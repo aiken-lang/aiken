@@ -275,10 +275,10 @@ pub enum ScriptOverrideArgumentError {
 
 impl Error {
     pub fn report(&self) {
-        if let Error::TestFailure { verbose, .. } = self {
-            if !verbose {
-                return;
-            }
+        if let Error::TestFailure { verbose, .. } = self
+            && !verbose
+        {
+            return;
         }
 
         println!("{self:?}")

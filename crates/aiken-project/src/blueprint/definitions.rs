@@ -184,10 +184,10 @@ impl Definitions<Annotated<Schema>> {
 
         // 1. List all Pairs definitions
         for (src, annotated) in self.inner.iter() {
-            if let Some(schema) = annotated.as_ref().map(|entry| &entry.annotated) {
-                if matches!(schema, Schema::Pair(_, _)) {
-                    usage.insert(Reference::new(src), BTreeSet::new());
-                }
+            if let Some(schema) = annotated.as_ref().map(|entry| &entry.annotated)
+                && matches!(schema, Schema::Pair(_, _))
+            {
+                usage.insert(Reference::new(src), BTreeSet::new());
             }
         }
 
@@ -354,16 +354,15 @@ impl Reference {
             annotation,
             module,
         }) = type_info.alias().as_deref()
+            && let Some(resolved_parameters) = resolve_alias(parameters, annotation, type_info)
         {
-            if let Some(resolved_parameters) = resolve_alias(parameters, annotation, type_info) {
-                return Self::from_type_alias(
-                    type_info,
-                    alias,
-                    module.as_deref(),
-                    resolved_parameters,
-                    type_parameters,
-                );
-            }
+            return Self::from_type_alias(
+                type_info,
+                alias,
+                module.as_deref(),
+                resolved_parameters,
+                type_parameters,
+            );
         }
 
         match type_info {

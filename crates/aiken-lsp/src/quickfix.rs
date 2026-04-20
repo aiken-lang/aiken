@@ -359,10 +359,10 @@ fn unknown_module(
 
     if let Some(serde_json::Value::String(module_name)) = data {
         for module in compiler.project.modules() {
-            if module.name.ends_with(module_name) {
-                if let Some(edit) = parsed_document.import(&module, None) {
-                    edits.push(edit);
-                }
+            if module.name.ends_with(module_name)
+                && let Some(edit) = parsed_document.import(&module, None)
+            {
+                edits.push(edit);
             }
         }
     }

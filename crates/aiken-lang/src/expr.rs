@@ -1107,10 +1107,11 @@ impl UntypedExpr {
     ) -> Result<Self, String> {
         let tipo = Type::collapse_links(tipo);
 
-        if let Type::App { name, module, .. } = tipo.deref() {
-            if module.is_empty() && name == "Data" {
-                return Ok(Self::reify_blind(data));
-            }
+        if let Type::App { name, module, .. } = tipo.deref()
+            && module.is_empty()
+            && name == "Data"
+        {
+            return Ok(Self::reify_blind(data));
         }
 
         Self::reify_with(
@@ -1207,75 +1208,74 @@ impl UntypedExpr {
                 }) => {
                     let ix = convert_tag_to_constr(tag).or(any_constructor).unwrap() as usize;
 
-                    if let Type::App { args, .. } = tipo.deref() {
-                        if let Some(DataType {
+                    if let Type::App { args, .. } = tipo.deref()
+                        && let Some(DataType {
                             constructors,
                             typed_parameters,
                             ..
                         }) = lookup_data_type_by_tipo(data_types, &tipo)
-                        {
-                            if constructors.is_empty() {
-                                return Ok(UntypedExpr::Var {
-                                    location: Span::empty(),
-                                    name: "Data".to_string(),
-                                });
-                            }
+                    {
+                        if constructors.is_empty() {
+                            return Ok(UntypedExpr::Var {
+                                location: Span::empty(),
+                                name: "Data".to_string(),
+                            });
+                        }
 
-                            let constructor = &constructors[ix];
+                        let constructor = &constructors[ix];
 
-                            let generics = typed_parameters.iter().zip(args).fold(
-                                IndexMap::new(),
-                                |mut generics, (generic, arg)| {
-                                    if let Some(ix) = generic.get_generic_id() {
-                                        generics.insert(ix, arg.clone());
+                        let generics = typed_parameters.iter().zip(args).fold(
+                            IndexMap::new(),
+                            |mut generics, (generic, arg)| {
+                                if let Some(ix) = generic.get_generic_id() {
+                                    generics.insert(ix, arg.clone());
+                                }
+
+                                generics
+                            },
+                        );
+
+                        return if fields.is_empty() {
+                            Ok(UntypedExpr::Var {
+                                location: Span::empty(),
+                                name: constructor.name.to_string(),
+                            })
+                        } else {
+                            let arguments = fields
+                                .to_vec()
+                                .into_iter()
+                                .zip(constructor.arguments.iter())
+                                .map(|(field, RecordConstructorArg { label, tipo, .. })| {
+                                    let mut tipo = tipo;
+
+                                    // Replace any generic with their specialised definitions
+                                    // for this type instance.
+                                    if let Type::Var { tipo: var, .. } =
+                                        Type::collapse_links(tipo.clone()).as_ref()
+                                        && let TypeVar::Generic { id } = &*var.borrow()
+                                    {
+                                        tipo = generics.get(id).expect("unknown generic?");
                                     }
 
-                                    generics
-                                },
-                            );
+                                    UntypedExpr::do_reify_data(data_types, field, tipo.clone()).map(
+                                        |value| CallArg {
+                                            label: label.clone(),
+                                            location: Span::empty(),
+                                            value,
+                                        },
+                                    )
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
 
-                            return if fields.is_empty() {
-                                Ok(UntypedExpr::Var {
-                                    location: Span::empty(),
+                            Ok(UntypedExpr::Call {
+                                location: Span::empty(),
+                                arguments,
+                                fun: Box::new(UntypedExpr::Var {
                                     name: constructor.name.to_string(),
-                                })
-                            } else {
-                                let arguments = fields
-                                    .to_vec()
-                                    .into_iter()
-                                    .zip(constructor.arguments.iter())
-                                    .map(|(field, RecordConstructorArg { label, tipo, .. })| {
-                                        let mut tipo = tipo;
-
-                                        // Replace any generic with their specialised definitions
-                                        // for this type instance.
-                                        if let Type::Var { tipo: var, .. } =
-                                            Type::collapse_links(tipo.clone()).as_ref()
-                                        {
-                                            if let TypeVar::Generic { id } = &*var.borrow() {
-                                                tipo = generics.get(id).expect("unknown generic?");
-                                            }
-                                        }
-
-                                        UntypedExpr::do_reify_data(data_types, field, tipo.clone())
-                                            .map(|value| CallArg {
-                                                label: label.clone(),
-                                                location: Span::empty(),
-                                                value,
-                                            })
-                                    })
-                                    .collect::<Result<Vec<_>, _>>()?;
-
-                                Ok(UntypedExpr::Call {
                                     location: Span::empty(),
-                                    arguments,
-                                    fun: Box::new(UntypedExpr::Var {
-                                        name: constructor.name.to_string(),
-                                        location: Span::empty(),
-                                    }),
-                                })
-                            };
-                        }
+                                }),
+                            })
+                        };
                     }
 
                     Err(format!(

@@ -288,20 +288,20 @@ fn expect_data(term: &Constant) -> Result<(), Error> {
 }
 
 fn expect_data_integer(term: &Constant) -> Result<(), Error> {
-    if let Constant::Data(data) = term {
-        if matches!(data, PlutusData::BigInt(..)) {
-            return Ok(());
-        }
+    if let Constant::Data(data) = term
+        && matches!(data, PlutusData::BigInt(..))
+    {
+        return Ok(());
     }
 
     Err(mismatch(term, Schema::Data(Data::Integer)))
 }
 
 fn expect_data_bytes(term: &Constant) -> Result<(), Error> {
-    if let Constant::Data(data) = term {
-        if matches!(data, PlutusData::BoundedBytes(..)) {
-            return Ok(());
-        }
+    if let Constant::Data(data) = term
+        && matches!(data, PlutusData::BoundedBytes(..))
+    {
+        return Ok(());
     }
 
     Err(mismatch(term, Schema::Data(Data::Bytes)))
@@ -341,16 +341,16 @@ fn expect_data_map(term: &Constant) -> Result<Vec<(Constant, Constant)>, Error> 
 }
 
 fn expect_data_constr(term: &Constant, index: usize) -> Result<Vec<Constant>, Error> {
-    if let Constant::Data(PlutusData::Constr(constr)) = term {
-        if let PlutusData::Constr(expected) = UplcData::constr(index as u64, vec![]) {
-            if expected.tag == constr.tag && expected.any_constructor == constr.any_constructor {
-                return Ok(constr
-                    .fields
-                    .iter()
-                    .map(|field| Constant::Data(field.to_owned()))
-                    .collect());
-            }
-        }
+    if let Constant::Data(PlutusData::Constr(constr)) = term
+        && let PlutusData::Constr(expected) = UplcData::constr(index as u64, vec![])
+        && expected.tag == constr.tag
+        && expected.any_constructor == constr.any_constructor
+    {
+        return Ok(constr
+            .fields
+            .iter()
+            .map(|field| Constant::Data(field.to_owned()))
+            .collect());
     }
 
     Err(mismatch(

@@ -4847,7 +4847,7 @@ impl<'a> CodeGenerator<'a> {
                     Some(term)
                 } else {
                     let mut term = Term::empty_list();
-                    for (arg, tipo) in args.into_iter().zip(tuple_sub_types.into_iter()).rev() {
+                    for (arg, tipo) in args.into_iter().zip(tuple_sub_types).rev() {
                         term = Term::mk_cons()
                             .apply(builder::convert_type_to_data(arg, &tipo, &self.data_types))
                             .apply(term);

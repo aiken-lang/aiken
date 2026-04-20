@@ -624,40 +624,39 @@ fn fmt_test(
     if let TestResult::PropertyTestResult(PropertyTestResult {
         labels, iterations, ..
     }) = result
+        && !labels.is_empty()
+        && result.is_success()
     {
-        if !labels.is_empty() && result.is_success() {
+        test = format!(
+            "{test}\n{title}",
+            title = "· with coverage".if_supports_color(Stderr, |s| s.bold())
+        );
+
+        let mut total = 0;
+        let mut pad = 0;
+        for (k, v) in labels {
+            total += v;
+            if k.len() > pad {
+                pad = k.len();
+            }
+        }
+
+        match coverage_mode {
+            CoverageMode::RelativeToLabels => {}
+            CoverageMode::RelativeToTests => {
+                total = *iterations;
+            }
+        }
+
+        let mut labels = labels.iter().collect::<Vec<_>>();
+        labels.sort_by(|a, b| b.1.cmp(a.1));
+
+        for (k, v) in labels {
             test = format!(
-                "{test}\n{title}",
-                title = "· with coverage".if_supports_color(Stderr, |s| s.bold())
+                "{test}\n| {} {:>5.1}%",
+                pretty::pad_right(k.to_owned(), pad, " ").if_supports_color(Stderr, |s| s.bold()),
+                100.0 * (*v as f64) / (total as f64),
             );
-
-            let mut total = 0;
-            let mut pad = 0;
-            for (k, v) in labels {
-                total += v;
-                if k.len() > pad {
-                    pad = k.len();
-                }
-            }
-
-            match coverage_mode {
-                CoverageMode::RelativeToLabels => {}
-                CoverageMode::RelativeToTests => {
-                    total = *iterations;
-                }
-            }
-
-            let mut labels = labels.iter().collect::<Vec<_>>();
-            labels.sort_by(|a, b| b.1.cmp(a.1));
-
-            for (k, v) in labels {
-                test = format!(
-                    "{test}\n| {} {:>5.1}%",
-                    pretty::pad_right(k.to_owned(), pad, " ")
-                        .if_supports_color(Stderr, |s| s.bold()),
-                    100.0 * (*v as f64) / (total as f64),
-                );
-            }
         }
     }
 
@@ -749,7 +748,11 @@ fn derive_execution_units_format(
     // Update max size of the execution units to account for underscores
     // after three decimal place e.g. 1_000_000
     let update_max_size = |x: usize| {
-        if x % 3 == 0 { x + x / 3 - 1 } else { x + x / 3 }
+        if x.is_multiple_of(3) {
+            x + x / 3 - 1
+        } else {
+            x + x / 3
+        }
     };
 
     if plain_numbers {

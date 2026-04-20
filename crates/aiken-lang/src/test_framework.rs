@@ -725,58 +725,55 @@ impl Prng {
         /// Interpret the given 'PlutusData' as one of two Prng constructors.
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
-                if *tag == 121 + Prng::SEEDED {
-                    if let [
+                if *tag == 121 + Prng::SEEDED
+                    && let [
                         PlutusData::BoundedBytes(bytes),
                         PlutusData::BoundedBytes(choices),
                     ] = &fields[..]
-                    {
-                        return Prng::Seeded {
-                            choices: choices.to_vec(),
-                            uplc: Data::constr(
-                                Prng::SEEDED,
-                                vec![
-                                    PlutusData::BoundedBytes(bytes.to_owned()),
-                                    // Clear choices between seeded runs, to not
-                                    // accumulate ALL choices ever made.
-                                    PlutusData::BoundedBytes(vec![].into()),
-                                ],
-                            ),
-                        };
-                    }
+                {
+                    return Prng::Seeded {
+                        choices: choices.to_vec(),
+                        uplc: Data::constr(
+                            Prng::SEEDED,
+                            vec![
+                                PlutusData::BoundedBytes(bytes.to_owned()),
+                                // Clear choices between seeded runs, to not
+                                // accumulate ALL choices ever made.
+                                PlutusData::BoundedBytes(vec![].into()),
+                            ],
+                        ),
+                    };
                 }
 
-                if *tag == 121 + Prng::REPLAYED {
-                    if let [PlutusData::BigInt(..), PlutusData::BoundedBytes(choices)] = &fields[..]
-                    {
-                        return Prng::Replayed {
-                            choices: choices.to_vec(),
-                            uplc: cst.clone(),
-                        };
-                    }
+                if *tag == 121 + Prng::REPLAYED
+                    && let [PlutusData::BigInt(..), PlutusData::BoundedBytes(choices)] = &fields[..]
+                {
+                    return Prng::Replayed {
+                        choices: choices.to_vec(),
+                        uplc: cst.clone(),
+                    };
                 }
             }
 
             unreachable!("malformed Prng: {cst:#?}")
         }
 
-        if let Term::Constant(rc) = &result {
-            if let Constant::Data(PlutusData::Constr(Constr { tag, fields, .. })) = &rc.borrow() {
-                if *tag == 121 + Prng::SOME {
-                    if let [PlutusData::Array(elems)] = &fields[..] {
-                        if let [new_seed, value] = &elems[..] {
-                            return Some((as_prng(new_seed), value.clone()));
-                        }
-                    }
-                }
+        if let Term::Constant(rc) = &result
+            && let Constant::Data(PlutusData::Constr(Constr { tag, fields, .. })) = &rc.borrow()
+        {
+            if *tag == 121 + Prng::SOME
+                && let [PlutusData::Array(elems)] = &fields[..]
+                && let [new_seed, value] = &elems[..]
+            {
+                return Some((as_prng(new_seed), value.clone()));
+            }
 
-                // May occurs when replaying a fuzzer from a shrinked sequence of
-                // choices. If we run out of choices, or a choice end up being
-                // invalid as per the expectation, the fuzzer can't go further and
-                // fail.
-                if *tag == 121 + Prng::NONE {
-                    return None;
-                }
+            // May occurs when replaying a fuzzer from a shrinked sequence of
+            // choices. If we run out of choices, or a choice end up being
+            // invalid as per the expectation, the fuzzer can't go further and
+            // fail.
+            if *tag == 121 + Prng::NONE {
+                return None;
             }
         }
 

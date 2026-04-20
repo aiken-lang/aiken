@@ -346,7 +346,7 @@ impl CheckedModule {
 
         // Order definitions to avoid dissociating doc comments from them
         let mut definitions: Vec<_> = self.ast.definitions.iter_mut().collect();
-        definitions.sort_by(|a, b| a.location().start.cmp(&b.location().start));
+        definitions.sort_by_key(|a| a.location().start);
 
         // Doc Comments
         let mut doc_comments = self.extra.doc_comments.iter().peekable();

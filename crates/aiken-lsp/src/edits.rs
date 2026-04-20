@@ -209,10 +209,9 @@ impl ParsedDocument {
                 as_name: imported_as,
                 ..
             }) = def
+                && path.join("/") == module.name
             {
-                if path.join("/") == module.name {
-                    as_name = imported_as.as_deref();
-                }
+                as_name = imported_as.as_deref();
             }
         }
 

@@ -204,14 +204,14 @@ pub fn erase_opaque_type_operations(
     air_tree: &mut AirTree,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) {
-    if let AirTree::Constr { tipo, args, .. } = air_tree {
-        if check_replaceable_opaque_type(tipo, data_types) {
-            let arg = args.pop().unwrap();
+    if let AirTree::Constr { tipo, args, .. } = air_tree
+        && check_replaceable_opaque_type(tipo, data_types)
+    {
+        let arg = args.pop().unwrap();
 
-            match arg {
-                AirTree::CastToData { value, .. } => *air_tree = *value,
-                _ => *air_tree = arg,
-            }
+        match arg {
+            AirTree::CastToData { value, .. } => *air_tree = *value,
+            _ => *air_tree = arg,
         }
     }
 
@@ -228,8 +228,8 @@ pub fn is_recursive_function_call<'a>(
     func_key: &FunctionAccessKey,
     variant: &String,
 ) -> (bool, Option<&'a Vec<AirTree>>) {
-    if let AirTree::Call { func, args, .. } = air_tree {
-        if let AirTree::Var {
+    if let AirTree::Call { func, args, .. } = air_tree
+        && let AirTree::Var {
             constructor:
                 ValueConstructor {
                     variant: ValueConstructorVariant::ModuleFn { name, module, .. },
@@ -238,14 +238,11 @@ pub fn is_recursive_function_call<'a>(
             variant_name,
             ..
         } = func.as_ref()
-        {
-            if name == &func_key.function_name
-                && module == &func_key.module_name
-                && variant == variant_name
-            {
-                return (true, Some(args));
-            }
-        }
+        && name == &func_key.function_name
+        && module == &func_key.module_name
+        && variant == variant_name
+    {
+        return (true, Some(args));
     }
     (false, None)
 }
@@ -295,15 +292,12 @@ pub fn identify_recursive_static_params(
         variant_name,
         ..
     } = air_tree
+        && name == &func_key.function_name
+        && module == &func_key.module_name
+        && variant == variant_name
     {
-        if name == &func_key.function_name
-            && module == &func_key.module_name
-            && variant == variant_name
-        {
-            // This is a usage of the recursive function either by call or being passed to a function or returned
-            *function_calls_and_usage =
-                (function_calls_and_usage.0, function_calls_and_usage.1 + 1);
-        }
+        // This is a usage of the recursive function either by call or being passed to a function or returned
+        *function_calls_and_usage = (function_calls_and_usage.0, function_calls_and_usage.1 + 1);
     }
 }
 
@@ -346,8 +340,8 @@ pub fn modify_self_calls(
             ..
         } = air_tree
         {
-            if let AirTree::Call { func, .. } = func_recursive.as_ref() {
-                if let AirTree::Var {
+            if let AirTree::Call { func, .. } = func_recursive.as_ref()
+                && let AirTree::Var {
                     constructor:
                         ValueConstructor {
                             variant: ValueConstructorVariant::ModuleFn { name, module, .. },
@@ -356,20 +350,19 @@ pub fn modify_self_calls(
                     variant_name,
                     ..
                 } = func.as_ref()
+            {
+                // The name must match and the recursive function must not be
+                // passed around for this optimization to work.
+                if name == &func_key.function_name
+                    && module == &func_key.module_name
+                    && variant == variant_name
+                    && calls_and_var_usage.0 == calls_and_var_usage.1
                 {
-                    // The name must match and the recursive function must not be
-                    // passed around for this optimization to work.
-                    if name == &func_key.function_name
-                        && module == &func_key.module_name
-                        && variant == variant_name
-                        && calls_and_var_usage.0 == calls_and_var_usage.1
-                    {
-                        // Remove any static-recursive-parameters, because they'll be bound statically
-                        // above the recursive part of the function
-                        // note: assumes that static_recursive_params is sorted
-                        for arg in recursive_static_indexes.iter().rev() {
-                            args.remove(*arg);
-                        }
+                    // Remove any static-recursive-parameters, because they'll be bound statically
+                    // above the recursive part of the function
+                    // note: assumes that static_recursive_params is sorted
+                    for arg in recursive_static_indexes.iter().rev() {
+                        args.remove(*arg);
                     }
                 }
             }
@@ -382,19 +375,17 @@ pub fn modify_self_calls(
             variant_name,
             ..
         } = &air_tree
+            && name.clone() == func_key.function_name
+            && module.clone() == func_key.module_name
+            && variant.clone() == variant_name.clone()
         {
-            if name.clone() == func_key.function_name
-                && module.clone() == func_key.module_name
-                && variant.clone() == variant_name.clone()
-            {
-                let self_call = AirTree::call(
-                    air_tree.clone(),
-                    air_tree.return_type(),
-                    vec![air_tree.clone()],
-                );
+            let self_call = AirTree::call(
+                air_tree.clone(),
+                air_tree.return_type(),
+                vec![air_tree.clone()],
+            );
 
-                *air_tree = self_call;
-            }
+            *air_tree = self_call;
         }
     });
 
@@ -438,45 +429,44 @@ pub fn modify_cyclic_calls(
 
             if let Some((names, index, cyclic_name)) =
                 cyclic_links.get(&(var_key.clone(), variant_name.to_string()))
+                && *cyclic_name == *func_key
             {
-                if *cyclic_name == *func_key {
-                    let cyclic_var_name = if cyclic_name.module_name.is_empty() {
-                        cyclic_name.function_name.to_string()
-                    } else {
-                        format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
-                    };
+                let cyclic_var_name = if cyclic_name.module_name.is_empty() {
+                    cyclic_name.function_name.to_string()
+                } else {
+                    format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
+                };
 
-                    let index_name = names[*index].clone();
+                let index_name = names[*index].clone();
 
-                    let var = AirTree::var(
-                        ValueConstructor::public(
-                            tipo.clone(),
-                            ValueConstructorVariant::ModuleFn {
-                                name: cyclic_var_name.clone(),
-                                field_map: None,
-                                module: "".to_string(),
-                                arity: 2,
-                                location: Span::empty(),
-                                builtin: None,
-                            },
-                        ),
-                        cyclic_var_name,
-                        "".to_string(),
-                    );
-
-                    *air_tree = AirTree::call(
-                        var.clone(),
+                let var = AirTree::var(
+                    ValueConstructor::public(
                         tipo.clone(),
-                        vec![
-                            var,
-                            AirTree::anon_func(
-                                names.clone(),
-                                AirTree::local_var(index_name, tipo),
-                                false,
-                            ),
-                        ],
-                    );
-                }
+                        ValueConstructorVariant::ModuleFn {
+                            name: cyclic_var_name.clone(),
+                            field_map: None,
+                            module: "".to_string(),
+                            arity: 2,
+                            location: Span::empty(),
+                            builtin: None,
+                        },
+                    ),
+                    cyclic_var_name,
+                    "".to_string(),
+                );
+
+                *air_tree = AirTree::call(
+                    var.clone(),
+                    tipo.clone(),
+                    vec![
+                        var,
+                        AirTree::anon_func(
+                            names.clone(),
+                            AirTree::local_var(index_name, tipo),
+                            false,
+                        ),
+                    ],
+                );
             }
         }
     });
@@ -1232,20 +1222,18 @@ pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
 
     if let Term::Constant(c) = term {
         constant = Some(c.clone());
-    } else if let Term::Apply { function, argument } = term {
-        if let Term::Constant(c) = argument.as_ref() {
-            if let Term::Builtin(b) = function.as_ref() {
-                if matches!(
-                    b,
-                    DefaultFunction::BData
-                        | DefaultFunction::IData
-                        | DefaultFunction::MapData
-                        | DefaultFunction::ListData
-                ) {
-                    constant = Some(c.clone());
-                }
-            }
-        }
+    } else if let Term::Apply { function, argument } = term
+        && let Term::Constant(c) = argument.as_ref()
+        && let Term::Builtin(b) = function.as_ref()
+        && matches!(
+            b,
+            DefaultFunction::BData
+                | DefaultFunction::IData
+                | DefaultFunction::MapData
+                | DefaultFunction::ListData
+        )
+    {
+        constant = Some(c.clone());
     }
     constant
 }

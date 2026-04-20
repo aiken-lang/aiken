@@ -162,10 +162,10 @@ impl PartialEq for Type {
 
 impl Type {
     pub fn collapse_links(t: Rc<Self>) -> Rc<Self> {
-        if let Type::Var { tipo, alias } = t.deref() {
-            if let TypeVar::Link { tipo } = tipo.borrow().deref() {
-                return Type::with_alias(tipo.clone(), alias.clone());
-            }
+        if let Type::Var { tipo, alias } = t.deref()
+            && let TypeVar::Link { tipo } = tipo.borrow().deref()
+        {
+            return Type::with_alias(tipo.clone(), alias.clone());
         }
         t
     }
@@ -844,15 +844,14 @@ pub fn check_replaceable_opaque_type(
 ) -> bool {
     let data_type = lookup_data_type_by_tipo(data_types, t);
 
-    if let Some(data_type) = data_type {
-        if let [constructor] = &data_type.constructors[..] {
-            return constructor.arguments.len() == 1
-                && data_type.opaque
-                // BIG WARNING: Adding any kind decorator
-                // will make the opaque type not replaceable
-                && data_type
-                    .decorators.is_empty();
-        }
+    if let Some(data_type) = data_type
+        && let [constructor] = &data_type.constructors[..]
+    {
+        return constructor.arguments.len() == 1
+            && data_type.opaque
+            // BIG WARNING: Adding any kind decorator
+            // will make the opaque type not replaceable
+            && data_type.decorators.is_empty();
     }
 
     false

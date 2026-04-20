@@ -2182,10 +2182,10 @@ impl<'comments> Formatter<'comments> {
     fn pattern_call_arg<'a>(&mut self, arg: &'a CallArg<UntypedPattern>) -> Document<'a> {
         let comments = self.pop_comments(arg.location.start);
 
-        if let (UntypedPattern::Var { name, .. }, Some(label)) = (&arg.value, &arg.label) {
-            if name == label {
-                return self.pattern(&arg.value);
-            }
+        if let (UntypedPattern::Var { name, .. }, Some(label)) = (&arg.value, &arg.label)
+            && name == label
+        {
+            return self.pattern(&arg.value);
         }
 
         let doc = arg

@@ -241,16 +241,16 @@ impl Blueprint {
                     .filter_map(|v| {
                         let (l, r) = v.get_module_and_name();
 
-                        if let Some(module_name) = module_name {
-                            if l != module_name {
-                                return None;
-                            }
+                        if let Some(module_name) = module_name
+                            && l != module_name
+                        {
+                            return None;
                         }
 
-                        if let Some(validator_name) = validator_name {
-                            if r != validator_name {
-                                return None;
-                            }
+                        if let Some(validator_name) = validator_name
+                            && r != validator_name
+                        {
+                            return None;
                         }
 
                         Some((l.to_string(), r.to_string(), !v.parameters.is_empty()))

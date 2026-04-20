@@ -1562,10 +1562,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 //
                 // The following check removes the warning by marking the new let-binding as used
                 // in this particular context.
-                if let Some(pattern_var_name) = pattern_var_name {
-                    if Some(pattern_var_name) == value_var_name {
-                        self.environment.increment_usage(pattern_var_name);
-                    }
+                if let Some(pattern_var_name) = pattern_var_name
+                    && Some(pattern_var_name) == value_var_name
+                {
+                    self.environment.increment_usage(pattern_var_name);
                 }
             }
             AssignmentKind::Let { .. } => {
@@ -2862,10 +2862,9 @@ fn recover_from_no_assignment(
         ref kind,
         ..
     }) = result
+        && matches!(kind, AssignmentKind::Expect { ..} if patterns.len() == 1)
     {
-        if matches!(kind, AssignmentKind::Expect { ..} if patterns.len() == 1) {
-            return Ok(Some(TypedExpr::void(span)));
-        }
+        return Ok(Some(TypedExpr::void(span)));
     }
 
     result.map(|()| None)

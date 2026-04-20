@@ -53,10 +53,9 @@ impl Printer {
             annotation,
             module: _,
         }) = typ.alias().as_deref()
+            && let Some(resolved_parameters) = resolve_alias(parameters, annotation, typ)
         {
-            if let Some(resolved_parameters) = resolve_alias(parameters, annotation, typ) {
-                return self.type_alias_doc(typ, alias.to_string(), resolved_parameters);
-            }
+            return self.type_alias_doc(typ, alias.to_string(), resolved_parameters);
         }
 
         match typ {

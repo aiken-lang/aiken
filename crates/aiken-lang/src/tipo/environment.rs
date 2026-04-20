@@ -1722,15 +1722,15 @@ impl<'a> Environment<'a> {
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.
-        if let Type::Var { tipo, alias } = rhs.deref() {
-            if let TypeVar::Link { tipo } = tipo.borrow().deref() {
-                return self.unify(
-                    lhs,
-                    Type::with_alias(tipo.clone(), alias.clone()),
-                    location,
-                    allow_cast,
-                );
-            }
+        if let Type::Var { tipo, alias } = rhs.deref()
+            && let TypeVar::Link { tipo } = tipo.borrow().deref()
+        {
+            return self.unify(
+                lhs,
+                Type::with_alias(tipo.clone(), alias.clone()),
+                location,
+                allow_cast,
+            );
         }
 
         let could_not_unify = || Error::CouldNotUnify {
@@ -1759,11 +1759,11 @@ impl<'a> Environment<'a> {
                 }
 
                 TypeVar::Generic { id } => {
-                    if let Type::Var { tipo, alias: _ } = rhs.deref() {
-                        if tipo.borrow().is_unbound() {
-                            *tipo.borrow_mut() = TypeVar::Generic { id: *id };
-                            return Ok(());
-                        }
+                    if let Type::Var { tipo, alias: _ } = rhs.deref()
+                        && tipo.borrow().is_unbound()
+                    {
+                        *tipo.borrow_mut() = TypeVar::Generic { id: *id };
+                        return Ok(());
                     }
                     Action::CouldNotUnify
                 }
