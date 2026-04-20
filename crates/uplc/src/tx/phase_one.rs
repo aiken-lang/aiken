@@ -75,10 +75,10 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
             TransactionOutput::PostAlonzo(output) => output.address.as_ref(),
         })?;
 
-        if let Address::Shelley(a) = address {
-            if let ShelleyPaymentPart::Script(h) = a.payment() {
-                spend.push((ScriptPurpose::Spending(input.clone(), ()), *h));
-            }
+        if let Address::Shelley(a) = address
+            && let ShelleyPaymentPart::Script(h) = a.payment()
+        {
+            spend.push((ScriptPurpose::Spending(input.clone(), ()), *h));
         }
     }
 
@@ -90,11 +90,11 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
                 .filter_map(|(acnt, _)| {
                     let address = Address::from_bytes(acnt).unwrap();
 
-                    if let Address::Stake(a) = address {
-                        if let StakePayload::Script(h) = a.payload() {
-                            let cred = StakeCredential::ScriptHash(*h);
-                            return Some((ScriptPurpose::Rewarding(cred), *h));
-                        }
+                    if let Address::Stake(a) = address
+                        && let StakePayload::Script(h) = a.payload()
+                    {
+                        let cred = StakeCredential::ScriptHash(*h);
+                        return Some((ScriptPurpose::Rewarding(cred), *h));
                     }
 
                     None

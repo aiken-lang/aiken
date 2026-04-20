@@ -1221,10 +1221,8 @@ impl Term<Name> {
             Term::Lambda {
                 parameter_name,
                 body,
-            } => {
-                if *parameter_name != original {
-                    Rc::make_mut(body).replace_identity_usage(original.clone());
-                }
+            } if *parameter_name != original => {
+                Rc::make_mut(body).replace_identity_usage(original.clone());
             }
             Term::Apply { function, argument } => {
                 let func = Rc::make_mut(function);
@@ -1957,11 +1955,11 @@ impl Term<Name> {
                 changed = true;
                 context.inlined_apply_ids.push(id);
                 *self = std::mem::replace(Rc::make_mut(d), Term::Error.force())
-            } else if let Term::Force(var) = d.as_ref() {
-                if let Term::Var(_) = var.as_ref() {
-                    changed = true;
-                    *self = var.as_ref().clone();
-                }
+            } else if let Term::Force(var) = d.as_ref()
+                && let Term::Var(_) = var.as_ref()
+            {
+                changed = true;
+                *self = var.as_ref().clone();
             }
         }
         changed
@@ -2009,13 +2007,11 @@ impl Term<Name> {
                 parameter_name,
                 body,
             } = Rc::make_mut(function)
+                && (parameter_name.text == CONSTR_INDEX_EXPOSER
+                    || parameter_name.text == CONSTR_FIELDS_EXPOSER)
             {
-                if parameter_name.text == CONSTR_INDEX_EXPOSER
-                    || parameter_name.text == CONSTR_FIELDS_EXPOSER
-                {
-                    let body = Rc::make_mut(body);
-                    *self = std::mem::replace(body, Term::Error)
-                }
+                let body = Rc::make_mut(body);
+                *self = std::mem::replace(body, Term::Error)
             }
         }
     }
@@ -2158,24 +2154,19 @@ impl Term<Name> {
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
-        let mut changed = false;
         match self {
-            Term::Builtin(d @ DefaultFunction::SubtractInteger) => {
-                if arg_stack.len() == d.arity() {
-                    let Some(Args::Apply(apply_id, Term::Constant(_))) = arg_stack.last() else {
-                        return false;
-                    };
-                    changed = true;
-                    context.constants_to_flip.push(*apply_id);
-
-                    *self = Term::Builtin(DefaultFunction::AddInteger);
-                }
+            Term::Builtin(d @ DefaultFunction::SubtractInteger) if arg_stack.len() == d.arity() => {
+                let Some(Args::Apply(apply_id, Term::Constant(_))) = arg_stack.last() else {
+                    return false;
+                };
+                context.constants_to_flip.push(*apply_id);
+                *self = Term::Builtin(DefaultFunction::AddInteger);
+                true
             }
             Term::Constr { .. } => todo!(),
             Term::Case { .. } => todo!(),
-            _ => {}
+            _ => false,
         }
-        changed
     }
 
     fn builtin_eval_reducer(

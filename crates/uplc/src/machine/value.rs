@@ -457,11 +457,11 @@ pub fn from_pallas_bigint(n: &conway::BigInt) -> BigInt {
 }
 
 pub fn to_pallas_bigint(n: &BigInt) -> conway::BigInt {
-    if let Some(i) = n.to_i128() {
-        if let Ok(i) = i.try_into() {
-            let pallas_int: pallas_codec::utils::Int = i;
-            return conway::BigInt::Int(pallas_int);
-        }
+    if let Some(i) = n.to_i128()
+        && let Ok(i) = i.try_into()
+    {
+        let pallas_int: pallas_codec::utils::Int = i;
+        return conway::BigInt::Int(pallas_int);
     }
 
     if n.is_positive() {
