@@ -135,36 +135,34 @@ fn acceptance_test_1_length() {
         }
     "#;
 
-    let uplc = Term::equals_integer()
-        .apply(Term::integer(3.into()))
-        .apply(
-            Term::var("length")
-                .lambda("length")
-                .apply(Term::var("length").apply(Term::var("length")))
-                .lambda("length")
-                .apply(
-                    Term::var("xs")
-                        .delayed_choose_list(
-                            Term::integer(0.into()),
-                            Term::add_integer()
-                                .apply(Term::integer(1.into()))
-                                .apply(
-                                    Term::var("length")
-                                        .apply(Term::var("length"))
-                                        .apply(Term::var("rest")),
-                                )
-                                .lambda("rest")
-                                .apply(Term::tail_list().apply(Term::var("xs"))),
-                        )
-                        .lambda("xs")
-                        .lambda("length"),
-                )
-                .apply(Term::list_values(vec![
-                    Constant::Data(Data::integer(1.into())),
-                    Constant::Data(Data::integer(2.into())),
-                    Constant::Data(Data::integer(3.into())),
-                ])),
-        );
+    let uplc = Term::equals_integer().apply(Term::integer(3.into())).apply(
+        Term::var("length")
+            .lambda("length")
+            .apply(Term::var("length").apply(Term::var("length")))
+            .lambda("length")
+            .apply(
+                Term::var("xs")
+                    .delayed_choose_list(
+                        Term::integer(0.into()),
+                        Term::add_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(
+                                Term::var("length")
+                                    .apply(Term::var("length"))
+                                    .apply(Term::var("rest")),
+                            )
+                            .lambda("rest")
+                            .apply(Term::tail_list().apply(Term::var("xs"))),
+                    )
+                    .lambda("xs")
+                    .lambda("length"),
+            )
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ])),
+    );
 
     assert_uplc(src, uplc.clone(), false, true);
     assert_uplc(src, uplc, false, false);
@@ -1074,10 +1072,7 @@ fn acceptance_test_8_is_not_empty() {
                 .lambda("bytes"),
         )
         .apply(Term::byte_string(vec![1]))
-        .if_then_else(
-            Term::bool(false),
-            Term::bool(true),
-        );
+        .if_then_else(Term::bool(false), Term::bool(true));
 
     assert_uplc(src, uplc.clone(), false, true);
     assert_uplc(src, uplc, false, false);
@@ -2226,7 +2221,6 @@ fn acceptance_test_23_to_list() {
             ),
         );
 
-
     assert_uplc(src, uplc.clone(), false, true);
     assert_uplc(src, uplc, false, false);
 }
@@ -2258,7 +2252,7 @@ fn acceptance_test_24_map_pair() {
     "#;
 
     let uplc = Term::equals_data()
-       .apply(Term::Constant(
+        .apply(Term::Constant(
             Constant::Data(Data::constr(
                 0,
                 vec![Data::list(vec![
@@ -2625,7 +2619,6 @@ fn acceptance_test_26_foldr() {
                         ),
                 ),
             );
-
 
     assert_uplc(src, uplc.clone(), false, true);
     assert_uplc(src, uplc, false, false);
@@ -5386,7 +5379,6 @@ fn test_init_3() {
                         Constant::Data(Data::integer(4.into())),
                     ])),
             ),
-
         false,
         true,
     );
@@ -5932,15 +5924,15 @@ fn bls12_381_elements_from_data_conversion() {
 
     assert_uplc(
         src,
-        Term::bls12_381_g1_equal()
-            .apply(g1)
-            .apply(Term::bls12_381_g1_uncompress().apply(
+        Term::bls12_381_g1_equal().apply(g1).apply(
+            Term::bls12_381_g1_uncompress().apply(
                 Term::un_b_data().apply(
                     Term::head_list().apply(
                         Term::snd_pair().apply(Term::unconstr_data().apply(constant.clone())),
                     ),
                 ),
-            )),
+            ),
+        ),
         false,
         true,
     )
