@@ -51,7 +51,7 @@ strip-ansi-escapes = "0.1.1"
 textplots = "0.8.7"
 thiserror = "1.0.39"
 tokio = { version = "1.43.1", features = ["full"] }
-toml = "0.7.2"
+toml = "1.1.0"
 uplc = { path = '../uplc', version = "1.1.21" }
 vec1 = "1.10.1"
 walkdir.workspace = true
