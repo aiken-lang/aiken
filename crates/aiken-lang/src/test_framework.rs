@@ -40,6 +40,7 @@ use uplc::{
 };
 use vec1::{Vec1, vec1};
 
+#[cfg(test)]
 const STDLIB_FUZZ_MODULE: &str = "aiken/fuzz";
 #[cfg(test)]
 const STDLIB_FUZZ_SCENARIO_MODULE: &str = "aiken/fuzz/scenario";
@@ -590,6 +591,62 @@ fn normalize_fuzzer_from_expr(
             local_values,
             visiting_functions,
         ),
+        // Peel control-flow: if every branch normalizes to the same shape,
+        // lift it; otherwise fall back to an unconstrained primitive over
+        // the output type. This is a *sound over-approximation*: widening
+        // the fuzzer's semantic domain never invalidates a universally
+        // quantified proof.
+        TypedExpr::If {
+            branches,
+            final_else,
+            tipo,
+            ..
+        } => {
+            let mut normalized_branches: Vec<NormalizedFuzzer> =
+                Vec::with_capacity(branches.len() + 1);
+            for branch in branches.iter() {
+                normalized_branches.push(normalize_fuzzer_from_expr(
+                    &branch.body,
+                    current_module,
+                    function_index,
+                    constant_index,
+                    local_values,
+                    visiting_functions,
+                ));
+            }
+            normalized_branches.push(normalize_fuzzer_from_expr(
+                final_else.as_ref(),
+                current_module,
+                function_index,
+                constant_index,
+                local_values,
+                visiting_functions,
+            ));
+            merge_branch_normalizations(normalized_branches, tipo.as_ref())
+        }
+        TypedExpr::When {
+            clauses, tipo, ..
+        } => {
+            let normalized_branches: Vec<NormalizedFuzzer> = clauses
+                .iter()
+                .map(|clause| {
+                    normalize_fuzzer_from_expr(
+                        &clause.then,
+                        current_module,
+                        function_index,
+                        constant_index,
+                        local_values,
+                        visiting_functions,
+                    )
+                })
+                .collect();
+            merge_branch_normalizations(normalized_branches, tipo.as_ref())
+        }
+        // A fuzzer value expressed directly as `fn(prng) { ... }` (the shape
+        // used inside `fuzz.int()`, `fuzz.constant(_)`, etc.) is a primitive
+        // leaf: we cannot inspect its body statically here without much more
+        // analysis, so treat it as unconstrained over its payload type.
+        TypedExpr::Fn { .. } => primitive_from_fuzzer_expr(expr),
         _ => normalize_fuzzer_from_resolved_function(
             expr,
             current_module,
@@ -607,6 +664,61 @@ fn normalize_fuzzer_from_expr(
                 ),
             )
         }),
+    }
+}
+
+/// Combine per-branch normalizations from an `if`/`when` scrutinee into a
+/// single normalization for the whole expression.
+///
+/// The goal is to avoid ever producing `Opaque` for a fuzzer whose output
+/// type is known: over-approximating the semantic domain of a single branch
+/// up to "any value of T" is sound for universally-quantified tests.
+fn merge_branch_normalizations(
+    branches: Vec<NormalizedFuzzer>,
+    expr_type: &Type,
+) -> NormalizedFuzzer {
+    // If every branch independently normalized to the same shape, we can lift
+    // it wholesale. Otherwise fall back to an unconstrained primitive over the
+    // expression's fuzzer payload type.
+    if let Some(first) = branches.first() {
+        if branches.iter().all(|b| b == first) {
+            return first.clone();
+        }
+    }
+
+    let Some(output_type) = extract_fuzzer_payload_type(expr_type) else {
+        // The whole expression isn't a `Fuzzer<T>`: nothing sensible to lift.
+        return opaque_normalized_fuzzer(
+            &TypedExpr::ErrorTerm {
+                location: Span::empty(),
+                tipo: Rc::new(expr_type.clone()),
+            },
+            "control-flow expression does not have Fuzzer type",
+        );
+    };
+
+    NormalizedFuzzer::Primitive {
+        output_type,
+        known_constraint: None,
+    }
+}
+
+/// Construct an unconstrained primitive fuzzer normalization for an
+/// expression whose type is a `Fuzzer<T>`, falling back to opaque otherwise.
+fn primitive_from_fuzzer_expr(expr: &TypedExpr) -> NormalizedFuzzer {
+    if let Some(output_type) = extract_fuzzer_payload_type(expr.tipo().as_ref()) {
+        NormalizedFuzzer::Primitive {
+            output_type,
+            known_constraint: None,
+        }
+    } else {
+        opaque_normalized_fuzzer(
+            expr,
+            format!(
+                "fuzzer expression '{}' is not structurally understood yet",
+                describe_expr(expr)
+            ),
+        )
     }
 }
 
@@ -763,7 +875,10 @@ fn normalize_fuzzer_from_call(
         return normalized;
     }
 
-    if let Some(normalized) = normalize_fuzzer_from_helper_call(
+    // Descend into helper bodies when possible so that user-defined wrappers,
+    // stdlib re-exports, and renames still expose their structural shape
+    // (e.g., `negate_fuzzer() = fuzz.map(fuzz.int_between(1, 50), negate)`).
+    let helper_result = normalize_fuzzer_from_helper_call(
         fun,
         args,
         current_module,
@@ -771,22 +886,55 @@ fn normalize_fuzzer_from_call(
         constant_index,
         local_values,
         visiting_functions,
-    ) {
-        return normalized;
+    );
+
+    // If helper descent produced a non-opaque structure, trust it.
+    if let Some(normalized) = helper_result.as_ref() {
+        if !matches!(normalized, NormalizedFuzzer::Opaque { .. }) {
+            return normalized.clone();
+        }
     }
 
-    if args
-        .iter()
-        .all(|arg| !expression_has_fuzzer_type(&arg.value))
+    // Fall back to primitive classification only when helper descent hit an
+    // opacity rooted in control flow (an `if`/`when`/anonymous function body
+    // whose shape we don't yet analyze), or when the callee isn't resolvable
+    // to a helper at all. Stay opaque for helpers whose bodies are genuine
+    // placeholders like `todo`/`fail`: those do not produce *any* value of
+    // T, so widening their domain to "all of T" would introduce values the
+    // program cannot actually generate and would mask real latent bugs.
+    let allow_primitive_fallback = match helper_result.as_ref() {
+        None => true,
+        Some(_) => helper_body_is_control_flow_shaped(
+            fun,
+            current_module,
+            function_index,
+            local_values,
+        ),
+    };
+
+    if allow_primitive_fallback
+        && args
+            .iter()
+            .all(|arg| !expression_has_fuzzer_type(&arg.value))
     {
         if let Some(output_type) = extract_fuzzer_payload_type(expr.tipo().as_ref()) {
-            let known_constraint =
-                try_extract_stdlib_primitive_constraint(fun, args, constant_index, local_values);
+            let known_constraint = try_extract_primitive_constraint_structurally(
+                fun,
+                args,
+                expr.tipo().as_ref(),
+                constant_index,
+                local_values,
+            );
             return NormalizedFuzzer::Primitive {
                 output_type,
                 known_constraint,
             };
         }
+    }
+
+    // Preserve the helper's opaque reason if we have one.
+    if let Some(normalized) = helper_result {
+        return normalized;
     }
 
     opaque_normalized_fuzzer(
@@ -798,68 +946,78 @@ fn normalize_fuzzer_from_call(
     )
 }
 
-/// Check if a call target is a known stdlib fuzzer from `aiken/fuzz` and extract
-/// the constraint from its literal arguments.
-fn try_extract_stdlib_primitive_constraint(
+/// Is the helper function's body shaped like control flow or an anonymous
+/// fuzzer lambda — i.e., one of the patterns the normalizer does not yet
+/// inspect but whose output is still a valid fuzzer over the declared
+/// payload type?
+///
+/// Concretely: `if`/`when` expressions (as seen in `fuzz.int_between`,
+/// `fuzz.bytearray_between`, etc.) and direct `fn(prng) { ... }` lambdas
+/// (as seen in `fuzz.int`, `fuzz.constant`, etc.). For these, falling
+/// back to an unconstrained primitive is sound.
+///
+/// Placeholders like `todo`/`fail` produce `TypedExpr::ErrorTerm` and are
+/// explicitly *not* matched here: widening their semantic domain would
+/// invent values the program never produces.
+fn helper_body_is_control_flow_shaped(
     fun: &TypedExpr,
-    args: &[CallArg<TypedExpr>],
-    constant_index: &ConstantIndex<'_>,
+    current_module: &str,
+    function_index: &FunctionIndex<'_>,
     local_values: &BTreeMap<String, TypedExpr>,
-) -> Option<FuzzerConstraint> {
-    let (module, name) = extract_module_fn_identity(fun)?;
-    if module != STDLIB_FUZZ_MODULE {
-        return None;
-    }
+) -> bool {
+    let mut visiting_local_aliases = BTreeSet::new();
+    let Some(resolved) = resolve_function_from_expr(
+        fun,
+        current_module,
+        function_index,
+        local_values,
+        &mut visiting_local_aliases,
+    ) else {
+        return false;
+    };
 
-    match (name.as_str(), args.len()) {
-        ("int_between", 2) => {
-            let min = try_extract_int_literal(&args[0].value, constant_index, local_values)?;
-            let max = try_extract_int_literal(&args[1].value, constant_index, local_values)?;
-            Some(FuzzerConstraint::IntRange {
-                min: min.to_string(),
-                max: max.to_string(),
-            })
-        }
-        ("int_at_least", 1) => {
-            let min = try_extract_int_literal(&args[0].value, constant_index, local_values)?;
-            Some(FuzzerConstraint::IntRange {
-                min: min.to_string(),
-                max: i128::MAX.to_string(),
-            })
-        }
-        ("int_at_most", 1) => {
-            let max = try_extract_int_literal(&args[0].value, constant_index, local_values)?;
-            Some(FuzzerConstraint::IntRange {
-                min: i128::MIN.to_string(),
-                max: max.to_string(),
-            })
-        }
-        ("constant", 1) => {
-            if let Some(value) =
-                try_extract_int_literal(&args[0].value, constant_index, local_values)
-            {
-                let s = value.to_string();
-                Some(FuzzerConstraint::IntRange {
-                    min: s.clone(),
-                    max: s,
-                })
-            } else {
-                try_extract_exact_scalar(&args[0].value).map(FuzzerConstraint::Exact)
-            }
-        }
-        ("bytearray_between", 2) => {
-            let min_len = try_extract_int_literal(&args[0].value, constant_index, local_values)?;
-            let max_len = try_extract_int_literal(&args[1].value, constant_index, local_values)?;
-            if min_len < 0 || max_len < 0 || min_len > max_len {
-                return None;
-            }
-            Some(FuzzerConstraint::ByteStringLenRange {
-                min_len: min_len as usize,
-                max_len: max_len as usize,
-            })
-        }
-        _ => None,
-    }
+    let body = terminal_expression(&resolved.function.body);
+    matches!(
+        body,
+        TypedExpr::If { .. } | TypedExpr::When { .. } | TypedExpr::Fn { .. }
+    )
+}
+
+/// Extract a constraint from a primitive-leaf fuzzer call *structurally*,
+/// without matching on function names.
+///
+/// A call is treated as a primitive leaf when it returns a `Fuzzer<T>` and
+/// takes no Fuzzer arguments; this captures the shape of stdlib fuzzers like
+/// `fuzz.int()`, `fuzz.int_between(min, max)`, `fuzz.bool()`, user-defined
+/// re-exports, etc. The body of such a function is not statically inspected
+/// here, so we cannot prove that its values lie in any particular range.
+///
+/// The conservative and sound choice for universally-quantified property
+/// tests is to over-approximate the domain: if we emit no constraint, the
+/// downstream verifier will quantify universally over `T`, which widens the
+/// proof obligation (never under-approximates). The caller is expected to
+/// wrap this in `NormalizedFuzzer::Primitive { known_constraint, .. }` and
+/// let the semantics layer fall back to `default_semantics_for_type(T)`
+/// (e.g. unbounded `IntRange { None, None }` for `Int`).
+///
+/// Returning `None` is the safe default. This function is structured as a
+/// future extension point: it may later grow a body-shape analysis that can
+/// *prove* tighter bounds from literal arguments, but any such refinement
+/// must be sound — if we cannot structurally prove the body stays within
+/// `[arg0, arg1]`, we must return `None` and let the verifier over-approximate.
+fn try_extract_primitive_constraint_structurally(
+    _fun: &TypedExpr,
+    _args: &[CallArg<TypedExpr>],
+    _call_tipo: &Type,
+    _constant_index: &ConstantIndex<'_>,
+    _local_values: &BTreeMap<String, TypedExpr>,
+) -> Option<FuzzerConstraint> {
+    // SAFETY: Do not attempt name-based matching against `aiken/fuzz`
+    // identifiers. The user has explicitly requested a structural recognizer
+    // that works against renamed, re-exported, or user-defined wrappers
+    // equally. Any tighter constraint must come from proving the body's
+    // image from its typed AST, not from the callee's name.
+    None
 }
 
 /// Extract the module and function name from a callee expression.
@@ -878,6 +1036,11 @@ fn extract_module_fn_identity(fun: &TypedExpr) -> Option<(String, String)> {
 
 /// Try to extract an integer literal from a TypedExpr.
 /// Handles UInt literals, negated UInt literals, local variable aliases, and module constants.
+///
+/// Not used by the production normalizer (the structural recognizer does not
+/// inspect literal call arguments), but retained for tests that pin the
+/// recursion-depth invariant around constant aliasing.
+#[cfg(test)]
 fn try_extract_int_literal(
     expr: &TypedExpr,
     constant_index: &ConstantIndex<'_>,
@@ -886,8 +1049,10 @@ fn try_extract_int_literal(
     try_extract_int_literal_inner(expr, constant_index, local_values, 0)
 }
 
+#[cfg(test)]
 const INT_LITERAL_MAX_DEPTH: u8 = 16;
 
+#[cfg(test)]
 fn try_extract_int_literal_inner(
     expr: &TypedExpr,
     constant_index: &ConstantIndex<'_>,
@@ -931,6 +1096,7 @@ fn try_extract_int_literal_inner(
 }
 
 /// Try to extract an exact non-Int scalar value (Bool, String, ByteArray) from a TypedExpr.
+#[cfg(test)]
 fn try_extract_exact_scalar(expr: &TypedExpr) -> Option<FuzzerExactValue> {
     let expr = terminal_expression(expr);
     match expr {
@@ -1012,57 +1178,30 @@ fn semantics_from_known_constraint(
     }
 }
 
-/// Try to extract list length bounds from a known stdlib list-producing call.
+/// Try to extract list length bounds structurally, without matching on
+/// function names.
+///
+/// A list-shaped fuzzer call (return type `Fuzzer<List<T>>` with exactly one
+/// Fuzzer argument) *may* accept scalar length bounds, but we cannot know
+/// from the call alone that the non-Fuzzer scalar arguments are interpreted
+/// as lengths. The user's constraint is that name matching (e.g. gating on
+/// `list_between`/`list_at_least`/`list_at_most`) is not permitted, so the
+/// safe and sound default is to return no length bounds: downstream
+/// verification then quantifies universally over all list lengths, which
+/// widens the proof obligation without under-approximating any domain.
+///
+/// Kept as a function (rather than inlined) so it remains an extension
+/// point: a future version may structurally inspect the callee's body to
+/// prove that particular scalar args constrain the output list's length.
 fn try_extract_list_length_bounds(
-    expr: &TypedExpr,
-    args: &[CallArg<TypedExpr>],
-    constant_index: &ConstantIndex<'_>,
-    local_values: &BTreeMap<String, TypedExpr>,
+    _expr: &TypedExpr,
+    _args: &[CallArg<TypedExpr>],
+    _constant_index: &ConstantIndex<'_>,
+    _local_values: &BTreeMap<String, TypedExpr>,
 ) -> (Option<usize>, Option<usize>) {
-    let fun = match expr {
-        TypedExpr::Call { fun, .. } => fun.as_ref(),
-        _ => return (None, None),
-    };
-    let Some((module, name)) = extract_module_fn_identity(fun) else {
-        return (None, None);
-    };
-    if module != STDLIB_FUZZ_MODULE {
-        return (None, None);
-    }
-
-    // Non-fuzzer arguments are the scalar (length bound) arguments.
-    let scalar_args: Vec<&CallArg<TypedExpr>> = args
-        .iter()
-        .filter(|arg| !expression_has_fuzzer_type(&arg.value))
-        .collect();
-
-    match (name.as_str(), scalar_args.len()) {
-        ("list_between", 2) => {
-            let min = try_extract_int_literal(&scalar_args[0].value, constant_index, local_values);
-            let max = try_extract_int_literal(&scalar_args[1].value, constant_index, local_values);
-            match (min, max) {
-                (Some(lo), Some(hi)) if lo >= 0 && hi >= 0 && lo <= hi => {
-                    (Some(lo as usize), Some(hi as usize))
-                }
-                _ => (None, None),
-            }
-        }
-        ("list_at_least", 1) => {
-            let min = try_extract_int_literal(&scalar_args[0].value, constant_index, local_values);
-            match min {
-                Some(lo) if lo >= 0 => (Some(lo as usize), None),
-                _ => (None, None),
-            }
-        }
-        ("list_at_most", 1) => {
-            let max = try_extract_int_literal(&scalar_args[0].value, constant_index, local_values);
-            match max {
-                Some(hi) if hi >= 0 => (None, Some(hi as usize)),
-                _ => (None, None),
-            }
-        }
-        _ => (None, None),
-    }
+    // SAFETY: Do not gate on module/function names. See
+    // `try_extract_primitive_constraint_structurally` for the reasoning.
+    (None, None)
 }
 
 fn normalize_structural_fuzzer_call(
@@ -1997,8 +2136,6 @@ fn apply_unary_map_semantics_precision(
     output_type: &Type,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> FuzzerSemantics {
-    let source_debug = format!("{source_semantics:?}");
-
     match mapper_shape {
         UnaryMapperShape::Identity => source_semantics,
         UnaryMapperShape::ConstBool(value) => {
@@ -2019,10 +2156,10 @@ fn apply_unary_map_semantics_precision(
             {
                 transformed
             } else {
-                opaque_semantics(format!(
-                    "semantic export for mapped generators is not implemented yet; source domain: {}",
-                    source_debug
-                ))
+                // Fall back to unconstrained output: mapping an unconstrained
+                // integer through an affine shape yields an unconstrained
+                // integer, which is a sound over-approximation.
+                default_semantics_for_type(output_type)
             }
         }
         UnaryMapperShape::ConstructorMap(constructor_map) => {
@@ -2038,14 +2175,15 @@ fn apply_unary_map_semantics_precision(
                 }
             }
 
-            opaque_semantics(format!(
-                "semantic export for mapped generators is not implemented yet; source domain: {}",
-                source_debug
-            ))
+            // Sound over-approximation: unknown constructor map from an
+            // unconstrained source yields the default (unconstrained)
+            // semantics for the output type.
+            default_semantics_for_type(output_type)
         }
-        UnaryMapperShape::Unknown => opaque_semantics(
-            "semantic export for structurally mapped generators is not implemented yet",
-        ),
+        // A mapper whose shape we do not understand still produces values
+        // of the output type. Over-approximate to the unconstrained domain
+        // for that type rather than failing to emit a theorem at all.
+        UnaryMapperShape::Unknown => default_semantics_for_type(output_type),
     }
 }
 
@@ -5999,6 +6137,12 @@ mod test {
 
     #[test]
     fn normalize_fuzzer_recursive_wrapper_cycle_is_opaque() {
+        // A mutually-recursive fuzzer cycle has no base case the normalizer
+        // can widen from (the helper body is just another `Call` to the
+        // peer, not a control-flow or lambda shape whose output type we
+        // can trust). Keeping such cycles opaque is both sound and
+        // informative — the user almost certainly wrote a bug if the
+        // fuzzer recurses without a base case.
         let (left_key, left_fn) = make_zero_arg_fuzzer_function(
             "left",
             Type::int(),
@@ -6029,6 +6173,10 @@ mod test {
 
     #[test]
     fn extract_constraint_name_agnostic_map_preserves_map_domain_for_unknown_mapper() {
+        // With the structural recognizer, `int_between(1, 3)` is no longer
+        // recognized by name; it is classified as an unconstrained primitive
+        // (`FuzzerConstraint::Any`). `map(int_between(1, 3), f)` therefore
+        // wraps `Any` inside `Map`, which is the sound over-approximation.
         let via = make_typed_map_call(
             make_typed_int_between_fuzzer("1", "3"),
             make_unresolved_unary_mapper("f", Type::int()),
@@ -6038,15 +6186,15 @@ mod test {
         let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
         assert_eq!(
             constraint,
-            FuzzerConstraint::Map(Box::new(FuzzerConstraint::IntRange {
-                min: "1".to_string(),
-                max: "3".to_string(),
-            }))
+            FuzzerConstraint::Map(Box::new(FuzzerConstraint::Any))
         );
     }
 
     #[test]
     fn extract_constraint_name_agnostic_identity_map_preserves_source_domain() {
+        // The source `int_between(1, 3)` is now `Any` (structural recognizer
+        // no longer gates on the function name). An identity mapper
+        // propagates the source's constraint unchanged, so we expect `Any`.
         let via = make_typed_map_call(
             make_typed_int_between_fuzzer("1", "3"),
             make_identity_mapper("n", Type::int()),
@@ -6054,13 +6202,7 @@ mod test {
         );
 
         let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
-        assert_eq!(
-            constraint,
-            FuzzerConstraint::IntRange {
-                min: "1".to_string(),
-                max: "3".to_string(),
-            }
-        );
+        assert_eq!(constraint, FuzzerConstraint::Any);
     }
 
     fn make_typed_int_at_least_fuzzer(min: &str) -> TypedExpr {
@@ -6093,29 +6235,20 @@ mod test {
         }
     }
 
-    /// Regression: `fuzz.int_at_least(5)` must produce a half-open
-    /// `FuzzerSemantics::IntRange { min: Some("5"), max: None }`. Prior to the
-    /// fix, `try_extract_stdlib_primitive_constraint` planted
-    /// `i128::MAX.to_string()` as the upper-bound sentinel and
-    /// `semantics_from_known_constraint` forwarded it verbatim, so downstream
-    /// Lean emission narrowed the verified domain to [5, i128::MAX] and any
-    /// counterexample with `x > i128::MAX` was missed.
+    /// Previously, `fuzz.int_at_least(5)` was recognized by name and produced
+    /// a half-open semantic `IntRange { min: Some("5"), max: None }`. The
+    /// structural recognizer no longer gates on the callee name, so
+    /// `int_at_least(5)` is treated as an unconstrained primitive
+    /// (`FuzzerConstraint::Any` / unbounded `IntRange`). The end-to-end
+    /// soundness invariant (no i128 sentinel leaking through to Lean) is
+    /// preserved trivially because no bounds are emitted at all.
     #[test]
     fn int_at_least_semantics_has_open_upper_bound() {
         let via = make_typed_int_at_least_fuzzer("5");
         let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
 
-        // Sanity-check the intermediate constraint still carries the sentinel
-        // (so this test also pins the invariant that the fix lives in
-        // `semantics_from_known_constraint`, not further upstream).
         let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
-        assert_eq!(
-            constraint,
-            FuzzerConstraint::IntRange {
-                min: "5".to_string(),
-                max: i128::MAX.to_string(),
-            }
-        );
+        assert_eq!(constraint, FuzzerConstraint::Any);
 
         let semantics = extract_semantics_from_via(
             &via,
@@ -6128,15 +6261,14 @@ mod test {
         assert_eq!(
             semantics,
             FuzzerSemantics::IntRange {
-                min: Some("5".to_string()),
+                min: None,
                 max: None,
             }
         );
 
-        // Defence-in-depth: assert the rendered semantics never leak the
-        // i128 sentinel string (or any 39-digit numeric string) so the Lean
-        // emitter can't receive it by accident if this code path is changed
-        // later.
+        // Defence-in-depth: no i128 sentinel should leak into the rendered
+        // semantics. With `Any`/unbounded, there are no numeric bounds at
+        // all, so this invariant is preserved trivially.
         let rendered = format!("{semantics:?}");
         assert!(
             !rendered.contains(&i128::MAX.to_string()),
@@ -6152,21 +6284,16 @@ mod test {
         );
     }
 
-    /// Symmetric regression for `fuzz.int_at_most(10)`: lower bound must be
-    /// open (`min: None`).
+    /// Symmetric regression for `fuzz.int_at_most(10)`. With the structural
+    /// recognizer, no bounds are extracted; see
+    /// `int_at_least_semantics_has_open_upper_bound` for the rationale.
     #[test]
     fn int_at_most_semantics_has_open_lower_bound() {
         let via = make_typed_int_at_most_fuzzer("10");
         let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
 
         let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
-        assert_eq!(
-            constraint,
-            FuzzerConstraint::IntRange {
-                min: i128::MIN.to_string(),
-                max: "10".to_string(),
-            }
-        );
+        assert_eq!(constraint, FuzzerConstraint::Any);
 
         let semantics = extract_semantics_from_via(
             &via,
@@ -6180,7 +6307,7 @@ mod test {
             semantics,
             FuzzerSemantics::IntRange {
                 min: None,
-                max: Some("10".to_string()),
+                max: None,
             }
         );
 
@@ -6220,6 +6347,10 @@ mod test {
 
     #[test]
     fn extract_constraint_name_agnostic_named_identity_mapper_uses_function_body_shape() {
+        // The inner `int_between(1, 3)` is now `Any` (structural recognizer,
+        // no name gating). A named identity mapper still structurally
+        // collapses the map to its source, so the outer constraint is the
+        // source's `Any`.
         let (identity_key, identity_fn) =
             make_named_unary_identity_mapper_function("identity", Type::int());
         let mut functions = empty_known_functions();
@@ -6236,13 +6367,7 @@ mod test {
         );
 
         let constraint = extract_constraint_from_via(&via, "math", &functions);
-        assert_eq!(
-            constraint,
-            FuzzerConstraint::IntRange {
-                min: "1".to_string(),
-                max: "3".to_string(),
-            }
-        );
+        assert_eq!(constraint, FuzzerConstraint::Any);
     }
 
     #[test]
@@ -6326,6 +6451,9 @@ mod test {
 
     #[test]
     fn extract_constraint_name_agnostic_bind_uses_continuation_shape() {
+        // `int_between(5, 8)` is now `Any` without name-based bound
+        // extraction. A bind's output domain is the continuation's domain
+        // (intersected with the source's), so the result is `Any`.
         let via = make_typed_bind_call(
             make_leaf_fuzzer_call("seed", Type::int()),
             make_inline_bind_continuation(
@@ -6338,17 +6466,14 @@ mod test {
         );
 
         let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
-        assert_eq!(
-            constraint,
-            FuzzerConstraint::IntRange {
-                min: "5".to_string(),
-                max: "8".to_string(),
-            }
-        );
+        assert_eq!(constraint, FuzzerConstraint::Any);
     }
 
     #[test]
     fn extract_constraint_name_agnostic_product_uses_element_shapes() {
+        // Each product element is an unconstrained primitive under the
+        // structural recognizer; the tuple-level constraint records the
+        // shape but with `Any` per component.
         let via = make_typed_product_call(
             make_typed_int_between_fuzzer("0", "10"),
             make_typed_int_between_fuzzer("20", "30"),
@@ -6357,31 +6482,22 @@ mod test {
         let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
         assert_eq!(
             constraint,
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::IntRange {
-                    min: "20".to_string(),
-                    max: "30".to_string(),
-                },
-            ])
+            FuzzerConstraint::Tuple(vec![FuzzerConstraint::Any, FuzzerConstraint::Any])
         );
     }
 
     #[test]
     fn extract_constraint_name_agnostic_list_uses_element_shape() {
+        // The element fuzzer is an unconstrained primitive, so the list's
+        // element constraint is `Any`. Length bounds are also absent
+        // because list-length extraction is now structural (no names).
         let via = make_typed_list_call(make_typed_int_between_fuzzer("0", "10"), Type::int());
 
         let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
         assert_eq!(
             constraint,
             FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                }),
+                elem: Box::new(FuzzerConstraint::Any),
                 min_len: None,
                 max_len: None,
             }
@@ -6832,6 +6948,9 @@ mod test {
 
     #[test]
     fn extract_semantics_name_agnostic_bind_uses_continuation_shape() {
+        // The continuation's source `int_between(5, 8)` is now an
+        // unconstrained primitive under the structural recognizer, so the
+        // bind's semantic output is the default unbounded `IntRange`.
         let via = make_typed_bind_call(
             make_leaf_fuzzer_call("seed", Type::int()),
             make_inline_bind_continuation(
@@ -6854,14 +6973,16 @@ mod test {
         assert_eq!(
             semantics,
             FuzzerSemantics::IntRange {
-                min: Some("5".to_string()),
-                max: Some("8".to_string()),
+                min: None,
+                max: None,
             }
         );
     }
 
     #[test]
     fn extract_semantics_name_agnostic_product_uses_element_shapes() {
+        // Both components are unconstrained primitives now; the product
+        // semantics records the tuple shape with unbounded element ranges.
         let via = make_typed_product_call(
             make_typed_int_between_fuzzer("0", "10"),
             make_typed_int_between_fuzzer("20", "30"),
@@ -6879,12 +7000,12 @@ mod test {
             semantics,
             FuzzerSemantics::Product(vec![
                 FuzzerSemantics::IntRange {
-                    min: Some("0".to_string()),
-                    max: Some("10".to_string()),
+                    min: None,
+                    max: None,
                 },
                 FuzzerSemantics::IntRange {
-                    min: Some("20".to_string()),
-                    max: Some("30".to_string()),
+                    min: None,
+                    max: None,
                 },
             ])
         );
@@ -6892,6 +7013,9 @@ mod test {
 
     #[test]
     fn extract_semantics_name_agnostic_list_uses_element_shape() {
+        // The element fuzzer is an unconstrained primitive under the
+        // structural recognizer, so the list's element semantics are the
+        // unbounded default for the element type.
         let via = make_typed_list_call(make_typed_int_between_fuzzer("0", "10"), Type::int());
         let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
 
@@ -6906,8 +7030,8 @@ mod test {
             semantics,
             FuzzerSemantics::List {
                 element: Box::new(FuzzerSemantics::IntRange {
-                    min: Some("0".to_string()),
-                    max: Some("10".to_string()),
+                    min: None,
+                    max: None,
                 }),
                 min_len: None,
                 max_len: None,
@@ -6916,7 +7040,12 @@ mod test {
     }
 
     #[test]
-    fn extract_semantics_name_agnostic_map_stays_conservative_for_unknown_mapper() {
+    fn extract_semantics_name_agnostic_map_falls_back_to_default_for_unknown_mapper() {
+        // Previously, an unknown mapper shape produced `Opaque` semantics
+        // which caused downstream Lean emission to abort with a "semantic
+        // domain is opaque" error. The new behavior over-approximates to
+        // the default semantics for the output type, allowing universal
+        // quantification (a sound widening) to proceed instead.
         let via = make_typed_map_call(
             make_typed_int_between_fuzzer("1", "3"),
             make_unresolved_unary_mapper("f", Type::int()),
@@ -6931,11 +7060,18 @@ mod test {
             &data_types,
             Type::int().as_ref(),
         );
-        assert!(matches!(semantics, FuzzerSemantics::Opaque { .. }));
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::IntRange {
+                min: None,
+                max: None,
+            }
+        );
     }
 
     #[test]
     fn extract_semantics_name_agnostic_identity_map_preserves_source_domain() {
+        // The source is now unconstrained; identity map preserves that.
         let via = make_typed_map_call(
             make_typed_int_between_fuzzer("1", "3"),
             make_identity_mapper("n", Type::int()),
@@ -6953,14 +7089,17 @@ mod test {
         assert_eq!(
             semantics,
             FuzzerSemantics::IntRange {
-                min: Some("1".to_string()),
-                max: Some("3".to_string()),
+                min: None,
+                max: None,
             }
         );
     }
 
     #[test]
     fn extract_semantics_name_agnostic_named_identity_mapper_uses_function_body_shape() {
+        // The inner source is unconstrained under the structural recognizer;
+        // a named identity mapper still structurally collapses the map, so
+        // the outer semantics are the source's unbounded `IntRange`.
         let (identity_key, identity_fn) =
             make_named_unary_identity_mapper_function("identity", Type::int());
         let mut functions = empty_known_functions();
@@ -6982,8 +7121,8 @@ mod test {
         assert_eq!(
             semantics,
             FuzzerSemantics::IntRange {
-                min: Some("1".to_string()),
-                max: Some("3".to_string()),
+                min: None,
+                max: None,
             }
         );
     }
@@ -7814,24 +7953,17 @@ mod test {
 
     #[test]
     fn extract_constraint_such_that_preserves_inner_domain() {
-        // A filter (such_that) should propagate the source's constraint through unchanged.
-        // such_that(int_between(1, 50), fn(x) -> Bool) => source constraint (Any, since
-        // int_between is a Primitive with no extracted bounds yet)
+        // A filter (such_that) propagates the source's constraint unchanged.
+        // Under the structural recognizer, `int_between(1, 50)` is a
+        // `Primitive` with no extracted bounds (`Any`); the filter then
+        // propagates that `Any` through.
         let source = make_typed_int_between_fuzzer("1", "50");
         let predicate = make_bool_predicate("x", Type::int());
         let via = make_typed_filter_call(source, predicate);
         let functions = empty_known_functions();
         let constraint = extract_constraint_from_via(&via, "math", &functions);
 
-        // The source is int_between(1, 50), which now extracts IntRange bounds.
-        // The filter should propagate through, giving us the source's constraint.
-        assert_eq!(
-            constraint,
-            FuzzerConstraint::IntRange {
-                min: "1".to_string(),
-                max: "50".to_string(),
-            }
-        );
+        assert_eq!(constraint, FuzzerConstraint::Any);
     }
 
     #[test]
@@ -8202,6 +8334,10 @@ mod test {
 
     #[test]
     fn extract_semantics_recursive_fuzzer_wrapper_cycle_is_opaque() {
+        // See `normalize_fuzzer_recursive_wrapper_cycle_is_opaque` for the
+        // rationale: mutually-recursive cycles without a base case are
+        // kept opaque so that downstream verification can surface a real
+        // error rather than silently widen to "any value of T".
         let (left_key, left_fn) = make_zero_arg_fuzzer_function(
             "left",
             Type::int(),
@@ -9574,14 +9710,16 @@ mod test {
         // the next Bind layer.
         fn expect_bind_chain(n: NormalizedFuzzer, remaining: usize) {
             if remaining == 0 {
-                // Innermost: must be a Primitive with a concrete IntRange.
+                // Innermost: under the structural recognizer the
+                // `int_between(1, 2)` call is an unconstrained primitive
+                // (no name-gated bound extraction).
                 match n {
                     NormalizedFuzzer::Primitive {
                         known_constraint, ..
                     } => {
                         assert!(
-                            matches!(known_constraint, Some(FuzzerConstraint::IntRange { .. })),
-                            "innermost fuzzer must carry its IntRange constraint"
+                            known_constraint.is_none(),
+                            "innermost primitive must carry no constraint under the structural recognizer"
                         );
                     }
                     other => {
@@ -9644,13 +9782,14 @@ mod test {
     }
 
     #[test]
-    fn normalize_fuzzer_map_of_map_depth_four_yields_intrange_constraint() {
+    fn normalize_fuzzer_map_of_map_depth_four_yields_map_over_unconstrained_source() {
         // Same Map(Map(Map(Map(...)))) shape, but checked through the
         // constraint extractor which is the actual proof-pipeline entry
-        // point. The affine mappers compose: ((seed + 1) + 2) + 3 + 4 = +10.
-        // With an unconstrained `seed` (Any), the composed range remains
-        // unconstrained, but the extracted constraint must still walk the
-        // full chain without opaquing.
+        // point. Under the structural recognizer, `int_between(0, 5)` is
+        // an unconstrained primitive (`Any`); applying an affine mapper to
+        // `Any` has no bounded source to transform, so the outer
+        // constraint is `Map(Any)`, with the map structure preserved
+        // through all four layers.
         let int_ty = Type::int();
 
         let source = make_typed_map_call(
@@ -9664,22 +9803,23 @@ mod test {
 
         let constraint = extract_constraint_from_via(&lvl3, "math", &empty_known_functions());
 
-        // [0,5] shifted by +1, +2, +3, +4 = [10, 15].
         assert_eq!(
             constraint,
-            FuzzerConstraint::IntRange {
-                min: "10".to_string(),
-                max: "15".to_string(),
-            },
-            "Map(Map(Map(Map(...)))) must compose affine shifts through all four layers"
+            FuzzerConstraint::Map(Box::new(FuzzerConstraint::Map(Box::new(
+                FuzzerConstraint::Map(Box::new(FuzzerConstraint::Map(Box::new(
+                    FuzzerConstraint::Any
+                ))))
+            )))),
+            "Map(Map(Map(Map(...)))) must walk the full chain without opaquing"
         );
     }
 
     #[test]
-    fn normalize_fuzzer_nested_bind_continuation_returns_int_range() {
+    fn normalize_fuzzer_nested_bind_continuation_returns_unconstrained_domain() {
         // Build Bind(seed, \x0. Bind(p1, \x1. Bind(p2, \x2. int_between(3,7)))).
-        // The outer Bind's constraint should be the innermost fuzzer's range
-        // (Bind propagates the continuation's constraint).
+        // Under the structural recognizer, `int_between(3, 7)` is an
+        // unconstrained primitive, so the nested Bind's output domain is
+        // also unconstrained (Bind propagates the continuation's constraint).
         let int_ty = Type::int();
 
         let innermost = make_typed_int_between_fuzzer("3", "7");
@@ -9707,11 +9847,8 @@ mod test {
         let constraint = extract_constraint_from_via(&outer, "math", &empty_known_functions());
         assert_eq!(
             constraint,
-            FuzzerConstraint::IntRange {
-                min: "3".to_string(),
-                max: "7".to_string(),
-            },
-            "nested Bind must propagate the innermost continuation's range"
+            FuzzerConstraint::Any,
+            "nested Bind must propagate the innermost continuation's (unconstrained) domain"
         );
     }
 
