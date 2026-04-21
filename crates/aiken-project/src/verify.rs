@@ -4313,14 +4313,17 @@ fn generate_proof_file(
              open PlutusCore.UPLC.Term (Term Const Program)\n\
              open AikenVerify.Utils\n",
         );
+        // PlutusCore's `#import_uplc` syntax is: `<identifier> <lang> <format> <filepath>`.
+        // Aiken's config layer enforces Plutus V3 only (see `validate_v3_only` in config.rs),
+        // so the language argument is always `PlutusV3`.
         s.push_str(&format!(
-            "\n#import_uplc {prog} single_cbor_hex \"./cbor/{test_id}.cbor\"\n"
+            "\n#import_uplc {prog} PlutusV3 single_cbor_hex \"./cbor/{test_id}.cbor\"\n"
         ));
         // For validator/equivalence modes, also import the handler program
         match target {
             VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence => {
                 s.push_str(&format!(
-                    "#import_uplc {handler_prog} single_cbor_hex \"./cbor/{test_id}_handler.cbor\"\n"
+                    "#import_uplc {handler_prog} PlutusV3 single_cbor_hex \"./cbor/{test_id}_handler.cbor\"\n"
                 ));
             }
             _ => {}
