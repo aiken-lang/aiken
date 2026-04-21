@@ -1901,6 +1901,7 @@ fn resolve_local_plutus_core_dir(explicit: Option<&Path>) -> Option<PathBuf> {
 fn generate_utils(cek_budget: u64) -> String {
     format!(
         r#"import PlutusCore.UPLC.CekMachine
+import PlutusCore.UPLC.PlutusScript
 
 namespace AikenVerify.Utils
 open PlutusCore.Integer (Integer)
@@ -1909,6 +1910,7 @@ open PlutusCore.UPLC.CekMachine
 open PlutusCore.UPLC.CekValue (CekValue)
 open PlutusCore.Data (Data)
 open PlutusCore.UPLC.Term (Term Const Program)
+open PlutusCore.UPLC.PlutusScript (PlutusScript)
 
 def fromHaltState (s : State): Option CekValue :=
   match s with
@@ -1952,16 +1954,16 @@ def isHaltState : State -> Prop
  | .Halt _ => True
  | _ => False
 
-def proveTests (p : Program) (args : List Term) : Option Bool :=
-  fromFrameToBool $ cekExecuteProgram p args {cek_budget}
+def proveTests (p : PlutusScript) (args : List Term) : Option Bool :=
+  fromFrameToBool $ cekExecuteProgram p.script args {cek_budget}
 
 /-- For Void-returning tests: True iff the program halts without error. -/
-def proveTestsHalt (p : Program) (args : List Term) : Prop :=
-  isHaltState (cekExecuteProgram p args {cek_budget})
+def proveTestsHalt (p : PlutusScript) (args : List Term) : Prop :=
+  isHaltState (cekExecuteProgram p.script args {cek_budget})
 
 /-- For Void+fail tests: True iff the program reaches an error state. -/
-def proveTestsError (p : Program) (args : List Term) : Prop :=
-  isErrorState (cekExecuteProgram p args {cek_budget})
+def proveTestsError (p : PlutusScript) (args : List Term) : Prop :=
+  isErrorState (cekExecuteProgram p.script args {cek_budget})
 
 def intArg (x : Integer) : List Term :=
   [Term.Const (Const.Data (Data.I x))]
@@ -1988,7 +1990,7 @@ def pairArg (x : Data) (y : Data) : List Term :=
   [Term.Const (Const.Data (Data.List [x, y]))]
 
 /-- For `fail once` witness mode: True iff the program returns `value` for the given args. -/
-def witnessTests (p : Program) (args : List Term) (value : Bool) : Prop :=
+def witnessTests (p : PlutusScript) (args : List Term) (value : Bool) : Prop :=
   proveTests p args = some value
 
 end AikenVerify.Utils

@@ -747,7 +747,7 @@ fn generate_workspace_creates_files() {
 
     // Check Utils.lean contains the budget
     let utils = fs::read_to_string(out_dir.join("AikenVerify/Utils.lean")).unwrap();
-    assert!(utils.contains("cekExecuteProgram p args 20000"));
+    assert!(utils.contains("cekExecuteProgram p.script args 20000"));
 
     // Check root import file
     let root = fs::read_to_string(out_dir.join("AikenVerify.lean")).unwrap();
