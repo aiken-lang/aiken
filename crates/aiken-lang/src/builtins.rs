@@ -590,7 +590,7 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
             ValueConstructorVariant::ModuleFn {
                 name: "unconstr_index".to_string(),
                 field_map: None,
-                module: "aiken/builtin".to_string(),
+                module: BUILTIN.to_string(),
                 arity: 1,
                 location: Span::empty(),
                 builtin: None,
@@ -606,7 +606,7 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
             ValueConstructorVariant::ModuleFn {
                 name: "unconstr_fields".to_string(),
                 field_map: None,
-                module: "aiken/builtin".to_string(),
+                module: BUILTIN.to_string(),
                 arity: 1,
                 location: Span::empty(),
                 builtin: None,
@@ -1166,7 +1166,7 @@ pub fn prelude_functions(
 
     functions.insert(
         FunctionAccessKey {
-            module_name: "aiken/builtin".to_string(),
+            module_name: BUILTIN.to_string(),
             function_name: "unconstr_index".to_string(),
         },
         unconstr_index_func,
@@ -1230,7 +1230,7 @@ pub fn prelude_functions(
 
     functions.insert(
         FunctionAccessKey {
-            module_name: "aiken/builtin".to_string(),
+            module_name: BUILTIN.to_string(),
             function_name: "unconstr_fields".to_string(),
         },
         unconstr_fields_func,
