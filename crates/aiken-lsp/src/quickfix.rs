@@ -2,7 +2,6 @@ use crate::{
     edits::{self, AnnotatedEdit, ParsedDocument},
     server::lsp_project::LspProject,
 };
-use aiken_project::module::CheckedModule;
 use std::{collections::HashMap, str::FromStr};
 
 const UNKNOWN_VARIABLE: &str = "aiken::check::unknown::variable";
@@ -280,15 +279,13 @@ fn unknown_identifier(
     let mut edits = Vec::new();
 
     if let Some(serde_json::Value::String(var_name)) = data {
-        for module in compiler.project.modules() {
-            if module.ast.has_definition(var_name) {
-                if let Some(edit) = parsed_document.import(&module, Some(var_name)) {
-                    edits.push(edit)
-                }
+        for module in compiler.project.glossary().find_definition(var_name) {
+            if let Some(edit) = parsed_document.import(module, Some(var_name)) {
+                edits.push(edit)
+            }
 
-                if let Some(edit) = suggest_qualified(parsed_document, &module, var_name, range) {
-                    edits.push(edit)
-                }
+            if let Some(edit) = suggest_qualified(parsed_document, module, var_name, range) {
+                edits.push(edit)
             }
         }
     }
@@ -305,17 +302,18 @@ fn unknown_constructor(
     let mut edits = Vec::new();
 
     if let Some(serde_json::Value::String(constructor_name)) = data {
-        for module in compiler.project.modules() {
-            if module.ast.has_constructor(constructor_name) {
-                if let Some(edit) = parsed_document.import(&module, Some(constructor_name)) {
-                    edits.push(edit)
-                }
+        for module in compiler
+            .project
+            .glossary()
+            .find_constructor(constructor_name)
+        {
+            if let Some(edit) = parsed_document.import(module, Some(constructor_name)) {
+                edits.push(edit)
+            }
 
-                if let Some(edit) =
-                    suggest_qualified(parsed_document, &module, constructor_name, range)
-                {
-                    edits.push(edit)
-                }
+            if let Some(edit) = suggest_qualified(parsed_document, module, constructor_name, range)
+            {
+                edits.push(edit)
             }
         }
     }
@@ -325,7 +323,7 @@ fn unknown_constructor(
 
 fn suggest_qualified(
     parsed_document: &ParsedDocument,
-    module: &CheckedModule,
+    module: &str,
     identifier: &str,
     range: &lsp_types::Range,
 ) -> Option<AnnotatedEdit> {
@@ -357,14 +355,11 @@ fn unknown_module(
 ) -> Vec<AnnotatedEdit> {
     let mut edits = Vec::new();
 
-    if let Some(serde_json::Value::String(module_name)) = data {
-        for module in compiler.project.modules() {
-            if module.name.ends_with(module_name)
-                && let Some(edit) = parsed_document.import(&module, None)
-            {
-                edits.push(edit);
-            }
-        }
+    if let Some(serde_json::Value::String(module_name)) = data
+        && let Some(module) = compiler.project.glossary().find_module(module_name)
+        && let Some(edit) = parsed_document.import(module, None)
+    {
+        edits.push(edit);
     }
 
     edits

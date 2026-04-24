@@ -26,7 +26,7 @@ use crate::{
     },
     config::ProjectConfig,
     error::{Error, Warning},
-    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
+    module::{CheckedModule, CheckedModules, Glossary, ParsedModule, ParsedModules},
     options::BlueprintExport,
     telemetry::{CoverageMode, Event},
 };
@@ -102,6 +102,7 @@ where
     constants: IndexMap<FunctionAccessKey, TypedExpr>,
     data_types: IndexMap<DataTypeKey, TypedDataType>,
     module_sources: HashMap<String, (String, LineNumbers)>,
+    glossary: Glossary,
 }
 
 impl<T> Project<T>
@@ -133,8 +134,8 @@ where
 
         let mut module_types = HashMap::new();
 
-        module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
-        module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
+        module_types.insert(builtins::PRELUDE.to_string(), builtins::prelude(&id_gen));
+        module_types.insert(builtins::BUILTIN.to_string(), builtins::plutus(&id_gen));
 
         let functions = builtins::prelude_functions(&id_gen, &module_types);
 
@@ -155,6 +156,7 @@ where
             constants: IndexMap::new(),
             data_types,
             module_sources: HashMap::new(),
+            glossary: Glossary::default(),
         }
     }
 
@@ -168,6 +170,10 @@ where
             utils::indexmap::as_str_ref_values(&self.module_sources),
             tracing,
         )
+    }
+
+    pub fn glossary(&self) -> &Glossary {
+        &self.glossary
     }
 
     pub fn warnings(&mut self) -> Vec<Warning> {
@@ -913,6 +919,8 @@ where
         let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
         self.with_dependencies(modules)?;
+
+        modules.extends_glossary(&mut self.glossary);
 
         for name in modules.sequence(&our_modules)? {
             if let Some(module) = modules.remove(&name) {

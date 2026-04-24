@@ -1415,8 +1415,8 @@ mod tester {
         let mut warnings = vec![];
 
         let mut module_types = HashMap::new();
-        module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
-        module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
+        module_types.insert(builtins::PRELUDE.to_string(), builtins::prelude(&id_gen));
+        module_types.insert(builtins::BUILTIN.to_string(), builtins::plutus(&id_gen));
 
         for (package, module) in extra {
             let mut warnings = vec![];

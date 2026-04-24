@@ -6,6 +6,7 @@ pub mod well_known;
 
 use crate::{
     ast::well_known::VALIDATOR_ELSE,
+    builtins,
     expr::{TypedExpr, UntypedExpr},
     line_numbers::LineNumbers,
     parser::token::{Base, Token},
@@ -113,38 +114,8 @@ impl TypedModule {
             .find_map(|definition| definition.find_node(byte_index))
     }
 
-    pub fn has_definition(&self, name: &str) -> bool {
-        self.definitions.iter().any(|def| match def {
-            Definition::Fn(f) => f.public && f.name == name,
-            Definition::TypeAlias(alias) => alias.public && alias.alias == name,
-            Definition::ModuleConstant(cst) => cst.public && cst.name == name,
-            Definition::DataType(t) => t.public && t.name == name,
-            Definition::Use(_) => false,
-            Definition::Test(_) => false,
-            Definition::Validator(_) => false,
-            Definition::Benchmark(_) => false,
-        })
-    }
-
-    pub fn has_constructor(&self, name: &str) -> bool {
-        self.definitions.iter().any(|def| match def {
-            Definition::DataType(t) if t.public && !t.opaque => t
-                .constructors
-                .iter()
-                .any(|constructor| constructor.name == name),
-            Definition::DataType(_) => false,
-            Definition::Fn(_) => false,
-            Definition::TypeAlias(_) => false,
-            Definition::ModuleConstant(_) => false,
-            Definition::Use(_) => false,
-            Definition::Test(_) => false,
-            Definition::Validator(_) => false,
-            Definition::Benchmark(_) => false,
-        })
-    }
-
     pub fn validate_module_name(&self) -> Result<(), Error> {
-        if self.name == "aiken" || self.name == "aiken/builtin" {
+        if self.name == builtins::PRELUDE || self.name == builtins::BUILTIN {
             return Err(Error::ReservedModuleName {
                 name: self.name.to_string(),
             });
