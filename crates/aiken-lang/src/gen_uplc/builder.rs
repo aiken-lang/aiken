@@ -916,11 +916,14 @@ pub fn list_access_to_uplc(
                         }
 
                         ExpectLevel::Full | ExpectLevel::Items => {
-                            if otherwise_delayed == Term::Error.delay() && tail_present {
-                                // No need to check last item if tail was present
+                            if tail_wasnt_cutoff {
+                                // The last retained name is the tail binder itself, so there is
+                                // no additional list cell to validate here.
                                 head_item(name, tipo, &tail_name, acc).lambda(tail_name)
                             } else if tail_present {
-                                // Custom error instead of trying to do head_item on a possibly empty list.
+                                // The tail was already cut off, so this retained item is still a
+                                // head pattern and must prove the list is non-empty before we can
+                                // read it, even when the fallback is the generic delayed error.
                                 Term::var(tail_name.to_string())
                                     .delay_filled_choose_list(
                                         otherwise_delayed.clone(),

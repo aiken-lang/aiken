@@ -20,6 +20,7 @@
 - **aiken-lang**: Do not display UPLC machine logs in test reports when `-t silent` is given. @KtorZ
 - **aiken-lang**: Allow test assertions to "see through" backpassing and provide feedback on test failure even when using continuation passing style. @KtorZ
 - **aiken-lang**: Fix code generation interner to avoid FreeUnique caused by optimisations. @KtorZ
+- **aiken-lang**: Fix compiler removing empty list checks with `-t silent` for list patterns containing only discards. @KtorZ
 - **aiken-lsp**: Fix import suggestions not being able to see through modules that aren't within the dependency path. @KtorZ
 
 ## v1.1.20 - 2025-12-11
