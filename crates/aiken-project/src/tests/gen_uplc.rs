@@ -6458,3 +6458,39 @@ fn as_data() {
 
     assert_uplc(src, program, false, true)
 }
+
+#[test]
+fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
+    let src = r#"
+      pub fn from_asset_list(inner: List<Int>) -> List<Int> {
+        expect [_, ..] as x = inner
+        x
+      }
+
+      test foo() {
+        let x = from_asset_list([])
+        x == x
+      }
+    "#;
+
+    let program_verbose = Term::equals_data()
+        .apply(Term::list_data().apply(Term::var("x_id_0")))
+        .apply(Term::list_data().apply(Term::var("x_id_0")))
+        .lambda("x_id_0")
+        .apply(Term::empty_list().delayed_choose_list(
+            Term::Error.delayed_trace(Term::string("expect [_, ..] as x = inner")),
+            Term::empty_list(),
+        ));
+
+    let program_silent = Term::equals_data()
+        .apply(Term::list_data().apply(Term::var("x_id_0")))
+        .apply(Term::list_data().apply(Term::var("x_id_0")))
+        .lambda("x_id_0")
+        .apply(Term::empty_list().delayed_choose_list(
+            Term::Error,
+            Term::empty_list(),
+        ));
+
+    assert_uplc(src, program_verbose, true, true);
+    assert_uplc(src, program_silent, true, false);
+}
