@@ -180,16 +180,25 @@ impl Mode {
 fn fits(
     mut limit: isize,
     mut current_width: isize,
-    mut docs: VecDeque<(isize, Mode, &Document<'_>)>,
+    remaining: &VecDeque<(isize, Mode, &Document<'_>)>,
 ) -> bool {
+    let mut extra: Vec<(isize, Mode, &Document<'_>)> = Vec::new();
+    let mut idx: usize = 0;
+
     loop {
         if current_width > limit {
             return false;
         };
 
-        let (indent, mode, document) = match docs.pop_front() {
+        let (indent, mode, document) = match extra.pop() {
             Some(x) => x,
-            None => return true,
+            None => match remaining.get(idx) {
+                Some(x) => {
+                    idx += 1;
+                    *x
+                }
+                None => return true,
+            },
         };
 
         match document {
@@ -199,13 +208,13 @@ fn fits(
 
             Document::Line(_) => return true,
 
-            Document::Nest(i, doc) => docs.push_front((i + indent, mode, doc)),
+            Document::Nest(i, doc) => extra.push((i + indent, mode, doc)),
 
-            Document::ForceUnbroken(doc) => docs.push_front((indent, mode, doc)),
+            Document::ForceUnbroken(doc) => extra.push((indent, mode, doc)),
 
-            Document::Group(doc) if mode.is_forced() => docs.push_front((indent, mode, doc)),
+            Document::Group(doc) if mode.is_forced() => extra.push((indent, mode, doc)),
 
-            Document::Group(doc) => docs.push_front((indent, Mode::Unbroken, doc)),
+            Document::Group(doc) => extra.push((indent, Mode::Unbroken, doc)),
 
             Document::Str(s) => limit -= s.len() as isize,
 
@@ -218,7 +227,7 @@ fn fits(
 
             Document::Vec(vec) => {
                 for doc in vec.iter().rev() {
-                    docs.push_front((indent, mode, doc));
+                    extra.push((indent, mode, doc));
                 }
             }
         }
@@ -264,7 +273,7 @@ fn format(
                 } else {
                     let unbroken_width = width + unbroken.len() as isize;
 
-                    if fits(limit, unbroken_width, docs.clone()) {
+                    if fits(limit, unbroken_width, &docs) {
                         writer.push_str(unbroken);
                         width = unbroken_width;
                         continue;
@@ -361,7 +370,7 @@ fn format(
 
                 group_docs.push_front((indent, inner_mode, doc.as_ref()));
 
-                if fits(limit, width, group_docs) {
+                if fits(limit, width, &group_docs) {
                     docs.push_front((indent, inner_mode, doc));
                 } else {
                     docs.push_front((indent, Mode::Broken, doc));
@@ -431,7 +440,7 @@ impl<'a> Document<'a> {
     pub fn fits(&self, target: isize) -> bool {
         let mut docs = VecDeque::new();
         docs.push_front((0, Mode::Unbroken, self));
-        fits(target, 0, docs)
+        fits(target, 0, &docs)
     }
 
     pub fn group(self) -> Self {

@@ -5,12 +5,12 @@ use crate::{
     quickfix,
     quickfix::Quickfix,
     utils::{
-        COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN, path_to_uri, span_to_lsp_range,
-        text_edit_replace, uri_to_module_name,
+        path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
+        COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
     },
 };
 use aiken_lang::{
-    ast::{Definition, Located, ModuleKind, Span, Use},
+    ast::{Definition, Located, ModuleKind, Span, TypedDefinition, Use},
     error::ExtraData,
     line_numbers::LineNumbers,
     parser,
@@ -23,17 +23,17 @@ use aiken_project::{
 };
 use indoc::formatdoc;
 use itertools::Itertools;
-use lsp_server::{Connection, Message};
+use lsp_server::Connection;
 use lsp_types::{
-    DocumentFormattingParams, InitializeParams, TextEdit,
     notification::{
         DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidSaveTextDocument,
         Notification, Progress, PublishDiagnostics, ShowMessage,
     },
     request::{
-        CodeActionRequest, Completion, Formatting, GotoDefinition, HoverRequest, Request,
-        WorkDoneProgressCreate,
+        CodeActionRequest, Completion, DocumentSymbolRequest, Formatting, GotoDefinition,
+        HoverRequest, References, Request, WorkDoneProgressCreate,
     },
+    DocumentFormattingParams, DocumentSymbol, InitializeParams, SymbolKind, TextEdit,
 };
 use miette::Diagnostic;
 use std::{
@@ -45,7 +45,15 @@ use std::{
 pub mod lsp_project;
 pub mod telemetry;
 
-#[allow(dead_code)]
+/// Result returned from background compilation thread
+struct BackgroundCompileResult {
+    compiler: LspProject,
+    stored_diagnostics: HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
+    stored_messages: Vec<lsp_types::ShowMessageParams>,
+}
+
+unsafe impl Send for BackgroundCompileResult {}
+
 pub struct Server {
     // Project root directory
     root: PathBuf,
@@ -71,6 +79,116 @@ pub struct Server {
 
     /// An instance of a LspProject
     compiler: Option<LspProject>,
+
+    pending_compile: Option<std::thread::JoinHandle<BackgroundCompileResult>>,
+
+    /// Files changed since last successful compilation (used to avoid no-op compiles)
+    files_changed_since_compile: HashSet<String>,
+}
+
+fn process_diagnostic_into<E>(
+    error: E,
+    stored_diagnostics: &mut HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
+    stored_messages: &mut Vec<lsp_types::ShowMessageParams>,
+) where
+    E: miette::Diagnostic + GetSource + ExtraData,
+{
+    let (severity, typ) = match error.severity() {
+        Some(severity) => match severity {
+            miette::Severity::Error => (
+                lsp_types::DiagnosticSeverity::ERROR,
+                lsp_types::MessageType::ERROR,
+            ),
+            miette::Severity::Warning => (
+                lsp_types::DiagnosticSeverity::WARNING,
+                lsp_types::MessageType::WARNING,
+            ),
+            miette::Severity::Advice => (
+                lsp_types::DiagnosticSeverity::HINT,
+                lsp_types::MessageType::INFO,
+            ),
+        },
+        None => (
+            lsp_types::DiagnosticSeverity::ERROR,
+            lsp_types::MessageType::ERROR,
+        ),
+    };
+
+    let message = match error.source() {
+        Some(err) => err.to_string(),
+        None => error.to_string(),
+    };
+
+    if let (Some(path), Some(src)) = (error.path(), error.src()) {
+        let line_numbers = LineNumbers::new(&src);
+
+        let related_labels = || {
+            error
+                .related()
+                .and_then(|mut iter| iter.find(|diag| diag.labels().is_some()))
+                .and_then(|diag| diag.labels())
+        };
+
+        let lsp_range = if let Some(span) = error
+            .labels()
+            .or_else(related_labels)
+            .and_then(|mut labels| labels.next())
+        {
+            span_to_lsp_range(
+                Span {
+                    start: span.inner().offset(),
+                    end: span.inner().offset() + span.inner().len(),
+                },
+                &line_numbers,
+            )
+        } else {
+            stored_messages.push(lsp_types::ShowMessageParams { typ, message });
+            return;
+        };
+
+        let lsp_diagnostic = lsp_types::Diagnostic {
+            range: lsp_range,
+            severity: Some(severity),
+            code: error.code().map(|c| {
+                lsp_types::NumberOrString::String(
+                    c.to_string()
+                        .trim()
+                        .replace("Warning ", "")
+                        .replace("Error ", ""),
+                )
+            }),
+            code_description: None,
+            source: None,
+            message,
+            related_information: None,
+            tags: None,
+            data: error.extra_data().map(serde_json::Value::String),
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let path = path.canonicalize().ok().unwrap_or(path);
+
+        stored_diagnostics
+            .entry(path.clone())
+            .or_default()
+            .push(lsp_diagnostic.clone());
+
+        let lsp_message = if let Some(hint) = error.help() {
+            hint.to_string()
+        } else {
+            "something is off".to_string()
+        };
+
+        let lsp_hint = lsp_types::Diagnostic {
+            severity: Some(lsp_types::DiagnosticSeverity::HINT),
+            message: lsp_message,
+            ..lsp_diagnostic
+        };
+
+        stored_diagnostics.entry(path).or_default().push(lsp_hint);
+    } else {
+        stored_messages.push(lsp_types::ShowMessageParams { typ, message })
+    }
 }
 
 impl Server {
@@ -99,7 +217,7 @@ impl Server {
 
     /// Compile the project if we are in one. Otherwise do nothing.
     #[allow(clippy::result_large_err)]
-    fn compile(&mut self, connection: &Connection) -> Result<(), ServerError> {
+    pub fn compile(&mut self, connection: &Connection) -> Result<(), ServerError> {
         self.notify_client_of_compilation_start(connection)?;
 
         if let Some(compiler) = self.compiler.as_mut() {
@@ -118,6 +236,68 @@ impl Server {
 
         self.notify_client_of_compilation_end(connection)?;
 
+        Ok(())
+    }
+
+    fn spawn_compile(&mut self) {
+        if self.files_changed_since_compile.is_empty()
+            && let Some(compiler) = &self.compiler
+            && !compiler.dep_cache().type_infos.is_empty()
+        {
+            return;
+        }
+
+        let _ = self.pending_compile.take();
+        if let Some(config) = self.config.clone() {
+            let root = self.root.clone();
+            let dep_cache = self
+                .compiler
+                .as_ref()
+                .map(|c| c.dep_cache().clone())
+                .unwrap_or_default();
+            let handle = std::thread::spawn(move || {
+                let mut compiler =
+                    LspProject::new_with_cache(config, root, telemetry::Lsp, dep_cache);
+                let result = compiler.compile();
+                let mut stored_diagnostics: HashMap<PathBuf, Vec<lsp_types::Diagnostic>> =
+                    HashMap::new();
+                let mut stored_messages: Vec<lsp_types::ShowMessageParams> = Vec::new();
+                for warning in compiler.project.warnings() {
+                    process_diagnostic_into(warning, &mut stored_diagnostics, &mut stored_messages);
+                }
+                if let Err(errs) = result {
+                    for err in errs {
+                        process_diagnostic_into(err, &mut stored_diagnostics, &mut stored_messages);
+                    }
+                }
+                BackgroundCompileResult {
+                    compiler,
+                    stored_diagnostics,
+                    stored_messages,
+                }
+            });
+            self.pending_compile = Some(handle);
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn poll_compile_result(&mut self, connection: &Connection) -> Result<(), ServerError> {
+        let finished = self
+            .pending_compile
+            .as_ref()
+            .map(|h| h.is_finished())
+            .unwrap_or(false);
+        if finished
+            && let Some(handle) = self.pending_compile.take()
+            && let Ok(result) = handle.join()
+        {
+            self.compiler = Some(result.compiler);
+            self.files_changed_since_compile.clear();
+            self.stored_diagnostics = result.stored_diagnostics;
+            self.stored_messages = result.stored_messages;
+            self.notify_client_of_compilation_end(connection)?;
+            self.publish_stored_diagnostics(connection)?;
+        }
         Ok(())
     }
 
@@ -158,38 +338,16 @@ impl Server {
         let path = params.text_document.uri.path();
         let mut new_text = String::new();
 
-        match self.edited.get(path) {
-            Some(src) => {
-                let (module, extra) = parser::module(src, ModuleKind::Lib).map_err(|errs| {
-                    aiken_project::error::Error::from_parse_errors(errs, Path::new(path), src)
-                })?;
+        let src = match self.edited.get(path) {
+            Some(src) => src.clone(),
+            None => fs::read_to_string(path).map_err(|_| vec![])?,
+        };
 
-                aiken_lang::format::pretty(&mut new_text, module, extra, src);
-            }
-            None => {
-                let src = {
-                    #[cfg(not(target_os = "windows"))]
-                    {
-                        fs::read_to_string(path).map_err(ProjectError::from)?
-                    }
-                    #[cfg(target_os = "windows")]
-                    {
-                        let temp = match urlencoding::decode(path) {
-                            Ok(decoded) => decoded.to_string(),
-                            Err(_) => path.to_owned(),
-                        };
-                        fs::read_to_string(temp.trim_start_matches("/"))
-                            .map_err(ProjectError::from)?
-                    }
-                };
+        let (module, extra) = parser::module(&src, ModuleKind::Lib).map_err(|errs| {
+            aiken_project::error::Error::from_parse_errors(errs, Path::new(path), &src)
+        })?;
 
-                let (module, extra) = parser::module(&src, ModuleKind::Lib).map_err(|errs| {
-                    aiken_project::error::Error::from_parse_errors(errs, Path::new(path), &src)
-                })?;
-
-                aiken_lang::format::pretty(&mut new_text, module, extra, &src);
-            }
-        }
+        aiken_lang::format::pretty(&mut new_text, module, extra, &src);
 
         Ok(vec![text_edit_replace(new_text)])
     }
@@ -203,50 +361,45 @@ impl Server {
         match notification.method.as_str() {
             DidSaveTextDocument::METHOD => {
                 let params = cast_notification::<DidSaveTextDocument>(notification)?;
-
-                self.edited.remove(params.text_document.uri.path());
-
-                self.compile(connection)?;
-
-                self.publish_stored_diagnostics(connection)?;
-
+                let file_path = params.text_document.uri.path();
+                self.edited.remove(file_path);
+                self.files_changed_since_compile
+                    .insert(file_path.to_string());
+                self.notify_client_of_compilation_start(connection)?;
+                self.spawn_compile();
                 Ok(())
             }
 
             DidChangeTextDocument::METHOD => {
                 let params = cast_notification::<DidChangeTextDocument>(notification)?;
-
-                // A file has changed in the editor so store a copy of the new content in memory
                 let path = params.text_document.uri.path().to_string();
-
                 if let Some(changes) = params.content_changes.into_iter().next() {
-                    self.edited.insert(path, changes.text);
+                    self.edited.insert(path.clone(), changes.text);
+                    self.files_changed_since_compile.insert(path);
                 }
-
                 Ok(())
             }
 
             DidCloseTextDocument::METHOD => {
                 let params = cast_notification::<DidCloseTextDocument>(notification)?;
-
-                self.edited.remove(params.text_document.uri.path());
-
+                let file_path = params.text_document.uri.path();
+                self.edited.remove(file_path);
                 Ok(())
             }
 
             DidChangeWatchedFiles::METHOD => {
                 if let Ok(config) = ProjectConfig::load(&self.root) {
                     self.config = Some(config);
-                    self.create_new_compiler();
-                    self.compile(connection)?;
+                    self.files_changed_since_compile
+                        .insert("__config__".to_string());
+                    self.notify_client_of_compilation_start(connection)?;
+                    self.spawn_compile();
                 } else {
                     self.stored_messages.push(lsp_types::ShowMessageParams {
                         typ: lsp_types::MessageType::ERROR,
                         message: "Failed to reload aiken.toml".to_string(),
                     });
                 }
-
-                self.publish_stored_diagnostics(connection)?;
 
                 Ok(())
             }
@@ -373,6 +526,30 @@ impl Server {
                     id,
                     error: None,
                     result: Some(serde_json::to_value(actions)?),
+                })
+            }
+
+            DocumentSymbolRequest::METHOD => {
+                let params = cast_request::<DocumentSymbolRequest>(request)?;
+
+                let symbols = self.document_symbols(params)?;
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(symbols)?),
+                })
+            }
+
+            References::METHOD => {
+                let params = cast_request::<References>(request)?;
+
+                let references = self.references(params)?;
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(references)?),
                 })
             }
 
@@ -568,37 +745,648 @@ impl Server {
     }
 
     #[allow(clippy::result_large_err)]
+    fn document_symbols(
+        &self,
+        params: lsp_types::DocumentSymbolParams,
+    ) -> Result<Option<lsp_types::DocumentSymbolResponse>, ServerError> {
+        eprintln!(
+            "DEBUG: document_symbols called for URI: {}",
+            params.text_document.uri
+        );
+
+        let module = match self.module_for_uri(&params.text_document.uri) {
+            Some(module) => {
+                eprintln!("DEBUG: Found module: {}", module.name);
+                module
+            }
+            None => {
+                eprintln!("DEBUG: No module found for URI");
+                return Ok(None);
+            }
+        };
+
+        let src = match &self.edited.get(&params.text_document.uri.to_string()) {
+            Some(src) => src.as_str(),
+            None => &module.code,
+        };
+
+        let line_numbers = LineNumbers::new(src);
+        let mut symbols = Vec::new();
+
+        eprintln!(
+            "DEBUG: Processing {} definitions",
+            module.ast.definitions.len()
+        );
+
+        // Extract symbols from module definitions
+        for definition in &module.ast.definitions {
+            if let Some(symbol) = self.definition_to_symbol(definition, &line_numbers) {
+                eprintln!("DEBUG: Found symbol: {}", symbol.name);
+                symbols.push(symbol);
+            }
+        }
+
+        eprintln!("DEBUG: Returning {} symbols", symbols.len());
+        Ok(Some(lsp_types::DocumentSymbolResponse::Nested(symbols)))
+    }
+
+    /// Find all references to a symbol at the given position
+    #[allow(clippy::result_large_err)]
+    fn references(
+        &self,
+        params: lsp_types::ReferenceParams,
+    ) -> Result<Option<Vec<lsp_types::Location>>, ServerError> {
+        let compiler = match &self.compiler {
+            Some(compiler) => compiler,
+            None => return Ok(None),
+        };
+
+        let module = match self.module_for_uri(&params.text_document_position.text_document.uri) {
+            Some(module) => module,
+            None => return Ok(None),
+        };
+
+        let src = match &self
+            .edited
+            .get(&params.text_document_position.text_document.uri.to_string())
+        {
+            Some(src) => src.as_str(),
+            None => &module.code,
+        };
+
+        let line_numbers = LineNumbers::new(src);
+
+        // Find the symbol at the given position
+        let symbol_name = match self.find_symbol_at_position(
+            &params.text_document_position.position,
+            module,
+            &line_numbers,
+        ) {
+            Some(name) => {
+                eprintln!("DEBUG: Found symbol name: {}", name);
+                name
+            }
+            None => {
+                eprintln!("DEBUG: No symbol found at position");
+                return Ok(None);
+            }
+        };
+
+        let mut references = Vec::new();
+
+        // Search through all modules for references to this symbol
+        for (module_name, checked_module) in &compiler.modules {
+            if let Some(module_refs) =
+                self.find_references_in_module(&symbol_name, checked_module, module_name)
+            {
+                references.extend(module_refs);
+            }
+        }
+
+        // Include the definition itself if requested
+        if params.context.include_declaration
+            && let Some(def_location) =
+                self.find_definition_location(&symbol_name, module, &line_numbers)
+        {
+            references.push(def_location);
+        }
+
+        Ok(Some(references))
+    }
+
+    /// Convert an Aiken definition to LSP DocumentSymbol
+    #[allow(deprecated)]
+    fn definition_to_symbol(
+        &self,
+        definition: &TypedDefinition,
+        line_numbers: &LineNumbers,
+    ) -> Option<DocumentSymbol> {
+        use aiken_lang::ast::Definition;
+
+        match definition {
+            Definition::Fn(function) => {
+                let range = span_to_lsp_range(function.location, line_numbers);
+                let selection_range = span_to_lsp_range(function.location, line_numbers);
+
+                Some(DocumentSymbol {
+                    name: function.name.clone(),
+                    detail: Some(format!("fn {}", function.name)),
+                    kind: SymbolKind::FUNCTION,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range,
+                    children: None,
+                })
+            }
+            Definition::Test(test) => {
+                let range = span_to_lsp_range(test.location, line_numbers);
+                let selection_range = span_to_lsp_range(test.location, line_numbers);
+
+                Some(DocumentSymbol {
+                    name: test.name.clone(),
+                    detail: Some(format!("test {}", test.name)),
+                    kind: SymbolKind::METHOD,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range,
+                    children: None,
+                })
+            }
+            Definition::Benchmark(benchmark) => {
+                let range = span_to_lsp_range(benchmark.location, line_numbers);
+                let selection_range = span_to_lsp_range(benchmark.location, line_numbers);
+
+                Some(DocumentSymbol {
+                    name: benchmark.name.clone(),
+                    detail: Some(format!("benchmark {}", benchmark.name)),
+                    kind: SymbolKind::METHOD,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range,
+                    children: None,
+                })
+            }
+            Definition::TypeAlias(type_alias) => {
+                let range = span_to_lsp_range(type_alias.location, line_numbers);
+                let selection_range = span_to_lsp_range(type_alias.location, line_numbers);
+
+                Some(DocumentSymbol {
+                    name: type_alias.alias.clone(),
+                    detail: Some(format!("type {}", type_alias.alias)),
+                    kind: SymbolKind::TYPE_PARAMETER,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range,
+                    children: None,
+                })
+            }
+            Definition::DataType(data_type) => {
+                let range = span_to_lsp_range(data_type.location, line_numbers);
+                let selection_range = span_to_lsp_range(data_type.location, line_numbers);
+
+                // Create child symbols for constructors
+                let mut children = Vec::new();
+                for constructor in &data_type.constructors {
+                    let constructor_range = span_to_lsp_range(constructor.location, line_numbers);
+                    let constructor_selection_range =
+                        span_to_lsp_range(constructor.location, line_numbers);
+
+                    children.push(DocumentSymbol {
+                        name: constructor.name.clone(),
+                        detail: Some(format!("constructor {}", constructor.name)),
+                        kind: SymbolKind::CONSTRUCTOR,
+                        tags: None,
+                        deprecated: None,
+                        range: constructor_range,
+                        selection_range: constructor_selection_range,
+                        children: None,
+                    });
+                }
+
+                Some(DocumentSymbol {
+                    name: data_type.name.clone(),
+                    detail: Some(format!("type {}", data_type.name)),
+                    kind: SymbolKind::CLASS,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range,
+                    children: if children.is_empty() {
+                        None
+                    } else {
+                        Some(children)
+                    },
+                })
+            }
+            Definition::ModuleConstant(constant) => {
+                let range = span_to_lsp_range(constant.location, line_numbers);
+                let selection_range = span_to_lsp_range(constant.location, line_numbers);
+
+                Some(DocumentSymbol {
+                    name: constant.name.clone(),
+                    detail: Some(format!("const {}", constant.name)),
+                    kind: SymbolKind::CONSTANT,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range,
+                    children: None,
+                })
+            }
+            Definition::Validator(validator) => {
+                let range = span_to_lsp_range(validator.location, line_numbers);
+                let selection_range = span_to_lsp_range(validator.location, line_numbers);
+
+                Some(DocumentSymbol {
+                    name: validator.name.clone(),
+                    detail: Some(format!("validator {}", validator.name)),
+                    kind: SymbolKind::CLASS,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range,
+                    children: None,
+                })
+            }
+            Definition::Use(_) => {
+                // Skip use statements for document symbols
+                None
+            }
+        }
+    }
+
+    /// Find the symbol name at the given position in a module
+    fn find_symbol_at_position(
+        &self,
+        position: &lsp_types::Position,
+        module: &CheckedModule,
+        line_numbers: &LineNumbers,
+    ) -> Option<String> {
+        // Convert LSP position to byte offset using LineNumbers API
+        let byte_index =
+            line_numbers.byte_index(position.line as usize, position.character as usize);
+
+        // Debug information
+        eprintln!(
+            "DEBUG: find_symbol_at_position - position: {}:{}, byte_index: {}",
+            position.line, position.character, byte_index
+        );
+
+        // Use the existing find_node functionality to get the node at position
+        if let Some(node) = module.find_node(byte_index) {
+            // Get info about the node for debugging
+            let symbol_name = self.extract_symbol_name_from_node_at_position(node, byte_index);
+            eprintln!("DEBUG: Found symbol: {:?}", symbol_name);
+            return symbol_name;
+        }
+
+        eprintln!("DEBUG: No node found at byte_index {}", byte_index);
+        None
+    }
+
+    /// Extract symbol name from a Located node, ensuring the byte_index is within the symbol's span
+    fn extract_symbol_name_from_node_at_position(
+        &self,
+        node: Located<'_>,
+        byte_index: usize,
+    ) -> Option<String> {
+        match node {
+            Located::Expression(expr) => match expr {
+                aiken_lang::expr::TypedExpr::Var { name, location, .. } => {
+                    eprintln!(
+                        "DEBUG: Found Variable '{}' at span {}..{}, checking byte_index {}",
+                        name, location.start, location.end, byte_index
+                    );
+                    // Only return the symbol if the byte_index is within the symbol's location
+                    if byte_index >= location.start && byte_index <= location.end {
+                        Some(name.clone())
+                    } else {
+                        eprintln!(
+                            "DEBUG: byte_index {} not within Variable '{}' span {}..{}",
+                            byte_index, name, location.start, location.end
+                        );
+                        None
+                    }
+                }
+                _ => {
+                    eprintln!(
+                        "DEBUG: Found Expression but not a Var: {:?}",
+                        std::mem::discriminant(expr)
+                    );
+                    None
+                }
+            },
+            Located::Definition(def) => match def {
+                Definition::Fn(function) => {
+                    eprintln!(
+                        "DEBUG: Found Function '{}' at span {}..{}, checking byte_index {}",
+                        function.name, function.location.start, function.location.end, byte_index
+                    );
+                    if byte_index >= function.location.start && byte_index <= function.location.end
+                    {
+                        Some(function.name.clone())
+                    } else {
+                        eprintln!(
+                            "DEBUG: byte_index {} not within Function '{}' span {}..{}",
+                            byte_index,
+                            function.name,
+                            function.location.start,
+                            function.location.end
+                        );
+                        None
+                    }
+                }
+                Definition::DataType(data_type) => {
+                    eprintln!(
+                        "DEBUG: Found DataType '{}' at span {}..{}, checking byte_index {}",
+                        data_type.name,
+                        data_type.location.start,
+                        data_type.location.end,
+                        byte_index
+                    );
+                    if byte_index >= data_type.location.start
+                        && byte_index <= data_type.location.end
+                    {
+                        Some(data_type.name.clone())
+                    } else {
+                        eprintln!(
+                            "DEBUG: byte_index {} not within DataType '{}' span {}..{}",
+                            byte_index,
+                            data_type.name,
+                            data_type.location.start,
+                            data_type.location.end
+                        );
+                        None
+                    }
+                }
+                Definition::TypeAlias(type_alias) => {
+                    eprintln!(
+                        "DEBUG: Found TypeAlias '{}' at span {}..{}, checking byte_index {}",
+                        type_alias.alias,
+                        type_alias.location.start,
+                        type_alias.location.end,
+                        byte_index
+                    );
+                    if byte_index >= type_alias.location.start
+                        && byte_index <= type_alias.location.end
+                    {
+                        Some(type_alias.alias.clone())
+                    } else {
+                        eprintln!(
+                            "DEBUG: byte_index {} not within TypeAlias '{}' span {}..{}",
+                            byte_index,
+                            type_alias.alias,
+                            type_alias.location.start,
+                            type_alias.location.end
+                        );
+                        None
+                    }
+                }
+                Definition::ModuleConstant(constant) => {
+                    eprintln!(
+                        "DEBUG: Found ModuleConstant '{}' at span {}..{}, checking byte_index {}",
+                        constant.name, constant.location.start, constant.location.end, byte_index
+                    );
+                    if byte_index >= constant.location.start && byte_index <= constant.location.end
+                    {
+                        Some(constant.name.clone())
+                    } else {
+                        eprintln!(
+                            "DEBUG: byte_index {} not within ModuleConstant '{}' span {}..{}",
+                            byte_index,
+                            constant.name,
+                            constant.location.start,
+                            constant.location.end
+                        );
+                        None
+                    }
+                }
+                Definition::Validator(validator) => {
+                    eprintln!(
+                        "DEBUG: Found Validator '{}' at span {}..{}, checking byte_index {}",
+                        validator.name,
+                        validator.location.start,
+                        validator.location.end,
+                        byte_index
+                    );
+                    if byte_index >= validator.location.start
+                        && byte_index <= validator.location.end
+                    {
+                        Some(validator.name.clone())
+                    } else {
+                        eprintln!(
+                            "DEBUG: byte_index {} not within Validator '{}' span {}..{}",
+                            byte_index,
+                            validator.name,
+                            validator.location.start,
+                            validator.location.end
+                        );
+                        None
+                    }
+                }
+                _ => {
+                    eprintln!(
+                        "DEBUG: Found Definition but not a named one: {:?}",
+                        std::mem::discriminant(def)
+                    );
+                    None
+                }
+            },
+            _ => {
+                eprintln!(
+                    "DEBUG: Found Located node but not Expression or Definition: {:?}",
+                    std::mem::discriminant(&node)
+                );
+                None
+            }
+        }
+    }
+
+    /// Find definition location for a symbol
+    fn find_definition_location(
+        &self,
+        symbol_name: &str,
+        module: &CheckedModule,
+        line_numbers: &LineNumbers,
+    ) -> Option<lsp_types::Location> {
+        // Search through module definitions to find the definition of the symbol
+        for definition in &module.ast.definitions {
+            match definition {
+                Definition::Fn(function) if function.name == symbol_name => {
+                    if let Some(uri) = self.module_name_to_uri(&module.name) {
+                        let range = span_to_lsp_range(function.location, line_numbers);
+                        return Some(lsp_types::Location { uri, range });
+                    }
+                }
+                Definition::DataType(data_type) if data_type.name == symbol_name => {
+                    if let Some(uri) = self.module_name_to_uri(&module.name) {
+                        let range = span_to_lsp_range(data_type.location, line_numbers);
+                        return Some(lsp_types::Location { uri, range });
+                    }
+                }
+                Definition::TypeAlias(type_alias) if type_alias.alias == symbol_name => {
+                    if let Some(uri) = self.module_name_to_uri(&module.name) {
+                        let range = span_to_lsp_range(type_alias.location, line_numbers);
+                        return Some(lsp_types::Location { uri, range });
+                    }
+                }
+                Definition::ModuleConstant(constant) if constant.name == symbol_name => {
+                    if let Some(uri) = self.module_name_to_uri(&module.name) {
+                        let range = span_to_lsp_range(constant.location, line_numbers);
+                        return Some(lsp_types::Location { uri, range });
+                    }
+                }
+                Definition::Validator(validator) if validator.name == symbol_name => {
+                    if let Some(uri) = self.module_name_to_uri(&module.name) {
+                        let range = span_to_lsp_range(validator.location, line_numbers);
+                        return Some(lsp_types::Location { uri, range });
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// Convert module name to URI
+    fn module_name_to_uri(&self, module_name: &str) -> Option<url::Url> {
+        if let Some(compiler) = &self.compiler
+            && let Some(source) = compiler.sources.get(module_name)
+        {
+            return url::Url::parse(&format!("file:///{}", source.path)).ok();
+        }
+        None
+    }
+
+    /// Find all references to a symbol in a module
+    fn find_references_in_module(
+        &self,
+        symbol_name: &str,
+        module: &CheckedModule,
+        module_name: &str,
+    ) -> Option<Vec<lsp_types::Location>> {
+        let mut locations = Vec::new();
+        let line_numbers = LineNumbers::new(&module.code);
+
+        // Search through module definitions
+        for definition in &module.ast.definitions {
+            self.find_references_in_definition(
+                symbol_name,
+                definition,
+                &line_numbers,
+                module_name,
+                &mut locations,
+            );
+        }
+
+        if locations.is_empty() {
+            None
+        } else {
+            Some(locations)
+        }
+    }
+
+    /// Find references to a symbol in a definition
+    fn find_references_in_definition(
+        &self,
+        symbol_name: &str,
+        definition: &TypedDefinition,
+        line_numbers: &LineNumbers,
+        module_name: &str,
+        locations: &mut Vec<lsp_types::Location>,
+    ) {
+        match definition {
+            Definition::Fn(function) => {
+                self.find_references_in_expr(
+                    symbol_name,
+                    &function.body,
+                    line_numbers,
+                    module_name,
+                    locations,
+                );
+            }
+            Definition::Validator(validator) => {
+                for handler in &validator.handlers {
+                    self.find_references_in_expr(
+                        symbol_name,
+                        &handler.body,
+                        line_numbers,
+                        module_name,
+                        locations,
+                    );
+                }
+            }
+            Definition::ModuleConstant(constant) => {
+                self.find_references_in_expr(
+                    symbol_name,
+                    &constant.value,
+                    line_numbers,
+                    module_name,
+                    locations,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    /// Find references to a symbol in an expression
+    fn find_references_in_expr(
+        &self,
+        symbol_name: &str,
+        expr: &aiken_lang::expr::TypedExpr,
+        line_numbers: &LineNumbers,
+        module_name: &str,
+        locations: &mut Vec<lsp_types::Location>,
+    ) {
+        match expr {
+            aiken_lang::expr::TypedExpr::Var { name, location, .. } => {
+                if name == symbol_name
+                    && let Some(uri) = self.module_name_to_uri(module_name)
+                {
+                    let range = span_to_lsp_range(*location, line_numbers);
+                    locations.push(lsp_types::Location { uri, range });
+                }
+            }
+            aiken_lang::expr::TypedExpr::Call { fun, args, .. } => {
+                self.find_references_in_expr(
+                    symbol_name,
+                    fun,
+                    line_numbers,
+                    module_name,
+                    locations,
+                );
+                for arg in args {
+                    self.find_references_in_expr(
+                        symbol_name,
+                        &arg.value,
+                        line_numbers,
+                        module_name,
+                        locations,
+                    );
+                }
+            }
+            // Add more expression types as needed for comprehensive reference finding
+            _ => {}
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
     pub fn listen(&mut self, connection: Connection) -> Result<(), ServerError> {
         self.create_compilation_progress_token(&connection)?;
         self.start_watching_aiken_toml(&connection)?;
 
-        // Compile the project once so we have all the state and any initial errors
-        self.compile(&connection)?;
-        self.publish_stored_diagnostics(&connection)?;
+        self.notify_client_of_compilation_start(&connection)?;
+        self.spawn_compile();
 
-        for msg in &connection.receiver {
-            tracing::debug!("Got message: {:#?}", msg);
-
-            match msg {
-                Message::Request(req) => {
+        loop {
+            self.poll_compile_result(&connection)?;
+            match connection
+                .receiver
+                .recv_timeout(std::time::Duration::from_millis(50))
+            {
+                Ok(lsp_server::Message::Request(req)) => {
                     if connection.handle_shutdown(&req)? {
                         return Ok(());
                     }
-
-                    tracing::debug!("Get request: {:#?}", req);
-
                     let response = self.handle_request(req, &connection)?;
-
-                    connection.sender.send(Message::Response(response))?;
+                    connection
+                        .sender
+                        .send(lsp_server::Message::Response(response))?;
                 }
-                Message::Response(_) => (),
-                Message::Notification(notification) => {
-                    self.handle_notification(&connection, notification)?
+                Ok(lsp_server::Message::Response(_)) => (),
+                Ok(lsp_server::Message::Notification(notification)) => {
+                    self.handle_notification(&connection, notification)?;
+                }
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                    return Ok(());
                 }
             }
         }
-
-        Ok(())
     }
 
     pub fn new(
@@ -615,6 +1403,8 @@ impl Server {
             stored_diagnostics: HashMap::new(),
             stored_messages: Vec::new(),
             compiler: None,
+            pending_compile: None,
+            files_changed_since_compile: HashSet::new(),
         };
 
         server.create_new_compiler();
@@ -658,102 +1448,11 @@ impl Server {
     where
         E: Diagnostic + GetSource + ExtraData,
     {
-        let (severity, typ) = match error.severity() {
-            Some(severity) => match severity {
-                miette::Severity::Error => (
-                    lsp_types::DiagnosticSeverity::ERROR,
-                    lsp_types::MessageType::ERROR,
-                ),
-                miette::Severity::Warning => (
-                    lsp_types::DiagnosticSeverity::WARNING,
-                    lsp_types::MessageType::WARNING,
-                ),
-                miette::Severity::Advice => (
-                    lsp_types::DiagnosticSeverity::HINT,
-                    lsp_types::MessageType::INFO,
-                ),
-            },
-            None => (
-                lsp_types::DiagnosticSeverity::ERROR,
-                lsp_types::MessageType::ERROR,
-            ),
-        };
-
-        let message = match error.source() {
-            Some(err) => err.to_string(),
-            None => error.to_string(),
-        };
-
-        if let (Some(path), Some(src)) = (error.path(), error.src()) {
-            let line_numbers = LineNumbers::new(&src);
-
-            let related_labels = || {
-                error
-                    .related()
-                    .and_then(|mut iter| iter.find(|diag| diag.labels().is_some()))
-                    .and_then(|diag| diag.labels())
-            };
-
-            let lsp_range = if let Some(span) = error
-                .labels()
-                .or_else(related_labels)
-                .and_then(|mut labels| labels.next())
-            {
-                span_to_lsp_range(
-                    Span {
-                        start: span.inner().offset(),
-                        end: span.inner().offset() + span.inner().len(),
-                    },
-                    &line_numbers,
-                )
-            } else {
-                self.stored_messages
-                    .push(lsp_types::ShowMessageParams { typ, message });
-                return Ok(());
-            };
-
-            let lsp_diagnostic = lsp_types::Diagnostic {
-                range: lsp_range,
-                severity: Some(severity),
-                code: error.code().map(|c| {
-                    lsp_types::NumberOrString::String(
-                        c.to_string()
-                            .trim()
-                            .replace("Warning ", "")
-                            .replace("Error ", ""),
-                    )
-                }),
-                code_description: None,
-                source: None,
-                message,
-                related_information: None,
-                tags: None,
-                data: error.extra_data().map(serde_json::Value::String),
-            };
-
-            #[cfg(not(target_os = "windows"))]
-            let path = path.canonicalize()?;
-
-            self.push_diagnostic(path.clone(), lsp_diagnostic.clone());
-
-            let lsp_message = if let Some(hint) = error.help() {
-                hint.to_string()
-            } else {
-                "something is off".to_string()
-            };
-
-            let lsp_hint = lsp_types::Diagnostic {
-                severity: Some(lsp_types::DiagnosticSeverity::HINT),
-                message: lsp_message,
-                ..lsp_diagnostic
-            };
-
-            self.push_diagnostic(path, lsp_hint);
-        } else {
-            self.stored_messages
-                .push(lsp_types::ShowMessageParams { typ, message })
-        }
-
+        process_diagnostic_into(
+            error,
+            &mut self.stored_diagnostics,
+            &mut self.stored_messages,
+        );
         Ok(())
     }
 
@@ -800,13 +1499,6 @@ impl Server {
         }
 
         Ok(())
-    }
-
-    fn push_diagnostic(&mut self, path: PathBuf, diagnostic: lsp_types::Diagnostic) {
-        self.stored_diagnostics
-            .entry(path)
-            .or_default()
-            .push(diagnostic);
     }
 
     #[allow(clippy::result_large_err)]
