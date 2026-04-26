@@ -4,6 +4,11 @@
 
 ### Added
 
+- **aiken-lsp**: Background (non-blocking) compilation — the LSP now spawns a separate thread for each compile cycle, so the editor stays responsive while the project is being type-checked.
+- **aiken-lsp**: Dependency caching (`LspDepCache`) — type information and checked modules for dependency packages are stored and reused across compile cycles, avoiding redundant re-inference when only project sources change.
+- **aiken-lsp**: Per-module incremental cache — unchanged own modules (detected via content hash) are skipped during type-checking, significantly reducing re-compilation time on every keystroke.
+- **aiken-lsp**: Support for the `textDocument/documentSymbol` LSP request — editors can now request an outline of all symbols (functions, types, constants, …) defined in the current file.
+- **aiken-lsp**: Support for the `textDocument/references` LSP request — editors can now find all usages of the symbol under the cursor across the project.
 - **aiken-lang**: Allow test assertions to _"see through"_ backpassing, to provide better insights on failing tests using a continuation passing style. @KtorZ
 - **aiken**: New flag `-I / --include-all-types` to the `aiken build` command to include all serialisable types in the blueprint, regardless of whether they are part of the contract interface or not. @emiflake, @KtorZ
 - **aiken**: `aiken test` is now an alias for `aiken check`. @KtorZ
@@ -22,6 +27,7 @@
 - **aiken-lang**: Fix code generation interner to avoid FreeUnique caused by optimisations. @KtorZ
 - **aiken-lang**: Fix compiler removing empty list checks with `-t silent` for list patterns containing only discards. @KtorZ
 - **aiken-lsp**: Fix import suggestions not being able to see through modules that aren't within the dependency path. @KtorZ
+- **aiken-lang**: Fix formatter `fits()` helper no longer cloning the document queue on every call — improves formatting performance for large files and fixes a potential stack-overflow on deeply nested documents.
 
 ## v1.1.20 - 2025-12-11
 
