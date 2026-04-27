@@ -54,6 +54,17 @@ struct BackgroundCompileResult {
 
 unsafe impl Send for BackgroundCompileResult {}
 
+/// Target symbol info for reference searching — enables scope-aware matching
+struct SymbolTarget {
+    name: String,
+    /// The module where this symbol is defined (None = local variable / unknown)
+    def_module: Option<String>,
+    /// Byte span of the definition site — used for precise disambiguation
+    def_span: Span,
+    /// Module where lookup started — needed to disambiguate local variables
+    origin_module: String,
+}
+
 pub struct Server {
     // Project root directory
     root: PathBuf,
@@ -646,7 +657,7 @@ impl Server {
                     None => return Ok(None),
                 };
 
-                let url = url::Url::parse(&format!("file:///{}", &module.path))
+                let url = url::Url::from_file_path(&module.path)
                     .expect("goto definition URL parse");
 
                 (url, &module.line_numbers)
@@ -749,44 +760,21 @@ impl Server {
         &self,
         params: lsp_types::DocumentSymbolParams,
     ) -> Result<Option<lsp_types::DocumentSymbolResponse>, ServerError> {
-        eprintln!(
-            "DEBUG: document_symbols called for URI: {}",
-            params.text_document.uri
-        );
-
         let module = match self.module_for_uri(&params.text_document.uri) {
-            Some(module) => {
-                eprintln!("DEBUG: Found module: {}", module.name);
-                module
-            }
-            None => {
-                eprintln!("DEBUG: No module found for URI");
-                return Ok(None);
-            }
+            Some(module) => module,
+            None => return Ok(None),
         };
 
-        let src = match &self.edited.get(&params.text_document.uri.to_string()) {
-            Some(src) => src.as_str(),
-            None => &module.code,
-        };
-
-        let line_numbers = LineNumbers::new(src);
+        let line_numbers = LineNumbers::new(&module.code);
         let mut symbols = Vec::new();
-
-        eprintln!(
-            "DEBUG: Processing {} definitions",
-            module.ast.definitions.len()
-        );
 
         // Extract symbols from module definitions
         for definition in &module.ast.definitions {
             if let Some(symbol) = self.definition_to_symbol(definition, &line_numbers) {
-                eprintln!("DEBUG: Found symbol: {}", symbol.name);
                 symbols.push(symbol);
             }
         }
 
-        eprintln!("DEBUG: Returning {} symbols", symbols.len());
         Ok(Some(lsp_types::DocumentSymbolResponse::Nested(symbols)))
     }
 
@@ -806,49 +794,39 @@ impl Server {
             None => return Ok(None),
         };
 
-        let src = match &self
-            .edited
-            .get(&params.text_document_position.text_document.uri.to_string())
-        {
-            Some(src) => src.as_str(),
-            None => &module.code,
-        };
-
-        let line_numbers = LineNumbers::new(src);
+        let line_numbers = LineNumbers::new(&module.code);
 
         // Find the symbol at the given position
-        let symbol_name = match self.find_symbol_at_position(
+        let target = match self.find_symbol_at_position(
             &params.text_document_position.position,
             module,
             &line_numbers,
         ) {
-            Some(name) => {
-                eprintln!("DEBUG: Found symbol name: {}", name);
-                name
-            }
-            None => {
-                eprintln!("DEBUG: No symbol found at position");
-                return Ok(None);
-            }
+            Some(target) => target,
+            None => return Ok(None),
         };
 
         let mut references = Vec::new();
 
         // Search through all modules for references to this symbol
         for (module_name, checked_module) in &compiler.modules {
-            if let Some(module_refs) =
-                self.find_references_in_module(&symbol_name, checked_module, module_name)
+            if let Some(module_refs) = self.find_references_in_module(&target, checked_module, module_name)
             {
                 references.extend(module_refs);
             }
         }
 
         // Include the definition itself if requested
-        if params.context.include_declaration
-            && let Some(def_location) =
-                self.find_definition_location(&symbol_name, module, &line_numbers)
-        {
-            references.push(def_location);
+        if params.context.include_declaration {
+            let def_mod_name = target.def_module.as_deref().unwrap_or(&module.name);
+
+            if let Some(def_mod) = compiler.modules.get(def_mod_name)
+                && let Some(uri) = self.module_name_to_uri(def_mod_name)
+            {
+                let def_ln = LineNumbers::new(&def_mod.code);
+                let range = span_to_lsp_range(target.def_span, &def_ln);
+                references.push(lsp_types::Location { uri, range });
+            }
         }
 
         Ok(Some(references))
@@ -862,6 +840,9 @@ impl Server {
         line_numbers: &LineNumbers,
     ) -> Option<DocumentSymbol> {
         use aiken_lang::ast::Definition;
+
+        // TODO: selection_range should ideally cover only the name identifier, not the full definition
+        // The AST currently doesn't store a separate name span
 
         match definition {
             Definition::Fn(function) => {
@@ -916,7 +897,7 @@ impl Server {
                 Some(DocumentSymbol {
                     name: type_alias.alias.clone(),
                     detail: Some(format!("type {}", type_alias.alias)),
-                    kind: SymbolKind::TYPE_PARAMETER,
+                    kind: SymbolKind::CLASS,
                     tags: None,
                     deprecated: None,
                     range,
@@ -999,237 +980,125 @@ impl Server {
         }
     }
 
-    /// Find the symbol name at the given position in a module
+    /// Find the symbol target at the given position in a module
     fn find_symbol_at_position(
         &self,
         position: &lsp_types::Position,
         module: &CheckedModule,
         line_numbers: &LineNumbers,
-    ) -> Option<String> {
+    ) -> Option<SymbolTarget> {
         // Convert LSP position to byte offset using LineNumbers API
         let byte_index =
             line_numbers.byte_index(position.line as usize, position.character as usize);
 
-        // Debug information
-        eprintln!(
-            "DEBUG: find_symbol_at_position - position: {}:{}, byte_index: {}",
-            position.line, position.character, byte_index
-        );
-
         // Use the existing find_node functionality to get the node at position
         if let Some(node) = module.find_node(byte_index) {
-            // Get info about the node for debugging
-            let symbol_name = self.extract_symbol_name_from_node_at_position(node, byte_index);
-            eprintln!("DEBUG: Found symbol: {:?}", symbol_name);
-            return symbol_name;
+            return self.extract_symbol_target_from_node(node, byte_index, &module.name);
         }
 
-        eprintln!("DEBUG: No node found at byte_index {}", byte_index);
         None
     }
 
-    /// Extract symbol name from a Located node, ensuring the byte_index is within the symbol's span
-    fn extract_symbol_name_from_node_at_position(
+    /// Extract symbol target from a Located node, ensuring the byte_index is within the symbol's span
+    fn extract_symbol_target_from_node(
         &self,
         node: Located<'_>,
         byte_index: usize,
-    ) -> Option<String> {
+        module_name: &str,
+    ) -> Option<SymbolTarget> {
         match node {
-            Located::Expression(expr) => match expr {
-                aiken_lang::expr::TypedExpr::Var { name, location, .. } => {
-                    eprintln!(
-                        "DEBUG: Found Variable '{}' at span {}..{}, checking byte_index {}",
-                        name, location.start, location.end, byte_index
-                    );
-                    // Only return the symbol if the byte_index is within the symbol's location
-                    if byte_index >= location.start && byte_index <= location.end {
-                        Some(name.clone())
-                    } else {
-                        eprintln!(
-                            "DEBUG: byte_index {} not within Variable '{}' span {}..{}",
-                            byte_index, name, location.start, location.end
-                        );
-                        None
-                    }
-                }
-                _ => {
-                    eprintln!(
-                        "DEBUG: Found Expression but not a Var: {:?}",
-                        std::mem::discriminant(expr)
-                    );
+            Located::Expression(aiken_lang::expr::TypedExpr::Var {
+                name,
+                constructor,
+                location,
+                ..
+            }) => {
+                if byte_index >= location.start && byte_index <= location.end {
+                    let def_loc = constructor.definition_location();
+
+                    Some(SymbolTarget {
+                        name: name.clone(),
+                        def_module: def_loc.module.map(|s| s.to_string()),
+                        def_span: def_loc.span,
+                        origin_module: module_name.to_string(),
+                    })
+                } else {
                     None
                 }
-            },
+            }
             Located::Definition(def) => match def {
                 Definition::Fn(function) => {
-                    eprintln!(
-                        "DEBUG: Found Function '{}' at span {}..{}, checking byte_index {}",
-                        function.name, function.location.start, function.location.end, byte_index
-                    );
                     if byte_index >= function.location.start && byte_index <= function.location.end
                     {
-                        Some(function.name.clone())
+                        Some(SymbolTarget {
+                            name: function.name.clone(),
+                            def_module: Some(module_name.to_string()),
+                            def_span: function.location,
+                            origin_module: module_name.to_string(),
+                        })
                     } else {
-                        eprintln!(
-                            "DEBUG: byte_index {} not within Function '{}' span {}..{}",
-                            byte_index,
-                            function.name,
-                            function.location.start,
-                            function.location.end
-                        );
                         None
                     }
                 }
                 Definition::DataType(data_type) => {
-                    eprintln!(
-                        "DEBUG: Found DataType '{}' at span {}..{}, checking byte_index {}",
-                        data_type.name,
-                        data_type.location.start,
-                        data_type.location.end,
-                        byte_index
-                    );
                     if byte_index >= data_type.location.start
                         && byte_index <= data_type.location.end
                     {
-                        Some(data_type.name.clone())
+                        Some(SymbolTarget {
+                            name: data_type.name.clone(),
+                            def_module: Some(module_name.to_string()),
+                            def_span: data_type.location,
+                            origin_module: module_name.to_string(),
+                        })
                     } else {
-                        eprintln!(
-                            "DEBUG: byte_index {} not within DataType '{}' span {}..{}",
-                            byte_index,
-                            data_type.name,
-                            data_type.location.start,
-                            data_type.location.end
-                        );
                         None
                     }
                 }
                 Definition::TypeAlias(type_alias) => {
-                    eprintln!(
-                        "DEBUG: Found TypeAlias '{}' at span {}..{}, checking byte_index {}",
-                        type_alias.alias,
-                        type_alias.location.start,
-                        type_alias.location.end,
-                        byte_index
-                    );
                     if byte_index >= type_alias.location.start
                         && byte_index <= type_alias.location.end
                     {
-                        Some(type_alias.alias.clone())
+                        Some(SymbolTarget {
+                            name: type_alias.alias.clone(),
+                            def_module: Some(module_name.to_string()),
+                            def_span: type_alias.location,
+                            origin_module: module_name.to_string(),
+                        })
                     } else {
-                        eprintln!(
-                            "DEBUG: byte_index {} not within TypeAlias '{}' span {}..{}",
-                            byte_index,
-                            type_alias.alias,
-                            type_alias.location.start,
-                            type_alias.location.end
-                        );
                         None
                     }
                 }
                 Definition::ModuleConstant(constant) => {
-                    eprintln!(
-                        "DEBUG: Found ModuleConstant '{}' at span {}..{}, checking byte_index {}",
-                        constant.name, constant.location.start, constant.location.end, byte_index
-                    );
                     if byte_index >= constant.location.start && byte_index <= constant.location.end
                     {
-                        Some(constant.name.clone())
+                        Some(SymbolTarget {
+                            name: constant.name.clone(),
+                            def_module: Some(module_name.to_string()),
+                            def_span: constant.location,
+                            origin_module: module_name.to_string(),
+                        })
                     } else {
-                        eprintln!(
-                            "DEBUG: byte_index {} not within ModuleConstant '{}' span {}..{}",
-                            byte_index,
-                            constant.name,
-                            constant.location.start,
-                            constant.location.end
-                        );
                         None
                     }
                 }
                 Definition::Validator(validator) => {
-                    eprintln!(
-                        "DEBUG: Found Validator '{}' at span {}..{}, checking byte_index {}",
-                        validator.name,
-                        validator.location.start,
-                        validator.location.end,
-                        byte_index
-                    );
                     if byte_index >= validator.location.start
                         && byte_index <= validator.location.end
                     {
-                        Some(validator.name.clone())
+                        Some(SymbolTarget {
+                            name: validator.name.clone(),
+                            def_module: Some(module_name.to_string()),
+                            def_span: validator.location,
+                            origin_module: module_name.to_string(),
+                        })
                     } else {
-                        eprintln!(
-                            "DEBUG: byte_index {} not within Validator '{}' span {}..{}",
-                            byte_index,
-                            validator.name,
-                            validator.location.start,
-                            validator.location.end
-                        );
                         None
                     }
                 }
-                _ => {
-                    eprintln!(
-                        "DEBUG: Found Definition but not a named one: {:?}",
-                        std::mem::discriminant(def)
-                    );
-                    None
-                }
+                _ => None,
             },
-            _ => {
-                eprintln!(
-                    "DEBUG: Found Located node but not Expression or Definition: {:?}",
-                    std::mem::discriminant(&node)
-                );
-                None
-            }
+            _ => None,
         }
-    }
-
-    /// Find definition location for a symbol
-    fn find_definition_location(
-        &self,
-        symbol_name: &str,
-        module: &CheckedModule,
-        line_numbers: &LineNumbers,
-    ) -> Option<lsp_types::Location> {
-        // Search through module definitions to find the definition of the symbol
-        for definition in &module.ast.definitions {
-            match definition {
-                Definition::Fn(function) if function.name == symbol_name => {
-                    if let Some(uri) = self.module_name_to_uri(&module.name) {
-                        let range = span_to_lsp_range(function.location, line_numbers);
-                        return Some(lsp_types::Location { uri, range });
-                    }
-                }
-                Definition::DataType(data_type) if data_type.name == symbol_name => {
-                    if let Some(uri) = self.module_name_to_uri(&module.name) {
-                        let range = span_to_lsp_range(data_type.location, line_numbers);
-                        return Some(lsp_types::Location { uri, range });
-                    }
-                }
-                Definition::TypeAlias(type_alias) if type_alias.alias == symbol_name => {
-                    if let Some(uri) = self.module_name_to_uri(&module.name) {
-                        let range = span_to_lsp_range(type_alias.location, line_numbers);
-                        return Some(lsp_types::Location { uri, range });
-                    }
-                }
-                Definition::ModuleConstant(constant) if constant.name == symbol_name => {
-                    if let Some(uri) = self.module_name_to_uri(&module.name) {
-                        let range = span_to_lsp_range(constant.location, line_numbers);
-                        return Some(lsp_types::Location { uri, range });
-                    }
-                }
-                Definition::Validator(validator) if validator.name == symbol_name => {
-                    if let Some(uri) = self.module_name_to_uri(&module.name) {
-                        let range = span_to_lsp_range(validator.location, line_numbers);
-                        return Some(lsp_types::Location { uri, range });
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
     }
 
     /// Convert module name to URI
@@ -1237,7 +1106,7 @@ impl Server {
         if let Some(compiler) = &self.compiler
             && let Some(source) = compiler.sources.get(module_name)
         {
-            return url::Url::parse(&format!("file:///{}", source.path)).ok();
+            return url::Url::from_file_path(&source.path).ok();
         }
         None
     }
@@ -1245,7 +1114,7 @@ impl Server {
     /// Find all references to a symbol in a module
     fn find_references_in_module(
         &self,
-        symbol_name: &str,
+        target: &SymbolTarget,
         module: &CheckedModule,
         module_name: &str,
     ) -> Option<Vec<lsp_types::Location>> {
@@ -1255,7 +1124,7 @@ impl Server {
         // Search through module definitions
         for definition in &module.ast.definitions {
             self.find_references_in_definition(
-                symbol_name,
+                target,
                 definition,
                 &line_numbers,
                 module_name,
@@ -1273,7 +1142,7 @@ impl Server {
     /// Find references to a symbol in a definition
     fn find_references_in_definition(
         &self,
-        symbol_name: &str,
+        target: &SymbolTarget,
         definition: &TypedDefinition,
         line_numbers: &LineNumbers,
         module_name: &str,
@@ -1282,7 +1151,7 @@ impl Server {
         match definition {
             Definition::Fn(function) => {
                 self.find_references_in_expr(
-                    symbol_name,
+                    target,
                     &function.body,
                     line_numbers,
                     module_name,
@@ -1292,17 +1161,43 @@ impl Server {
             Definition::Validator(validator) => {
                 for handler in &validator.handlers {
                     self.find_references_in_expr(
-                        symbol_name,
+                        target,
                         &handler.body,
                         line_numbers,
                         module_name,
                         locations,
                     );
                 }
+
+                self.find_references_in_expr(
+                    target,
+                    &validator.fallback.body,
+                    line_numbers,
+                    module_name,
+                    locations,
+                );
+            }
+            Definition::Test(test) => {
+                self.find_references_in_expr(
+                    target,
+                    &test.body,
+                    line_numbers,
+                    module_name,
+                    locations,
+                );
+            }
+            Definition::Benchmark(benchmark) => {
+                self.find_references_in_expr(
+                    target,
+                    &benchmark.body,
+                    line_numbers,
+                    module_name,
+                    locations,
+                );
             }
             Definition::ModuleConstant(constant) => {
                 self.find_references_in_expr(
-                    symbol_name,
+                    target,
                     &constant.value,
                     line_numbers,
                     module_name,
@@ -1316,15 +1211,42 @@ impl Server {
     /// Find references to a symbol in an expression
     fn find_references_in_expr(
         &self,
-        symbol_name: &str,
+        target: &SymbolTarget,
         expr: &aiken_lang::expr::TypedExpr,
         line_numbers: &LineNumbers,
         module_name: &str,
         locations: &mut Vec<lsp_types::Location>,
     ) {
         match expr {
-            aiken_lang::expr::TypedExpr::Var { name, location, .. } => {
-                if name == symbol_name
+            aiken_lang::expr::TypedExpr::Var {
+                name,
+                constructor,
+                location,
+                ..
+            } => {
+                let def_loc = constructor.definition_location();
+                let var_def_module = def_loc.module.map(|s| s.to_string());
+
+                if name == &target.name
+                    && var_def_module == target.def_module
+                    && def_loc.span == target.def_span
+                    && (var_def_module.is_some() || module_name == target.origin_module)
+                    && let Some(uri) = self.module_name_to_uri(module_name)
+                {
+                    let range = span_to_lsp_range(*location, line_numbers);
+                    locations.push(lsp_types::Location { uri, range });
+                }
+            }
+            aiken_lang::expr::TypedExpr::ModuleSelect {
+                module_name: selected_module,
+                constructor,
+                label,
+                location,
+                ..
+            } => {
+                if label == &target.name
+                    && Some(selected_module.clone()) == target.def_module
+                    && constructor.location() == target.def_span
                     && let Some(uri) = self.module_name_to_uri(module_name)
                 {
                     let range = span_to_lsp_range(*location, line_numbers);
@@ -1333,7 +1255,7 @@ impl Server {
             }
             aiken_lang::expr::TypedExpr::Call { fun, args, .. } => {
                 self.find_references_in_expr(
-                    symbol_name,
+                    target,
                     fun,
                     line_numbers,
                     module_name,
@@ -1341,7 +1263,7 @@ impl Server {
                 );
                 for arg in args {
                     self.find_references_in_expr(
-                        symbol_name,
+                        target,
                         &arg.value,
                         line_numbers,
                         module_name,
@@ -1349,7 +1271,116 @@ impl Server {
                     );
                 }
             }
-            // Add more expression types as needed for comprehensive reference finding
+            aiken_lang::expr::TypedExpr::Sequence { expressions, .. } => {
+                for expr in expressions {
+                    self.find_references_in_expr(target, expr, line_numbers, module_name, locations);
+                }
+            }
+            aiken_lang::expr::TypedExpr::Pipeline { expressions, .. } => {
+                for expr in expressions.iter() {
+                    self.find_references_in_expr(target, expr, line_numbers, module_name, locations);
+                }
+            }
+            aiken_lang::expr::TypedExpr::Fn { body, .. } => {
+                self.find_references_in_expr(target, body, line_numbers, module_name, locations);
+            }
+            aiken_lang::expr::TypedExpr::List { elements, tail, .. } => {
+                for elem in elements {
+                    self.find_references_in_expr(target, elem, line_numbers, module_name, locations);
+                }
+
+                if let Some(tail) = tail {
+                    self.find_references_in_expr(target, tail, line_numbers, module_name, locations);
+                }
+            }
+            aiken_lang::expr::TypedExpr::BinOp { left, right, .. } => {
+                self.find_references_in_expr(target, left, line_numbers, module_name, locations);
+                self.find_references_in_expr(target, right, line_numbers, module_name, locations);
+            }
+            aiken_lang::expr::TypedExpr::Assignment { value, .. } => {
+                self.find_references_in_expr(target, value, line_numbers, module_name, locations);
+            }
+            aiken_lang::expr::TypedExpr::Trace { then, text, .. } => {
+                self.find_references_in_expr(target, then, line_numbers, module_name, locations);
+                self.find_references_in_expr(target, text, line_numbers, module_name, locations);
+            }
+            aiken_lang::expr::TypedExpr::When {
+                subject, clauses, ..
+            } => {
+                self.find_references_in_expr(target, subject, line_numbers, module_name, locations);
+
+                for clause in clauses {
+                    self.find_references_in_expr(
+                        target,
+                        &clause.then,
+                        line_numbers,
+                        module_name,
+                        locations,
+                    );
+                }
+            }
+            aiken_lang::expr::TypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => {
+                for branch in branches.iter() {
+                    self.find_references_in_expr(
+                        target,
+                        &branch.condition,
+                        line_numbers,
+                        module_name,
+                        locations,
+                    );
+
+                    self.find_references_in_expr(
+                        target,
+                        &branch.body,
+                        line_numbers,
+                        module_name,
+                        locations,
+                    );
+                }
+
+                self.find_references_in_expr(
+                    target,
+                    final_else,
+                    line_numbers,
+                    module_name,
+                    locations,
+                );
+            }
+            aiken_lang::expr::TypedExpr::RecordAccess { record, .. } => {
+                self.find_references_in_expr(target, record, line_numbers, module_name, locations);
+            }
+            aiken_lang::expr::TypedExpr::Tuple { elems, .. } => {
+                for elem in elems {
+                    self.find_references_in_expr(target, elem, line_numbers, module_name, locations);
+                }
+            }
+            aiken_lang::expr::TypedExpr::Pair { fst, snd, .. } => {
+                self.find_references_in_expr(target, fst, line_numbers, module_name, locations);
+                self.find_references_in_expr(target, snd, line_numbers, module_name, locations);
+            }
+            aiken_lang::expr::TypedExpr::TupleIndex { tuple, .. } => {
+                self.find_references_in_expr(target, tuple, line_numbers, module_name, locations);
+            }
+            aiken_lang::expr::TypedExpr::RecordUpdate { spread, args, .. } => {
+                self.find_references_in_expr(target, spread, line_numbers, module_name, locations);
+
+                for arg in args {
+                    self.find_references_in_expr(
+                        target,
+                        &arg.value,
+                        line_numbers,
+                        module_name,
+                        locations,
+                    );
+                }
+            }
+            aiken_lang::expr::TypedExpr::UnOp { value, .. } => {
+                self.find_references_in_expr(target, value, line_numbers, module_name, locations);
+            }
             _ => {}
         }
     }
