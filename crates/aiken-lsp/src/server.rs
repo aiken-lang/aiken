@@ -849,6 +849,9 @@ impl Server {
                 let range = span_to_lsp_range(function.location, line_numbers);
                 let selection_range = span_to_lsp_range(function.location, line_numbers);
 
+                let mut vars = Vec::new();
+                collect_let_vars(&function.body, line_numbers, &mut vars);
+
                 Some(DocumentSymbol {
                     name: function.name.clone(),
                     detail: Some(format!("fn {}", function.name)),
@@ -857,12 +860,15 @@ impl Server {
                     deprecated: None,
                     range,
                     selection_range,
-                    children: None,
+                    children: if vars.is_empty() { None } else { Some(vars) },
                 })
             }
             Definition::Test(test) => {
                 let range = span_to_lsp_range(test.location, line_numbers);
                 let selection_range = span_to_lsp_range(test.location, line_numbers);
+
+                let mut vars = Vec::new();
+                collect_let_vars(&test.body, line_numbers, &mut vars);
 
                 Some(DocumentSymbol {
                     name: test.name.clone(),
@@ -872,12 +878,15 @@ impl Server {
                     deprecated: None,
                     range,
                     selection_range,
-                    children: None,
+                    children: if vars.is_empty() { None } else { Some(vars) },
                 })
             }
             Definition::Benchmark(benchmark) => {
                 let range = span_to_lsp_range(benchmark.location, line_numbers);
                 let selection_range = span_to_lsp_range(benchmark.location, line_numbers);
+
+                let mut vars = Vec::new();
+                collect_let_vars(&benchmark.body, line_numbers, &mut vars);
 
                 Some(DocumentSymbol {
                     name: benchmark.name.clone(),
@@ -887,7 +896,7 @@ impl Server {
                     deprecated: None,
                     range,
                     selection_range,
-                    children: None,
+                    children: if vars.is_empty() { None } else { Some(vars) },
                 })
             }
             Definition::TypeAlias(type_alias) => {
@@ -1604,5 +1613,161 @@ impl Server {
             .send(lsp_server::Message::Request(request))?;
 
         Ok(())
+    }
+}
+
+fn collect_pattern_vars(
+    pattern: &aiken_lang::ast::TypedPattern,
+    line_numbers: &LineNumbers,
+    vars: &mut Vec<DocumentSymbol>,
+) {
+    use aiken_lang::ast::Pattern;
+
+    match pattern {
+        Pattern::Var { location, name } => {
+            let range = span_to_lsp_range(*location, line_numbers);
+            #[allow(deprecated)]
+            vars.push(DocumentSymbol {
+                name: name.clone(),
+                detail: Some(format!("let {name}")),
+                kind: SymbolKind::VARIABLE,
+                tags: None,
+                deprecated: None,
+                range,
+                selection_range: range,
+                children: None,
+            });
+        }
+        Pattern::Assign { name, location, pattern } => {
+            let range = span_to_lsp_range(*location, line_numbers);
+            #[allow(deprecated)]
+            vars.push(DocumentSymbol {
+                name: name.clone(),
+                detail: Some(format!("let {name}")),
+                kind: SymbolKind::VARIABLE,
+                tags: None,
+                deprecated: None,
+                range,
+                selection_range: range,
+                children: None,
+            });
+            collect_pattern_vars(pattern, line_numbers, vars);
+        }
+        Pattern::List { elements, tail, .. } => {
+            for elem in elements {
+                collect_pattern_vars(elem, line_numbers, vars);
+            }
+            if let Some(tail) = tail {
+                collect_pattern_vars(tail, line_numbers, vars);
+            }
+        }
+        Pattern::Tuple { elems, .. } => {
+            for elem in elems {
+                collect_pattern_vars(elem, line_numbers, vars);
+            }
+        }
+        Pattern::Pair { fst, snd, .. } => {
+            collect_pattern_vars(fst, line_numbers, vars);
+            collect_pattern_vars(snd, line_numbers, vars);
+        }
+        Pattern::Constructor { arguments, .. } => {
+            for arg in arguments {
+                collect_pattern_vars(&arg.value, line_numbers, vars);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_let_vars(
+    expr: &aiken_lang::expr::TypedExpr,
+    line_numbers: &LineNumbers,
+    vars: &mut Vec<DocumentSymbol>,
+) {
+    use aiken_lang::ast::AssignmentKind;
+    use aiken_lang::expr::TypedExpr;
+
+    match expr {
+        TypedExpr::Assignment { pattern, kind, value, .. } => {
+            match kind {
+                AssignmentKind::Let { .. } | AssignmentKind::Expect { .. } => {
+                    collect_pattern_vars(pattern, line_numbers, vars);
+                }
+                AssignmentKind::Is => {}
+            }
+            collect_let_vars(value, line_numbers, vars);
+        }
+        TypedExpr::Sequence { expressions, .. } => {
+            for e in expressions {
+                collect_let_vars(e, line_numbers, vars);
+            }
+        }
+        TypedExpr::Pipeline { expressions, .. } => {
+            for e in expressions.iter() {
+                collect_let_vars(e, line_numbers, vars);
+            }
+        }
+        TypedExpr::If { branches, final_else, .. } => {
+            for branch in branches.iter() {
+                if let Some((is_pattern, _)) = &branch.is {
+                    collect_pattern_vars(is_pattern, line_numbers, vars);
+                }
+                collect_let_vars(&branch.body, line_numbers, vars);
+            }
+            collect_let_vars(final_else, line_numbers, vars);
+        }
+        TypedExpr::When { subject, clauses, .. } => {
+            collect_let_vars(subject, line_numbers, vars);
+            for clause in clauses {
+                collect_let_vars(&clause.then, line_numbers, vars);
+            }
+        }
+        TypedExpr::Trace { then, text, .. } => {
+            collect_let_vars(then, line_numbers, vars);
+            collect_let_vars(text, line_numbers, vars);
+        }
+        TypedExpr::Call { fun, args, .. } => {
+            collect_let_vars(fun, line_numbers, vars);
+            for arg in args {
+                collect_let_vars(&arg.value, line_numbers, vars);
+            }
+        }
+        TypedExpr::BinOp { left, right, .. } => {
+            collect_let_vars(left, line_numbers, vars);
+            collect_let_vars(right, line_numbers, vars);
+        }
+        TypedExpr::List { elements, tail, .. } => {
+            for elem in elements {
+                collect_let_vars(elem, line_numbers, vars);
+            }
+            if let Some(tail) = tail {
+                collect_let_vars(tail, line_numbers, vars);
+            }
+        }
+        TypedExpr::Tuple { elems, .. } => {
+            for elem in elems {
+                collect_let_vars(elem, line_numbers, vars);
+            }
+        }
+        TypedExpr::Pair { fst, snd, .. } => {
+            collect_let_vars(fst, line_numbers, vars);
+            collect_let_vars(snd, line_numbers, vars);
+        }
+        TypedExpr::RecordAccess { record, .. } => {
+            collect_let_vars(record, line_numbers, vars);
+        }
+        TypedExpr::TupleIndex { tuple, .. } => {
+            collect_let_vars(tuple, line_numbers, vars);
+        }
+        TypedExpr::RecordUpdate { spread, args, .. } => {
+            collect_let_vars(spread, line_numbers, vars);
+            for arg in args {
+                collect_let_vars(&arg.value, line_numbers, vars);
+            }
+        }
+        TypedExpr::UnOp { value, .. } => {
+            collect_let_vars(value, line_numbers, vars);
+        }
+        _ => {}
     }
 }
