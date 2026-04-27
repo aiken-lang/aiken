@@ -1702,11 +1702,6 @@ fn collect_let_vars(
                 collect_let_vars(e, line_numbers, vars);
             }
         }
-        TypedExpr::Pipeline { expressions, .. } => {
-            for e in expressions.iter() {
-                collect_let_vars(e, line_numbers, vars);
-            }
-        }
         TypedExpr::If { branches, final_else, .. } => {
             for branch in branches.iter() {
                 if let Some((is_pattern, _)) = &branch.is {
