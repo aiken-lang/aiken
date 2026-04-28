@@ -6486,10 +6486,7 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
         .apply(Term::list_data().apply(Term::var("x_id_0")))
         .apply(Term::list_data().apply(Term::var("x_id_0")))
         .lambda("x_id_0")
-        .apply(Term::empty_list().delayed_choose_list(
-            Term::Error,
-            Term::empty_list(),
-        ));
+        .apply(Term::empty_list().delayed_choose_list(Term::Error, Term::empty_list()));
 
     assert_uplc(src, program_verbose, true, true);
     assert_uplc(src, program_silent, true, false);
