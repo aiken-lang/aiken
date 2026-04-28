@@ -343,7 +343,7 @@ pub struct Repository {
     pub platform: Platform,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
     Github,
@@ -351,7 +351,7 @@ pub enum Platform {
     Bitbucket,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Dependency {
     pub name: PackageName,
     pub version: String,

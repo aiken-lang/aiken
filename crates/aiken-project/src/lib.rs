@@ -53,7 +53,8 @@ use package_name::PackageName;
 use pallas_addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload};
 use pallas_primitives::conway::PolicyId;
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet, hash_map::DefaultHasher},
+    hash::{Hash, Hasher},
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
@@ -103,6 +104,15 @@ where
     data_types: IndexMap<DataTypeKey, TypedDataType>,
     module_sources: HashMap<String, (String, LineNumbers)>,
     glossary: Glossary,
+    /// When true, `type_check()` skips calling `with_dependencies()`.
+    /// Used by the LSP to avoid re-parsing and re-inferring dependency
+    /// modules on every keystroke when their TypeInfos are pre-injected.
+    skip_with_dependencies: bool,
+    /// LSP per-file incremental cache: maps own module name → (content_hash, TypeInfo).
+    /// When populated, `type_check()` can skip `infer()` for unchanged modules.
+    own_module_hints: HashMap<String, (u64, TypeInfo)>,
+    /// LSP per-file incremental cache: maps own module name → last CheckedModule.
+    own_checked_modules: HashMap<String, CheckedModule>,
 }
 
 impl<T> Project<T>
@@ -157,6 +167,9 @@ where
             data_types,
             module_sources: HashMap::new(),
             glossary: Glossary::default(),
+            skip_with_dependencies: false,
+            own_module_hints: HashMap::new(),
+            own_checked_modules: HashMap::new(),
         }
     }
 
@@ -184,8 +197,73 @@ where
         self.checked_modules.values().cloned().collect()
     }
 
+    /// Clear all checked modules. Call this before each compile to ensure stale
+    /// entries from deleted files do not persist across incremental recheck cycles.
+    pub fn clear_checked_modules(&mut self) {
+        self.checked_modules = CheckedModules::default();
+    }
+
     pub fn importable_modules(&self) -> Vec<String> {
         self.module_types.keys().cloned().collect()
+    }
+
+    pub fn config(&self) -> &ProjectConfig {
+        &self.config
+    }
+
+    pub fn set_skip_dependencies(&mut self, skip: bool) {
+        self.skip_with_dependencies = skip;
+    }
+
+    pub fn inject_module_types(&mut self, type_infos: &HashMap<String, TypeInfo>) {
+        for (name, info) in type_infos {
+            self.module_types.insert(name.clone(), info.clone());
+        }
+    }
+
+    pub fn extract_dep_module_types(&self, own_package: &str) -> HashMap<String, TypeInfo> {
+        let dep_names: std::collections::HashSet<&str> = self
+            .checked_modules
+            .values()
+            .filter(|m| m.package != own_package)
+            .map(|m| m.name.as_str())
+            .collect();
+        self.module_types
+            .iter()
+            .filter(|(name, _)| dep_names.contains(name.as_str()))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    pub fn set_own_module_hints(
+        &mut self,
+        hints: HashMap<String, (u64, TypeInfo)>,
+        checked: HashMap<String, CheckedModule>,
+    ) {
+        self.own_module_hints = hints;
+        self.own_checked_modules = checked;
+    }
+
+    pub fn extract_own_module_hints(&self, own_package: &str) -> HashMap<String, (u64, TypeInfo)> {
+        let mut result = HashMap::new();
+        for checked in self.checked_modules.values() {
+            if checked.package == own_package
+                && let Some(type_info) = self.module_types.get(&checked.name)
+            {
+                let mut hasher = DefaultHasher::new();
+                checked.code.hash(&mut hasher);
+                result.insert(checked.name.clone(), (hasher.finish(), type_info.clone()));
+            }
+        }
+        result
+    }
+
+    pub fn extract_own_checked_modules(&self, own_package: &str) -> HashMap<String, CheckedModule> {
+        self.checked_modules
+            .values()
+            .filter(|m| m.package == own_package)
+            .map(|m| (m.name.clone(), m.clone()))
+            .collect()
     }
 
     pub fn checkpoint(&self) -> Checkpoint {
@@ -918,12 +996,79 @@ where
     ) -> Result<(), Vec<Error>> {
         let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
-        self.with_dependencies(modules)?;
+        if !self.skip_with_dependencies {
+            self.with_dependencies(modules)?;
+        }
 
         modules.extends_glossary(&mut self.glossary);
 
+        let own_module_deps_map: HashMap<String, Vec<String>> =
+            if !self.own_module_hints.is_empty() {
+                let env_mods: Vec<String> = modules
+                    .values()
+                    .filter_map(|m| {
+                        if m.kind == ModuleKind::Env {
+                            Some(m.name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                modules
+                    .values()
+                    .map(|m| {
+                        let (name, deps) = m.deps_for_graph(&env_mods);
+                        let own_deps: Vec<String> =
+                            deps.into_iter().filter(|d| our_modules.contains(d)).collect();
+                        (name, own_deps)
+                    })
+                    .collect()
+            } else {
+                HashMap::new()
+            };
+
+        let mut cache_hit_modules: HashSet<String> = HashSet::new();
+
         for name in modules.sequence(&our_modules)? {
             if let Some(module) = modules.remove(&name) {
+                let own_deps = own_module_deps_map
+                    .get(&name)
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[]);
+                let all_deps_cache_hit =
+                    own_deps.iter().all(|d| cache_hit_modules.contains(d));
+
+                if all_deps_cache_hit {
+                    let mut hasher = DefaultHasher::new();
+                    module.code.hash(&mut hasher);
+                    let current_hash = hasher.finish();
+
+                    if let (Some((cached_hash, cached_type_info)), Some(cached_checked)) = (
+                        self.own_module_hints.get(&name),
+                        self.own_checked_modules.get(&name),
+                    ) && current_hash == *cached_hash
+                    {
+                        self.module_types
+                            .insert(name.clone(), cached_type_info.clone());
+                        self.module_sources.insert(
+                            name.clone(),
+                            (
+                                cached_checked.code.clone(),
+                                LineNumbers::new(&cached_checked.code),
+                            ),
+                        );
+                        cached_checked.ast.register_definitions(
+                            &mut self.functions,
+                            &mut self.constants,
+                            &mut self.data_types,
+                        );
+                        self.checked_modules
+                            .insert(name.clone(), cached_checked.clone());
+                        cache_hit_modules.insert(name);
+                        continue;
+                    }
+                }
+
                 let (checked_module, warnings) = module.infer(
                     &self.id_gen,
                     &self.config.name.to_string(),
