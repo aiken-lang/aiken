@@ -1,0 +1,157 @@
+---
+source: crates/aiken/src/cmd/verify.rs
+expression: "&summary"
+---
+{
+  "total": 6,
+  "proved": 1,
+  "partial": 1,
+  "witness": 1,
+  "failed": 1,
+  "timed_out": 1,
+  "unknown": 1,
+  "skipped": [
+    {
+      "name": "example.test_skip",
+      "module": "example",
+      "reason": "unsupported shape"
+    }
+  ],
+  "theorems": [
+    {
+      "test_name": "example.test_proved",
+      "theorem_name": "Example.test_proved",
+      "status": {
+        "kind": "proved"
+      }
+    },
+    {
+      "test_name": "example.test_witness",
+      "theorem_name": "Example.test_witness",
+      "status": {
+        "kind": "witness_proved",
+        "instances": 2,
+        "witnesses": [
+          "00",
+          "01"
+        ],
+        "note": "witness-only proof"
+      }
+    },
+    {
+      "test_name": "example.test_partial",
+      "theorem_name": "Example.test_partial",
+      "status": {
+        "kind": "partial",
+        "note": "partial proof"
+      },
+      "over_approximations": 2
+    },
+    {
+      "test_name": "example.test_failed",
+      "theorem_name": "Example.test_failed",
+      "status": {
+        "kind": "failed",
+        "category": {
+          "kind": "build_error"
+        },
+        "reason": "build failed"
+      }
+    },
+    {
+      "test_name": "example.test_timed_out",
+      "theorem_name": "Example.test_timed_out",
+      "status": {
+        "kind": "timed_out",
+        "reason": "timed out"
+      }
+    },
+    {
+      "test_name": "example.test_unknown",
+      "theorem_name": "Example.test_unknown",
+      "status": {
+        "kind": "unknown"
+      }
+    }
+  ],
+  "raw_output": {
+    "success": false,
+    "stdout": {
+      "tail": "stdout tail",
+      "total_bytes": 2048,
+      "truncated": true,
+      "log_path": "build/verify/logs/lake_build.stdout.log"
+    },
+    "stderr": {
+      "tail": "stderr tail",
+      "total_bytes": 1024,
+      "truncated": true,
+      "log_path": "build/verify/logs/lake_build.stderr.log"
+    },
+    "exit_code": 1,
+    "theorem_results": [
+      {
+        "test_name": "example.test_proved",
+        "theorem_name": "Example.test_proved",
+        "status": {
+          "kind": "proved"
+        }
+      },
+      {
+        "test_name": "example.test_witness",
+        "theorem_name": "Example.test_witness",
+        "status": {
+          "kind": "witness_proved",
+          "instances": 2,
+          "witnesses": [
+            "00",
+            "01"
+          ],
+          "note": "witness-only proof"
+        }
+      },
+      {
+        "test_name": "example.test_partial",
+        "theorem_name": "Example.test_partial",
+        "status": {
+          "kind": "partial",
+          "note": "partial proof"
+        },
+        "over_approximations": 2
+      },
+      {
+        "test_name": "example.test_failed",
+        "theorem_name": "Example.test_failed",
+        "status": {
+          "kind": "failed",
+          "category": {
+            "kind": "build_error"
+          },
+          "reason": "build failed"
+        }
+      },
+      {
+        "test_name": "example.test_timed_out",
+        "theorem_name": "Example.test_timed_out",
+        "status": {
+          "kind": "timed_out",
+          "reason": "timed out"
+        }
+      },
+      {
+        "test_name": "example.test_unknown",
+        "theorem_name": "Example.test_unknown",
+        "status": {
+          "kind": "unknown"
+        }
+      }
+    ]
+  },
+  "elapsed_ms": 3210,
+  "command_success": false,
+  "blaster_rev": "abc123",
+  "plutus_core_rev": "pc456",
+  "allow_vacuous_subgenerators": true,
+  "two_phase_disabled": true,
+  "verify_summary_version": "2"
+}

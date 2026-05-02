@@ -1,0 +1,37 @@
+---
+source: crates/aiken/src/cmd/verify.rs
+expression: "&manifest"
+---
+{
+  "version": "1.0.0",
+  "tests": [
+    {
+      "id": "example_test_ok",
+      "aiken_module": "example",
+      "aiken_name": "test_ok",
+      "lean_module": "Example.TestOk",
+      "lean_theorem": "example_test_ok",
+      "lean_file": "Example/TestOk.lean",
+      "flat_file": "example_test_ok.flat",
+      "has_termination_theorem": true,
+      "has_equivalence_theorem": true,
+      "over_approximations": 2,
+      "partial_proof_note": "partial proof note",
+      "witness_proof_note": {
+        "instances": 2,
+        "witnesses": [
+          "00",
+          "01"
+        ],
+        "note": "witness-only"
+      }
+    }
+  ],
+  "skipped": [
+    {
+      "name": "example.test_skip",
+      "module": "example",
+      "reason": "unsupported shape"
+    }
+  ]
+}

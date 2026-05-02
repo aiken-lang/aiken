@@ -1,0 +1,9 @@
+---
+source: crates/aiken/src/cmd/verify.rs
+expression: "&payload"
+---
+{
+  "version": "1",
+  "kind": "verify-cli-error",
+  "message": "project load failed"
+}

@@ -10,12 +10,14 @@ pub mod check;
 pub mod completion;
 pub mod docs;
 pub mod export;
+pub mod export_tests;
 pub mod fmt;
 pub mod lsp;
 pub mod new;
 pub mod packages;
 pub mod tx;
 pub mod uplc;
+pub mod verify;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
 #[derive(Parser)]
@@ -26,6 +28,7 @@ pub enum Cmd {
     Fmt(fmt::Args),
 
     Export(export::Args),
+    ExportTests(export_tests::Args),
 
     #[clap(visible_alias("b"))]
     Build(build::Args),
@@ -53,6 +56,9 @@ pub enum Cmd {
     #[cfg(not(target_os = "windows"))]
     #[clap(subcommand)]
     Completion(completion::Cmd),
+
+    #[clap(subcommand)]
+    Verify(verify::Cmd),
 
     #[clap(hide = true)]
     Lsp(lsp::Args),
