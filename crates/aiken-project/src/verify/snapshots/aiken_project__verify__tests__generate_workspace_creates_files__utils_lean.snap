@@ -1,0 +1,107 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: utils
+---
+import PlutusCore.UPLC.CekMachine
+import PlutusCore.UPLC.PlutusScript
+
+namespace AikenVerify.Utils
+open PlutusCore.Integer (Integer)
+open PlutusCore.ByteString (ByteString)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.CekValue (CekValue)
+open PlutusCore.Data (Data)
+open PlutusCore.UPLC.Term (Term Const Program)
+open PlutusCore.UPLC.PlutusScript (PlutusScript)
+
+def fromHaltState (s : State): Option CekValue :=
+  match s with
+  | .Halt cv => some cv
+  | _ => none
+
+def fromFrameToInt (s : State): Option Integer :=
+  match s with
+  | .Halt (.VCon (Const.Integer x)) => some x
+  | _ => none
+
+def fromFrameToBool (s : State) : Option Bool :=
+  match s with
+  | .Halt (.VCon (Const.Bool x)) => some x
+  | _ => none
+
+def fromFrameToData (s : State) : Option Data :=
+  match s with
+  | .Halt (.VCon (Const.Data x)) => some x
+  | _ => none
+
+def integerToBuiltin (x : Integer) : Term := Term.Const (Const.Integer x)
+
+def executeIntProgram (p : Program) (args : List Term) (exUnit : Nat) : Option Integer :=
+  fromFrameToInt $ cekExecuteProgram p args exUnit
+
+def executeDataProgram (p : Program) (args : List Term) (exUnit : Nat) : Option Data :=
+  fromFrameToData $ cekExecuteProgram p args exUnit
+
+def intArgs2 (x : Integer) (y : Integer) : List Term :=
+    [integerToBuiltin x, integerToBuiltin y]
+
+def intArgs3 (x : Integer) (y : Integer) (z : Integer) : List Term :=
+    [integerToBuiltin x, integerToBuiltin y, integerToBuiltin z]
+
+def isErrorState : State -> Prop
+ | State.Error => True
+ | _ => False
+
+def isHaltState : State -> Prop
+ | .Halt _ => True
+ | _ => False
+
+def proveTests (p : PlutusScript) (args : List Term) : Option Bool :=
+  fromFrameToBool $ cekExecuteProgram p.script args 20000
+
+/-- For Void-returning tests: True iff the program halts without error. -/
+def proveTestsHalt (p : PlutusScript) (args : List Term) : Prop :=
+  isHaltState (cekExecuteProgram p.script args 20000)
+
+/-- For Void+fail tests: True iff the program reaches an error state. -/
+def proveTestsError (p : PlutusScript) (args : List Term) : Prop :=
+  isErrorState (cekExecuteProgram p.script args 20000)
+
+def intArg (x : Integer) : List Term :=
+  [Term.Const (Const.Data (Data.I x))]
+
+def boolArg (x : Bool) : List Term :=
+  [Term.Const (Const.Data (Data.Constr (if x then 1 else 0) []))]
+
+def bytearrayArg (x : ByteString) : List Term :=
+  [Term.Const (Const.Data (Data.B x))]
+
+def dataArg (x : Data) : List Term :=
+  [Term.Const (Const.Data x)]
+
+def dataArgs2 (x : Data) (y : Data) : List Term :=
+  [Term.Const (Const.Data x), Term.Const (Const.Data y)]
+
+def dataArgs3 (x : Data) (y : Data) (z : Data) : List Term :=
+  [Term.Const (Const.Data x), Term.Const (Const.Data y), Term.Const (Const.Data z)]
+
+def stringArg (x : ByteString) : List Term :=
+  [Term.Const (Const.Data (Data.B x))]
+
+def pairArg (x : Data) (y : Data) : List Term :=
+  [Term.Const (Const.Data (Data.List [x, y]))]
+
+/-- For `fail once` witness mode: True iff the program returns `value` for the given args. -/
+def witnessTests (p : PlutusScript) (args : List Term) (value : Bool) : Prop :=
+  proveTests p args = some value
+
+/-- `allProp p xs` holds iff every element of `xs` satisfies predicate `p`.
+    Used in generated theorem preconditions to express per-element constraints
+    (e.g. element range bounds) as a recursively-defined Prop rather than
+    using `∀ x ∈ xs, ...` which desugars to `List.Mem` — an inductive predicate
+    that Blaster's SMT backend cannot translate. -/
+def allProp {α : Type} (p : α → Prop) : List α → Prop
+  | [] => True
+  | x :: xs => p x ∧ allProp p xs
+
+end AikenVerify.Utils

@@ -15,12 +15,59 @@ use std::{
 pub enum ExitFailure {
     #[error("")]
     ExitFailure,
+    #[error("{0}")]
+    Message(String),
 }
 
 impl ExitFailure {
     pub fn into_report() -> miette::Report {
         ExitFailure::ExitFailure.into()
     }
+
+    pub fn with_message(message: impl Into<String>) -> miette::Report {
+        ExitFailure::Message(message.into()).into()
+    }
+}
+
+fn render_diagnostic_message<E>(error: &E) -> String
+where
+    E: Diagnostic + ToString + ?Sized,
+{
+    let mut rendered = error.to_string();
+
+    if let Some(help) = Diagnostic::help(error) {
+        let help = help.to_string();
+        if !help.trim().is_empty() {
+            rendered.push_str("\n\n");
+            rendered.push_str(&help);
+        }
+    }
+
+    rendered
+}
+
+fn render_error(error: &crate::error::Error) -> String {
+    match error {
+        crate::error::Error::Parse { error, .. } => render_diagnostic_message(error.as_ref()),
+        crate::error::Error::Type { error, .. } => render_diagnostic_message(error.as_ref()),
+        _ => render_diagnostic_message(error),
+    }
+}
+
+fn render_errors(errors: &[crate::error::Error]) -> String {
+    errors
+        .iter()
+        .map(render_error)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn render_warnings(warnings: &[crate::error::Warning]) -> String {
+    warnings
+        .iter()
+        .map(crate::error::Warning::render)
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 struct Summary {
@@ -130,6 +177,29 @@ pub fn with_project<A>(
     deny: bool,
     suppress_warnings: bool,
     show_summary: bool,
+    action: A,
+) -> miette::Result<()>
+where
+    A: FnMut(&mut Project<EventTarget>) -> Result<(), Vec<crate::error::Error>>,
+{
+    with_project_event_target(
+        directory,
+        deny,
+        suppress_warnings,
+        show_summary,
+        EventTarget::default(),
+        true,
+        action,
+    )
+}
+
+pub fn with_project_event_target<A>(
+    directory: Option<&Path>,
+    deny: bool,
+    suppress_warnings: bool,
+    show_summary: bool,
+    event_target: EventTarget,
+    report_diagnostics: bool,
     mut action: A,
 ) -> miette::Result<()>
 where
@@ -148,7 +218,7 @@ where
             .members
             .into_iter()
             .map(|member| {
-                let event_target = EventTarget::default();
+                let event_target = event_target.clone();
                 is_terminal = matches!(event_target, EventTarget::Terminal(_));
                 Project::new(member, event_target)
             })
@@ -157,8 +227,12 @@ where
         let projects = match res_projects {
             Ok(p) => Ok(p),
             Err(e) => {
-                e.report();
-                Err(ExitFailure::into_report())
+                if report_diagnostics {
+                    e.report();
+                    Err(ExitFailure::into_report())
+                } else {
+                    Err(ExitFailure::with_message(render_error(&e)))
+                }
             }
         }?;
 
@@ -175,13 +249,17 @@ where
             }
         }
     } else {
-        let event_target = EventTarget::default();
+        let event_target = event_target.clone();
         is_terminal = matches!(event_target, EventTarget::Terminal(_));
         let mut project = match Project::new(workspace_root, event_target) {
             Ok(p) => Ok(p),
             Err(e) => {
-                e.report();
-                Err(ExitFailure::into_report())
+                if report_diagnostics {
+                    e.report();
+                    Err(ExitFailure::into_report())
+                } else {
+                    Err(ExitFailure::with_message(render_error(&e)))
+                }
             }
         }?;
 
@@ -199,7 +277,7 @@ where
 
     let warning_count = warnings.len();
 
-    if is_terminal && !suppress_warnings {
+    if report_diagnostics && is_terminal && !suppress_warnings {
         for warning in &warnings {
             eprintln!();
             warning.report()
@@ -207,11 +285,13 @@ where
     }
 
     if !errs.is_empty() {
-        if is_terminal {
+        if report_diagnostics {
             for err in &errs {
                 err.report()
             }
+        }
 
+        if report_diagnostics && is_terminal {
             eprintln!(
                 "{}",
                 Summary {
@@ -222,10 +302,14 @@ where
             );
         }
 
-        return Err(ExitFailure::into_report());
+        return Err(if report_diagnostics {
+            ExitFailure::into_report()
+        } else {
+            ExitFailure::with_message(render_errors(&errs))
+        });
     }
 
-    if is_terminal && show_summary {
+    if report_diagnostics && is_terminal && show_summary {
         eprintln!(
             "{}",
             Summary {
@@ -237,11 +321,18 @@ where
     }
 
     if warning_count > 0 && deny {
-        Err(ExitFailure::into_report())
+        Err(if report_diagnostics {
+            ExitFailure::into_report()
+        } else {
+            ExitFailure::with_message(format!(
+                "Warnings were denied by --deny.\n\n{}",
+                render_warnings(&warnings)
+            ))
+        })
     } else {
         Ok(())
     }
-}
+    }
 
 /// Run a function each time a file in the project changes
 ///
@@ -329,5 +420,175 @@ where
             );
             with_project(directory, false, false, false, &mut action).unwrap_or(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_project_event_target;
+    use crate::telemetry::EventTarget;
+    use std::fs;
+
+    #[test]
+    fn render_warnings_reuses_the_warning_renderer() {
+        let warning = crate::error::Warning::NoValidators;
+        assert_eq!(super::render_warnings(std::slice::from_ref(&warning)), warning.render());
+    }
+
+    #[test]
+    fn suppressed_project_load_errors_preserve_the_root_cause() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        fs::create_dir_all(tmp.path().join("lib")).expect("lib dir");
+        fs::write(
+            tmp.path().join("aiken.toml"),
+            "name = \"aiken-lang/watch-error\"\nversion = [\n",
+        )
+        .expect("manifest");
+        fs::write(
+            tmp.path().join("lib/tests.ak"),
+            "use missing/module\n\ntest broken() { True }\n",
+        )
+        .expect("source");
+
+        let err = with_project_event_target(
+            Some(tmp.path()),
+            false,
+            true,
+            false,
+            EventTarget::default(),
+            false,
+            |_project| Ok(()),
+        )
+        .expect_err("broken project should fail to load");
+
+        assert!(
+            err.to_string().contains("unclosed array"),
+            "suppressed diagnostics must still preserve the underlying loader/compiler error: {err}"
+        );
+    }
+
+    #[test]
+    fn suppressed_parse_errors_preserve_the_parser_failure() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        fs::create_dir_all(tmp.path().join("lib")).expect("lib dir");
+        fs::write(
+            tmp.path().join("aiken.toml"),
+            "name = \"aiken-lang/watch-parse\"\nversion = \"0.0.0\"\nplutusVersion = \"v3\"\n",
+        )
+        .expect("manifest");
+        fs::write(
+            tmp.path().join("lib/tests.ak"),
+            "validator foo {\n",
+        )
+        .expect("source");
+
+        let err = with_project_event_target(
+            Some(tmp.path()),
+            false,
+            true,
+            false,
+            EventTarget::default(),
+            false,
+            |project| {
+                project.build(
+                    false,
+                    aiken_lang::ast::Tracing::silent(),
+                    project.blueprint_path(None),
+                    crate::options::BlueprintExport::from(false),
+                    None,
+                )
+            },
+        )
+        .expect_err("broken source should fail to load or build");
+
+        let rendered = err.to_string().to_lowercase();
+        assert!(
+            rendered.contains("unexpected"),
+            "suppressed parse diagnostics must preserve the parser failure: {err}",
+        );
+    }
+
+    #[test]
+    fn suppressed_type_errors_preserve_the_type_failure() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        fs::create_dir_all(tmp.path().join("lib")).expect("lib dir");
+        fs::write(
+            tmp.path().join("aiken.toml"),
+            "name = \"aiken-lang/watch-type\"\nversion = \"0.0.0\"\nplutusVersion = \"v3\"\n",
+        )
+        .expect("manifest");
+        fs::write(
+            tmp.path().join("lib/tests.ak"),
+            "test broken() {\n  missing\n}\n",
+        )
+        .expect("source");
+
+        let err = with_project_event_target(
+            Some(tmp.path()),
+            false,
+            true,
+            false,
+            EventTarget::default(),
+            false,
+            |project| {
+                project.build(
+                    false,
+                    aiken_lang::ast::Tracing::silent(),
+                    project.blueprint_path(None),
+                    crate::options::BlueprintExport::from(false),
+                    None,
+                )
+            },
+        )
+        .expect_err("type-invalid source should fail to build");
+
+        let rendered = err.to_string().to_lowercase();
+        assert!(
+            rendered.contains("unknown variable"),
+            "suppressed type diagnostics must preserve the type failure: {err}",
+        );
+    }
+
+    #[test]
+    fn suppressed_denied_warnings_preserve_the_warning_cause() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        fs::create_dir_all(tmp.path().join("lib")).expect("lib dir");
+        fs::write(
+            tmp.path().join("aiken.toml"),
+            "name = \"aiken-lang/watch-warning\"\nversion = \"0.0.0\"\nplutusVersion = \"v3\"\n",
+        )
+        .expect("manifest");
+        fs::write(
+            tmp.path().join("lib/tests.ak"),
+            "validator foo {\n  spend(c) {\n    True\n  }\n}\n",
+        )
+        .expect("source");
+
+        let err = with_project_event_target(
+            Some(tmp.path()),
+            true,
+            true,
+            false,
+            EventTarget::default(),
+            false,
+            |project| {
+                project.build(
+                    false,
+                    aiken_lang::ast::Tracing::silent(),
+                    project.blueprint_path(None),
+                    crate::options::BlueprintExport::from(false),
+                    None,
+                )
+            },
+        )
+        .expect_err("warning-only project should fail under --deny");
+
+        let rendered = err.to_string().to_lowercase();
+        assert!(
+            rendered.contains("warnings were denied by --deny")
+                && rendered.contains("validator")
+                && rendered.contains("ignore"),
+            "suppressed denied warnings must preserve the underlying warning cause: {err}",
+        );
     }
 }

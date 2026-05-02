@@ -1,0 +1,17 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: stable
+---
+import Lake
+open Lake DSL
+
+package AikenVerify where
+
+@[default_target]
+lean_lib AikenVerify where
+
+require Blaster from git
+  "https://github.com/input-output-hk/Lean-blaster" @ "<DEFAULT_BLASTER_REV>"
+
+require PlutusCore from
+  "<TMP>/PlutusCore"

@@ -1,0 +1,31 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: proof
+---
+import AikenVerify.Utils
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.My_module.test_bool
+open PlutusCore.Integer (Integer)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_my_module__test_bool_34d285b7 PlutusV3 single_cbor_hex "./cbor/my_module__test_bool_34d285b7.cbor"
+
+theorem test_bool :
+  ∀ (x : Integer),
+  (0 <= x ∧ x <= 255)
+  →
+  (proveTests prog_my_module__test_bool_34d285b7 (intArg x)) = true :=
+  by blaster
+
+theorem test_bool_alwaysTerminating :
+  ∀ (x : Integer),
+  (0 <= x ∧ x <= 255)
+  →
+  Option.isSome (proveTests prog_my_module__test_bool_34d285b7 (intArg x)) :=
+  by blaster
+
+end AikenVerify.Proofs.My_module.test_bool

@@ -3,6 +3,7 @@ pub mod error;
 mod memo_program;
 pub mod parameter;
 pub mod schema;
+pub mod schema_from_type;
 pub mod validator;
 
 use crate::{

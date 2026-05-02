@@ -1,0 +1,25 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: proof
+---
+import AikenVerify.Utils
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.My_module.test_ev
+open PlutusCore.Integer (Integer)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_my_module__test_ev_f11494ac PlutusV3 single_cbor_hex "./cbor/my_module__test_ev_f11494ac.cbor"
+
+-- Mode: proof (existential proof attempt)
+theorem test_ev :
+  ∃ (x : Integer),
+  (0 <= x ∧ x <= 255)
+  ∧
+  (proveTests prog_my_module__test_ev_f11494ac (intArg x)) = false :=
+  by blaster
+
+end AikenVerify.Proofs.My_module.test_ev

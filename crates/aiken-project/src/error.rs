@@ -178,6 +178,99 @@ pub enum Error {
     },
 }
 
+#[derive(Debug)]
+struct InternalDiagnostic {
+    message: String,
+    code: Option<String>,
+    help: Option<String>,
+    url: Option<String>,
+    style_code: bool,
+}
+
+impl Display for InternalDiagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for InternalDiagnostic {}
+
+impl Diagnostic for InternalDiagnostic {
+    fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        self.code
+            .as_deref()
+            .map(|code| Box::new(code) as Box<dyn Display + 'a>)
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        self.help
+            .as_deref()
+            .map(|help| Box::new(help) as Box<dyn Display + 'a>)
+    }
+
+    fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        self.url
+            .as_deref()
+            .map(|url| Box::new(url) as Box<dyn Display + 'a>)
+    }
+}
+
+impl Error {
+    pub fn verify_generation(
+        message: impl Into<String>,
+        code: Option<String>,
+        help: Option<String>,
+        url: Option<String>,
+    ) -> Self {
+        Self::wrap_internal_diagnostic(InternalDiagnostic {
+            message: message.into(),
+            code,
+            help,
+            url,
+            style_code: false,
+        })
+    }
+
+    pub fn debruijn(error: impl Into<String>) -> Self {
+        let error = error.into();
+        Self::wrap_internal_diagnostic(InternalDiagnostic {
+            message: format!("Failed to convert program to DeBruijn representation: {error}"),
+            code: Some("aiken::uplc::debruijn".to_string()),
+            help: Some(
+                "The generated validator program could not be converted to DeBruijn form; this usually indicates an internal code-generation bug.".to_string(),
+            ),
+            url: None,
+            style_code: true,
+        })
+    }
+
+    pub fn flat_encode(error: impl Into<String>) -> Self {
+        let error = error.into();
+        Self::wrap_internal_diagnostic(InternalDiagnostic {
+            message: format!("Failed to flat-encode program: {error}"),
+            code: Some("aiken::uplc::flat-encode".to_string()),
+            help: Some(
+                "The generated validator program could not be flat-encoded; this usually indicates an internal UPLC encoding bug.".to_string(),
+            ),
+            url: None,
+            style_code: true,
+        })
+    }
+
+    fn wrap_internal_diagnostic(error: InternalDiagnostic) -> Self {
+        Self::StandardIo(io::Error::other(error))
+    }
+
+    fn as_internal_diagnostic(&self) -> Option<&InternalDiagnostic> {
+        match self {
+            Error::StandardIo(error) => error
+                .get_ref()
+                .and_then(|inner| inner.downcast_ref::<InternalDiagnostic>()),
+            _ => None,
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug, Diagnostic)]
 pub enum ScriptOverrideArgumentError {
     #[error(
@@ -349,7 +442,7 @@ impl ExtraData for Error {
             Error::DuplicateModule { .. }
             | Error::FileIo { .. }
             | Error::Format { .. }
-            | Error::StandardIo { .. }
+            | Error::StandardIo(_)
             | Error::Blueprint { .. }
             | Error::MissingManifest { .. }
             | Error::TomlLoading { .. }
@@ -381,6 +474,10 @@ pub trait GetSource {
 
 impl GetSource for Error {
     fn path(&self) -> Option<PathBuf> {
+        if self.as_internal_diagnostic().is_some() {
+            return None;
+        }
+
         match self {
             Error::FileIo { .. }
             | Error::Format { .. }
@@ -410,6 +507,10 @@ impl GetSource for Error {
     }
 
     fn src(&self) -> Option<String> {
+        if self.as_internal_diagnostic().is_some() {
+            return None;
+        }
+
         match self {
             Error::DuplicateModule { .. }
             | Error::FileIo { .. }
@@ -455,6 +556,13 @@ impl Diagnostic for Error {
             ))
         }
 
+        if let Some(error) = self.as_internal_diagnostic() {
+            return if error.style_code {
+                error.code().map(boxed)
+            } else {
+                error.code()
+            };
+        }
         match self {
             Error::DuplicateModule { .. } => Some(boxed(Box::new("aiken::module::duplicate"))),
             Error::Blueprint(e) => e.code().map(boxed),
@@ -491,6 +599,10 @@ impl Diagnostic for Error {
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        if let Some(error) = self.as_internal_diagnostic() {
+            return error.help();
+        }
+
         match self {
             Error::DuplicateModule { first, second, .. } => Some(Box::new(format!(
                 "Rename either of them:\n- {}\n- {}",
@@ -556,6 +668,10 @@ impl Diagnostic for Error {
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        if let Some(error) = self.as_internal_diagnostic() {
+            return error.labels();
+        }
+
         match self {
             Error::Blueprint(e) => e.labels(),
             Error::Parse { error, .. } => error.labels(),
@@ -594,6 +710,10 @@ impl Diagnostic for Error {
     }
 
     fn source_code(&self) -> Option<&dyn SourceCode> {
+        if let Some(error) = self.as_internal_diagnostic() {
+            return error.source_code();
+        }
+
         match self {
             Error::Blueprint(e) => e.source_code(),
             Error::Parse { named, .. } => Some(named.as_ref()),
@@ -623,6 +743,10 @@ impl Diagnostic for Error {
     }
 
     fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        if let Some(error) = self.as_internal_diagnostic() {
+            return error.url();
+        }
+
         match self {
             Error::Blueprint(e) => e.url(),
             Error::Type { error, .. } => error.url(),
@@ -653,6 +777,10 @@ impl Diagnostic for Error {
     }
 
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
+        if let Some(error) = self.as_internal_diagnostic() {
+            return error.related();
+        }
+
         match self {
             Error::Blueprint(e) => e.related(),
             Error::Type { error, .. } => error.related(),
@@ -831,8 +959,12 @@ impl Warning {
         }
     }
 
+    pub fn render(&self) -> String {
+        format!("{self:?}")
+    }
+
     pub fn report(&self) {
-        eprintln!("{self:?}")
+        eprintln!("{}", self.render())
     }
 }
 

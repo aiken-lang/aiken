@@ -1,0 +1,24 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: proof
+---
+import AikenVerify.Utils
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.My_module.test_void_fail
+open PlutusCore.Integer (Integer)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_my_module__test_void_fail_78744c06 PlutusV3 single_cbor_hex "./cbor/my_module__test_void_fail_78744c06.cbor"
+
+theorem test_void_fail :
+  ∀ (x : Integer),
+  (0 <= x ∧ x <= 255)
+  →
+  proveTestsError prog_my_module__test_void_fail_78744c06 (intArg x) :=
+  by blaster
+
+end AikenVerify.Proofs.My_module.test_void_fail

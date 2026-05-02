@@ -71,7 +71,9 @@ impl EventListener for Json {
 
                 println!("{}", serde_json::to_string_pretty(&json).unwrap());
             }
-            _ => super::Terminal.handle_event(event),
+            // JSON consumers require a single structured payload; progress
+            // events without a JSON contract are intentionally silent.
+            _ => {}
         }
     }
 }
