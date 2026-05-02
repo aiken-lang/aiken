@@ -108,6 +108,9 @@ fn convert_constraint(lang: &LangFuzzerConstraint) -> FuzzerConstraint {
             }
         }
         LangFuzzerConstraint::Exact(value) => FuzzerConstraint::Exact(convert_exact_value(value)),
+        LangFuzzerConstraint::OneOf(values) => {
+            FuzzerConstraint::OneOf(values.iter().map(convert_exact_value).collect())
+        }
         LangFuzzerConstraint::Tuple(elems) => {
             FuzzerConstraint::Tuple(elems.iter().map(convert_constraint).collect())
         }
@@ -132,6 +135,8 @@ fn convert_constraint(lang: &LangFuzzerConstraint) -> FuzzerConstraint {
         LangFuzzerConstraint::Unsupported { reason } => FuzzerConstraint::Unsupported {
             reason: reason.clone(),
         },
+        // Public boundary: aiken-lang marks this enum non-exhaustive, so keep
+        // accepting genuinely future variants as explicit unsupported metadata.
         _ => FuzzerConstraint::Unsupported {
             reason: "unsupported future fuzzer constraint variant".to_string(),
         },
@@ -211,6 +216,9 @@ fn convert_semantics(lang: &LangFuzzerSemantics) -> FuzzerSemantics {
             type_name: type_name.clone(),
         },
         LangFuzzerSemantics::Exact(value) => FuzzerSemantics::Exact(convert_exact_value(value)),
+        LangFuzzerSemantics::OneOf(values) => {
+            FuzzerSemantics::OneOf(values.iter().map(convert_exact_value).collect())
+        }
         LangFuzzerSemantics::Product(elems) => {
             FuzzerSemantics::Product(elems.iter().map(convert_semantics).collect())
         }
@@ -256,6 +264,8 @@ fn convert_semantics(lang: &LangFuzzerSemantics) -> FuzzerSemantics {
         LangFuzzerSemantics::Opaque { reason } => FuzzerSemantics::Opaque {
             reason: reason.clone(),
         },
+        // Public boundary: aiken-lang marks this enum non-exhaustive, so keep
+        // accepting genuinely future variants as explicit opaque metadata.
         _ => FuzzerSemantics::Opaque {
             reason: "unsupported future fuzzer semantics variant".to_string(),
         },
@@ -311,6 +321,7 @@ fn collect_data_with_schema_type_names_into(semantics: &FuzzerSemantics, out: &m
         | FuzzerSemantics::String
         | FuzzerSemantics::Data
         | FuzzerSemantics::Exact(_)
+        | FuzzerSemantics::OneOf(_)
         | FuzzerSemantics::Constructors { .. }
         | FuzzerSemantics::Opaque { .. } => {}
     }

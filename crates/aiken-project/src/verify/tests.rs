@@ -241,6 +241,21 @@ fn derive_fixture_semantics_from_constraint(
             }
             _ => fixture_semantics_opaque(),
         },
+        FuzzerConstraint::OneOf(values) => {
+            let matches_output = values.iter().all(|value| {
+                matches!(
+                    (output_type, value),
+                    (FuzzerOutputType::Bool, FuzzerExactValue::Bool(_))
+                        | (FuzzerOutputType::ByteArray, FuzzerExactValue::ByteArray(_))
+                        | (FuzzerOutputType::String, FuzzerExactValue::String(_))
+                )
+            });
+            if matches_output {
+                FuzzerSemantics::OneOf(values.clone())
+            } else {
+                fixture_semantics_opaque()
+            }
+        }
         FuzzerConstraint::Tuple(parts) => match output_type {
             FuzzerOutputType::Tuple(types) if types.len() == parts.len() => {
                 FuzzerSemantics::Product(
@@ -325,6 +340,50 @@ fn collect_proof_benchmark_metrics(proof: &str) -> ProofBenchmarkMetrics {
             .filter(|line| line.trim_start().starts_with("theorem "))
             .count(),
     }
+}
+
+fn correctness_case_theorem_count(proof: &str, lean_test_name: &str) -> usize {
+    let prefix = format!("theorem {lean_test_name}_case_");
+    proof
+        .lines()
+        .filter(|line| {
+            line.trim_start().starts_with(&prefix) && !line.contains("_alwaysTerminating")
+        })
+        .count()
+}
+
+fn assert_generation_error_code(
+    error: &miette::Report,
+    expected_code: &'static str,
+    expected_category: GenerationErrorCategory,
+    context: &str,
+) {
+    let generation_error = error.downcast_ref::<GenerationError>().unwrap_or_else(|| {
+        panic!("{context}: error must downcast to GenerationError, got: {error}")
+    });
+    assert_eq!(
+        generation_error.code,
+        Some(expected_code),
+        "{context}: expected code {expected_code}, got {:?} (message: {})",
+        generation_error.code,
+        generation_error.message,
+    );
+    assert_eq!(
+        generation_error.category, expected_category,
+        "{context}: category mismatch for {expected_code}",
+    );
+}
+
+fn attach_validator_target(test: &mut ExportedPropertyTest) {
+    test.validator_target = Some(ValidatorTarget {
+        validator_module: "validators/my_validator".to_string(),
+        validator_name: "spend".to_string(),
+        handler_name: Some("spend.handler".to_string()),
+        handler_program: Some(ExportedProgram {
+            hex: "deadbeef".to_string(),
+            flat_bytes: None,
+        }),
+    });
 }
 
 fn generate_proof_for_phase12_case(test: &ExportedPropertyTest) -> miette::Result<String> {
@@ -2688,8 +2747,6 @@ fn bytearray_length_range_with_inconsistent_bounds_errors() {
 
 #[test]
 fn string_exact_non_empty_generates_direct_scalar_domain() {
-    // See `bytearray_length_range_generates_direct_scalar_domain`: any
-    // top-level String fuzzer (including `Exact`) is skipped for Blaster.
     let test = make_test_with_type(
         "my_module",
         "test_string_exact_non_empty",
@@ -2700,6 +2757,143 @@ fn string_exact_non_empty_generates_direct_scalar_domain() {
     let lean_name = sanitize_lean_name("test_string_exact_non_empty");
     let lean_module = "AikenVerify.Proofs.My_module.test_string_exact_non_empty";
 
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect("exact String should generate a ground finite theorem");
+
+    assert!(
+        proof.contains("theorem test_string_exact_non_empty_case_000 :")
+            && proof.contains("theorem test_string_exact_non_empty :"),
+        "Expected exact String proof to contain case and aggregate theorems, got:\n{proof}"
+    );
+    assert_eq!(
+        correctness_case_theorem_count(&proof, "test_string_exact_non_empty"),
+        1
+    );
+    assert!(
+        proof.contains("stringArg") && !proof.contains("(x : ByteString)"),
+        "Exact String proof should use ground stringArg and no ByteString quantifier, got:\n{proof}"
+    );
+}
+
+#[test]
+fn finite_string_oneof_generates_case_theorems_and_aggregate() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_string_cases",
+        FuzzerOutputType::String,
+        FuzzerConstraint::OneOf(vec![
+            FuzzerExactValue::String("".to_string()),
+            FuzzerExactValue::String("hello".to_string()),
+            FuzzerExactValue::String("test".to_string()),
+            FuzzerExactValue::String("world".to_string()),
+        ]),
+    );
+    let id = test_id("my_module", "test_string_cases");
+    let lean_name = sanitize_lean_name("test_string_cases");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_cases";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect("finite String OneOf should generate ground case theorems");
+
+    assert_eq!(
+        correctness_case_theorem_count(&proof, "test_string_cases"),
+        4
+    );
+    assert!(proof.contains("theorem test_string_cases_case_000 :"));
+    assert!(proof.contains("theorem test_string_cases_case_003 :"));
+    assert!(proof.contains("theorem test_string_cases :"));
+    assert!(
+        proof.contains("stringArg") && !proof.contains("(x : ByteString)"),
+        "finite String proof should use ground stringArg values, got:\n{proof}"
+    );
+    assert!(
+        !proof.contains("_l0") && !proof.contains("_l1"),
+        "finite String proof must use _case_NNN names, got:\n{proof}"
+    );
+}
+
+#[test]
+fn finite_string_literal_encoding_handles_special_utf8_bytes() {
+    let special =
+        String::from_utf8(vec![b'a', b'"', b'\\', b'\n', 0xc3, 0xa9]).expect("valid UTF-8 fixture");
+    let test = make_test_with_type(
+        "my_module",
+        "test_string_special_bytes",
+        FuzzerOutputType::String,
+        FuzzerConstraint::Exact(FuzzerExactValue::String(special)),
+    );
+    let id = test_id("my_module", "test_string_special_bytes");
+    let lean_name = sanitize_lean_name("test_string_special_bytes");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_special_bytes";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect("special-character finite String should generate a ground theorem");
+
+    for byte in [97, 34, 92, 10, 195, 169] {
+        assert!(
+            proof.contains(&format!("consByteStringV1 {byte}")),
+            "finite String proof should encode byte {byte}, got:\n{proof}"
+        );
+    }
+}
+
+#[test]
+fn qualified_bytestring_literal_handles_empty_and_edge_bytes() {
+    assert_eq!(
+        lean_bytestring_literal_from_bytes_qualified(&[]),
+        "PlutusCore.ByteString.emptyByteString"
+    );
+    assert_eq!(
+        lean_bytestring_literal_from_bytes_qualified(&[0x00, 0xff]),
+        "PlutusCore.ByteString.consByteStringV1 0 (PlutusCore.ByteString.consByteStringV1 255 (PlutusCore.ByteString.emptyByteString))"
+    );
+}
+
+#[test]
+fn fuzzer_semantics_display_renders_oneof() {
+    let semantics = FuzzerSemantics::OneOf(vec![
+        FuzzerExactValue::String("".to_string()),
+        FuzzerExactValue::String("hello".to_string()),
+    ]);
+    assert_eq!(semantics.to_string(), "OneOf(\"\", \"hello\")");
+}
+
+#[test]
+fn finite_string_oneof_above_cap_reports_e0034() {
+    let values = (0..=MAX_FINITE_DOMAIN_CASES)
+        .map(|i| FuzzerExactValue::String(format!("s{i:02}")))
+        .collect::<Vec<_>>();
+    let test = make_test_with_type(
+        "my_module",
+        "test_string_too_many_cases",
+        FuzzerOutputType::String,
+        FuzzerConstraint::OneOf(values),
+    );
+    let id = test_id("my_module", "test_string_too_many_cases");
+    let lean_name = sanitize_lean_name("test_string_too_many_cases");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_too_many_cases";
+
     let err = generate_proof_file(
         &test,
         &id,
@@ -2708,12 +2902,298 @@ fn string_exact_non_empty_generates_direct_scalar_domain() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     )
-    .unwrap_err()
-    .to_string();
+    .expect_err("over-cap finite String domain must be rejected");
 
+    assert_generation_error_code(
+        &err,
+        "E0034",
+        GenerationErrorCategory::FallbackRequired,
+        "over-cap finite String domain",
+    );
+    let message = err.to_string();
     assert!(
-        err.contains("String") || err.contains("ByteArray"),
-        "Expected String/ByteArray skip error, got:\n{err}"
+        message.contains(&format!(
+            "finite domain has {} cases, exceeds cap of {} (MAX_FINITE_DOMAIN_CASES)",
+            MAX_FINITE_DOMAIN_CASES + 1,
+            MAX_FINITE_DOMAIN_CASES
+        )),
+        "E0034 message should use the stable cap format, got: {message}"
+    );
+}
+
+#[test]
+fn finite_string_empty_oneof_reports_e0044() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_string_empty_cases",
+        FuzzerOutputType::String,
+        FuzzerConstraint::OneOf(vec![]),
+    );
+    let id = test_id("my_module", "test_string_empty_cases");
+    let lean_name = sanitize_lean_name("test_string_empty_cases");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_empty_cases";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect_err("empty finite String metadata must be rejected");
+
+    assert_generation_error_code(
+        &err,
+        "E0044",
+        GenerationErrorCategory::InvalidConstraint,
+        "empty finite String domain",
+    );
+}
+
+#[test]
+fn finite_string_validator_target_reports_e0035() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_string_validator_target",
+        FuzzerOutputType::String,
+        FuzzerConstraint::Exact(FuzzerExactValue::String("hello".to_string())),
+    );
+    attach_validator_target(&mut test);
+    let id = test_id("my_module", "test_string_validator_target");
+    let lean_name = sanitize_lean_name("test_string_validator_target");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_validator_target";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::ValidatorHandler,
+    )
+    .expect_err("finite-domain validator target must be rejected in this pass");
+
+    assert_generation_error_code(
+        &err,
+        "E0035",
+        GenerationErrorCategory::FallbackRequired,
+        "finite String validator target",
+    );
+}
+
+#[test]
+fn finite_string_equivalence_target_reports_e0035() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_string_equivalence_target",
+        FuzzerOutputType::String,
+        FuzzerConstraint::Exact(FuzzerExactValue::String("hello".to_string())),
+    );
+    attach_validator_target(&mut test);
+    test.target_kind = VerificationTargetKind::Equivalence;
+    let id = test_id("my_module", "test_string_equivalence_target");
+    let lean_name = sanitize_lean_name("test_string_equivalence_target");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_equivalence_target";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::Equivalence,
+    )
+    .expect_err("finite-domain equivalence target must be rejected in this pass");
+
+    assert_generation_error_code(
+        &err,
+        "E0035",
+        GenerationErrorCategory::FallbackRequired,
+        "finite String equivalence target",
+    );
+}
+
+#[test]
+fn bounded_top_level_bool_list_generates_exact_finite_cases() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_bool_list_cases",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: Some(3),
+        },
+    );
+    let id = test_id("my_module", "test_bool_list_cases");
+    let lean_name = sanitize_lean_name("test_bool_list_cases");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_list_cases";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect("bounded top-level List<Bool> should generate exact finite cases");
+
+    assert_eq!(
+        correctness_case_theorem_count(&proof, "test_bool_list_cases"),
+        15
+    );
+    assert!(proof.contains("theorem test_bool_list_cases :"));
+    assert!(proof.contains("Data.Constr 0 []"));
+    assert!(proof.contains("Data.Constr 1 []"));
+    assert!(
+        !proof.contains("if x_i then") && !proof.contains("List.Mem") && !proof.contains("∀ xs"),
+        "bool-list finite proof must bypass generic List<Bool> encoding, got:\n{proof}"
+    );
+}
+
+#[test]
+fn bounded_top_level_bool_list_validator_target_reports_e0035() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_bool_list_validator_target",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: Some(3),
+        },
+    );
+    attach_validator_target(&mut test);
+    let id = test_id("my_module", "test_bool_list_validator_target");
+    let lean_name = sanitize_lean_name("test_bool_list_validator_target");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_list_validator_target";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::ValidatorHandler,
+    )
+    .expect_err("finite List<Bool> validator target must be rejected in this pass");
+
+    assert_generation_error_code(
+        &err,
+        "E0035",
+        GenerationErrorCategory::FallbackRequired,
+        "finite List<Bool> validator target",
+    );
+}
+
+#[test]
+fn unbounded_bool_list_still_reports_e0013() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_bool_list_unbounded",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: None,
+            max_len: None,
+        },
+    );
+    let id = test_id("my_module", "test_bool_list_unbounded");
+    let lean_name = sanitize_lean_name("test_bool_list_unbounded");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_list_unbounded";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect_err("unbounded List<Bool> must remain explicitly unsupported");
+
+    assert_generation_error_code(
+        &err,
+        "E0013",
+        GenerationErrorCategory::FallbackRequired,
+        "unbounded List<Bool>",
+    );
+}
+
+#[test]
+fn half_bounded_bool_list_still_reports_e0013() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_bool_list_half_bounded",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: None,
+        },
+    );
+    let id = test_id("my_module", "test_bool_list_half_bounded");
+    let lean_name = sanitize_lean_name("test_bool_list_half_bounded");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_list_half_bounded";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect_err("half-bounded List<Bool> must remain explicitly unsupported");
+
+    assert_generation_error_code(
+        &err,
+        "E0013",
+        GenerationErrorCategory::FallbackRequired,
+        "half-bounded List<Bool>",
+    );
+}
+
+#[test]
+fn bounded_top_level_bool_list_above_cap_reports_e0034() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_bool_list_too_many_cases",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: Some(6),
+        },
+    );
+    let id = test_id("my_module", "test_bool_list_too_many_cases");
+    let lean_name = sanitize_lean_name("test_bool_list_too_many_cases");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_list_too_many_cases";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .expect_err("over-cap bounded List<Bool> must be rejected");
+
+    assert_generation_error_code(
+        &err,
+        "E0034",
+        GenerationErrorCategory::FallbackRequired,
+        "over-cap bounded List<Bool>",
+    );
+    assert!(
+        err.to_string().contains(&format!(
+            "exceeds cap of {} (MAX_FINITE_THEOREM_INSTANCES_PER_TEST)",
+            MAX_FINITE_THEOREM_INSTANCES_PER_TEST
+        )),
+        "E0034 bool-list message should name theorem cap, got: {err}"
     );
 }
 
@@ -6605,7 +7085,10 @@ fn export_path_falls_back_to_unbounded_int_semantics_for_seed_lambda() {
     assert!(
         matches!(
             &test.semantics,
-            FuzzerSemantics::IntRange { min: None, max: None }
+            FuzzerSemantics::IntRange {
+                min: None,
+                max: None
+            }
         ),
         "seed_fuzzer helper bodies currently widen to an unconstrained int domain, got {:?}",
         test.semantics
@@ -7261,16 +7744,15 @@ fn export_tests_output_generates_validator_and_equivalence_workspaces() {
 
         let manifest = generate_lean_workspace(&validator_target_tests, &config, &SkipPolicy::All)
             .unwrap_or_else(|e| {
-                panic!(
-                    "workspace generation should succeed for --target {target}: {e}"
-                )
+                panic!("workspace generation should succeed for --target {target}: {e}")
             });
         assert!(
             !manifest.tests.is_empty(),
             "--target {target} should generate runnable tests"
         );
         assert_eq!(
-            manifest.skipped.len(), 0,
+            manifest.skipped.len(),
+            0,
             "--target {target} should not succeed with only skipped tests"
         );
 
@@ -9221,6 +9703,16 @@ fn capabilities_supported_types_include_all_working_types() {
     );
     assert!(caps.supported_fuzzer_types.contains(&"String".to_string()));
     assert!(caps.supported_fuzzer_types.contains(&"Data".to_string()));
+    assert!(
+        caps.supported_fuzzer_types
+            .iter()
+            .any(|entry| entry.contains("Finite literal String domains"))
+    );
+    assert!(
+        caps.supported_fuzzer_types
+            .iter()
+            .any(|entry| entry.contains("Bounded top-level List<Bool>"))
+    );
 }
 
 #[test]
@@ -9765,6 +10257,13 @@ fn intentional_limitations_register() {
         caps.unsupported_fuzzer_types
             .iter()
             .any(|t| t.contains("partial-application"))
+    );
+
+    // 9. Finite ByteArray literal domains remain separate future work.
+    assert!(
+        caps.unsupported_fuzzer_types
+            .iter()
+            .any(|t| t.contains("finite literal ByteArray"))
     );
 }
 
@@ -13829,7 +14328,6 @@ fn raw_output_can_report_public_path_separately_from_persist_path() {
     let persisted = std::fs::read_to_string(&persist_path).expect("log file must exist");
     assert_eq!(persisted, content);
 }
-
 
 #[test]
 fn raw_output_disables_cap_when_zero() {

@@ -331,6 +331,24 @@ pub(crate) const CATALOGUE: &[CatalogueEntry] = &[
         informational: false,
     },
     CatalogueEntry {
+        code: "E0034",
+        feature: "finite_domain_too_large",
+        category: GenerationErrorCategory::FallbackRequired,
+        summary: "A finite fuzzer domain exceeds the verifier's generated-theorem cap.",
+        future: false,
+        doc_path: "E0034",
+        informational: false,
+    },
+    CatalogueEntry {
+        code: "E0035",
+        feature: "finite_domain_target_mode_unsupported",
+        category: GenerationErrorCategory::FallbackRequired,
+        summary: "Finite-domain theorem generation is currently supported only for property-wrapper verification targets.",
+        future: false,
+        doc_path: "E0035",
+        informational: false,
+    },
+    CatalogueEntry {
         code: "E0050",
         feature: "validator_target_missing",
         category: GenerationErrorCategory::UnsupportedShape,
@@ -564,7 +582,8 @@ pub(crate) fn category_is_skippable(category: GenerationErrorCategory) -> bool {
 /// Keep this list honest: add a code here only once a real runtime path exists.
 pub(crate) const EXPOSED_CATALOGUE_CODES: &[&str] = &[
     "E0011", "E0013", "E0015", "E0016", "E0017", "E0018", "E0020", "E0023", "E0024", "E0025",
-    "E0026", "E0027", "E0028", "E0029", "E0050", "S0001", "S0002", "S0003",
+    "E0026", "E0027", "E0028", "E0029", "E0034", "E0035", "E0044", "E0050", "S0001", "S0002",
+    "S0003",
 ];
 
 /// Iterator over the currently surfaced catalogue entries, projected to the

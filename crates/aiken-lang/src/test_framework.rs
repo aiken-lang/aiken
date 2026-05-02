@@ -31,6 +31,7 @@ use patricia_tree::PatriciaMap;
 use std::time::Duration;
 use std::{
     borrow::Borrow,
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     fmt::{Debug, Display},
@@ -45,6 +46,8 @@ use uplc::{
 use vec1::{Vec1, vec1};
 
 const STDLIB_FUZZ_MODULE: &str = "aiken/fuzz";
+const MAX_FINITE_MAPPER_SOURCE_CASES: usize = 64;
+const MAX_FINITE_DOMAIN_CASES: usize = 64;
 #[cfg(test)]
 const STDLIB_FUZZ_SCENARIO_MODULE: &str = "aiken/fuzz/scenario";
 
@@ -667,6 +670,14 @@ fn describe_semantics(semantics: &FuzzerSemantics) -> String {
         FuzzerSemantics::Data => "Data".to_string(),
         FuzzerSemantics::DataWithSchema { type_name } => format!("DataWithSchema<{type_name}>"),
         FuzzerSemantics::Exact(value) => format!("Exact({})", describe_exact_value(value)),
+        FuzzerSemantics::OneOf(values) => format!(
+            "OneOf({})",
+            values
+                .iter()
+                .map(describe_exact_value)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         FuzzerSemantics::Product(items) => format!(
             "Product({})",
             items
@@ -1361,7 +1372,7 @@ unsafe impl Send for PropertyTest {}
 /// export manifest. It supports composable constraints for arbitrary fuzzer
 /// output shapes (integers, tuples, lists, mapped values, etc.).
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FuzzerExactValue {
     Bool(bool),
     ByteArray(Vec<u8>),
@@ -1397,6 +1408,7 @@ pub enum FuzzerSemantics {
         type_name: String,
     },
     Exact(FuzzerExactValue),
+    OneOf(Vec<FuzzerExactValue>),
     Product(Vec<FuzzerSemantics>),
     List {
         element: Box<FuzzerSemantics>,
@@ -1491,6 +1503,8 @@ pub enum FuzzerConstraint {
     ByteStringLenRange { min_len: usize, max_len: usize },
     /// Exact scalar value.
     Exact(FuzzerExactValue),
+    /// Finite scalar set. Empty sets are invalid and singletons canonicalize to `Exact`.
+    OneOf(Vec<FuzzerExactValue>),
     /// A tuple whose elements each carry their own constraint.
     Tuple(Vec<FuzzerConstraint>),
     /// A list whose elements satisfy `elem`, with optional length bounds.
@@ -1516,6 +1530,7 @@ pub enum UnaryMapperShape {
     ConstBool(bool),
     ConstByteArray(Vec<u8>),
     ConstString(String),
+    FiniteScalar(Vec<FuzzerExactValue>),
     ConstInt(String),
     IntAffine { scale: i8, offset: String },
     ConstructorMap(BTreeMap<String, String>),
@@ -2582,6 +2597,29 @@ fn semantics_from_known_constraint(
         FuzzerConstraint::Exact(FuzzerExactValue::Bool(b)) if output_type.is_bool() => {
             Some(FuzzerSemantics::Exact(FuzzerExactValue::Bool(*b)))
         }
+        FuzzerConstraint::Exact(FuzzerExactValue::ByteArray(bytes))
+            if output_type.is_bytearray() =>
+        {
+            Some(FuzzerSemantics::Exact(FuzzerExactValue::ByteArray(
+                bytes.clone(),
+            )))
+        }
+        FuzzerConstraint::Exact(FuzzerExactValue::String(value)) if output_type.is_string() => {
+            Some(FuzzerSemantics::Exact(FuzzerExactValue::String(
+                value.clone(),
+            )))
+        }
+        FuzzerConstraint::OneOf(values) => {
+            match canonicalize_finite_scalar_domain(output_type, values.clone()) {
+                Ok(CanonicalFiniteScalarDomain::Exact(value)) => {
+                    Some(FuzzerSemantics::Exact(value))
+                }
+                Ok(CanonicalFiniteScalarDomain::OneOf(values)) => {
+                    Some(FuzzerSemantics::OneOf(values))
+                }
+                Err(_) => None,
+            }
+        }
         _ => None,
     }
 }
@@ -2649,8 +2687,6 @@ fn try_extract_list_length_bounds(
     }
 }
 
-
-
 fn normalize_structural_fuzzer_call(
     expr: &TypedExpr,
     args: &[CallArg<TypedExpr>],
@@ -2695,12 +2731,22 @@ fn normalize_structural_fuzzer_call(
                     local_values,
                     visiting_functions,
                 );
-                let mapper_shape = summarize_unary_mapper_shape(
+                let mut mapper_shape = summarize_unary_mapper_shape(
                     &mapper.value,
                     current_module,
                     function_index,
                     local_values,
                 );
+                if let Some(finite_shape) = summarize_finite_scalar_mapper_shape(
+                    &source,
+                    &mapper.value,
+                    output_type.as_ref(),
+                    current_module,
+                    function_index,
+                    local_values,
+                ) {
+                    mapper_shape = finite_shape;
+                }
 
                 let mapper_returns_bool =
                     function_return_type(&mapper.value).is_some_and(|(_, ret)| ret.is_bool());
@@ -3166,12 +3212,9 @@ fn summarize_unary_mapper_body(
     }
 
     let mut visiting_local_aliases = BTreeSet::new();
-    if let Some(constant_shape) = resolve_tautological_bool_mapper(
-        body,
-        arg_name,
-        local_values,
-        &mut visiting_local_aliases,
-    ) {
+    if let Some(constant_shape) =
+        resolve_tautological_bool_mapper(body, arg_name, local_values, &mut visiting_local_aliases)
+    {
         return constant_shape;
     }
 
@@ -3233,7 +3276,8 @@ fn resolve_identity_mapper(
         } if matches!(
             constructor.variant,
             ValueConstructorVariant::LocalVariable { .. }
-        ) => {
+        ) =>
+        {
             if name == arg_name {
                 return true;
             }
@@ -3245,19 +3289,14 @@ fn resolve_identity_mapper(
                 return false;
             }
 
-            let resolved = resolve_identity_mapper(
-                bound_expr,
-                arg_name,
-                local_values,
-                visiting_local_aliases,
-            );
+            let resolved =
+                resolve_identity_mapper(bound_expr, arg_name, local_values, visiting_local_aliases);
             visiting_local_aliases.remove(name);
             resolved
         }
         _ => false,
     }
 }
-
 
 fn resolve_exact_constant_mapper(
     expr: &TypedExpr,
@@ -3316,7 +3355,8 @@ fn resolve_tautological_bool_mapper(
         } if matches!(
             constructor.variant,
             ValueConstructorVariant::LocalVariable { .. }
-        ) => {
+        ) =>
+        {
             let bound_expr = local_values.get(name)?;
             if !visiting_local_aliases.insert(name.clone()) {
                 return None;
@@ -3593,6 +3633,374 @@ fn resolve_int_affine_mapper(
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum FiniteEvalValue {
+    Int(BigInt),
+    Bool(bool),
+    ByteArray(Vec<u8>),
+    String(String),
+}
+
+fn normalized_int_range(normalized: &NormalizedFuzzer) -> Option<(String, String)> {
+    match normalized {
+        NormalizedFuzzer::Primitive {
+            known_constraint: Some(FuzzerConstraint::IntRange { min, max }),
+            ..
+        } => Some((min.clone(), max.clone())),
+        _ => None,
+    }
+}
+
+fn enumerate_capped_int_range(min: &str, max: &str, cap: usize) -> Option<Vec<BigInt>> {
+    let lo = parse_decimal_bigint(min)?;
+    let hi = parse_decimal_bigint(max)?;
+    if lo > hi {
+        return None;
+    }
+
+    let cases = &hi - &lo + BigInt::from(1);
+    if cases > BigInt::from(cap) {
+        return None;
+    }
+
+    let mut values = Vec::new();
+    let mut current = lo;
+    while current <= hi {
+        values.push(current.clone());
+        current += 1;
+    }
+    Some(values)
+}
+
+fn summarize_finite_scalar_mapper_shape(
+    source: &NormalizedFuzzer,
+    mapper: &TypedExpr,
+    output_type: &Type,
+    current_module: &str,
+    function_index: &FunctionIndex<'_>,
+    local_values: &BTreeMap<String, TypedExpr>,
+) -> Option<UnaryMapperShape> {
+    if !output_type.is_string() {
+        return None;
+    }
+
+    let (min, max) = normalized_int_range(source)?;
+    let source_values = enumerate_capped_int_range(&min, &max, MAX_FINITE_MAPPER_SOURCE_CASES)?;
+
+    let mut mapper_expr = terminal_expression(mapper).clone();
+    let mut mapper_module = current_module.to_string();
+    let mut mapper_locals = local_values.clone();
+    let mut visiting_functions = BTreeSet::new();
+
+    loop {
+        let mapper = terminal_expression(&mapper_expr);
+        match mapper {
+            TypedExpr::Fn { args, body, .. } => {
+                return evaluate_finite_scalar_mapper_body(
+                    args,
+                    body,
+                    &mapper_locals,
+                    source_values,
+                );
+            }
+            _ => {
+                let Some((resolved, resolved_locals, applied_arg_count)) =
+                    resolve_function_with_applied_args(
+                        mapper,
+                        &mapper_module,
+                        function_index,
+                        &mapper_locals,
+                    )
+                else {
+                    return None;
+                };
+
+                let key = (resolved.module_name.clone(), resolved.function_name.clone());
+                if !visiting_functions.insert(key) {
+                    return None;
+                }
+
+                let remaining_args = resolved
+                    .function
+                    .arguments
+                    .len()
+                    .saturating_sub(applied_arg_count);
+
+                if remaining_args == 1 {
+                    return evaluate_finite_scalar_mapper_body(
+                        &resolved.function.arguments[applied_arg_count..],
+                        &resolved.function.body,
+                        &resolved_locals,
+                        source_values,
+                    );
+                }
+
+                if remaining_args == 0 {
+                    mapper_expr = resolved.function.body.clone();
+                    mapper_module = resolved.module_name;
+                    mapper_locals = resolved_locals;
+                    continue;
+                }
+
+                return None;
+            }
+        }
+    }
+}
+
+fn evaluate_finite_scalar_mapper_body(
+    args: &[TypedArg],
+    body: &TypedExpr,
+    local_values: &BTreeMap<String, TypedExpr>,
+    source_values: Vec<BigInt>,
+) -> Option<UnaryMapperShape> {
+    if args.len() != 1 {
+        return None;
+    }
+    let arg_name = args[0].get_variable_name()?;
+
+    let mut values = Vec::new();
+    for source_value in source_values {
+        let mut env = BTreeMap::new();
+        env.insert(arg_name.to_string(), FiniteEvalValue::Int(source_value));
+        let value = eval_finite_mapper_expr(body, arg_name, local_values, &mut env)?;
+        match value {
+            FiniteEvalValue::String(value) => values.push(FuzzerExactValue::String(value)),
+            FiniteEvalValue::ByteArray(bytes) => values.push(FuzzerExactValue::ByteArray(bytes)),
+            FiniteEvalValue::Bool(value) => values.push(FuzzerExactValue::Bool(value)),
+            FiniteEvalValue::Int(_) => return None,
+        }
+    }
+
+    if values.is_empty() {
+        None
+    } else {
+        Some(UnaryMapperShape::FiniteScalar(values))
+    }
+}
+
+fn eval_finite_mapper_expr(
+    expr: &TypedExpr,
+    arg_name: &str,
+    local_values: &BTreeMap<String, TypedExpr>,
+    env: &mut BTreeMap<String, FiniteEvalValue>,
+) -> Option<FiniteEvalValue> {
+    match expr {
+        TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+            eval_finite_mapper_sequence(expressions, arg_name, local_values, env)
+        }
+        TypedExpr::Trace { then, .. } => {
+            eval_finite_mapper_expr(then.as_ref(), arg_name, local_values, env)
+        }
+        TypedExpr::UInt { value, base, .. } => {
+            Some(FiniteEvalValue::Int(parse_uint_bigint(value, base)?))
+        }
+        TypedExpr::String { value, .. } => Some(FiniteEvalValue::String(value.clone())),
+        TypedExpr::ByteArray { bytes, .. } => Some(FiniteEvalValue::ByteArray(bytes.clone())),
+        TypedExpr::Var {
+            name, constructor, ..
+        } if matches!(
+            constructor.variant,
+            ValueConstructorVariant::LocalVariable { .. }
+        ) =>
+        {
+            if let Some(value) = env.get(name) {
+                return Some(value.clone());
+            }
+            let bound_expr = local_values.get(name)?;
+            eval_finite_mapper_expr(bound_expr, arg_name, local_values, env)
+        }
+        TypedExpr::Var {
+            name, constructor, ..
+        } if constructor.tipo.is_bool() => match &constructor.variant {
+            ValueConstructorVariant::Record { arity, module, .. }
+                if module.is_empty() && *arity == 0 =>
+            {
+                match name.as_str() {
+                    "True" => Some(FiniteEvalValue::Bool(true)),
+                    "False" => Some(FiniteEvalValue::Bool(false)),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        TypedExpr::If {
+            branches,
+            final_else,
+            ..
+        } => {
+            for branch in branches {
+                if branch.is.is_some() {
+                    return None;
+                }
+                let condition =
+                    eval_finite_mapper_expr(&branch.condition, arg_name, local_values, env)?;
+                let FiniteEvalValue::Bool(condition) = condition else {
+                    return None;
+                };
+                if condition {
+                    return eval_finite_mapper_expr(&branch.body, arg_name, local_values, env);
+                }
+            }
+            eval_finite_mapper_expr(final_else.as_ref(), arg_name, local_values, env)
+        }
+        TypedExpr::When {
+            subject, clauses, ..
+        } => {
+            let subject = eval_finite_mapper_expr(subject.as_ref(), arg_name, local_values, env)?;
+            for clause in clauses {
+                if finite_eval_value_matches_pattern(&subject, &clause.pattern)? {
+                    return eval_finite_mapper_expr(&clause.then, arg_name, local_values, env);
+                }
+            }
+            None
+        }
+        TypedExpr::BinOp {
+            name, left, right, ..
+        } => {
+            let left = eval_finite_mapper_expr(left.as_ref(), arg_name, local_values, env)?;
+            match name {
+                BinOp::And => {
+                    let FiniteEvalValue::Bool(left) = left else {
+                        return None;
+                    };
+                    if !left {
+                        return Some(FiniteEvalValue::Bool(false));
+                    }
+                    let right =
+                        eval_finite_mapper_expr(right.as_ref(), arg_name, local_values, env)?;
+                    let FiniteEvalValue::Bool(right) = right else {
+                        return None;
+                    };
+                    Some(FiniteEvalValue::Bool(right))
+                }
+                BinOp::Or => {
+                    let FiniteEvalValue::Bool(left) = left else {
+                        return None;
+                    };
+                    if left {
+                        return Some(FiniteEvalValue::Bool(true));
+                    }
+                    let right =
+                        eval_finite_mapper_expr(right.as_ref(), arg_name, local_values, env)?;
+                    let FiniteEvalValue::Bool(right) = right else {
+                        return None;
+                    };
+                    Some(FiniteEvalValue::Bool(right))
+                }
+                _ => {
+                    let right =
+                        eval_finite_mapper_expr(right.as_ref(), arg_name, local_values, env)?;
+                    eval_finite_mapper_bin_op(*name, left, right)
+                }
+            }
+        }
+        TypedExpr::UnOp { op, value, .. } => {
+            let value = eval_finite_mapper_expr(value.as_ref(), arg_name, local_values, env)?;
+            match (op, value) {
+                (UnOp::Not, FiniteEvalValue::Bool(value)) => Some(FiniteEvalValue::Bool(!value)),
+                (UnOp::Negate, FiniteEvalValue::Int(value)) => Some(FiniteEvalValue::Int(-value)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn eval_finite_mapper_sequence(
+    expressions: &[TypedExpr],
+    arg_name: &str,
+    local_values: &BTreeMap<String, TypedExpr>,
+    env: &mut BTreeMap<String, FiniteEvalValue>,
+) -> Option<FiniteEvalValue> {
+    let (last, prefix) = expressions.split_last()?;
+    let mut scoped_env = env.clone();
+    for expr in prefix {
+        let TypedExpr::Assignment {
+            value,
+            pattern,
+            kind,
+            ..
+        } = expr
+        else {
+            return None;
+        };
+        if !kind.is_let() {
+            return None;
+        }
+        let value =
+            eval_finite_mapper_expr(value.as_ref(), arg_name, local_values, &mut scoped_env)?;
+        match pattern {
+            TypedPattern::Var { name, .. } => {
+                scoped_env.insert(name.clone(), value);
+            }
+            TypedPattern::Discard { .. } => {}
+            _ => return None,
+        }
+    }
+    eval_finite_mapper_expr(last, arg_name, local_values, &mut scoped_env)
+}
+
+fn eval_finite_mapper_bin_op(
+    op: BinOp,
+    left: FiniteEvalValue,
+    right: FiniteEvalValue,
+) -> Option<FiniteEvalValue> {
+    match (op, left, right) {
+        (BinOp::Eq, left, right) => Some(FiniteEvalValue::Bool(left == right)),
+        (BinOp::NotEq, left, right) => Some(FiniteEvalValue::Bool(left != right)),
+        (BinOp::LtInt, FiniteEvalValue::Int(left), FiniteEvalValue::Int(right)) => {
+            Some(FiniteEvalValue::Bool(left < right))
+        }
+        (BinOp::LtEqInt, FiniteEvalValue::Int(left), FiniteEvalValue::Int(right)) => {
+            Some(FiniteEvalValue::Bool(left <= right))
+        }
+        (BinOp::GtEqInt, FiniteEvalValue::Int(left), FiniteEvalValue::Int(right)) => {
+            Some(FiniteEvalValue::Bool(left >= right))
+        }
+        (BinOp::GtInt, FiniteEvalValue::Int(left), FiniteEvalValue::Int(right)) => {
+            Some(FiniteEvalValue::Bool(left > right))
+        }
+        (BinOp::AddInt, FiniteEvalValue::Int(left), FiniteEvalValue::Int(right)) => {
+            Some(FiniteEvalValue::Int(left + right))
+        }
+        (BinOp::SubInt, FiniteEvalValue::Int(left), FiniteEvalValue::Int(right)) => {
+            Some(FiniteEvalValue::Int(left - right))
+        }
+        _ => None,
+    }
+}
+
+fn finite_eval_value_matches_pattern(
+    value: &FiniteEvalValue,
+    pattern: &TypedPattern,
+) -> Option<bool> {
+    match pattern {
+        TypedPattern::Discard { .. } => Some(true),
+        TypedPattern::Int {
+            value: pattern,
+            base,
+            ..
+        } => {
+            let FiniteEvalValue::Int(value) = value else {
+                return Some(false);
+            };
+            let pattern = parse_uint_bigint(pattern, base)?;
+            Some(value == &pattern)
+        }
+        TypedPattern::ByteArray { value: pattern, .. } => {
+            let FiniteEvalValue::ByteArray(value) = value else {
+                return Some(false);
+            };
+            Some(value == pattern)
+        }
+        TypedPattern::Assign { pattern, .. } => {
+            finite_eval_value_matches_pattern(value, pattern.as_ref())
+        }
+        _ => None,
+    }
+}
+
 fn parse_uint_bigint(value: &str, base: &Base) -> Option<BigInt> {
     let digits = value.replace('_', "");
     let radix = match base {
@@ -3690,6 +4098,82 @@ fn parse_decimal_bigint(value: &str) -> Option<BigInt> {
     value.parse::<BigInt>().ok()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FiniteDomainError {
+    Empty,
+    Heterogeneous,
+    OutputTypeMismatch,
+    TooLarge,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum CanonicalFiniteScalarDomain {
+    Exact(FuzzerExactValue),
+    OneOf(Vec<FuzzerExactValue>),
+}
+
+fn exact_value_matches_output_type(output_type: &Type, value: &FuzzerExactValue) -> bool {
+    match value {
+        FuzzerExactValue::Bool(_) => output_type.is_bool(),
+        FuzzerExactValue::ByteArray(_) => output_type.is_bytearray(),
+        FuzzerExactValue::String(_) => output_type.is_string(),
+    }
+}
+
+fn exact_value_kind(value: &FuzzerExactValue) -> u8 {
+    match value {
+        FuzzerExactValue::Bool(_) => 0,
+        FuzzerExactValue::ByteArray(_) => 1,
+        FuzzerExactValue::String(_) => 2,
+    }
+}
+
+fn compare_exact_values(a: &FuzzerExactValue, b: &FuzzerExactValue) -> Ordering {
+    match (a, b) {
+        (FuzzerExactValue::Bool(a), FuzzerExactValue::Bool(b)) => a.cmp(b),
+        (FuzzerExactValue::ByteArray(a), FuzzerExactValue::ByteArray(b)) => a.cmp(b),
+        (FuzzerExactValue::String(a), FuzzerExactValue::String(b)) => {
+            a.as_bytes().cmp(b.as_bytes())
+        }
+        _ => exact_value_kind(a).cmp(&exact_value_kind(b)),
+    }
+}
+
+fn canonicalize_finite_scalar_domain(
+    output_type: &Type,
+    mut values: Vec<FuzzerExactValue>,
+) -> Result<CanonicalFiniteScalarDomain, FiniteDomainError> {
+    if values.is_empty() {
+        return Err(FiniteDomainError::Empty);
+    }
+
+    let kind = exact_value_kind(&values[0]);
+    if values.iter().any(|value| exact_value_kind(value) != kind) {
+        return Err(FiniteDomainError::Heterogeneous);
+    }
+    if values
+        .iter()
+        .any(|value| !exact_value_matches_output_type(output_type, value))
+    {
+        return Err(FiniteDomainError::OutputTypeMismatch);
+    }
+
+    values.sort_by(compare_exact_values);
+    values.dedup();
+
+    if values.len() > MAX_FINITE_DOMAIN_CASES {
+        return Err(FiniteDomainError::TooLarge);
+    }
+
+    if values.len() == 1 {
+        Ok(CanonicalFiniteScalarDomain::Exact(
+            values.into_iter().next().expect("len checked"),
+        ))
+    } else {
+        Ok(CanonicalFiniteScalarDomain::OneOf(values))
+    }
+}
+
 fn apply_unary_map_constraint_precision(
     mapper_shape: &UnaryMapperShape,
     source_constraint: FuzzerConstraint,
@@ -3707,6 +4191,13 @@ fn apply_unary_map_constraint_precision(
         }
         UnaryMapperShape::ConstString(value) => {
             FuzzerConstraint::Exact(FuzzerExactValue::String(value.clone()))
+        }
+        UnaryMapperShape::FiniteScalar(values) => {
+            match canonicalize_finite_scalar_domain(output_type, values.clone()) {
+                Ok(CanonicalFiniteScalarDomain::Exact(value)) => FuzzerConstraint::Exact(value),
+                Ok(CanonicalFiniteScalarDomain::OneOf(values)) => FuzzerConstraint::OneOf(values),
+                Err(_) => FuzzerConstraint::Map(Box::new(source_constraint)),
+            }
         }
         UnaryMapperShape::ConstInt(value) => FuzzerConstraint::IntRange {
             min: value.clone(),
@@ -3785,6 +4276,13 @@ fn apply_unary_map_semantics_precision(
         }
         UnaryMapperShape::ConstString(value) => {
             FuzzerSemantics::Exact(FuzzerExactValue::String(value.clone()))
+        }
+        UnaryMapperShape::FiniteScalar(values) => {
+            match canonicalize_finite_scalar_domain(output_type, values.clone()) {
+                Ok(CanonicalFiniteScalarDomain::Exact(value)) => FuzzerSemantics::Exact(value),
+                Ok(CanonicalFiniteScalarDomain::OneOf(values)) => FuzzerSemantics::OneOf(values),
+                Err(_) => default_semantics_for_type(output_type, data_types),
+            }
         }
         UnaryMapperShape::ConstInt(value) => FuzzerSemantics::IntRange {
             min: Some(value.clone()),
@@ -5125,6 +5623,7 @@ fn fuzzer_semantics_of_normalized(normalized: &NormalizedFuzzer) -> FuzzerSemant
                 }
             }
             Some(FuzzerConstraint::Exact(v)) => FuzzerSemantics::Exact(v.clone()),
+            Some(FuzzerConstraint::OneOf(values)) => FuzzerSemantics::OneOf(values.clone()),
             Some(FuzzerConstraint::DataConstructorTags { tags }) => {
                 FuzzerSemantics::Constructors { tags: tags.clone() }
             }
@@ -5243,7 +5742,12 @@ pub fn transition_prop_is_vacuous(tp: &TransitionProp) -> bool {
         // the bind domain. Treat only that bound-output/domain pair as
         // non-vacuous; truly unconstrained (`Data`) or opaque domains remain
         // vacuous.
-        TransitionProp::Exists { binder, domain, body, .. } => {
+        TransitionProp::Exists {
+            binder,
+            domain,
+            body,
+            ..
+        } => {
             if exists_bound_output_domain_constrains_transition(
                 binder,
                 domain.as_ref(),
@@ -6462,6 +6966,16 @@ fn semantics_from_constraint(constraint: &FuzzerConstraint, output_type: &Type) 
             }
         }
         FuzzerConstraint::Exact(value) => FuzzerSemantics::Exact(value.clone()),
+        FuzzerConstraint::OneOf(values) => {
+            match canonicalize_finite_scalar_domain(output_type, values.clone()) {
+                Ok(CanonicalFiniteScalarDomain::Exact(value)) => FuzzerSemantics::Exact(value),
+                Ok(CanonicalFiniteScalarDomain::OneOf(values)) => FuzzerSemantics::OneOf(values),
+                Err(_) => opaque_semantics(format!(
+                    "finite scalar constraint does not match output type '{}'",
+                    describe_tipo(output_type)
+                )),
+            }
+        }
         FuzzerConstraint::Tuple(elems) => {
             let inner_types = output_type.get_inner_types();
             if !(output_type.is_tuple() || output_type.is_pair()) {
@@ -9209,7 +9723,6 @@ mod test {
         }
     }
 
-
     fn make_identity_mapper(arg_name: &str, payload_type: Rc<Type>) -> TypedExpr {
         TypedExpr::Fn {
             location: Span::empty(),
@@ -9287,6 +9800,136 @@ mod test {
 
     fn make_constant_int_mapper(input_type: Rc<Type>, value: &str) -> TypedExpr {
         make_unary_mapper("x", input_type, Type::int(), uint_lit(value))
+    }
+
+    fn string_lit(value: &str) -> TypedExpr {
+        TypedExpr::String {
+            location: Span::empty(),
+            tipo: Type::string(),
+            value: value.to_string(),
+        }
+    }
+
+    fn int_eq_expr(arg_name: &str, value: &str) -> TypedExpr {
+        TypedExpr::BinOp {
+            location: Span::empty(),
+            tipo: Type::bool(),
+            name: BinOp::Eq,
+            left: Box::new(local_var(arg_name, Type::int())),
+            right: Box::new(uint_lit(value)),
+        }
+    }
+
+    fn finite_string_if_mapper_body(arg_name: &str) -> TypedExpr {
+        TypedExpr::If {
+            location: Span::empty(),
+            tipo: Type::string(),
+            branches: vec1::vec1![
+                IfBranch {
+                    condition: int_eq_expr(arg_name, "0"),
+                    body: string_lit("world"),
+                    is: None,
+                    location: Span::empty(),
+                },
+                IfBranch {
+                    condition: int_eq_expr(arg_name, "1"),
+                    body: string_lit("hello"),
+                    is: None,
+                    location: Span::empty(),
+                },
+                IfBranch {
+                    condition: int_eq_expr(arg_name, "2"),
+                    body: string_lit("test"),
+                    is: None,
+                    location: Span::empty(),
+                },
+            ],
+            final_else: Box::new(string_lit("")),
+        }
+    }
+
+    fn finite_string_if_mapper() -> TypedExpr {
+        make_unary_mapper(
+            "i",
+            Type::int(),
+            Type::string(),
+            finite_string_if_mapper_body("i"),
+        )
+    }
+
+    fn int_pattern(value: &str) -> TypedPattern {
+        TypedPattern::Int {
+            location: Span::empty(),
+            value: value.to_string(),
+            base: Base::Decimal {
+                numeric_underscore: false,
+            },
+        }
+    }
+
+    fn finite_string_when_mapper() -> TypedExpr {
+        let body = TypedExpr::When {
+            location: Span::empty(),
+            tipo: Type::string(),
+            subject: Box::new(local_var("i", Type::int())),
+            clauses: vec![
+                TypedClause {
+                    location: Span::empty(),
+                    pattern: int_pattern("0"),
+                    then: string_lit("world"),
+                },
+                TypedClause {
+                    location: Span::empty(),
+                    pattern: int_pattern("1"),
+                    then: string_lit("hello"),
+                },
+                TypedClause {
+                    location: Span::empty(),
+                    pattern: int_pattern("2"),
+                    then: string_lit("test"),
+                },
+                TypedClause {
+                    location: Span::empty(),
+                    pattern: TypedPattern::Discard {
+                        name: "_".to_string(),
+                        location: Span::empty(),
+                    },
+                    then: string_lit(""),
+                },
+            ],
+        };
+
+        make_unary_mapper("i", Type::int(), Type::string(), body)
+    }
+
+    fn expected_finite_string_values() -> Vec<FuzzerExactValue> {
+        vec![
+            FuzzerExactValue::String("".to_string()),
+            FuzzerExactValue::String("hello".to_string()),
+            FuzzerExactValue::String("test".to_string()),
+            FuzzerExactValue::String("world".to_string()),
+        ]
+    }
+
+    fn make_named_finite_string_mapper_function(name: &str) -> (FunctionAccessKey, TypedFunction) {
+        (
+            FunctionAccessKey {
+                module_name: "math".to_string(),
+                function_name: name.to_string(),
+            },
+            TypedFunction {
+                arguments: vec![TypedArg::new("i", Type::int())],
+                body: finite_string_if_mapper_body("i"),
+                doc: None,
+                location: Span::empty(),
+                name: name.to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: Type::string(),
+                end_position: 0,
+                on_test_failure: OnTestFailure::FailImmediately,
+            },
+        )
     }
 
     fn make_add_int_mapper(offset: &str) -> TypedExpr {
@@ -10381,6 +11024,51 @@ mod test {
     }
 
     #[test]
+    fn extract_constraint_finite_string_if_mapper_is_oneof() {
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "3"),
+            finite_string_if_mapper(),
+            Type::string(),
+        );
+
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::OneOf(expected_finite_string_values())
+        );
+    }
+
+    #[test]
+    fn extract_constraint_finite_string_when_mapper_is_oneof() {
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "3"),
+            finite_string_when_mapper(),
+            Type::string(),
+        );
+
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::OneOf(expected_finite_string_values())
+        );
+    }
+
+    #[test]
+    fn extract_constraint_finite_string_singleton_canonicalizes_to_exact() {
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "3"),
+            make_unary_mapper("i", Type::int(), Type::string(), string_lit("same")),
+            Type::string(),
+        );
+
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::Exact(FuzzerExactValue::String("same".to_string()))
+        );
+    }
+
+    #[test]
     fn extract_constraint_name_agnostic_nested_constant_then_affine_map_transforms_range() {
         let source = make_typed_map_call(
             make_leaf_fuzzer_call("seed", Type::int()),
@@ -11120,6 +11808,159 @@ mod test {
                 max: Some("3".to_string()),
             }
         );
+    }
+
+    #[test]
+    fn extract_semantics_finite_string_if_mapper_is_oneof() {
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "3"),
+            finite_string_if_mapper(),
+            Type::string(),
+        );
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::string().as_ref(),
+        );
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::OneOf(expected_finite_string_values())
+        );
+    }
+
+    #[test]
+    fn extract_semantics_helper_wrapped_finite_string_mapper_is_oneof() {
+        let (mapper_key, mapper_fn) = make_named_finite_string_mapper_function("label_for_i");
+        let mut functions = empty_known_functions();
+        functions.insert(&mapper_key, &mapper_fn);
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "3"),
+            module_fn_var(
+                "label_for_i",
+                "math",
+                Type::function(vec![Type::int()], Type::string()),
+            ),
+            Type::string(),
+        );
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &functions,
+            &data_types,
+            Type::string().as_ref(),
+        );
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::OneOf(expected_finite_string_values())
+        );
+    }
+
+    #[test]
+    fn extract_semantics_finite_string_source_range_above_cap_stays_generic_string() {
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "999999999999999999999999999999999999999999"),
+            finite_string_if_mapper(),
+            Type::string(),
+        );
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::string().as_ref(),
+        );
+        assert_eq!(semantics, FuzzerSemantics::String);
+    }
+
+    #[test]
+    fn extract_semantics_finite_string_source_range_outside_i128_above_cap_uses_bigint() {
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer(
+                "170141183460469231731687303715884105728",
+                "170141183460469231731687303715884105828",
+            ),
+            finite_string_if_mapper(),
+            Type::string(),
+        );
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::string().as_ref(),
+        );
+        assert_eq!(semantics, FuzzerSemantics::String);
+    }
+
+    #[test]
+    fn extract_semantics_finite_string_non_literal_mapper_stays_generic_string() {
+        let mapper = make_unary_mapper(
+            "i",
+            Type::int(),
+            Type::string(),
+            local_var("unresolved_label", Type::string()),
+        );
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "3"),
+            mapper,
+            Type::string(),
+        );
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::string().as_ref(),
+        );
+        assert_eq!(semantics, FuzzerSemantics::String);
+    }
+
+    #[test]
+    fn extract_semantics_finite_string_mixed_literal_outputs_stay_generic_string() {
+        let body = TypedExpr::If {
+            location: Span::empty(),
+            tipo: Type::string(),
+            branches: vec1::vec1![IfBranch {
+                condition: int_eq_expr("i", "0"),
+                body: string_lit("ok"),
+                is: None,
+                location: Span::empty(),
+            }],
+            final_else: Box::new(TypedExpr::ByteArray {
+                location: Span::empty(),
+                tipo: Type::byte_array(),
+                bytes: vec![0],
+                preferred_format: crate::ast::ByteArrayFormatPreference::HexadecimalString,
+            }),
+        };
+        let via = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "1"),
+            make_unary_mapper("i", Type::int(), Type::string(), body),
+            Type::string(),
+        );
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::string().as_ref(),
+        );
+        assert_eq!(semantics, FuzzerSemantics::String);
     }
 
     #[test]
@@ -13883,6 +14724,76 @@ mod test {
         assert_eq!(
             try_extract_exact_scalar(&expr),
             Some(FuzzerExactValue::ByteArray(vec![0xDE, 0xAD])),
+        );
+    }
+
+    #[test]
+    fn canonicalize_finite_scalar_domain_sorts_dedups_and_preserves_oneof() {
+        let domain = canonicalize_finite_scalar_domain(
+            Type::string().as_ref(),
+            vec![
+                FuzzerExactValue::String("world".to_string()),
+                FuzzerExactValue::String("hello".to_string()),
+                FuzzerExactValue::String("".to_string()),
+                FuzzerExactValue::String("hello".to_string()),
+                FuzzerExactValue::String("test".to_string()),
+            ],
+        )
+        .expect("valid finite string domain");
+
+        assert_eq!(
+            domain,
+            CanonicalFiniteScalarDomain::OneOf(expected_finite_string_values())
+        );
+    }
+
+    #[test]
+    fn canonicalize_finite_scalar_domain_singleton_becomes_exact() {
+        let domain = canonicalize_finite_scalar_domain(
+            Type::string().as_ref(),
+            vec![
+                FuzzerExactValue::String("same".to_string()),
+                FuzzerExactValue::String("same".to_string()),
+            ],
+        )
+        .expect("valid singleton string domain");
+
+        assert_eq!(
+            domain,
+            CanonicalFiniteScalarDomain::Exact(FuzzerExactValue::String("same".to_string()))
+        );
+    }
+
+    #[test]
+    fn canonicalize_finite_scalar_domain_rejects_mismatch_and_empty() {
+        assert_eq!(
+            canonicalize_finite_scalar_domain(Type::string().as_ref(), vec![]),
+            Err(FiniteDomainError::Empty)
+        );
+        assert_eq!(
+            canonicalize_finite_scalar_domain(
+                Type::string().as_ref(),
+                vec![FuzzerExactValue::ByteArray(vec![0])]
+            ),
+            Err(FiniteDomainError::OutputTypeMismatch)
+        );
+        assert_eq!(
+            canonicalize_finite_scalar_domain(
+                Type::string().as_ref(),
+                vec![
+                    FuzzerExactValue::String("a".to_string()),
+                    FuzzerExactValue::ByteArray(vec![0]),
+                ]
+            ),
+            Err(FiniteDomainError::Heterogeneous)
+        );
+    }
+
+    #[test]
+    fn describe_semantics_renders_oneof_deterministically() {
+        assert_eq!(
+            describe_semantics(&FuzzerSemantics::OneOf(expected_finite_string_values())),
+            "OneOf(\"\", \"hello\", \"test\", \"world\")"
         );
     }
 

@@ -84,6 +84,8 @@ fn is_zero(n: &usize) -> bool {
 mod lean_sym {
     /// Logical conjunction (U+2227).
     pub(super) const AND: &str = "\u{2227}";
+    /// Logical disjunction (U+2228).
+    pub(super) const OR: &str = "\u{2228}";
     /// Universal quantifier (U+2200).
     pub(super) const FORALL: &str = "\u{2200}";
     /// Existential quantifier (U+2203).
@@ -377,7 +379,9 @@ impl CapturedOutput {
     }
 }
 /// Schema version for `aiken verify capabilities --json` output.
-pub const VERIFICATION_CAPABILITIES_VERSION: &str = "2";
+pub const VERIFICATION_CAPABILITIES_VERSION: &str = "3";
+pub(crate) const MAX_FINITE_DOMAIN_CASES: usize = 64;
+pub(crate) const MAX_FINITE_THEOREM_INSTANCES_PER_TEST: usize = 64;
 
 /// Schema version for `aiken verify doctor --json` output.
 pub const DOCTOR_REPORT_VERSION: &str = "1";
@@ -473,6 +477,9 @@ pub fn capabilities() -> VerificationCapabilities {
             "List<T>".to_string(),
             "Tuple(T, ...)".to_string(),
             "Pair(T, T)".to_string(),
+            "Finite literal String domains (Exact/OneOf)".to_string(),
+            "Bounded top-level List<Bool> domains within finite enumeration cap".to_string(),
+            "Bounded scalar ByteArray length ranges".to_string(),
             "Finite nullary ADT constructor domains (Data.Constr tag [])".to_string(),
         ],
         unsupported_fuzzer_types: vec![
@@ -481,6 +488,8 @@ pub fn capabilities() -> VerificationCapabilities {
             "Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded."
                 .to_string(),
             "General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements."
+                .to_string(),
+            "Unbounded String/ByteArray content and finite literal ByteArray domains remain unsupported."
                 .to_string(),
         ],
         existential_modes: vec!["witness".to_string(), "proof".to_string()],
@@ -2444,6 +2453,19 @@ pub(crate) enum UnsupportedReason {
         pattern: String,
         binders: Vec<String>,
     },
+    FiniteDomainTooLarge {
+        test_name: String,
+        cases: String,
+        cap: usize,
+        cap_constant: &'static str,
+    },
+    FiniteDomainTargetModeUnsupported {
+        test_name: String,
+        target: String,
+    },
+    SemanticsOutputTypeMismatch {
+        test_name: String,
+    },
     ValidatorTargetMissing {
         test_name: String,
     },
@@ -2494,6 +2516,9 @@ impl UnsupportedReason {
             | UnsupportedReason::ListElementNoLeanMapping { test_name, .. }
             | UnsupportedReason::NonFirstOrderSuchThatHelper { test_name, .. }
             | UnsupportedReason::WhenPatternConstructorVarDropped { test_name, .. }
+            | UnsupportedReason::FiniteDomainTooLarge { test_name, .. }
+            | UnsupportedReason::FiniteDomainTargetModeUnsupported { test_name, .. }
+            | UnsupportedReason::SemanticsOutputTypeMismatch { test_name }
             | UnsupportedReason::ValidatorTargetMissing { test_name }
             | UnsupportedReason::StepFnSoundAxiomEmitted { test_name, .. }
             | UnsupportedReason::ConstructorTagUnresolved { test_name, .. }
@@ -2522,6 +2547,26 @@ impl UnsupportedReason {
             UnsupportedReason::ValidatorTargetMissing { test_name } => {
                 format!(
                     "Test '{test_name}' has no validator target metadata required for the selected verification target."
+                )
+            }
+            UnsupportedReason::FiniteDomainTooLarge {
+                test_name,
+                cases,
+                cap,
+                cap_constant,
+            } => {
+                format!(
+                    "Test '{test_name}': finite domain has {cases} cases, exceeds cap of {cap} ({cap_constant})"
+                )
+            }
+            UnsupportedReason::FiniteDomainTargetModeUnsupported { test_name, target } => {
+                format!(
+                    "Test '{test_name}' has a finite fuzzer domain, but target mode '{target}' is not supported for finite-domain theorem generation."
+                )
+            }
+            UnsupportedReason::SemanticsOutputTypeMismatch { test_name } => {
+                format!(
+                    "Test '{test_name}' has fuzzer semantics that disagree with the declared output type."
                 )
             }
             _ => format!("Test '{}': {summary}", self.test_name()),
@@ -3634,7 +3679,13 @@ fn lean_prop_conjunction(parts: &[String]) -> String {
     match parts {
         [] => "True".to_string(),
         [single] => single.clone(),
-        _ => format!("({})", parts.join(&format!(" {} ", lean_sym::AND))),
+        _ => {
+            let wrapped = parts
+                .iter()
+                .map(|part| format!("({part})"))
+                .collect::<Vec<_>>();
+            format!("({})", wrapped.join(&format!(" {} ", lean_sym::AND)))
+        }
     }
 }
 
@@ -4208,6 +4259,34 @@ fn emit_partial_data_semantics_predicate(
             let literal = lean_bytestring_literal_from_bytes(value.as_bytes());
             builder.definitions.push(format!(
                 "def {name} (x : Data) : Prop := x = Data.B {literal}\n"
+            ));
+        }
+        FuzzerSemantics::OneOf(values) => {
+            if values.is_empty() {
+                return Err(semantics_output_type_mismatch_error(test_name));
+            }
+            let mut parts = Vec::new();
+            for value in values {
+                let literal = match value {
+                    FuzzerExactValue::Bool(value) => {
+                        let tag = if *value { 1 } else { 0 };
+                        format!("Data.Constr {tag} []")
+                    }
+                    FuzzerExactValue::ByteArray(bytes) => {
+                        format!("Data.B {}", lean_bytestring_literal_from_bytes(bytes))
+                    }
+                    FuzzerExactValue::String(value) => {
+                        format!(
+                            "Data.B {}",
+                            lean_bytestring_literal_from_bytes(value.as_bytes())
+                        )
+                    }
+                };
+                parts.push(format!("x = {literal}"));
+            }
+            builder.definitions.push(format!(
+                "def {name} (x : Data) : Prop := {}\n",
+                parts.join(&format!(" {} ", lean_sym::OR))
             ));
         }
         FuzzerSemantics::Product(elems) => {
@@ -5506,6 +5585,7 @@ fn fuzzer_semantics_contains_opaque(semantics: &FuzzerSemantics) -> bool {
         // generation -- it is NOT opaque.
         | FuzzerSemantics::DataWithSchema { .. }
         | FuzzerSemantics::Exact(_)
+        | FuzzerSemantics::OneOf(_)
         | FuzzerSemantics::Constructors { .. } => false,
     }
 }
@@ -5531,6 +5611,7 @@ fn fuzzer_semantics_requires_schema(sem: &FuzzerSemantics) -> bool {
         | FuzzerSemantics::String
         | FuzzerSemantics::Data
         | FuzzerSemantics::Exact(_)
+        | FuzzerSemantics::OneOf(_)
         | FuzzerSemantics::Constructors { .. }
         | FuzzerSemantics::Opaque { .. } => false,
     }
@@ -5931,6 +6012,24 @@ fn collect_scalar_precondition_parts_from_semantics(
             })?;
             out.push(format!("({var} = {lit})"));
             *witness = Some(lit);
+            Ok(())
+        }
+        FuzzerSemantics::OneOf(values) => {
+            if values.is_empty() {
+                return Err(semantics_output_type_mismatch_error(test_name));
+            }
+            let mut parts = Vec::new();
+            let mut first_lit = None;
+            for value in values {
+                let lit = exact_value_to_scalar_literal(output_type, value)
+                    .ok_or_else(|| semantics_output_type_mismatch_error(test_name))?;
+                if first_lit.is_none() {
+                    first_lit = Some(lit.clone());
+                }
+                parts.push(format!("{var} = {lit}"));
+            }
+            out.push(format!("({})", parts.join(&format!(" {} ", lean_sym::OR))));
+            *witness = first_lit;
             Ok(())
         }
         FuzzerSemantics::Constructors { tags } => {
@@ -6752,6 +6851,122 @@ fn format_theorems(
     out
 }
 
+fn theorem_proposition(
+    body: &TheoremBody,
+    existential: bool,
+    prog: &str,
+    arg_expr: &str,
+    quantifier_vars: &str,
+    precondition_parts: &[String],
+) -> String {
+    let body = body.format(prog, arg_expr);
+    if existential {
+        let quantifiers = format!("{} {quantifier_vars},", lean_sym::EXISTS);
+        let and_sep = format!("\n  {}\n  ", lean_sym::AND);
+        let preconditions = if precondition_parts.is_empty() {
+            String::new()
+        } else {
+            format!("\n  {}", precondition_parts.join(&and_sep))
+        };
+        let connector = if preconditions.is_empty() {
+            " ".to_string()
+        } else {
+            and_sep
+        };
+        format!("{quantifiers}{preconditions}{connector}{body}")
+    } else if quantifier_vars.is_empty() {
+        body
+    } else {
+        let quantifiers = format!("{} {quantifier_vars},", lean_sym::FORALL);
+        let implies_sep = format!("\n  {}\n  ", lean_sym::IMPLIES);
+        let preconditions = if precondition_parts.is_empty() {
+            String::new()
+        } else {
+            format!("\n  {}", precondition_parts.join(&implies_sep))
+        };
+        let arrow = if preconditions.is_empty() {
+            String::new()
+        } else {
+            implies_sep
+        };
+        format!("{quantifiers}{preconditions}{arrow}{body}")
+    }
+}
+
+fn format_aggregate_theorem(
+    theorem_name: &str,
+    propositions: &[String],
+    proof_names: &[String],
+) -> String {
+    let proposition = lean_prop_conjunction(propositions);
+    let proof = match proof_names {
+        [] => "trivial".to_string(),
+        [single] => single.clone(),
+        _ => format!(
+            "{}{}{}",
+            lean_sym::ANGLE_OPEN,
+            proof_names.join(", "),
+            lean_sym::ANGLE_CLOSE
+        ),
+    };
+    format!("\ntheorem {theorem_name} :\n  {proposition} :=\n  by exact {proof}\n")
+}
+
+fn finite_case_theorem_name(base: &str, index: usize) -> String {
+    format!("{base}_case_{index:03}")
+}
+
+fn format_ground_theorem_family(
+    form: &TheoremForm,
+    lean_test_name: &str,
+    prog: &str,
+    arg_exprs: &[String],
+    case_tactic: Option<&'static str>,
+) -> String {
+    let mut out = String::new();
+    let mut correctness_props = Vec::new();
+    let mut correctness_names = Vec::new();
+    let mut termination_props = Vec::new();
+    let mut termination_names = Vec::new();
+
+    for (index, arg_expr) in arg_exprs.iter().enumerate() {
+        let theorem_name = finite_case_theorem_name(lean_test_name, index);
+        let correctness_body = form.correctness.format(prog, arg_expr);
+        let correctness_tactic = case_tactic.unwrap_or_else(|| form.correctness.tactic());
+        out.push_str(&format!(
+            "theorem {theorem_name} :\n  {correctness_body} :=\n  by {correctness_tactic}\n"
+        ));
+        correctness_props.push(correctness_body);
+        correctness_names.push(theorem_name.clone());
+
+        if let Some(ref term_body) = form.termination {
+            let term_name = format!("{theorem_name}_alwaysTerminating");
+            let term_body_str = term_body.format(prog, arg_expr);
+            let term_tactic = case_tactic.unwrap_or_else(|| term_body.tactic());
+            out.push_str(&format!(
+                "\ntheorem {term_name} :\n  {term_body_str} :=\n  by {term_tactic}\n"
+            ));
+            termination_props.push(term_body_str);
+            termination_names.push(term_name);
+        }
+        out.push('\n');
+    }
+
+    out.push_str(&format_aggregate_theorem(
+        lean_test_name,
+        &correctness_props,
+        &correctness_names,
+    ));
+    if form.termination.is_some() {
+        out.push_str(&format_aggregate_theorem(
+            &format!("{lean_test_name}_alwaysTerminating"),
+            &termination_props,
+            &termination_names,
+        ));
+    }
+    out
+}
+
 /// Generate an equivalence theorem proving that the property wrapper and
 /// validator handler produce the same result for all inputs.
 fn equivalence_goal(
@@ -6940,16 +7155,24 @@ fn fuzzer_output_type_uses_bytestring(ty: &FuzzerOutputType) -> bool {
 /// We skip when:
 /// - The semantics is an unbounded `ByteArrayRange` (`min_len: None` or `max_len: None`) —
 ///   no length constraint is available to generate a useful precondition.
-/// - `String` — always skipped; no length-only path covers String content.
+/// - `String` — skipped unless semantics proves an exact finite literal domain.
 /// - `ByteArray` appears as a `List` element — list-of-bytes requires per-element byte
 ///   reasoning which Blaster cannot handle.
 ///
-/// We do NOT skip bounded scalar `ByteArrayRange { min_len: Some(_), max_len: Some(_) }` —
-/// `collect_scalar_precondition_parts_from_semantics` already emits
-/// `(min_len <= x.length ∧ x.length <= max_len)` which is sufficient when the test body
-/// does not inspect byte contents.
+/// We do NOT skip exact finite `String` semantics or bounded scalar
+/// `ByteArrayRange { min_len: Some(_), max_len: Some(_) }`. Finite strings
+/// use ground case theorems; bounded byte arrays use a length precondition,
+/// which is sufficient when the test body does not inspect byte contents.
 fn bytestring_skip_required(sem: &FuzzerSemantics, ty: &FuzzerOutputType) -> bool {
     match (sem, ty) {
+        (FuzzerSemantics::Exact(FuzzerExactValue::String(_)), FuzzerOutputType::String) => false,
+        (FuzzerSemantics::OneOf(values), FuzzerOutputType::String)
+            if values
+                .iter()
+                .all(|value| matches!(value, FuzzerExactValue::String(_))) =>
+        {
+            false
+        }
         // Bounded scalar ByteArray: proceed
         (
             FuzzerSemantics::ByteArrayRange {
@@ -6986,6 +7209,169 @@ fn fuzzer_output_type_has_bool_list_element(ty: &FuzzerOutputType) -> bool {
         }
         _ => false,
     }
+}
+
+fn finite_domain_too_large_error(
+    test_name: &str,
+    cases: impl Into<String>,
+    cap: usize,
+    cap_constant: &'static str,
+) -> miette::Report {
+    unsupported_error(
+        "E0034",
+        UnsupportedReason::FiniteDomainTooLarge {
+            test_name: test_name.to_string(),
+            cases: cases.into(),
+            cap,
+            cap_constant,
+        },
+    )
+}
+
+fn finite_domain_target_mode_error(
+    test_name: &str,
+    target: &VerificationTargetKind,
+) -> miette::Report {
+    unsupported_error(
+        "E0035",
+        UnsupportedReason::FiniteDomainTargetModeUnsupported {
+            test_name: test_name.to_string(),
+            target: target.to_string(),
+        },
+    )
+}
+
+fn semantics_output_type_mismatch_error(test_name: &str) -> miette::Report {
+    unsupported_error(
+        "E0044",
+        UnsupportedReason::SemanticsOutputTypeMismatch {
+            test_name: test_name.to_string(),
+        },
+    )
+}
+
+fn checked_bool_list_cardinality(min_len: usize, max_len: usize) -> Result<usize, String> {
+    if min_len > max_len {
+        return Ok(0);
+    }
+
+    let mut total = 0usize;
+    for len in min_len..=max_len {
+        let cases = if len >= usize::BITS as usize {
+            MAX_FINITE_THEOREM_INSTANCES_PER_TEST + 1
+        } else {
+            1usize
+                .checked_shl(len as u32)
+                .unwrap_or(MAX_FINITE_THEOREM_INSTANCES_PER_TEST + 1)
+        };
+        total = total
+            .checked_add(cases)
+            .unwrap_or(MAX_FINITE_THEOREM_INSTANCES_PER_TEST + 1);
+        if total > MAX_FINITE_THEOREM_INSTANCES_PER_TEST {
+            return Err(total.to_string());
+        }
+    }
+
+    Ok(total)
+}
+
+fn supported_top_level_bool_list_cardinality(
+    ty: &FuzzerOutputType,
+    sem: &FuzzerSemantics,
+) -> Result<Option<usize>, String> {
+    match (ty, sem) {
+        (
+            FuzzerOutputType::List(elem_type),
+            FuzzerSemantics::List {
+                element,
+                min_len: Some(min_len),
+                max_len: Some(max_len),
+            },
+        ) if matches!(elem_type.as_ref(), FuzzerOutputType::Bool)
+            && matches!(element.as_ref(), FuzzerSemantics::Bool) =>
+        {
+            checked_bool_list_cardinality(*min_len, *max_len).map(Some)
+        }
+        _ => Ok(None),
+    }
+}
+
+fn finite_string_arg_exprs(
+    test_name: &str,
+    semantics: &FuzzerSemantics,
+) -> miette::Result<Option<Vec<String>>> {
+    let values = match semantics {
+        FuzzerSemantics::Exact(FuzzerExactValue::String(value)) => {
+            vec![FuzzerExactValue::String(value.clone())]
+        }
+        FuzzerSemantics::OneOf(values) => {
+            if values.is_empty() {
+                return Err(semantics_output_type_mismatch_error(test_name));
+            }
+            if !values
+                .iter()
+                .all(|value| matches!(value, FuzzerExactValue::String(_)))
+            {
+                return Err(semantics_output_type_mismatch_error(test_name));
+            }
+            values.clone()
+        }
+        _ => return Ok(None),
+    };
+
+    if values.len() > MAX_FINITE_DOMAIN_CASES {
+        return Err(finite_domain_too_large_error(
+            test_name,
+            values.len().to_string(),
+            MAX_FINITE_DOMAIN_CASES,
+            "MAX_FINITE_DOMAIN_CASES",
+        ));
+    }
+    if values.len() > MAX_FINITE_THEOREM_INSTANCES_PER_TEST {
+        return Err(finite_domain_too_large_error(
+            test_name,
+            values.len().to_string(),
+            MAX_FINITE_THEOREM_INSTANCES_PER_TEST,
+            "MAX_FINITE_THEOREM_INSTANCES_PER_TEST",
+        ));
+    }
+
+    let args = values
+        .iter()
+        .map(|value| match value {
+            FuzzerExactValue::String(value) => {
+                let lit = lean_bytestring_literal_from_bytes_qualified(value.as_bytes());
+                format!("stringArg ({lit})")
+            }
+            _ => unreachable!("validated above"),
+        })
+        .collect();
+    Ok(Some(args))
+}
+
+fn bool_list_arg_exprs(min_len: usize, max_len: usize) -> Vec<String> {
+    let mut args = Vec::new();
+    for len in min_len..=max_len {
+        let patterns = if len >= usize::BITS as usize {
+            0
+        } else {
+            1usize << len
+        };
+        for mask in 0..patterns {
+            let items = (0..len)
+                .map(|index| {
+                    if ((mask >> index) & 1) == 1 {
+                        "Data.Constr 1 []".to_string()
+                    } else {
+                        "Data.Constr 0 []".to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            args.push(format!("[Term.Const (Const.Data (Data.List [{items}]))]"));
+        }
+    }
+    args
 }
 
 /// Shared header for every Lean proof file emitted by the verifier.
@@ -7467,11 +7853,12 @@ fn generate_proof_file(
     // the encoding requires instance parameters on a dependent inductive,
     // which Z3's bitvector theory cannot synthesize.
     //
-    // Exception: bounded scalar `ByteArrayRange { min_len: Some(_), max_len: Some(_) }`
-    // is allowed through — Blaster can translate `ByteString.length` via the
-    // `String.length` path and the length precondition is often sufficient when
-    // the test body does not inspect byte contents. See `bytestring_skip_required`
-    // for the carve-out logic.
+    // Exceptions: exact finite `String` semantics are routed to ground
+    // theorem families, and bounded scalar
+    // `ByteArrayRange { min_len: Some(_), max_len: Some(_) }` is allowed
+    // through because Blaster can translate `ByteString.length` via the
+    // `String.length` path. See `bytestring_skip_required` for the carve-out
+    // logic.
     //
     // Skip the remaining cases with `FallbackRequired` so `--skip-unsupported`
     // treats them as skipped rather than as generation failures.
@@ -7484,12 +7871,38 @@ fn generate_proof_file(
         ));
     }
 
-    // `List<Bool>` elements encode as `Data.Constr (if x_i then 1 else 0) []`.
-    // The if-then-else produces SMT ite terms that, combined with the CEK
-    // machine encoding, exceed Z3's practical decision budget even when the
-    // list is length-bounded.  Scalar `Bool` proofs are fine; only `Bool` as
-    // a *list element* type is affected.
-    if fuzzer_output_type_has_bool_list_element(&test.fuzzer_output_type) {
+    match supported_top_level_bool_list_cardinality(&test.fuzzer_output_type, &test.semantics) {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            if fuzzer_output_type_has_bool_list_element(&test.fuzzer_output_type) {
+                return Err(unsupported_error(
+                    "E0013",
+                    UnsupportedReason::ListOfBool {
+                        test_name: test.name.clone(),
+                    },
+                ));
+            }
+        }
+        Err(cases) => {
+            return Err(finite_domain_too_large_error(
+                &test.name,
+                cases,
+                MAX_FINITE_THEOREM_INSTANCES_PER_TEST,
+                "MAX_FINITE_THEOREM_INSTANCES_PER_TEST",
+            ));
+        }
+    }
+
+    // `List<Bool>` elements encode as `Data.Constr (if x_i then 1 else 0) []`
+    // on the generic path. Only the exact bounded top-level shape above is
+    // allowed through to the finite ground enumerator; every other bool-list
+    // shape remains an explicit skip.
+    if fuzzer_output_type_has_bool_list_element(&test.fuzzer_output_type)
+        && supported_top_level_bool_list_cardinality(&test.fuzzer_output_type, &test.semantics)
+            .ok()
+            .flatten()
+            .is_none()
+    {
         return Err(unsupported_error(
             "E0013",
             UnsupportedReason::ListOfBool {
@@ -8453,6 +8866,31 @@ fn try_generate_direct_proof_from_semantics(
             )))
         }
         (FuzzerOutputType::String, semantics) => {
+            if let Some(arg_exprs) = finite_string_arg_exprs(&test.name, semantics)? {
+                if !matches!(target, VerificationTargetKind::PropertyWrapper) {
+                    return Err(finite_domain_target_mode_error(&test.name, target));
+                }
+                if form.existential {
+                    return Err(unsupported_error(
+                        "E0011",
+                        UnsupportedReason::UnboundedBytearray {
+                            test_name: test.name.clone(),
+                        },
+                    ));
+                }
+                let theorems = format_ground_theorem_family(
+                    form,
+                    lean_test_name,
+                    verify_prog,
+                    &arg_exprs,
+                    Some("native_decide"),
+                );
+                let mut content = direct_header("open PlutusCore.ByteString (ByteString)");
+                content.push_str(&theorems);
+                content.push_str(footer);
+                return Ok(Some(content));
+            }
+
             let (precondition_parts, witness) = build_scalar_domain_preconditions_from_semantics(
                 &test.name,
                 &test.fuzzer_output_type,
@@ -8598,6 +9036,45 @@ fn try_generate_direct_proof_from_semantics(
                 max_len,
             },
         ) => {
+            if matches!(elem_type.as_ref(), FuzzerOutputType::Bool)
+                && matches!(elem_semantics.as_ref(), FuzzerSemantics::Bool)
+                && let (Some(lo), Some(hi)) = (*min_len, *max_len)
+            {
+                if !matches!(target, VerificationTargetKind::PropertyWrapper) {
+                    return Err(finite_domain_target_mode_error(&test.name, target));
+                }
+                if form.existential {
+                    return Err(unsupported_error(
+                        "E0013",
+                        UnsupportedReason::ListOfBool {
+                            test_name: test.name.clone(),
+                        },
+                    ));
+                }
+                validate_list_len_bounds(&test.name, Some(lo), Some(hi))?;
+                let case_count = checked_bool_list_cardinality(lo, hi).map_err(|cases| {
+                    finite_domain_too_large_error(
+                        &test.name,
+                        cases,
+                        MAX_FINITE_THEOREM_INSTANCES_PER_TEST,
+                        "MAX_FINITE_THEOREM_INSTANCES_PER_TEST",
+                    )
+                })?;
+                let arg_exprs = bool_list_arg_exprs(lo, hi);
+                debug_assert_eq!(arg_exprs.len(), case_count);
+                let theorems = format_ground_theorem_family(
+                    form,
+                    lean_test_name,
+                    verify_prog,
+                    &arg_exprs,
+                    Some("native_decide"),
+                );
+                let mut content = direct_header("open PlutusCore.Data (Data)");
+                content.push_str(&theorems);
+                content.push_str(footer);
+                return Ok(Some(content));
+            }
+
             if lean_type_for(elem_type).is_none() || lean_data_encoder(elem_type, "x_i").is_none() {
                 return Err(generation_error(
                     GenerationErrorCategory::UnsupportedShape,
@@ -8626,6 +9103,10 @@ fn try_generate_direct_proof_from_semantics(
             if let (Some(lo), Some(hi), true) = (*min_len, *max_len, is_scalar_elem) {
                 validate_list_len_bounds(&test.name, Some(lo), Some(hi))?;
                 let mut all_theorems = String::new();
+                let mut correctness_props = Vec::new();
+                let mut correctness_names = Vec::new();
+                let mut termination_props = Vec::new();
+                let mut termination_names = Vec::new();
 
                 for len in lo..=hi {
                     let vars: Vec<String> = (0..len).map(|i| format!("x{i}")).collect();
@@ -8646,12 +9127,16 @@ fn try_generate_direct_proof_from_semantics(
                         all_theorems.push_str(&format!(
                             "theorem {theorem_name} :\n  {correctness_body} :=\n  by {correctness_tactic}\n"
                         ));
+                        correctness_props.push(correctness_body);
+                        correctness_names.push(theorem_name.clone());
                         if let Some(ref term_body) = form.termination {
                             let term_str = term_body.format(verify_prog, &arg_expr);
                             let term_tactic = term_body.tactic();
                             all_theorems.push_str(&format!(
                                 "\ntheorem {theorem_name}_alwaysTerminating :\n  {term_str} :=\n  by {term_tactic}\n"
                             ));
+                            termination_props.push(term_str);
+                            termination_names.push(format!("{theorem_name}_alwaysTerminating"));
                         }
                         all_theorems.push('\n');
                         continue;
@@ -8678,6 +9163,26 @@ fn try_generate_direct_proof_from_semantics(
                     } else {
                         None
                     };
+                    correctness_props.push(theorem_proposition(
+                        &form.correctness,
+                        form.existential,
+                        verify_prog,
+                        &arg_expr,
+                        &quantifier_vars,
+                        &precondition_parts,
+                    ));
+                    correctness_names.push(theorem_name.clone());
+                    if let Some(ref term_body) = form.termination {
+                        termination_props.push(theorem_proposition(
+                            term_body,
+                            false,
+                            verify_prog,
+                            &arg_expr,
+                            &quantifier_vars,
+                            &precondition_parts,
+                        ));
+                        termination_names.push(format!("{theorem_name}_alwaysTerminating"));
+                    }
 
                     let theorems = format_theorems(
                         form,
@@ -8690,6 +9195,19 @@ fn try_generate_direct_proof_from_semantics(
                     );
                     all_theorems.push_str(&theorems);
                     all_theorems.push('\n');
+                }
+
+                all_theorems.push_str(&format_aggregate_theorem(
+                    lean_test_name,
+                    &correctness_props,
+                    &correctness_names,
+                ));
+                if form.termination.is_some() {
+                    all_theorems.push_str(&format_aggregate_theorem(
+                        &format!("{lean_test_name}_alwaysTerminating"),
+                        &termination_props,
+                        &termination_names,
+                    ));
                 }
 
                 let mut content = direct_header(&opens);

@@ -46,6 +46,9 @@ fn code_for_reason(reason: &UnsupportedReason) -> &'static str {
         UnsupportedReason::ListElementNoLeanMapping { .. } => "E0031",
         UnsupportedReason::NonFirstOrderSuchThatHelper { .. } => "E0032",
         UnsupportedReason::WhenPatternConstructorVarDropped { .. } => "E0033",
+        UnsupportedReason::FiniteDomainTooLarge { .. } => "E0034",
+        UnsupportedReason::FiniteDomainTargetModeUnsupported { .. } => "E0035",
+        UnsupportedReason::SemanticsOutputTypeMismatch { .. } => "E0044",
         UnsupportedReason::ValidatorTargetMissing { .. } => "E0050",
         UnsupportedReason::StepFnSoundAxiomEmitted { .. } => "S0001",
         UnsupportedReason::ConstructorTagUnresolved { .. } => "S0002",
@@ -157,6 +160,19 @@ fn all_reasons() -> Vec<UnsupportedReason> {
             test_name: test_name.clone(),
             pattern: "Some(x)".to_string(),
             binders: vec!["x".to_string()],
+        },
+        UnsupportedReason::FiniteDomainTooLarge {
+            test_name: test_name.clone(),
+            cases: "65".to_string(),
+            cap: 64,
+            cap_constant: "MAX_FINITE_THEOREM_INSTANCES_PER_TEST",
+        },
+        UnsupportedReason::FiniteDomainTargetModeUnsupported {
+            test_name: test_name.clone(),
+            target: "validator".to_string(),
+        },
+        UnsupportedReason::SemanticsOutputTypeMismatch {
+            test_name: test_name.clone(),
         },
         UnsupportedReason::ValidatorTargetMissing {
             test_name: test_name.clone(),
@@ -418,7 +434,6 @@ fn iter_catalogue_projects_the_currently_surfaced_codes_with_correct_skippable_f
         projected.iter().all(|entry| entry.code != "S0004"),
         "informational-only codes like S0004 must stay out of the public catalogue until runtime reports emit them with a code field",
     );
-
 }
 
 #[test]
@@ -461,7 +476,6 @@ fn capabilities_json_shape_includes_supported_and_unsupported_arrays() {
         caps.unsupported.iter().all(|c| c.code != "S0004"),
         "informational-only codes like S0004 must be absent from the public capabilities payload",
     );
-
 
     let json = serde_json::to_value(&caps).expect("capabilities should serialise");
     let supported = json

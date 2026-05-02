@@ -593,6 +593,51 @@ fn line_has_length_indexed_variant(line: &str, base: &str) -> bool {
     false
 }
 
+fn line_has_finite_case_variant(line: &str, base: &str) -> bool {
+    if base.is_empty() {
+        return false;
+    }
+
+    let mut start = 0;
+    while let Some(off) = line[start..].find(base) {
+        let s = start + off;
+        let e = s + base.len();
+        let before_ok = line[..s]
+            .chars()
+            .next_back()
+            .map(|c| !is_lean_identifier_char(c))
+            .unwrap_or(true);
+        let rest = &line[e..];
+        if before_ok && rest.starts_with("_case_") {
+            let prefix_len = "_case_".len();
+            let digits_end = prefix_len
+                + rest[prefix_len..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .count();
+            if digits_end > prefix_len {
+                let after = rest[digits_end..].chars().next();
+                let after_ok = after.map(|c| !is_lean_identifier_char(c)).unwrap_or(true);
+                const AT_SUFFIX: &str = "_alwaysTerminating";
+                let at_rest = &rest[digits_end..];
+                let at_ok = if let Some(stripped) = at_rest.strip_prefix(AT_SUFFIX) {
+                    let after_at = stripped.chars().next();
+                    after_at
+                        .map(|c| !is_lean_identifier_char(c))
+                        .unwrap_or(true)
+                } else {
+                    false
+                };
+                if after_ok || at_ok {
+                    return true;
+                }
+            }
+        }
+        start = e;
+    }
+    false
+}
+
 fn is_lean_module_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_' || ch == '.'
 }
@@ -617,6 +662,7 @@ pub(super) fn theorem_has_explicit_failure(theorem: &str, output: &str) -> bool 
         .any(|line| {
             line_has_theorem_reference(line, theorem)
                 || line_has_length_indexed_variant(line, theorem)
+                || line_has_finite_case_variant(line, theorem)
         })
 }
 
@@ -712,7 +758,9 @@ fn absolute_path_token_end(line: &str, start: usize) -> usize {
     line[start..]
         .char_indices()
         .skip(1)
-        .find_map(|(offset, ch)| matches!(ch, ',' | ')' | ']' | '}' | '"').then_some(start + offset))
+        .find_map(|(offset, ch)| {
+            matches!(ch, ',' | ')' | ']' | '}' | '"').then_some(start + offset)
+        })
         .unwrap_or(line.len())
 }
 
@@ -735,22 +783,25 @@ fn quoted_absolute_path_end(line: &str, start: usize) -> Option<usize> {
         .next_back()
         .filter(|ch| matches!(ch, '"' | '\''))?;
 
-    line[start..].char_indices().skip(1).find_map(|(offset, ch)| {
-        if ch != quote {
-            return None;
-        }
+    line[start..]
+        .char_indices()
+        .skip(1)
+        .find_map(|(offset, ch)| {
+            if ch != quote {
+                return None;
+            }
 
-        let end = start + offset;
-        if is_escaped_quote(line, end) {
-            return None;
-        }
+            let end = start + offset;
+            if is_escaped_quote(line, end) {
+                return None;
+            }
 
-        let next = line[end + ch.len_utf8()..].chars().next();
-        next.is_none_or(|next| {
-            next.is_whitespace() || matches!(next, ':' | ',' | ')' | ']' | '}' | '"' | '\'')
+            let next = line[end + ch.len_utf8()..].chars().next();
+            next.is_none_or(|next| {
+                next.is_whitespace() || matches!(next, ':' | ',' | ')' | ']' | '}' | '"' | '\'')
+            })
+            .then_some(end)
         })
-        .then_some(end)
-    })
 }
 
 fn diagnostic_absolute_path_end(segment: &str) -> Option<usize> {
@@ -853,7 +904,11 @@ fn redact_absolute_path_token(token: &str) -> String {
 
     let is_windows_drive = path.as_bytes().get(1) == Some(&b':');
     let is_unc = path.starts_with("\\\\");
-    let separator = if is_windows_drive || is_unc { '\\' } else { '/' };
+    let separator = if is_windows_drive || is_unc {
+        '\\'
+    } else {
+        '/'
+    };
     let escaped_quote_sentinel = '\0';
     let normalized_path = if separator == '\\' {
         path.replace(r#"\""#, &escaped_quote_sentinel.to_string())
@@ -1002,8 +1057,7 @@ mod tests {
 
     #[test]
     fn redact_absolute_paths_keeps_diagnostic_paths_with_spaces_intact() {
-        let line =
-            "error: /Users/alice/work/Aiken Verify/Proofs/Foo Bar.lean:15:5: build failed";
+        let line = "error: /Users/alice/work/Aiken Verify/Proofs/Foo Bar.lean:15:5: build failed";
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains("/Users/alice/work"));
@@ -1015,8 +1069,7 @@ mod tests {
 
     #[test]
     fn redact_absolute_paths_handles_quoted_paths_with_spaces() {
-        let line =
-            "error: \"/Users/alice/work/Aiken Verify/Proofs/Foo Bar.lean\" failed";
+        let line = "error: \"/Users/alice/work/Aiken Verify/Proofs/Foo Bar.lean\" failed";
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains("/Users/alice/work"));
@@ -1046,8 +1099,7 @@ mod tests {
 
     #[test]
     fn redact_absolute_paths_redacts_windows_drive_diagnostics_with_spaces() {
-        let line =
-            r#"error: C:\Users\alice\Aiken Verify\Proofs\Foo Bar.lean:15:5: build failed"#;
+        let line = r#"error: C:\Users\alice\Aiken Verify\Proofs\Foo Bar.lean:15:5: build failed"#;
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains(r#"C:\Users\alice"#));
@@ -1059,8 +1111,7 @@ mod tests {
 
     #[test]
     fn redact_absolute_paths_handles_quoted_windows_drive_paths() {
-        let line =
-            r#"error: "C:\Users\alice\Aiken Verify\Proofs\Foo Bar.lean" failed"#;
+        let line = r#"error: "C:\Users\alice\Aiken Verify\Proofs\Foo Bar.lean" failed"#;
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains(r#"C:\Users\alice"#));
@@ -1072,8 +1123,7 @@ mod tests {
 
     #[test]
     fn redact_absolute_paths_handles_quoted_windows_drive_paths_with_escaped_quotes() {
-        let line =
-            r#"error: "C:\Users\alice\Aiken Verify\Proofs\Foo\"":15:5: build failed"#;
+        let line = r#"error: "C:\Users\alice\Aiken Verify\Proofs\Foo\"":15:5: build failed"#;
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains(r#"C:\Users\alice"#));
@@ -1094,8 +1144,7 @@ mod tests {
 
     #[test]
     fn redact_absolute_paths_redacts_unc_diagnostics_with_spaces() {
-        let line =
-            r#"error: \\server\share\Aiken Verify\Proofs\Foo Bar.lean:7:9: build failed"#;
+        let line = r#"error: \\server\share\Aiken Verify\Proofs\Foo Bar.lean:7:9: build failed"#;
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains(r#"\\server\share"#));
@@ -1107,21 +1156,16 @@ mod tests {
 
     #[test]
     fn redact_absolute_paths_handles_quoted_unc_paths() {
-        let line =
-            r#"error: "\\server\share\Aiken Verify\Proofs\Foo Bar.lean" failed"#;
+        let line = r#"error: "\\server\share\Aiken Verify\Proofs\Foo Bar.lean" failed"#;
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains(r#"\\server\share"#));
-        assert_eq!(
-            redacted,
-            r#"error: "…\Proofs\Foo Bar.lean" failed"#
-        );
+        assert_eq!(redacted, r#"error: "…\Proofs\Foo Bar.lean" failed"#);
     }
 
     #[test]
     fn redact_absolute_paths_handles_quoted_unc_paths_with_escaped_quotes() {
-        let line =
-            r#"error: "\\server\share\Aiken Verify\Proofs\Foo\"":7:9: build failed"#;
+        let line = r#"error: "\\server\share\Aiken Verify\Proofs\Foo\"":7:9: build failed"#;
         let redacted = redact_absolute_paths_in_line(line);
 
         assert!(!redacted.contains(r#"\\server\share"#));
@@ -1136,7 +1180,6 @@ mod tests {
         assert!(!redacted.contains(r#"\\server\share"#));
         assert_eq!(redacted, r#"error: …\Proofs Failed"#);
     }
-
 
     #[test]
     fn redact_absolute_paths_redacts_shallow_posix_home_paths() {
@@ -1342,5 +1385,40 @@ mod tests {
             "error: foo_l100 failed",
             "foo"
         ));
+    }
+
+    #[test]
+    fn finite_case_variant_matches_case_suffix() {
+        assert!(line_has_finite_case_variant(
+            "error: foo_case_000 failed",
+            "foo"
+        ));
+        assert!(line_has_finite_case_variant(
+            "error: foo_case_12 failed",
+            "foo"
+        ));
+        assert!(line_has_finite_case_variant(
+            "error: foo_case_003_alwaysTerminating failed",
+            "foo"
+        ));
+        assert!(!line_has_finite_case_variant(
+            "error: foo_case_ failed",
+            "foo"
+        ));
+        assert!(!line_has_finite_case_variant(
+            "error: foo_case_003_extra failed",
+            "foo"
+        ));
+        assert!(!line_has_finite_case_variant(
+            "error: bar_foo_case_003 failed",
+            "foo"
+        ));
+    }
+
+    #[test]
+    fn theorem_failure_detection_matches_finite_case_variants() {
+        let output = "error: AikenVerify/Proofs/Foo.lean:12:4: foo_case_007 failed";
+        assert!(theorem_has_explicit_failure("foo", output));
+        assert!(!theorem_has_explicit_failure("bar", output));
     }
 }

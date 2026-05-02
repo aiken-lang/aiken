@@ -172,6 +172,8 @@ pub enum FuzzerConstraint {
     ByteStringLenRange { min_len: usize, max_len: usize },
     /// Exact scalar value.
     Exact(FuzzerExactValue),
+    /// Finite scalar set. Empty sets are invalid and singletons canonicalize to `Exact`.
+    OneOf(Vec<FuzzerExactValue>),
     /// A tuple whose elements each carry their own constraint.
     Tuple(Vec<FuzzerConstraint>),
     /// A list whose elements satisfy `elem`, with optional length bounds.
@@ -225,6 +227,7 @@ pub enum FuzzerSemantics {
         type_name: String,
     },
     Exact(FuzzerExactValue),
+    OneOf(Vec<FuzzerExactValue>),
     Product(Vec<FuzzerSemantics>),
     List {
         element: Box<FuzzerSemantics>,
@@ -299,6 +302,10 @@ impl std::fmt::Display for FuzzerSemantics {
                 write!(f, "DataWithSchema<{type_name}>")
             }
             FuzzerSemantics::Exact(value) => write!(f, "Exact({value})"),
+            FuzzerSemantics::OneOf(values) => {
+                let rendered = values.iter().map(ToString::to_string).collect::<Vec<_>>();
+                write!(f, "OneOf({})", rendered.join(", "))
+            }
             FuzzerSemantics::Product(items) => {
                 let rendered = items.iter().map(ToString::to_string).collect::<Vec<_>>();
                 write!(f, "Product({})", rendered.join(", "))
@@ -626,7 +633,7 @@ pub struct ExportedPropertyTest {
 }
 
 /// Schema version for `aiken export-tests` JSON output.
-pub const EXPORT_TESTS_VERSION: &str = "1";
+pub const EXPORT_TESTS_VERSION: &str = "2";
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
