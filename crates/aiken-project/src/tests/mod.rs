@@ -182,7 +182,6 @@ fn widgets_data_types() -> IndexMap<DataTypeKey, TypedDataType> {
     data_types
 }
 
-
 #[test]
 fn resolve_type_name_to_type_preserves_generic_arguments() {
     let data_types = widgets_data_types();
@@ -224,7 +223,6 @@ fn resolve_type_name_to_type_handles_tuple_generic_arguments() {
     assert!(elems[1].is_bytearray());
 }
 
-
 #[test]
 fn resolve_type_name_to_type_handles_module_qualified_monomorphic_types() {
     let data_types = widgets_data_types();
@@ -251,7 +249,10 @@ fn resolve_type_name_to_type_handles_unique_local_custom_types() {
     let state = super::resolve_type_name_to_type(&data_types, "State")
         .expect("unique local custom type should resolve");
 
-    let Type::App { module, name, args, .. } = state.as_ref() else {
+    let Type::App {
+        module, name, args, ..
+    } = state.as_ref()
+    else {
         panic!("State should resolve to Type::App")
     };
     assert_eq!(module, "widgets");
@@ -298,10 +299,7 @@ pub type Result<a> {
     module.ast.name = "widgets".to_string();
     let checked = project.check(module);
     let data_types = project.data_types.clone();
-    let checked_modules = CheckedModules::from(HashMap::from([(
-        checked.name.clone(),
-        checked,
-    )]));
+    let checked_modules = CheckedModules::from(HashMap::from([(checked.name.clone(), checked)]));
 
     let semantics = FuzzerSemantics::DataWithSchema {
         type_name: "Result<Int>".to_string(),
@@ -337,7 +335,6 @@ fn collect_inner_data_schemas_errors_on_unresolvable_custom_leaves() {
     assert!(message.contains("MissingType"));
     assert!(message.contains("inner_data_schemas"));
 }
-
 
 #[test]
 fn json_relative_path_keeps_project_relative_paths_and_redacts_external_absolutes() {

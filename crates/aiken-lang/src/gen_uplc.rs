@@ -175,7 +175,6 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term)
     }
 
-
     pub fn generate_raw(
         &mut self,
         body: &TypedExpr,

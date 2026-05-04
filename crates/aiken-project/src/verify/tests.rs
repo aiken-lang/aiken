@@ -2881,7 +2881,7 @@ fn fuzzer_semantics_display_renders_oneof() {
 
 #[test]
 fn finite_string_oneof_above_cap_reports_e0034() {
-    let values = (0..=MAX_FINITE_DOMAIN_CASES)
+    let values = (0..=MAX_FINITE_THEOREM_INSTANCES_PER_TEST)
         .map(|i| FuzzerExactValue::String(format!("s{i:02}")))
         .collect::<Vec<_>>();
     let test = make_test_with_type(
@@ -2913,9 +2913,9 @@ fn finite_string_oneof_above_cap_reports_e0034() {
     let message = err.to_string();
     assert!(
         message.contains(&format!(
-            "finite domain has {} cases, exceeds cap of {} (MAX_FINITE_DOMAIN_CASES)",
-            MAX_FINITE_DOMAIN_CASES + 1,
-            MAX_FINITE_DOMAIN_CASES
+            "finite domain has {} cases, exceeds cap of {} (MAX_FINITE_THEOREM_INSTANCES_PER_TEST)",
+            MAX_FINITE_THEOREM_INSTANCES_PER_TEST + 1,
+            MAX_FINITE_THEOREM_INSTANCES_PER_TEST
         )),
         "E0034 message should use the stable cap format, got: {message}"
     );
@@ -3015,6 +3015,83 @@ fn finite_string_equivalence_target_reports_e0035() {
 }
 
 #[test]
+fn finite_string_existential_property_wrapper_reports_e0036() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_string_existential_property_wrapper",
+        FuzzerOutputType::String,
+        FuzzerConstraint::Exact(FuzzerExactValue::String("hello".to_string())),
+    );
+    test.on_test_failure = OnTestFailure::SucceedImmediately;
+    let id = test_id("my_module", "test_string_existential_property_wrapper");
+    let lean_name = sanitize_lean_name("test_string_existential_property_wrapper");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_existential_property_wrapper";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::PropertyWrapper,
+    )
+    .expect_err("finite String existential proof mode must report finite-domain limitation");
+
+    assert_generation_error_code(
+        &err,
+        "E0036",
+        GenerationErrorCategory::FallbackRequired,
+        "finite String existential property-wrapper target",
+    );
+    let message = err.to_string();
+    assert!(
+        message.contains("finite-domain existential theorem generation"),
+        "E0036 message should explain the finite-domain existential limitation, got: {message}"
+    );
+    assert!(
+        !message.contains("unbounded ByteArray") && !message.contains("UnboundedBytearray"),
+        "E0036 message must not report the legacy ByteArray limitation, got: {message}"
+    );
+}
+
+#[test]
+fn finite_string_existential_validator_target_reports_e0036_before_target_mode() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_string_existential_validator_target",
+        FuzzerOutputType::String,
+        FuzzerConstraint::Exact(FuzzerExactValue::String("hello".to_string())),
+    );
+    test.on_test_failure = OnTestFailure::SucceedImmediately;
+    attach_validator_target(&mut test);
+    let id = test_id("my_module", "test_string_existential_validator_target");
+    let lean_name = sanitize_lean_name("test_string_existential_validator_target");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_existential_validator_target";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::ValidatorHandler,
+    )
+    .expect_err("finite String existential proof mode must take precedence over target mode");
+
+    assert_generation_error_code(
+        &err,
+        "E0036",
+        GenerationErrorCategory::FallbackRequired,
+        "finite String existential validator target",
+    );
+    let message = err.to_string();
+    assert!(
+        !message.contains("target mode"),
+        "E0036 should be reported before finite-domain target-mode gating, got: {message}"
+    );
+}
+
+#[test]
 fn bounded_top_level_bool_list_generates_exact_finite_cases() {
     let test = make_test_with_type(
         "my_module",
@@ -3085,6 +3162,84 @@ fn bounded_top_level_bool_list_validator_target_reports_e0035() {
         "E0035",
         GenerationErrorCategory::FallbackRequired,
         "finite List<Bool> validator target",
+    );
+}
+
+#[test]
+fn bounded_bool_list_existential_property_wrapper_reports_e0036() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_bool_list_existential_property_wrapper",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: Some(3),
+        },
+    );
+    test.on_test_failure = OnTestFailure::SucceedImmediately;
+    let id = test_id("my_module", "test_bool_list_existential_property_wrapper");
+    let lean_name = sanitize_lean_name("test_bool_list_existential_property_wrapper");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_list_existential_property_wrapper";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::PropertyWrapper,
+    )
+    .expect_err("bounded List<Bool> existential proof mode must report finite-domain limitation");
+
+    assert_generation_error_code(
+        &err,
+        "E0036",
+        GenerationErrorCategory::FallbackRequired,
+        "bounded List<Bool> existential property-wrapper target",
+    );
+}
+
+#[test]
+fn bounded_bool_list_existential_validator_target_reports_e0036_before_target_mode() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_bool_list_existential_validator_target",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: Some(3),
+        },
+    );
+    test.on_test_failure = OnTestFailure::SucceedImmediately;
+    attach_validator_target(&mut test);
+    let id = test_id("my_module", "test_bool_list_existential_validator_target");
+    let lean_name = sanitize_lean_name("test_bool_list_existential_validator_target");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_list_existential_validator_target";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::ValidatorHandler,
+    )
+    .expect_err(
+        "bounded List<Bool> existential proof mode must take precedence over target mode",
+    );
+
+    assert_generation_error_code(
+        &err,
+        "E0036",
+        GenerationErrorCategory::FallbackRequired,
+        "bounded List<Bool> existential validator target",
+    );
+    let message = err.to_string();
+    assert!(
+        !message.contains("target mode"),
+        "E0036 should be reported before finite-domain target-mode gating, got: {message}"
     );
 }
 
@@ -3980,15 +4135,23 @@ fn list_semantics_can_generate_direct_theorem_without_constraint_extraction() {
         max_len: Some(3),
     };
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         "test_list_semantics_direct",
         "test_list_semantics_direct",
         "AikenVerify.Proofs.My_module.test_list_semantics_direct",
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
+    )
+    .expect("bounded List<Bool> semantics should generate finite cases");
+
+    assert_eq!(
+        correctness_case_theorem_count(&proof, "test_list_semantics_direct"),
+        14
     );
-    assert_proof_generation_skipped_as_fallback(&result, "list<bool> hard-skipped", "Bool");
+    assert!(proof.contains("theorem test_list_semantics_direct :"));
+    assert!(proof.contains("theorem test_list_semantics_direct_case_000 :"));
+    assert!(proof.contains("theorem test_list_semantics_direct_case_013 :"));
 }
 
 #[test]

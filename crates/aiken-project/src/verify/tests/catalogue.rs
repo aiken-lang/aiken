@@ -48,6 +48,7 @@ fn code_for_reason(reason: &UnsupportedReason) -> &'static str {
         UnsupportedReason::WhenPatternConstructorVarDropped { .. } => "E0033",
         UnsupportedReason::FiniteDomainTooLarge { .. } => "E0034",
         UnsupportedReason::FiniteDomainTargetModeUnsupported { .. } => "E0035",
+        UnsupportedReason::FiniteDomainExistentialUnsupported { .. } => "E0036",
         UnsupportedReason::SemanticsOutputTypeMismatch { .. } => "E0044",
         UnsupportedReason::ValidatorTargetMissing { .. } => "E0050",
         UnsupportedReason::StepFnSoundAxiomEmitted { .. } => "S0001",
@@ -170,6 +171,9 @@ fn all_reasons() -> Vec<UnsupportedReason> {
         UnsupportedReason::FiniteDomainTargetModeUnsupported {
             test_name: test_name.clone(),
             target: "validator".to_string(),
+        },
+        UnsupportedReason::FiniteDomainExistentialUnsupported {
+            test_name: test_name.clone(),
         },
         UnsupportedReason::SemanticsOutputTypeMismatch {
             test_name: test_name.clone(),

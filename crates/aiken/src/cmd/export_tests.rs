@@ -362,7 +362,6 @@ test unit_smoke() {
     const PINNED_STDLIB_TEST_REV: &str = "10acc2499c34eb014cfb5eb71e55a93499c4cc61";
     const PINNED_FUZZ_TEST_REV: &str = "06874926ec70747f3fc4e2b9364ee9e1393441cc";
 
-
     fn write_property_fixture_manifest(root: &Path, name: &str) {
         fs::write(
             root.join("aiken.toml"),
@@ -554,7 +553,6 @@ test prop_a(x via fuzz.int()) {
 
         assert_eq!(captured_include_flat_bytes, Some(true));
     }
-
 
     #[test]
     fn exported_tests_json_contract_snapshot() {
@@ -765,13 +763,10 @@ test prop_a(x via fuzz.int()) {
             "unit-test selectors should still export no property tests",
         );
         assert!(
-            !project
-                .warnings()
-                .into_iter()
-                .any(|warning| matches!(
-                    warning,
-                    aiken_project::error::Warning::SuspiciousTestMatch { .. }
-                )),
+            !project.warnings().into_iter().any(|warning| matches!(
+                warning,
+                aiken_project::error::Warning::SuspiciousTestMatch { .. }
+            )),
             "matching a real unit test should not emit a suspicious selector warning",
         );
 

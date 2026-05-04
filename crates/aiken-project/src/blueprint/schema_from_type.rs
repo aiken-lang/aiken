@@ -56,7 +56,8 @@ fn do_build(
     // reports the underlying representation structurally. `deep = true` keeps
     // unwrapping through nested opaque wrappers.
     let tipo = convert_opaque_type(tipo, data_types, true);
-    let wrapper_title = (original_tipo.as_ref() != tipo.as_ref()).then(|| original_tipo.to_pretty(0));
+    let wrapper_title =
+        (original_tipo.as_ref() != tipo.as_ref()).then(|| original_tipo.to_pretty(0));
 
     if contains_self_mapped_generic(original_tipo.as_ref(), type_parameters) {
         return None;
@@ -66,79 +67,103 @@ fn do_build(
     // ADTs like `Option<Int>` don't accidentally dispatch to the ADT branch
     // when args happen to include a primitive.
     if tipo.is_int() {
-        return Some(register_inline(&original_tipo, type_parameters, definitions, |_| {
-            if let Some(title) = wrapper_title.clone() {
-                Annotated {
-                    title: Some(title),
-                    description: None,
-                    annotated: Schema::Data(Data::Integer),
+        return Some(register_inline(
+            &original_tipo,
+            type_parameters,
+            definitions,
+            |_| {
+                if let Some(title) = wrapper_title.clone() {
+                    Annotated {
+                        title: Some(title),
+                        description: None,
+                        annotated: Schema::Data(Data::Integer),
+                    }
+                } else {
+                    Annotated::from(Schema::int())
                 }
-            } else {
-                Annotated::from(Schema::int())
-            }
-        }));
+            },
+        ));
     }
     if tipo.is_bytearray() {
-        return Some(register_inline(&original_tipo, type_parameters, definitions, |_| {
-            if let Some(title) = wrapper_title.clone() {
-                Annotated {
-                    title: Some(title),
-                    description: None,
-                    annotated: Schema::Data(Data::Bytes),
+        return Some(register_inline(
+            &original_tipo,
+            type_parameters,
+            definitions,
+            |_| {
+                if let Some(title) = wrapper_title.clone() {
+                    Annotated {
+                        title: Some(title),
+                        description: None,
+                        annotated: Schema::Data(Data::Bytes),
+                    }
+                } else {
+                    Annotated::from(Schema::bytes())
                 }
-            } else {
-                Annotated::from(Schema::bytes())
-            }
-        }));
+            },
+        ));
     }
     if tipo.is_bool() {
-        return Some(register_inline(&original_tipo, type_parameters, definitions, |_| {
-            Annotated {
+        return Some(register_inline(
+            &original_tipo,
+            type_parameters,
+            definitions,
+            |_| Annotated {
                 title: wrapper_title.clone().or(Some("Bool".to_string())),
                 description: None,
                 annotated: Schema::bool(),
-            }
-        }));
+            },
+        ));
     }
     if tipo.is_void() {
-        return Some(register_inline(&original_tipo, type_parameters, definitions, |_| {
-            Annotated {
+        return Some(register_inline(
+            &original_tipo,
+            type_parameters,
+            definitions,
+            |_| Annotated {
                 title: wrapper_title.clone().or(Some("Unit".to_string())),
                 description: None,
                 annotated: Schema::void(),
-            }
-        }));
+            },
+        ));
     }
     if tipo.is_data() {
-        return Some(register_inline(&original_tipo, type_parameters, definitions, |_| {
-            Annotated {
+        return Some(register_inline(
+            &original_tipo,
+            type_parameters,
+            definitions,
+            |_| Annotated {
                 title: wrapper_title.clone().or(Some("Data".to_string())),
                 description: Some("Any Plutus data.".to_string()),
                 annotated: Schema::Data(Data::Opaque),
-            }
-        }));
+            },
+        ));
     }
     if tipo.is_string() {
         // `String` has no `Data` encoding; surface as unrepresentable.
         return None;
     }
     if type_is_never(&tipo) {
-        return Some(register_inline(&original_tipo, type_parameters, definitions, |_| {
-            Annotated {
-                title: wrapper_title.clone().or(Some("Never".to_string())),
-                description: None,
-                annotated: Schema::Data(Data::AnyOf(vec![Annotated {
-                    title: Some("Never".to_string()),
-                    description: Some("Nothing.".to_string()),
-                    annotated: Constructor {
-                        // NOTE: Tag 1 — the `__hole` constructor at index 0 is
-                        // a placeholder that can never be inhabited.
-                        index: 1,
-                        fields: vec![],
-                    },
-                }])),
-            }
-        }));
+        return Some(register_inline(
+            &original_tipo,
+            type_parameters,
+            definitions,
+            |_| {
+                Annotated {
+                    title: wrapper_title.clone().or(Some("Never".to_string())),
+                    description: None,
+                    annotated: Schema::Data(Data::AnyOf(vec![Annotated {
+                        title: Some("Never".to_string()),
+                        description: Some("Nothing.".to_string()),
+                        annotated: Constructor {
+                            // NOTE: Tag 1 — the `__hole` constructor at index 0 is
+                            // a placeholder that can never be inhabited.
+                            index: 1,
+                            fields: vec![],
+                        },
+                    }])),
+                }
+            },
+        ));
     }
 
     match tipo.as_ref() {
@@ -213,8 +238,11 @@ fn do_build(
                     },
                 ))
             }
-            "Ordering" => Some(register_inline(&original_tipo, type_parameters, definitions, |_| {
-                Annotated {
+            "Ordering" => Some(register_inline(
+                &original_tipo,
+                type_parameters,
+                definitions,
+                |_| Annotated {
                     title: wrapper_title.clone().or(Some("Ordering".to_string())),
                     description: None,
                     annotated: Schema::Data(Data::AnyOf(vec![
@@ -243,8 +271,8 @@ fn do_build(
                             },
                         },
                     ])),
-                }
-            })),
+                },
+            )),
             _ => None,
         },
 
@@ -446,10 +474,7 @@ fn build_data_type(
     })
 }
 
-fn contains_self_mapped_generic(
-    tipo: &Type,
-    type_parameters: &HashMap<u64, Rc<Type>>,
-) -> bool {
+fn contains_self_mapped_generic(tipo: &Type, type_parameters: &HashMap<u64, Rc<Type>>) -> bool {
     match tipo {
         Type::App { args, .. } => args
             .iter()
@@ -847,8 +872,12 @@ mod tests {
 
         assert_ne!(script_ref, datum_ref);
 
-        let script = defs.lookup(&script_ref).expect("script wrapper should be registered");
-        let datum = defs.lookup(&datum_ref).expect("datum wrapper should be registered");
+        let script = defs
+            .lookup(&script_ref)
+            .expect("script wrapper should be registered");
+        let datum = defs
+            .lookup(&datum_ref)
+            .expect("datum wrapper should be registered");
         assert!(matches!(script.annotated, Schema::Data(Data::Bytes)));
         assert!(matches!(datum.annotated, Schema::Data(Data::Bytes)));
         assert!(

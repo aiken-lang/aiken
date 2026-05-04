@@ -332,7 +332,7 @@ where
     } else {
         Ok(())
     }
-    }
+}
 
 /// Run a function each time a file in the project changes
 ///
@@ -432,7 +432,10 @@ mod tests {
     #[test]
     fn render_warnings_reuses_the_warning_renderer() {
         let warning = crate::error::Warning::NoValidators;
-        assert_eq!(super::render_warnings(std::slice::from_ref(&warning)), warning.render());
+        assert_eq!(
+            super::render_warnings(std::slice::from_ref(&warning)),
+            warning.render()
+        );
     }
 
     #[test]
@@ -476,11 +479,7 @@ mod tests {
             "name = \"aiken-lang/watch-parse\"\nversion = \"0.0.0\"\nplutusVersion = \"v3\"\n",
         )
         .expect("manifest");
-        fs::write(
-            tmp.path().join("lib/tests.ak"),
-            "validator foo {\n",
-        )
-        .expect("source");
+        fs::write(tmp.path().join("lib/tests.ak"), "validator foo {\n").expect("source");
 
         let err = with_project_event_target(
             Some(tmp.path()),

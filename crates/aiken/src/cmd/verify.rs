@@ -476,7 +476,10 @@ fn failure_artifact_advice(resolved_out_dir: &Path, artifacts_retained: bool) ->
     if artifacts_retained {
         return vec![
             format!("Logs available at {}/logs/", resolved_out_dir.display()),
-            format!("To reproduce: cd {} && lake build", resolved_out_dir.display()),
+            format!(
+                "To reproduce: cd {} && lake build",
+                resolved_out_dir.display()
+            ),
         ];
     }
 
@@ -603,7 +606,7 @@ fn exec_doctor(
         blaster_rev,
         plutus_core_rev,
     }: DoctorArgs,
- ) -> miette::Result<()> {
+) -> miette::Result<()> {
     let result = run_doctor_command_with(json, blaster_rev, plutus_core_rev, verify::run_doctor)?;
 
     print!("{}", result.output);
@@ -706,7 +709,6 @@ fn clean_project_root(workspace_root: &Path) -> miette::Result<PathBuf> {
     Ok(workspace_root.to_path_buf())
 }
 
-
 fn run_clean_for_directory_with<F>(
     directory: Option<&Path>,
     out_dir: PathBuf,
@@ -717,8 +719,7 @@ where
 {
     let workspace_root = workspace_root(directory)?;
     let project_root = clean_project_root(&workspace_root)?;
-    let result =
-        run_clean_command_with(&project_root, out_dir, |path| clean_artifacts(path))?;
+    let result = run_clean_command_with(&project_root, out_dir, |path| clean_artifacts(path))?;
 
     Ok(CommandBranchResult {
         output: result.output,
@@ -1366,10 +1367,7 @@ fn exec_run_with_project(
                 );
             }
 
-            if should_cleanup_artifacts(
-                run_options.artifact_policy,
-                !skipped_without_allow,
-            )
+            if should_cleanup_artifacts(run_options.artifact_policy, !skipped_without_allow)
                 && let Err(e) = verify::clear_generated_workspace(&resolved_out_dir)
                 && run_options.output_mode.shows_advisories()
             {
@@ -1455,10 +1453,8 @@ fn exec_run_with_project(
             run_options.accept_partial,
             run_options.accept_witness,
         );
-        let cleanup_needed = should_cleanup_artifacts(
-            run_options.artifact_policy,
-            summary.command_success,
-        );
+        let cleanup_needed =
+            should_cleanup_artifacts(run_options.artifact_policy, summary.command_success);
         let cleanup_error = if cleanup_needed {
             verify::clear_generated_workspace(&resolved_out_dir).err()
         } else {
@@ -2437,7 +2433,10 @@ test unit_smoke() {
             fixture_root.join("build/verify/manifest.json").exists(),
             "clean must not remove artifacts when the manifest boundary is missing"
         );
-        assert!(!attempted_cleanup, "clean must not run without a manifest boundary");
+        assert!(
+            !attempted_cleanup,
+            "clean must not run without a manifest boundary"
+        );
 
         fs::remove_dir_all(&fixture_root).expect("fixture root should be removable");
     }
@@ -2487,7 +2486,10 @@ test unit_smoke() {
             fixture_root.join("build/verify/manifest.json").exists(),
             "clean must not remove artifacts when the project manifest is invalid"
         );
-        assert!(!attempted_cleanup, "clean must not run when the manifest is invalid");
+        assert!(
+            !attempted_cleanup,
+            "clean must not run when the manifest is invalid"
+        );
 
         fs::remove_dir_all(&fixture_root).expect("fixture root should be removable");
     }
@@ -2510,11 +2512,8 @@ test unit_smoke() {
             "members = [\"member-a\", \"member-b\"]\n",
         )
         .expect("workspace manifest should be writable");
-        fs::write(
-            fixture_root.join("build/verify/manifest.json"),
-            "{}",
-        )
-        .expect("workspace root artifact should be writable");
+        fs::write(fixture_root.join("build/verify/manifest.json"), "{}")
+            .expect("workspace root artifact should be writable");
         fs::write(
             fixture_root.join("member-a/build/verify/manifest.json"),
             "{}",
@@ -2539,11 +2538,15 @@ test unit_smoke() {
             "requested project artifacts should be removed",
         );
         assert!(
-            fixture_root.join("member-a/build/verify/manifest.json").exists(),
+            fixture_root
+                .join("member-a/build/verify/manifest.json")
+                .exists(),
             "clean must not implicitly remove sibling member artifacts",
         );
         assert!(
-            fixture_root.join("member-b/build/verify/manifest.json").exists(),
+            fixture_root
+                .join("member-b/build/verify/manifest.json")
+                .exists(),
             "clean must not implicitly remove sibling member artifacts",
         );
 
@@ -2595,7 +2598,9 @@ members = [1, 2]
             "root artifact should be removed for normal project configs",
         );
         assert!(
-            fixture_root.join("member-a/build/verify/manifest.json").exists(),
+            fixture_root
+                .join("member-a/build/verify/manifest.json")
+                .exists(),
             "nested config.members must not trigger sibling workspace cleanup",
         );
 
@@ -2907,7 +2912,10 @@ members = [1, 2]
             true,
         );
         let json = serde_json::to_value(&summary).expect("summary should serialize");
-        assert_eq!(json["verify_summary_version"], verify::VERIFY_SUMMARY_VERSION);
+        assert_eq!(
+            json["verify_summary_version"],
+            verify::VERIFY_SUMMARY_VERSION
+        );
         assert_eq!(json["allow_vacuous_subgenerators"], true);
         assert_eq!(json["two_phase_disabled"], true);
     }
@@ -3322,9 +3330,7 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
                 .expect("fixture project should load");
             let mut exit_code = 0;
             if let Err(errors) = exec_run_with_project(&mut project, &run_options, &mut exit_code) {
-                panic!(
-                    "verify run should support --target {target}; got errors: {errors:#?}"
-                );
+                panic!("verify run should support --target {target}; got errors: {errors:#?}");
             }
             assert_eq!(exit_code, 0);
 
@@ -3534,7 +3540,8 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
         let project_root_arg = project_root.to_string_lossy().into_owned();
 
         assert!(
-            VerifyCli::try_parse_from(["aiken-verify", "doctor", project_root_arg.as_str()]).is_err(),
+            VerifyCli::try_parse_from(["aiken-verify", "doctor", project_root_arg.as_str()])
+                .is_err(),
             "`verify doctor` should reject positional project directories because the command is global",
         );
     }

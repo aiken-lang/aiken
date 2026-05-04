@@ -1011,7 +1011,9 @@ pub(super) fn extract_error_for_module(module: &str, output: &str) -> String {
 
 pub(super) fn extract_error_for_theorem(theorem: &str, output: &str) -> String {
     extract_error_for_match(output, |line| {
-        line_has_theorem_reference(line, theorem) || line_has_length_indexed_variant(line, theorem)
+        line_has_theorem_reference(line, theorem)
+            || line_has_length_indexed_variant(line, theorem)
+            || line_has_finite_case_variant(line, theorem)
     })
 }
 
@@ -1420,5 +1422,32 @@ mod tests {
         let output = "error: AikenVerify/Proofs/Foo.lean:12:4: foo_case_007 failed";
         assert!(theorem_has_explicit_failure("foo", output));
         assert!(!theorem_has_explicit_failure("bar", output));
+    }
+
+    #[test]
+    fn extract_error_for_theorem_matches_finite_case_variants() {
+        let finite_case_output = "info: build started\n\
+                      context before finite case\n\
+                      error: AikenVerify/Proofs/Foo.lean:12:4: foo_case_007 failed";
+
+        let finite_case_reason = extract_error_for_theorem("foo", finite_case_output);
+        assert!(!finite_case_reason.is_empty());
+        assert!(
+            finite_case_reason.contains("foo_case_007"),
+            "got: {finite_case_reason}"
+        );
+        assert!(extract_error_for_theorem("bar", finite_case_output).is_empty());
+
+        let terminating_case_output = "info: build started\n\
+                      context before terminating finite case\n\
+                      error: AikenVerify/Proofs/Foo.lean:18:4: foo_case_003_alwaysTerminating failed";
+
+        let terminating_case_reason = extract_error_for_theorem("foo", terminating_case_output);
+        assert!(!terminating_case_reason.is_empty());
+        assert!(
+            terminating_case_reason.contains("foo_case_003_alwaysTerminating"),
+            "got: {terminating_case_reason}"
+        );
+        assert!(extract_error_for_theorem("bar", terminating_case_output).is_empty());
     }
 }

@@ -380,7 +380,6 @@ impl CapturedOutput {
 }
 /// Schema version for `aiken verify capabilities --json` output.
 pub const VERIFICATION_CAPABILITIES_VERSION: &str = "3";
-pub(crate) const MAX_FINITE_DOMAIN_CASES: usize = 64;
 pub(crate) const MAX_FINITE_THEOREM_INSTANCES_PER_TEST: usize = 64;
 
 /// Schema version for `aiken verify doctor --json` output.
@@ -2463,6 +2462,9 @@ pub(crate) enum UnsupportedReason {
         test_name: String,
         target: String,
     },
+    FiniteDomainExistentialUnsupported {
+        test_name: String,
+    },
     SemanticsOutputTypeMismatch {
         test_name: String,
     },
@@ -2518,6 +2520,7 @@ impl UnsupportedReason {
             | UnsupportedReason::WhenPatternConstructorVarDropped { test_name, .. }
             | UnsupportedReason::FiniteDomainTooLarge { test_name, .. }
             | UnsupportedReason::FiniteDomainTargetModeUnsupported { test_name, .. }
+            | UnsupportedReason::FiniteDomainExistentialUnsupported { test_name }
             | UnsupportedReason::SemanticsOutputTypeMismatch { test_name }
             | UnsupportedReason::ValidatorTargetMissing { test_name }
             | UnsupportedReason::StepFnSoundAxiomEmitted { test_name, .. }
@@ -2562,6 +2565,11 @@ impl UnsupportedReason {
             UnsupportedReason::FiniteDomainTargetModeUnsupported { test_name, target } => {
                 format!(
                     "Test '{test_name}' has a finite fuzzer domain, but target mode '{target}' is not supported for finite-domain theorem generation."
+                )
+            }
+            UnsupportedReason::FiniteDomainExistentialUnsupported { test_name } => {
+                format!(
+                    "Test '{test_name}' has a finite fuzzer domain, but finite-domain existential theorem generation is not supported for fail-style theorem families."
                 )
             }
             UnsupportedReason::SemanticsOutputTypeMismatch { test_name } => {
@@ -7241,6 +7249,15 @@ fn finite_domain_target_mode_error(
     )
 }
 
+fn finite_domain_existential_error(test_name: &str) -> miette::Report {
+    unsupported_error(
+        "E0036",
+        UnsupportedReason::FiniteDomainExistentialUnsupported {
+            test_name: test_name.to_string(),
+        },
+    )
+}
+
 fn semantics_output_type_mismatch_error(test_name: &str) -> miette::Report {
     unsupported_error(
         "E0044",
@@ -7319,14 +7336,6 @@ fn finite_string_arg_exprs(
         _ => return Ok(None),
     };
 
-    if values.len() > MAX_FINITE_DOMAIN_CASES {
-        return Err(finite_domain_too_large_error(
-            test_name,
-            values.len().to_string(),
-            MAX_FINITE_DOMAIN_CASES,
-            "MAX_FINITE_DOMAIN_CASES",
-        ));
-    }
     if values.len() > MAX_FINITE_THEOREM_INSTANCES_PER_TEST {
         return Err(finite_domain_too_large_error(
             test_name,
@@ -7871,6 +7880,9 @@ fn generate_proof_file(
         ));
     }
 
+    // Bool-list preflight is centralized here: supported bounded top-level
+    // `List<Bool>` shapes pass through to the finite enumerator, unsupported
+    // bool-list shapes return E0013, and over-cap bounded shapes return E0034.
     match supported_top_level_bool_list_cardinality(&test.fuzzer_output_type, &test.semantics) {
         Ok(Some(_)) => {}
         Ok(None) => {
@@ -7893,23 +7905,6 @@ fn generate_proof_file(
         }
     }
 
-    // `List<Bool>` elements encode as `Data.Constr (if x_i then 1 else 0) []`
-    // on the generic path. Only the exact bounded top-level shape above is
-    // allowed through to the finite ground enumerator; every other bool-list
-    // shape remains an explicit skip.
-    if fuzzer_output_type_has_bool_list_element(&test.fuzzer_output_type)
-        && supported_top_level_bool_list_cardinality(&test.fuzzer_output_type, &test.semantics)
-            .ok()
-            .flatten()
-            .is_none()
-    {
-        return Err(unsupported_error(
-            "E0013",
-            UnsupportedReason::ListOfBool {
-                test_name: test.name.clone(),
-            },
-        ));
-    }
 
     // Soundness guard: `DataWithSchema` semantics require a `fuzzer_data_schema`
     // to produce a sound theorem. Without it the `Data` domain is unconstrained
@@ -8867,16 +8862,11 @@ fn try_generate_direct_proof_from_semantics(
         }
         (FuzzerOutputType::String, semantics) => {
             if let Some(arg_exprs) = finite_string_arg_exprs(&test.name, semantics)? {
+                if form.existential {
+                    return Err(finite_domain_existential_error(&test.name));
+                }
                 if !matches!(target, VerificationTargetKind::PropertyWrapper) {
                     return Err(finite_domain_target_mode_error(&test.name, target));
-                }
-                if form.existential {
-                    return Err(unsupported_error(
-                        "E0011",
-                        UnsupportedReason::UnboundedBytearray {
-                            test_name: test.name.clone(),
-                        },
-                    ));
                 }
                 let theorems = format_ground_theorem_family(
                     form,
@@ -9040,16 +9030,11 @@ fn try_generate_direct_proof_from_semantics(
                 && matches!(elem_semantics.as_ref(), FuzzerSemantics::Bool)
                 && let (Some(lo), Some(hi)) = (*min_len, *max_len)
             {
+                if form.existential {
+                    return Err(finite_domain_existential_error(&test.name));
+                }
                 if !matches!(target, VerificationTargetKind::PropertyWrapper) {
                     return Err(finite_domain_target_mode_error(&test.name, target));
-                }
-                if form.existential {
-                    return Err(unsupported_error(
-                        "E0013",
-                        UnsupportedReason::ListOfBool {
-                            test_name: test.name.clone(),
-                        },
-                    ));
                 }
                 validate_list_len_bounds(&test.name, Some(lo), Some(hi))?;
                 let case_count = checked_bool_list_cardinality(lo, hi).map_err(|cases| {
