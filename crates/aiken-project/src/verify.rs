@@ -55,7 +55,7 @@ use crate::blueprint::{
 use crate::export::{
     ExportedDataSchema, ExportedPropertyTest, FuzzerConstraint, FuzzerExactValue, FuzzerOutputType,
     FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode,
-    VerificationTargetKind,
+    TransitionWidening, TransitionWideningKind, VerificationTargetKind,
 };
 use num_bigint::BigInt;
 use std::collections::HashMap;
@@ -74,6 +74,153 @@ use uplc::{PlutusData, machine::runtime::convert_tag_to_constr};
 
 fn is_zero(n: &usize) -> bool {
     *n == 0
+}
+
+type TransitionWideningLog = Vec<TransitionWidening>;
+
+fn push_widening(
+    widenings: &mut TransitionWideningLog,
+    kind: TransitionWideningKind,
+    message: impl Into<String>,
+) {
+    widenings.push(TransitionWidening {
+        kind,
+        message: message.into(),
+    });
+}
+
+#[cfg(test)]
+fn widening_messages(widenings: &[TransitionWidening]) -> Vec<String> {
+    widenings.iter().map(|entry| entry.message.clone()).collect()
+}
+
+fn render_widening_counts(counts: &BTreeMap<TransitionWideningKind, usize>) -> String {
+    let mut parts = Vec::new();
+    for (kind, count) in counts {
+        let label = match kind {
+            TransitionWideningKind::Relation => "relation",
+            TransitionWideningKind::DataFreshening => "data-freshening",
+            TransitionWideningKind::BoolFreshening => "bool-freshening",
+            TransitionWideningKind::Domain => "domain",
+            TransitionWideningKind::OpaqueSubGenerator => "opaque-sub-generator",
+        };
+        parts.push(format!("{count} {label}"));
+    }
+    parts.join(", ")
+}
+
+fn widening_category_counts(
+    widenings: &[TransitionWidening],
+    include_sub_generators: bool,
+    opaque_sub_generators: &[(String, String)],
+) -> BTreeMap<TransitionWideningKind, usize> {
+    let mut counts = BTreeMap::new();
+    for widening in widenings {
+        if matches!(widening.kind, TransitionWideningKind::OpaqueSubGenerator)
+            && !include_sub_generators
+        {
+            continue;
+        }
+        *counts.entry(widening.kind).or_insert(0) += 1;
+    }
+    if include_sub_generators && !opaque_sub_generators.is_empty() {
+        *counts
+            .entry(TransitionWideningKind::OpaqueSubGenerator)
+            .or_insert(0) += opaque_sub_generators.len();
+    }
+    counts
+}
+
+fn widening_summary_suffix(
+    widenings: &[TransitionWidening],
+    include_sub_generators: bool,
+    opaque_sub_generators: &[(String, String)],
+) -> Option<String> {
+    let counts = widening_category_counts(
+        widenings,
+        include_sub_generators,
+        opaque_sub_generators,
+    );
+    if counts.is_empty() {
+        return None;
+    }
+
+    let total: usize = counts.values().sum();
+    Some(format!(
+        "counted theorem widened ({} over-approximations: {})",
+        total,
+        render_widening_counts(&counts),
+    ))
+}
+
+fn combined_widenings(
+    primary: &[TransitionWidening],
+    helper: &[TransitionWidening],
+) -> Vec<TransitionWidening> {
+    let mut combined = Vec::with_capacity(primary.len() + helper.len());
+    combined.extend_from_slice(primary);
+    combined.extend_from_slice(helper);
+    combined
+}
+
+fn transition_prop_widenings(
+    tp: &crate::export::ExportedTransitionProp,
+ ) -> Vec<TransitionWidening> {
+    let combined = combined_widenings(&tp.widenings, &tp.helper_widenings);
+    if !combined.is_empty() || tp.unsupported_log.is_empty() {
+        return combined;
+    }
+
+    tp.unsupported_log
+        .iter()
+        .map(|message| TransitionWidening {
+            // Legacy export payloads only carried message strings. Preserve the
+            // non-zero over-approximation accounting when reading them back.
+            kind: TransitionWideningKind::Relation,
+            message: message.clone(),
+        })
+        .collect()
+}
+
+fn domain_widening_is_production_disallowed(message: &str) -> bool {
+    // Today every emitted Domain widening still drops semantic information that
+    // matters to production honesty (`... widened to True`, or the equivalent
+    // loss of element constraints for untyped list binders). Keep the predicate
+    // message-based so future audited value-domain relaxations can opt in
+    // explicitly without reopening the broad “all Domain widenings are harmless”
+    // hole this check is closing.
+    message.contains("widened to True") || message.contains("not a typed Lean list")
+}
+
+fn disallowed_production_widening_counts(
+    widenings: &[TransitionWidening],
+    allow_debug_sub_generators: bool,
+    opaque_sub_generators: &[(String, String)],
+) -> BTreeMap<TransitionWideningKind, usize> {
+    let mut counts = BTreeMap::new();
+
+    for widening in widenings {
+        let disallowed = match widening.kind {
+            TransitionWideningKind::Domain => {
+                domain_widening_is_production_disallowed(&widening.message)
+            }
+            TransitionWideningKind::OpaqueSubGenerator => false,
+            TransitionWideningKind::Relation
+            | TransitionWideningKind::DataFreshening
+            | TransitionWideningKind::BoolFreshening => true,
+        };
+        if disallowed {
+            *counts.entry(widening.kind).or_insert(0) += 1;
+        }
+    }
+
+    if !allow_debug_sub_generators && !opaque_sub_generators.is_empty() {
+        *counts
+            .entry(TransitionWideningKind::OpaqueSubGenerator)
+            .or_insert(0) += opaque_sub_generators.len();
+    }
+
+    counts
 }
 
 /// Lean Unicode symbols used verbatim in generated proof output.
@@ -2916,28 +3063,24 @@ pub fn generate_lean_workspace(
             None
         };
 
-        // Count over-approximations: constraints dropped during TransitionProp → Lean lowering.
-        // Only non-zero for two-phase state-machine trace halt theorems
-        // (`Void + FailImmediately`). Error tests (`_ko`) use concrete native_decide
-        // witnesses instead of the two-phase proof, so they carry no over-approximation
-        // penalty even though they share the same TransitionProp.
-        //
-        // Per H4: when the hidden `--allow-vacuous-subgenerators` debug flag is on,
-        // each sub-generator predicate widened to `def := fun _ _ => True` is also
-        // recorded as an over-approximation (one per entry in `opaque_sub_generators`).
-        // In default mode the test would have hard-errored with E0018 inside
-        // `try_generate_two_phase_proof`, so this branch is only reached when the
-        // proof was actually emitted with the widened predicates.
-        let over_approximations = if is_state_machine_trace_halt_test(test) {
+        // Count transition-theorem over-approximations for halt tests whenever
+        // the emitted proof actually uses the transition relation. Witness-only
+        // native_decide fallbacks do not emit that theorem and therefore carry
+        // no transition-widening budget.
+        let over_approximations = if is_state_machine_trace_halt_test(test)
+            && !matches!(&proof_caveat, ProofCaveat::Witness(_))
+        {
             test.transition_prop_lean
                 .as_ref()
                 .map(|tp| {
-                    let widened = if config.allow_vacuous_subgenerators {
-                        tp.opaque_sub_generators.len()
-                    } else {
-                        0
-                    };
-                    tp.unsupported_log.len() + widened
+                    let theorem_widenings = transition_prop_widenings(tp);
+                    widening_category_counts(
+                        &theorem_widenings,
+                        config.allow_vacuous_subgenerators,
+                        &tp.opaque_sub_generators,
+                    )
+                    .values()
+                    .sum()
                 })
                 .unwrap_or(0)
         } else {
@@ -3700,20 +3843,40 @@ fn lean_prop_conjunction(parts: &[String]) -> String {
 fn exported_data_schema_for_reference<'a>(
     test_name: &str,
     schema: &'a ExportedDataSchema,
+    fallback_schemas: Option<&'a BTreeMap<String, ExportedDataSchema>>,
     reference: &Reference,
-) -> miette::Result<&'a SchemaData> {
-    let _key = reference.as_key();
-    let Some(definition) = schema.definitions.lookup(reference) else {
-        return Err(unsupported_error(
-            "E0025",
-            UnsupportedReason::MissingFuzzerSchema {
-                test_name: test_name.to_string(),
-            },
-        ));
-    };
+) -> miette::Result<(&'a ExportedDataSchema, &'a SchemaData)> {
+    let key = reference.as_key();
+    let resolved = schema
+        .definitions
+        .lookup(reference)
+        .map(|definition| (schema, definition))
+        .or_else(|| {
+            fallback_schemas.and_then(|schemas| {
+                schemas
+                    .get(&key)
+                    .and_then(|schema| schema.definitions.lookup(reference).map(|definition| (schema, definition)))
+                    .or_else(|| {
+                        schemas.values().find_map(|schema| {
+                            schema
+                                .definitions
+                                .lookup(reference)
+                                .map(|definition| (schema, definition))
+                        })
+                    })
+            })
+        })
+        .ok_or_else(|| {
+            unsupported_error(
+                "E0025",
+                UnsupportedReason::MissingFuzzerSchema {
+                    test_name: test_name.to_string(),
+                },
+            )
+        })?;
 
-    match &definition.annotated {
-        Schema::Data(data) => Ok(data),
+    match &resolved.1.annotated {
+        Schema::Data(data) => Ok((resolved.0, data)),
         _ => Err(unsupported_error(
             "E0026",
             UnsupportedReason::NonDataFuzzerSchema {
@@ -3735,6 +3898,7 @@ fn ensure_exported_schema_reference_predicate(
     builder: &mut LeanDataShapeBuilder,
     test_name: &str,
     schema: &ExportedDataSchema,
+    fallback_schemas: Option<&BTreeMap<String, ExportedDataSchema>>,
     prefix: &str,
     reference: &Reference,
 ) -> miette::Result<String> {
@@ -3754,8 +3918,18 @@ fn ensure_exported_schema_reference_predicate(
 
     let name = schema_predicate_name(prefix, &key);
     let result = (|| {
-        let data = exported_data_schema_for_reference(test_name, schema, reference)?;
-        emit_exported_schema_data_predicate(builder, test_name, schema, prefix, &name, &key, data)
+        let (resolved_schema, data) =
+            exported_data_schema_for_reference(test_name, schema, fallback_schemas, reference)?;
+        emit_exported_schema_data_predicate(
+            builder,
+            test_name,
+            resolved_schema,
+            fallback_schemas,
+            prefix,
+            &name,
+            &key,
+            data,
+        )
     })();
 
     builder.visiting_refs.remove(&key);
@@ -3768,18 +3942,31 @@ fn ensure_exported_schema_declaration_predicate(
     builder: &mut LeanDataShapeBuilder,
     test_name: &str,
     schema: &ExportedDataSchema,
+    fallback_schemas: Option<&BTreeMap<String, ExportedDataSchema>>,
     prefix: &str,
     declaration: &SchemaDeclaration<SchemaData>,
     path: &str,
 ) -> miette::Result<String> {
     match declaration {
         SchemaDeclaration::Referenced(reference) => ensure_exported_schema_reference_predicate(
-            builder, test_name, schema, prefix, reference,
+            builder,
+            test_name,
+            schema,
+            fallback_schemas,
+            prefix,
+            reference,
         ),
         SchemaDeclaration::Inline(data) => {
             let name = schema_predicate_name(prefix, path);
             emit_exported_schema_data_predicate(
-                builder, test_name, schema, prefix, &name, path, data,
+                builder,
+                test_name,
+                schema,
+                fallback_schemas,
+                prefix,
+                &name,
+                path,
+                data,
             )?;
             Ok(name)
         }
@@ -3790,6 +3977,7 @@ fn emit_exported_schema_data_predicate(
     builder: &mut LeanDataShapeBuilder,
     test_name: &str,
     schema: &ExportedDataSchema,
+    fallback_schemas: Option<&BTreeMap<String, ExportedDataSchema>>,
     prefix: &str,
     name: &str,
     path: &str,
@@ -3811,6 +3999,7 @@ fn emit_exported_schema_data_predicate(
                 builder,
                 test_name,
                 schema,
+                fallback_schemas,
                 prefix,
                 item,
                 &format!("{path}_item"),
@@ -3832,6 +4021,7 @@ fn emit_exported_schema_data_predicate(
                     builder,
                     test_name,
                     schema,
+                    fallback_schemas,
                     prefix,
                     &item.annotated,
                     &format!("{path}_item_{index}"),
@@ -3849,6 +4039,7 @@ fn emit_exported_schema_data_predicate(
                 builder,
                 test_name,
                 schema,
+                fallback_schemas,
                 prefix,
                 keys,
                 &format!("{path}_keys"),
@@ -3857,6 +4048,7 @@ fn emit_exported_schema_data_predicate(
                 builder,
                 test_name,
                 schema,
+                fallback_schemas,
                 prefix,
                 values,
                 &format!("{path}_values"),
@@ -3892,6 +4084,7 @@ fn emit_exported_schema_data_predicate(
                         builder,
                         test_name,
                         schema,
+                        fallback_schemas,
                         prefix,
                         &field.annotated,
                         &format!("{path}_ctor_{ctor_index}_field_{field_index}"),
@@ -3933,7 +4126,7 @@ fn build_exported_data_shape_predicates(
 ) -> miette::Result<(String, String)> {
     let mut builder = LeanDataShapeBuilder::default();
     let root_predicate =
-        build_exported_data_shape_predicates_into(test_name, schema, prefix, &mut builder)?;
+        build_exported_data_shape_predicates_into(test_name, schema, None, prefix, &mut builder)?;
     let body = finalize_lean_data_shape_builder(builder);
     Ok((root_predicate, body))
 }
@@ -3953,10 +4146,18 @@ fn build_exported_data_shape_predicates(
 fn build_exported_data_shape_predicates_into(
     test_name: &str,
     schema: &ExportedDataSchema,
+    fallback_schemas: Option<&BTreeMap<String, ExportedDataSchema>>,
     prefix: &str,
     builder: &mut LeanDataShapeBuilder,
 ) -> miette::Result<String> {
-    ensure_exported_schema_reference_predicate(builder, test_name, schema, prefix, &schema.root)
+    ensure_exported_schema_reference_predicate(
+        builder,
+        test_name,
+        schema,
+        fallback_schemas,
+        prefix,
+        &schema.root,
+    )
 }
 
 /// Render the accumulated shape predicate definitions into a single Lean
@@ -3992,6 +4193,94 @@ fn finalize_lean_data_shape_builder(builder: LeanDataShapeBuilder) -> String {
             .join("\n");
         format!("mutual\n{inner}\nend\n")
     }
+
+}
+
+struct TransitionDomainShapeState<'a> {
+    enabled: bool,
+    test_name: &'a str,
+    shape_prefix: String,
+    inner_data_schemas: Option<&'a BTreeMap<String, ExportedDataSchema>>,
+    builder: LeanDataShapeBuilder,
+}
+
+fn schema_type_name_candidates(type_name: &str) -> Vec<String> {
+    let mut candidates = vec![type_name.to_string()];
+    if let Some((module, name)) = type_name.rsplit_once('.') {
+        let slash = format!("{module}/{name}");
+        if !candidates.contains(&slash) {
+            candidates.push(slash);
+        }
+    }
+    candidates
+}
+
+impl<'a> TransitionDomainShapeState<'a> {
+    #[cfg(test)]
+    fn disabled() -> Self {
+        Self {
+            enabled: false,
+            test_name: "transition_prop",
+            shape_prefix: "transition_prop_shape".to_string(),
+            inner_data_schemas: None,
+            builder: LeanDataShapeBuilder::default(),
+        }
+    }
+
+    fn enabled(
+        test_name: &'a str,
+        shape_prefix: String,
+        inner_data_schemas: &'a BTreeMap<String, ExportedDataSchema>,
+    ) -> Self {
+        Self {
+            enabled: true,
+            test_name,
+            shape_prefix,
+            inner_data_schemas: Some(inner_data_schemas),
+            builder: LeanDataShapeBuilder::default(),
+        }
+    }
+
+    fn predicate_for_data_with_schema(&mut self, type_name: &str) -> Option<String> {
+        if !self.enabled {
+            return None;
+        }
+        let inner_data_schemas = self.inner_data_schemas?;
+        let candidates = schema_type_name_candidates(type_name);
+        let owned_schema = if let Some(schema) = candidates
+            .iter()
+            .find_map(|candidate| inner_data_schemas.get(candidate))
+        {
+            schema.clone()
+        } else {
+            let (reference, root_key) = candidates.iter().find_map(|candidate| {
+                let reference = Reference::new(candidate);
+                inner_data_schemas
+                    .values()
+                    .any(|schema| schema.definitions.try_lookup(&reference).is_some())
+                    .then_some((reference, candidate.clone()))
+            })?;
+            let parent = inner_data_schemas
+                .values()
+                .find(|schema| schema.definitions.try_lookup(&reference).is_some())?;
+            ExportedDataSchema {
+                root: Reference::new(&root_key),
+                definitions: parent.definitions.clone(),
+            }
+        };
+        build_exported_data_shape_predicates_into(
+            self.test_name,
+            &owned_schema,
+            Some(inner_data_schemas),
+            &self.shape_prefix,
+            &mut self.builder,
+        )
+        .ok()
+    }
+
+    fn take_definitions(&mut self) -> String {
+        finalize_lean_data_shape_builder(std::mem::take(&mut self.builder))
+    }
 }
 
 fn build_exported_data_shape_witness_from_declaration(
@@ -4014,7 +4303,8 @@ fn build_exported_data_shape_witness_from_reference(
     schema: &ExportedDataSchema,
     reference: &Reference,
 ) -> miette::Result<String> {
-    let data = exported_data_schema_for_reference(test_name, schema, reference)?;
+    let (_resolved_schema, data) =
+        exported_data_schema_for_reference(test_name, schema, None, reference)?;
     build_exported_data_shape_witness_from_data(test_name, schema, data)
 }
 
@@ -4204,6 +4494,7 @@ fn emit_partial_data_semantics_predicate(
                 let root_pred = build_exported_data_shape_predicates_into(
                     test_name,
                     schema,
+                    Some(inner_data_schemas),
                     shape_prefix,
                     shape_builder,
                 )
@@ -4421,6 +4712,7 @@ fn build_partial_data_semantics_predicates_into(
 /// `Data` expression. Tracks every fresh existential variable introduced
 /// for `FuzzExistential` / `Opaque` / `Let` nodes so that the caller can
 /// wrap the final expression in the appropriate `∃` binders.
+#[derive(Clone)]
 struct ShallowIrEmitCtx {
     /// Existential bindings accumulated so far: `(var_name, lean_type_str)`.
     existentials: Vec<(String, String)>,
@@ -4429,55 +4721,91 @@ struct ShallowIrEmitCtx {
     /// has been emitted globally. When a name has been used before, a numeric
     /// suffix is appended to prevent Lean variable shadowing.
     binder_counters: std::collections::HashMap<String, usize>,
+    /// Every Lean name reserved so far in this emission context.
+    used_names: std::collections::BTreeSet<String>,
+    /// Stack of logical binder names to their alpha-renamed Lean names.
+    binder_env: Vec<(String, String)>,
 }
 
 impl ShallowIrEmitCtx {
     fn new() -> Self {
+        let mut used_names = std::collections::BTreeSet::new();
+        used_names.insert("state".to_string());
+        used_names.insert("transition".to_string());
         Self {
             existentials: Vec::new(),
             fresh_counter: 0,
             binder_counters: std::collections::HashMap::new(),
+            used_names,
+            binder_env: Vec::new(),
         }
     }
 
     /// Allocate a fresh existential variable of the given `ShallowIrType`
     /// and record it. Returns the chosen variable name.
     fn fresh(&mut self, ty: &aiken_lang::test_framework::ShallowIrType) -> String {
-        let name = format!("_fuzz_{}", self.fresh_counter);
-        self.fresh_counter += 1;
-        self.existentials
-            .push((name.clone(), shallow_ir_type_to_lean(ty)));
-        name
+        loop {
+            let name = format!("_fuzz_{}", self.fresh_counter);
+            self.fresh_counter += 1;
+            if self.used_names.insert(name.clone()) {
+                self.existentials
+                    .push((name.clone(), shallow_ir_type_to_lean(ty)));
+                return name;
+            }
+        }
     }
 
-    /// Return a unique binder name for a `TransitionProp::Exists` node.
-    /// On first use of `base`, returns `base` unchanged. On every subsequent
-    /// use, returns `base_N` (where N starts at 1) so that nested `∃` binders
-    /// in the generated Lean do not shadow each other. The counter is global
-    /// across the whole definition so that names are unique even across deeply
-    /// nested branches.
     fn unique_binder(&mut self, base: &str) -> String {
-        let count = self.binder_counters.entry(base.to_string()).or_insert(0);
-        if *count == 0 {
-            *count += 1;
-            base.to_string()
-        } else {
-            let name = format!("{}_{}", base, *count);
-            *count += 1;
-            name
+        let base = if base.is_empty() { "_binder" } else { base };
+        let counter = self.binder_counters.entry(base.to_string()).or_insert(0);
+        loop {
+            let candidate = if *counter == 0 {
+                base.to_string()
+            } else {
+                format!("{base}_{}", *counter)
+            };
+            *counter += 1;
+            if self.used_names.insert(candidate.clone()) {
+                return candidate;
+            }
         }
+    }
+
+    fn push_binder(&mut self, logical: &str, emitted: &str) {
+        self.binder_env
+            .push((logical.to_string(), emitted.to_string()));
+    }
+
+    fn pop_binder(&mut self, logical: &str) {
+        if let Some(index) = self
+            .binder_env
+            .iter()
+            .rposition(|(name, _)| name == logical)
+        {
+            self.binder_env.remove(index);
+        }
+    }
+
+    fn resolve_bound_name(&self, logical: &str) -> String {
+        self.binder_env
+            .iter()
+            .rev()
+            .find_map(|(name, emitted)| (name == logical).then_some(emitted.clone()))
+            .unwrap_or_else(|| logical.to_string())
     }
 
     /// Create a forked child context that inherits the fresh counter (to avoid
     /// name collisions) but starts with an empty existentials list. Used by
     /// `EqOutput` to keep its existentials local rather than hoisting them to
-    /// the definition level. After forking, sync `fresh_counter` back:
+    /// the definition level. After forking, sync `fresh_counter` back.
     /// `self.fresh_counter = child.fresh_counter`.
     fn fork(&self) -> Self {
         Self {
             existentials: Vec::new(),
             fresh_counter: self.fresh_counter,
-            binder_counters: std::collections::HashMap::new(),
+            binder_counters: self.binder_counters.clone(),
+            used_names: self.used_names.clone(),
+            binder_env: self.binder_env.clone(),
         }
     }
 }
@@ -4492,9 +4820,9 @@ fn shallow_ir_type_to_lean(ty: &aiken_lang::test_framework::ShallowIrType) -> St
         ShallowIrType::Bool => "Bool".into(),
         ShallowIrType::ByteArray => "ByteString".into(),
         ShallowIrType::Unit => "Unit".into(),
-        ShallowIrType::String => "String".into(),
+        ShallowIrType::String => "ByteString".into(),
         ShallowIrType::Data | ShallowIrType::Unknown | ShallowIrType::Adt(_) => "Data".into(),
-        ShallowIrType::List(inner) => format!("List {}", shallow_ir_type_to_lean(inner)),
+        ShallowIrType::List(inner) => format!("List ({})", shallow_ir_type_to_lean(inner)),
         ShallowIrType::Pair(a, b) => format!(
             "({} {CROSS} {})",
             shallow_ir_type_to_lean(a),
@@ -4505,112 +4833,703 @@ fn shallow_ir_type_to_lean(ty: &aiken_lang::test_framework::ShallowIrType) -> St
     }
 }
 
+fn emit_typed_var_as_lean_data(
+    name: &str,
+    ty: &aiken_lang::test_framework::ShallowIrType,
+    ctx: &mut ShallowIrEmitCtx,
+    depth: usize,
+) -> String {
+    use aiken_lang::test_framework::ShallowIrType;
+    match ty {
+        ShallowIrType::Int => format!("Data.I {name}"),
+        ShallowIrType::Bool => format!("Data.Constr (if {name} then 1 else 0) []"),
+        ShallowIrType::ByteArray | ShallowIrType::String => format!("Data.B {name}"),
+        ShallowIrType::Data | ShallowIrType::Unknown | ShallowIrType::Adt(_) => name.to_string(),
+        ShallowIrType::Unit => "Data.Constr (0 : Integer) []".to_string(),
+        ShallowIrType::List(elem) => {
+            let elem_var = format!("x_{depth}");
+            let elem_encoder = emit_typed_var_as_lean_data(&elem_var, elem, ctx, depth + 1);
+            format!("Data.List ({name}.map (fun {elem_var} => {elem_encoder}))")
+        }
+        ShallowIrType::Pair(a, b) => {
+            let fst_var = format!("p_{depth}_1");
+            let snd_var = format!("p_{depth}_2");
+            let fst_enc = emit_typed_var_as_lean_data(&fst_var, a, ctx, depth + 1);
+            let snd_enc = emit_typed_var_as_lean_data(&snd_var, b, ctx, depth + 1);
+            format!("(let ({fst_var}, {snd_var}) := {name}; Data.List [{fst_enc}, {snd_enc}])")
+        }
+        _ => ctx.fresh(ty),
+    }
+}
+
+
+fn emit_bound_var_as_lean_data(
+    name: &str,
+    ty: &aiken_lang::test_framework::ShallowIrType,
+    ctx: &mut ShallowIrEmitCtx,
+ ) -> String {
+    emit_typed_var_as_lean_data(&ctx.resolve_bound_name(name), ty, ctx, 0)
+}
+
+fn shallow_ir_type_hint(
+    ir: &aiken_lang::test_framework::ShallowIr,
+ ) -> Option<aiken_lang::test_framework::ShallowIrType> {
+    use aiken_lang::test_framework::{ShallowConst, ShallowIr, ShallowIrType};
+
+    match ir {
+        ShallowIr::Const(ShallowConst::Int(_)) => Some(ShallowIrType::Int),
+        ShallowIr::Const(ShallowConst::Bool(_)) => Some(ShallowIrType::Bool),
+        ShallowIr::Const(ShallowConst::ByteArray(_)) => Some(ShallowIrType::ByteArray),
+        ShallowIr::Const(ShallowConst::String(_)) => Some(ShallowIrType::String),
+        ShallowIr::Const(ShallowConst::Unit) => Some(ShallowIrType::Unit),
+        ShallowIr::Var { ty, .. }
+        | ShallowIr::BoundVar { ty, .. }
+        | ShallowIr::FieldAccess { ty, .. }
+        | ShallowIr::Opaque { ty, .. }
+        | ShallowIr::FuzzExistential { kind: ty, .. } => Some(ty.clone()),
+        ShallowIr::ListLit { ty, .. } => Some(ty.clone()),
+        ShallowIr::Tuple(_)
+        | ShallowIr::Construct { .. }
+        | ShallowIr::RecordUpdate { .. }
+        | ShallowIr::BinOp { .. }
+        | ShallowIr::Let { .. }
+        | ShallowIr::If { .. }
+        | ShallowIr::Match { .. }
+        | _ => None,
+    }
+}
+
+fn emit_pair_bound_var_component_as_lean_data(
+    name: &str,
+    fst: &aiken_lang::test_framework::ShallowIrType,
+    snd: &aiken_lang::test_framework::ShallowIrType,
+    index: u64,
+    ctx: &mut ShallowIrEmitCtx,
+) -> Option<String> {
+    let resolved = ctx.resolve_bound_name(name);
+    let fst_var = format!("_pair_{}_0", resolved);
+    let snd_var = format!("_pair_{}_1", resolved);
+    let component = match index {
+        0 => emit_typed_var_as_lean_data(&fst_var, fst, ctx, 1),
+        1 => emit_typed_var_as_lean_data(&snd_var, snd, ctx, 1),
+        _ => return None,
+    };
+    Some(format!("(let ({fst_var}, {snd_var}) := {resolved}; {component})"))
+}
+
+fn exact_data_projection_fallback() -> &'static str {
+    "Data.Constr (0 : Integer) []"
+}
+
+fn emit_exact_constructor_field_projection(record_data: String, index: u64) -> String {
+    let fallback = exact_data_projection_fallback();
+    format!(
+        "(match {record_data} with | Data.Constr _ fields => (match fields.get? {index} with | some field => field | none => {fallback}) | _ => {fallback})"
+    )
+}
+
+fn try_emit_shallow_ir_as_lean_data_exact(
+    ir: &aiken_lang::test_framework::ShallowIr,
+    ctx: &mut ShallowIrEmitCtx,
+) -> Option<String> {
+    let mut preview_ctx = ctx.clone();
+    let baseline_existentials = preview_ctx.existentials.len();
+    let mut preview_log = Vec::new();
+    let out = emit_shallow_ir_as_lean_data(ir, &mut preview_ctx, &mut preview_log);
+    if preview_log.is_empty() && preview_ctx.existentials.len() == baseline_existentials {
+        *ctx = preview_ctx;
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn try_emit_shallow_ir_as_lean_bool_exact(
+    ir: &aiken_lang::test_framework::ShallowIr,
+    ctx: &mut ShallowIrEmitCtx,
+ ) -> Option<String> {
+    let mut preview_ctx = ctx.clone();
+    let baseline_existentials = preview_ctx.existentials.len();
+    let mut preview_log = Vec::new();
+    let out = emit_shallow_ir_as_lean_bool(ir, &mut preview_ctx, &mut preview_log);
+    if preview_log.is_empty() && preview_ctx.existentials.len() == baseline_existentials {
+        *ctx = preview_ctx;
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn try_emit_shallow_ir_as_lean_integer_exact(
+    ir: &aiken_lang::test_framework::ShallowIr,
+    ctx: &mut ShallowIrEmitCtx,
+ ) -> Option<String> {
+    use aiken_lang::test_framework::{ShallowBinOp, ShallowConst, ShallowIr, ShallowIrType};
+
+    match ir {
+        ShallowIr::Const(ShallowConst::Int(s)) => Some(format!("({s} : Integer)")),
+        ShallowIr::BoundVar { name, ty } if matches!(ty, ShallowIrType::Int) => {
+            Some(ctx.resolve_bound_name(name))
+        }
+        ShallowIr::Let { value, body, .. } => {
+            let mut preview_ctx = ctx.clone();
+            try_emit_shallow_ir_as_lean_data_exact(value, &mut preview_ctx)?;
+            let body_expr = try_emit_shallow_ir_as_lean_integer_exact(body, &mut preview_ctx)?;
+            *ctx = preview_ctx;
+            Some(body_expr)
+        }
+        ShallowIr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            let mut preview_ctx = ctx.clone();
+            let cond_expr = try_emit_shallow_ir_as_lean_bool_exact(cond, &mut preview_ctx)?;
+            let then_expr = try_emit_shallow_ir_as_lean_integer_exact(then_branch, &mut preview_ctx)?;
+            let else_expr = try_emit_shallow_ir_as_lean_integer_exact(else_branch, &mut preview_ctx)?;
+            *ctx = preview_ctx;
+            Some(format!("(if {cond_expr} then {then_expr} else {else_expr})"))
+        }
+        ShallowIr::Match { subject, arms } => {
+            let mut preview_ctx = ctx.clone();
+            let subject_expr = try_emit_shallow_ir_as_lean_data_exact(subject, &mut preview_ctx)?;
+            let mut tagged = Vec::new();
+            let mut default_expr = None;
+
+            for arm in arms {
+                let body_expr = try_emit_shallow_ir_as_lean_integer_exact(&arm.body, &mut preview_ctx)?;
+                match arm.tag {
+                    Some(tag) => tagged.push((tag, body_expr)),
+                    None => default_expr = Some(body_expr),
+                }
+            }
+
+            let default_expr = default_expr?;
+            let mut result = default_expr.clone();
+            for (tag, body) in tagged.into_iter().rev() {
+                result = format!("(if tag = ({tag} : Integer) then {body} else {result})");
+            }
+
+            *ctx = preview_ctx;
+            Some(format!(
+                "(match {subject_expr} with | Data.Constr tag _ => {result} | _ => {default_expr})"
+            ))
+        }
+        ShallowIr::BinOp { op, left, right } => {
+            let mut preview_ctx = ctx.clone();
+            let left_expr = try_emit_shallow_ir_as_lean_integer_exact(left, &mut preview_ctx)?;
+            let right_expr = try_emit_shallow_ir_as_lean_integer_exact(right, &mut preview_ctx)?;
+            let op_expr = match op {
+                ShallowBinOp::Add => format!("({left_expr} + {right_expr})"),
+                ShallowBinOp::Sub => format!("({left_expr} - {right_expr})"),
+                ShallowBinOp::Mul => format!("({left_expr} * {right_expr})"),
+                ShallowBinOp::Div => format!("({left_expr} / {right_expr})"),
+                ShallowBinOp::Mod => format!("({left_expr} % {right_expr})"),
+                _ => return None,
+            };
+            *ctx = preview_ctx;
+            Some(op_expr)
+        }
+        _ => None,
+    }
+}
+
+fn shallow_ir_mentions_name(
+    ir: &aiken_lang::test_framework::ShallowIr,
+    name: &str,
+) -> bool {
+    use aiken_lang::test_framework::ShallowIr;
+
+    match ir {
+        ShallowIr::Var { name: ir_name, .. } | ShallowIr::BoundVar { name: ir_name, .. } => {
+            ir_name == name
+        }
+        ShallowIr::Let { value, body, .. } => {
+            shallow_ir_mentions_name(value, name) || shallow_ir_mentions_name(body, name)
+        }
+        ShallowIr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            shallow_ir_mentions_name(cond, name)
+                || shallow_ir_mentions_name(then_branch, name)
+                || shallow_ir_mentions_name(else_branch, name)
+        }
+        ShallowIr::Match { subject, arms } => {
+            shallow_ir_mentions_name(subject, name)
+                || arms.iter().any(|arm| shallow_ir_mentions_name(&arm.body, name))
+        }
+        ShallowIr::Construct { fields, .. } | ShallowIr::Tuple(fields) => {
+            fields.iter().any(|field| shallow_ir_mentions_name(field, name))
+        }
+        ShallowIr::FieldAccess { record, .. } => shallow_ir_mentions_name(record, name),
+        ShallowIr::RecordUpdate { record, updates, .. } => {
+            shallow_ir_mentions_name(record, name)
+                || updates
+                    .iter()
+                    .any(|update| shallow_ir_mentions_name(&update.value, name))
+        }
+        ShallowIr::BinOp { left, right, .. } => {
+            shallow_ir_mentions_name(left, name) || shallow_ir_mentions_name(right, name)
+        }
+        ShallowIr::ListLit { elements, tail, .. } => {
+            elements.iter().any(|element| shallow_ir_mentions_name(element, name))
+                || tail
+                    .as_ref()
+                    .is_some_and(|tail| shallow_ir_mentions_name(tail, name))
+        }
+        ShallowIr::Const(_) | ShallowIr::FuzzExistential { .. } | ShallowIr::Opaque { .. } => false,
+        _ => false,
+}
+}
+
+fn freshen_unknown_field_projection(
+    ctx: &mut ShallowIrEmitCtx,
+    unsupported_log: &mut TransitionWideningLog,
+    message: String,
+ ) -> String {
+    use aiken_lang::test_framework::ShallowIrType;
+
+    push_widening(
+        unsupported_log,
+        TransitionWideningKind::DataFreshening,
+        message,
+    );
+    let fresh = ctx.fresh(&ShallowIrType::Data);
+    emit_bound_var_as_lean_data(&fresh, &ShallowIrType::Data, ctx)
+}
+fn emit_match_as_lean_data_exact(
+    subject: &aiken_lang::test_framework::ShallowIr,
+    arms: &[aiken_lang::test_framework::ShallowIrArm],
+    ctx: &mut ShallowIrEmitCtx,
+) -> Option<String> {
+    let mut preview_ctx = ctx.clone();
+    let subject_expr = try_emit_shallow_ir_as_lean_data_exact(subject, &mut preview_ctx)?;
+    let mut tagged = Vec::new();
+    let mut default_expr = None;
+
+    for arm in arms {
+        let body_expr = try_emit_shallow_ir_as_lean_data_exact(&arm.body, &mut preview_ctx)?;
+        match arm.tag {
+            Some(tag) => tagged.push((tag, body_expr)),
+            None => default_expr = Some(body_expr),
+        }
+    }
+
+    let default_expr = default_expr?;
+    let mut result = default_expr.clone();
+    for (tag, body) in tagged.into_iter().rev() {
+        result = format!("(if tag = ({tag} : Integer) then {body} else {result})");
+    }
+
+    *ctx = preview_ctx;
+    Some(format!(
+        "(match {subject_expr} with | Data.Constr tag _ => {result} | _ => {default_expr})"
+    ))
+}
+
+fn emit_field_projection_as_lean_data(
+    record: &aiken_lang::test_framework::ShallowIr,
+    index: u64,
+    label: &str,
+    kind: aiken_lang::test_framework::ShallowFieldAccessKind,
+    ctx: &mut ShallowIrEmitCtx,
+    unsupported_log: &mut TransitionWideningLog,
+    context: &str,
+) -> String {
+    use aiken_lang::test_framework::{ShallowFieldAccessKind, ShallowIr, ShallowIrType};
+
+    let field_kind = match kind {
+        ShallowFieldAccessKind::ConstructorField => "constructor field",
+        ShallowFieldAccessKind::ListElement => "list element",
+    };
+    let freshen = |ctx: &mut ShallowIrEmitCtx,
+                   unsupported_log: &mut TransitionWideningLog,
+                   detail: String| {
+        freshen_unknown_field_projection(
+            ctx,
+            unsupported_log,
+            format!("{context} {field_kind} `{label}` freshened: {detail}"),
+        )
+    };
+
+    match (record, kind) {
+        (ShallowIr::Construct { fields, .. }, ShallowFieldAccessKind::ConstructorField) => fields
+            .get(index as usize)
+            .map(|field| emit_shallow_ir_as_lean_data(field, ctx, unsupported_log))
+            .unwrap_or_else(|| freshen(ctx, unsupported_log, format!("index {index} out of bounds"))),
+        (ShallowIr::Tuple(elems), ShallowFieldAccessKind::ListElement) => elems
+            .get(index as usize)
+            .map(|elem| emit_shallow_ir_as_lean_data(elem, ctx, unsupported_log))
+            .unwrap_or_else(|| freshen(ctx, unsupported_log, format!("index {index} out of bounds"))),
+        (
+            ShallowIr::ListLit { elements, tail, .. },
+            ShallowFieldAccessKind::ListElement,
+        ) => {
+            if let Some(elem) = elements.get(index as usize) {
+                emit_shallow_ir_as_lean_data(elem, ctx, unsupported_log)
+            } else if tail.is_none() {
+                freshen(ctx, unsupported_log, format!("index {index} out of bounds"))
+            } else {
+                freshen(
+                    ctx,
+                    unsupported_log,
+                    "index falls into spread tail".to_string(),
+                )
+            }
+        }
+        (
+            ShallowIr::BoundVar {
+                name,
+                ty: ShallowIrType::Pair(fst, snd),
+            },
+            ShallowFieldAccessKind::ListElement,
+        ) => emit_pair_bound_var_component_as_lean_data(
+            name,
+            fst.as_ref(),
+            snd.as_ref(),
+            index,
+            ctx,
+        )
+        .unwrap_or_else(|| freshen(ctx, unsupported_log, format!("index {index} out of bounds"))),
+        (ShallowIr::RecordUpdate { record, updates, .. }, ShallowFieldAccessKind::ConstructorField) => {
+            if let Some(update) = updates.iter().find(|update| update.index == index as usize) {
+                emit_shallow_ir_as_lean_data(&update.value, ctx, unsupported_log)
+            } else {
+                emit_field_projection_as_lean_data(
+                    record,
+                    index,
+                    label,
+                    kind,
+                    ctx,
+                    unsupported_log,
+                    context,
+                )
+            }
+        }
+        (
+            record @ ShallowIr::BoundVar {
+                ty: ShallowIrType::Adt(_),
+                ..
+            },
+            ShallowFieldAccessKind::ConstructorField,
+        )
+        | (
+            record @ ShallowIr::FieldAccess {
+                ty: ShallowIrType::Adt(_),
+                ..
+            },
+            ShallowFieldAccessKind::ConstructorField,
+        ) => try_emit_shallow_ir_as_lean_data_exact(record, ctx)
+            .map(|record_data| {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::Relation,
+                    format!(
+                        "{context} {field_kind} `{label}` widened via constructor-match fallback for non-constructor or missing-field cases"
+                    ),
+                );
+                emit_exact_constructor_field_projection(record_data, index)
+            })
+            .unwrap_or_else(|| freshen(
+                ctx,
+                unsupported_log,
+                "source is not structurally known".to_string(),
+            )),
+        _ => freshen(
+            ctx,
+            unsupported_log,
+            "source is not structurally known".to_string(),
+        ),
+    }
+}
+
+
 /// Recursively emit a `ShallowIr` node as a Lean expression of type `Data`.
 ///
-/// Unrecognised / opaque constructs, as well as `FuzzExistential` leaves,
-/// are emitted as fresh `∃`-bound variables accumulated on `ctx`. The caller
-/// is expected to wrap the final expression in the corresponding binders.
+/// Any widening site must append a structured record to `unsupported_log`;
+/// otherwise the exported transition theorem can look precise while quietly
+/// introducing fresh witnesses unrelated to the source relation.
 fn emit_shallow_ir_as_lean_data(
     ir: &aiken_lang::test_framework::ShallowIr,
     ctx: &mut ShallowIrEmitCtx,
-) -> String {
-    use aiken_lang::test_framework::{ShallowConst, ShallowIr, ShallowIrType};
+    unsupported_log: &mut TransitionWideningLog,
+ ) -> String {
+    use aiken_lang::test_framework::{
+        ShallowConst, ShallowFieldAccessKind, ShallowIr, ShallowIrType,
+    };
 
     match ir {
         ShallowIr::Const(ShallowConst::Int(s)) => format!("Data.I ({s} : Integer)"),
         ShallowIr::Const(ShallowConst::Bool(true)) => "Data.Constr (1 : Integer) []".to_string(),
         ShallowIr::Const(ShallowConst::Bool(false)) => "Data.Constr (0 : Integer) []".to_string(),
         ShallowIr::Const(ShallowConst::Unit) => "Data.Constr (0 : Integer) []".to_string(),
-        ShallowIr::Const(ShallowConst::String(_)) => {
-            // No canonical Data-level encoding for strings; treat as opaque.
-            ctx.fresh(&ShallowIrType::Data)
-        }
+        ShallowIr::Const(ShallowConst::String(value)) => format!(
+            "Data.B ({})",
+            lean_bytestring_literal_from_bytes_qualified(value.as_bytes())
+        ),
         ShallowIr::Const(ShallowConst::ByteArray(hex_str)) => match hex::decode(hex_str) {
             Ok(bytes) => format!(
                 "Data.B ({})",
                 lean_bytestring_literal_from_bytes_qualified(&bytes)
             ),
-            Err(_) => ctx.fresh(&ShallowIrType::ByteArray),
+            Err(_) => {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    format!(
+                        "ByteArray literal with invalid hex freshened to opaque ByteString witness: {hex_str}"
+                    ),
+                );
+                let name = ctx.fresh(&ShallowIrType::ByteArray);
+                emit_bound_var_as_lean_data(&name, &ShallowIrType::ByteArray, ctx)
+            }
         },
-        // `Var` nodes inside ShallowIr represent either local Aiken variables or
-        // module-level function references.  Neither can be lowered to a closed
-        // `Data` expression in the Lean proof namespace — local variables are not
-        // in scope inside the generated `def`, and function references (e.g.
-        // `step : State -> Transaction -> Fuzzer<Transition>`) are not `Data`
-        // values at all.  Treating them as fresh existentials is the sound choice:
-        // it widens the set of admitted transitions (over-approximation) without
-        // introducing undefined Lean identifiers that would crash the build.
-        ShallowIr::Var { ty, .. } => ctx.fresh(ty),
-        ShallowIr::FuzzExistential { kind, .. } => ctx.fresh(kind),
-        ShallowIr::Opaque { ty, .. } => ctx.fresh(ty),
+        ShallowIr::Var { name, ty } => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::DataFreshening,
+                format!("Out-of-scope Var freshened while emitting Data: {name} : {:?}", ty),
+            );
+            let fresh = ctx.fresh(ty);
+            emit_bound_var_as_lean_data(&fresh, ty, ctx)
+        }
+        ShallowIr::BoundVar { name, ty } => emit_bound_var_as_lean_data(name, ty, ctx),
+        ShallowIr::FuzzExistential { kind, .. } => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::DataFreshening,
+                format!("FuzzExistential freshened while emitting Data: {:?}", kind),
+            );
+            let fresh = ctx.fresh(kind);
+            emit_bound_var_as_lean_data(&fresh, kind, ctx)
+        }
+        ShallowIr::Opaque { ty, reason, .. } => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::DataFreshening,
+                format!("Opaque Data node freshened: {reason}"),
+            );
+            let fresh = ctx.fresh(ty);
+            emit_bound_var_as_lean_data(&fresh, ty, ctx)
+        }
         ShallowIr::Construct { tag, fields, .. } => {
             let field_strs: Vec<String> = fields
                 .iter()
-                .map(|f| emit_shallow_ir_as_lean_data(f, ctx))
+                .map(|f| emit_shallow_ir_as_lean_data(f, ctx, unsupported_log))
                 .collect();
             format!("Data.Constr ({tag} : Integer) [{}]", field_strs.join(", "))
-        }
-        ShallowIr::Tuple(elems) if elems.len() == 2 => {
-            let a = emit_shallow_ir_as_lean_data(&elems[0], ctx);
-            let b = emit_shallow_ir_as_lean_data(&elems[1], ctx);
-            format!("Data.Constr (0 : Integer) [{a}, {b}]")
         }
         ShallowIr::Tuple(elems) => {
             let parts: Vec<String> = elems
                 .iter()
-                .map(|e| emit_shallow_ir_as_lean_data(e, ctx))
+                .map(|e| emit_shallow_ir_as_lean_data(e, ctx, unsupported_log))
                 .collect();
             format!("Data.List [{}]", parts.join(", "))
         }
-        ShallowIr::ListLit { elements, .. } => {
+        ShallowIr::ListLit { elements, tail, .. } => {
             let parts: Vec<String> = elements
                 .iter()
-                .map(|e| emit_shallow_ir_as_lean_data(e, ctx))
+                .map(|e| emit_shallow_ir_as_lean_data(e, ctx, unsupported_log))
                 .collect();
-            format!("Data.List [{}]", parts.join(", "))
+            if let Some(tail) = tail {
+                let tail_data = emit_shallow_ir_as_lean_data(tail, ctx, unsupported_log);
+                let prefix_list = if parts.is_empty() {
+                    "[]".to_string()
+                } else {
+                    format!("[{}]", parts.join(", "))
+                };
+                format!(
+                    "(match {tail_data} with | Data.List tail => Data.List ({prefix_list} ++ tail) | _ => Data.List {prefix_list})"
+                )
+            } else {
+                format!("Data.List [{}]", parts.join(", "))
+            }
         }
         ShallowIr::Let { name, value, body } => {
-            // Treat the let-bound name as an existential over Data — the `value`
-            // would otherwise have to be reified at the Data level, which we
-            // cannot always do. Introducing the name as an existential variable
-            // keeps the predicate sound (widens).
-            let _value_unused = emit_shallow_ir_as_lean_data(value, ctx);
-            let _ = name; // the name appears in subsequent `Var` nodes verbatim
-            emit_shallow_ir_as_lean_data(body, ctx)
+            if name != "_" && shallow_ir_mentions_name(body, name) {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    format!(
+                        "Let node widened while emitting Data; binding '{name}' is referenced in the body"
+                    ),
+                );
+                return ctx.fresh(&ShallowIrType::Data);
+            }
+
+            let mut preview_ctx = ctx.clone();
+            let Some(_value_expr) = try_emit_shallow_ir_as_lean_data_exact(value, &mut preview_ctx) else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    format!(
+                        "Let node widened while emitting Data; binding '{name}' not reified precisely"
+                    ),
+                );
+                return ctx.fresh(&ShallowIrType::Data);
+            };
+            let Some(body_expr) = try_emit_shallow_ir_as_lean_data_exact(body, &mut preview_ctx) else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    format!(
+                        "Let node widened while emitting Data; binding '{name}' not reified precisely"
+                    ),
+                );
+                return ctx.fresh(&ShallowIrType::Data);
+            };
+            *ctx = preview_ctx;
+            body_expr
         }
-        ShallowIr::If { .. }
-        | ShallowIr::Match { .. }
-        | ShallowIr::FieldAccess { .. }
-        | ShallowIr::RecordUpdate { .. }
-        | ShallowIr::BinOp { .. } => {
-            // These shapes don't have a direct Data-level literal form; erase
-            // to a fresh Data existential, which remains sound (widens).
+        ShallowIr::FieldAccess {
+            record,
+            index,
+            label,
+            kind,
+            ..
+        } => emit_field_projection_as_lean_data(
+            record,
+            *index,
+            label,
+            *kind,
+            ctx,
+            unsupported_log,
+            "field access",
+        ),
+        ShallowIr::RecordUpdate {
+            record,
+            tag,
+            field_count,
+            updates,
+        } => {
+            let mut fields = Vec::with_capacity(*field_count);
+            for index in 0..*field_count {
+                if let Some(update) = updates.iter().find(|update| update.index == index) {
+                    fields.push(emit_shallow_ir_as_lean_data(
+                        &update.value,
+                        ctx,
+                        unsupported_log,
+                    ));
+                } else {
+                    fields.push(emit_field_projection_as_lean_data(
+                        record,
+                        index as u64,
+                        &index.to_string(),
+                        ShallowFieldAccessKind::ConstructorField,
+                        ctx,
+                        unsupported_log,
+                        "record update",
+                    ));
+                }
+            }
+            format!("Data.Constr ({tag} : Integer) [{}]", fields.join(", "))
+        }
+        ShallowIr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            let mut preview_ctx = ctx.clone();
+            let Some(cond_expr) = try_emit_shallow_ir_as_lean_bool_exact(cond, &mut preview_ctx) else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    "If node freshened while emitting Data".to_string(),
+                );
+                return ctx.fresh(&ShallowIrType::Data);
+            };
+            let Some(then_expr) =
+                try_emit_shallow_ir_as_lean_data_exact(then_branch, &mut preview_ctx)
+            else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    "If node freshened while emitting Data".to_string(),
+                );
+                return ctx.fresh(&ShallowIrType::Data);
+            };
+            let Some(else_expr) =
+                try_emit_shallow_ir_as_lean_data_exact(else_branch, &mut preview_ctx)
+            else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    "If node freshened while emitting Data".to_string(),
+                );
+                return ctx.fresh(&ShallowIrType::Data);
+            };
+            *ctx = preview_ctx;
+            format!("(if {cond_expr} then {then_expr} else {else_expr})")
+        }
+        ShallowIr::Match { subject, arms } => {
+            if let Some(expr) = emit_match_as_lean_data_exact(subject, arms, ctx) {
+                expr
+            } else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    "Match node freshened while emitting Data",
+                );
+                ctx.fresh(&ShallowIrType::Data)
+            }
+        }
+        ShallowIr::BinOp { op, left, right } => {
+            if matches!(op, aiken_lang::test_framework::ShallowBinOp::Append) {
+                let left_data = emit_shallow_ir_as_lean_data(left, ctx, unsupported_log);
+                let right_data = emit_shallow_ir_as_lean_data(right, ctx, unsupported_log);
+                match (shallow_ir_type_hint(left), shallow_ir_type_hint(right)) {
+                    (Some(aiken_lang::test_framework::ShallowIrType::List(_)), _)
+                    | (_, Some(aiken_lang::test_framework::ShallowIrType::List(_))) => {
+                        format!(
+                            "(match {left_data}, {right_data} with | Data.List xs, Data.List ys => Data.List (xs ++ ys) | _, _ => Data.List [])"
+                        )
+                    }
+                    (Some(aiken_lang::test_framework::ShallowIrType::ByteArray), _)
+                    | (_, Some(aiken_lang::test_framework::ShallowIrType::ByteArray))
+                    | (Some(aiken_lang::test_framework::ShallowIrType::String), _)
+                    | (_, Some(aiken_lang::test_framework::ShallowIrType::String)) => {
+                        format!(
+                            "(match {left_data}, {right_data} with | Data.B xs, Data.B ys => Data.B (xs ++ ys) | _, _ => Data.B ByteString.empty)"
+                        )
+                    }
+                    _ => {
+                        push_widening(
+                            unsupported_log,
+                            TransitionWideningKind::DataFreshening,
+                            format!("BinOp node freshened while emitting Data: {:?}", op),
+                        );
+                        ctx.fresh(&ShallowIrType::Data)
+                    }
+                }
+            } else if let Some(int_expr) = try_emit_shallow_ir_as_lean_integer_exact(ir, ctx) {
+                format!("Data.I {int_expr}")
+            } else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::DataFreshening,
+                    format!("BinOp node freshened while emitting Data: {:?}", op),
+                );
+                ctx.fresh(&ShallowIrType::Data)
+            }
+        }
+        _ => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::DataFreshening,
+                "unknown ShallowIr shape freshened while emitting Data",
+            );
             ctx.fresh(&ShallowIrType::Data)
         }
-        _ => ctx.fresh(&ShallowIrType::Data),
     }
 }
 
-/// Emit a `ShallowIr` expression as a Lean `Bool`-typed expression.
-///
-/// Used to emit `IfThenElse` conditions precisely.  Only recognises shapes
-/// that have a direct `Bool` interpretation without requiring type class
-/// instances not yet confirmed to exist in the Blaster prelude:
-///   - `Const(Bool)` → `true` / `false`
-///   - `BinOp(And/Or)` over Bool operands → `(l && r)` / `(l || r)`
-///
-/// `BinOp(Eq/NotEq)` would require `DecidableEq Data` from Blaster's
-/// `PlutusCore.Data` — not yet confirmed.  Use a fresh Bool existential
-/// until the instance is verified and a `decide (l = r)` path is re-enabled.
-///
-/// All unrecognised shapes fall back to `ctx.fresh(&ShallowIrType::Bool)`.
-/// For the `IfThenElse` encoding `(cond = true ∧ t) ∨ (cond = false ∧ e)`
-/// bound under `∃ (_cond : Bool), …`, a fresh existential correctly reduces
-/// to `t ∨ e` (the previous sound over-approximation), so fallback is safe.
 fn emit_shallow_ir_as_lean_bool(
     ir: &aiken_lang::test_framework::ShallowIr,
     ctx: &mut ShallowIrEmitCtx,
-) -> String {
+    unsupported_log: &mut TransitionWideningLog,
+ ) -> String {
     use aiken_lang::test_framework::{ShallowBinOp, ShallowConst, ShallowIr, ShallowIrType};
 
     match ir {
@@ -4621,28 +5540,87 @@ fn emit_shallow_ir_as_lean_bool(
                 "false".to_string()
             }
         }
+        ShallowIr::BoundVar { name, ty } if matches!(ty, ShallowIrType::Bool) => {
+            ctx.resolve_bound_name(name)
+        }
+        ShallowIr::FieldAccess { ty, .. } if matches!(ty, ShallowIrType::Bool) => {
+            let data = emit_shallow_ir_as_lean_data(ir, ctx, unsupported_log);
+            format!("decide ({data} = Data.Constr (1 : Integer) [])")
+        }
         ShallowIr::BinOp { op, left, right } => match op {
-            // Logical composition over Bool sub-expressions — recurse.
             ShallowBinOp::And => {
-                let l = emit_shallow_ir_as_lean_bool(left, ctx);
-                let r = emit_shallow_ir_as_lean_bool(right, ctx);
+                let l = emit_shallow_ir_as_lean_bool(left, ctx, unsupported_log);
+                let r = emit_shallow_ir_as_lean_bool(right, ctx, unsupported_log);
                 format!("({l} && {r})")
             }
             ShallowBinOp::Or => {
-                let l = emit_shallow_ir_as_lean_bool(left, ctx);
-                let r = emit_shallow_ir_as_lean_bool(right, ctx);
+                let l = emit_shallow_ir_as_lean_bool(left, ctx, unsupported_log);
+                let r = emit_shallow_ir_as_lean_bool(right, ctx, unsupported_log);
                 format!("({l} || {r})")
             }
-            // Eq/NotEq: requires `DecidableEq Data` — pending Blaster
-            // prelude verification.  Fall through to fresh existential for now.
-            // TODO: once confirmed, emit `decide ({l} = {r})` / `!(decide ({l} = {r}))`.
-            //
-            // Ordered comparisons (Lt/LtEq/Gt/GtEq): `Data` has no `Ord`.
-            // Arithmetic / Append: result is not Bool.
-            _ => ctx.fresh(&ShallowIrType::Bool),
+            ShallowBinOp::Eq | ShallowBinOp::NotEq => {
+                let eq = if let (Some(l), Some(r)) = (
+                    try_emit_shallow_ir_as_lean_integer_exact(left, ctx),
+                    try_emit_shallow_ir_as_lean_integer_exact(right, ctx),
+                ) {
+                    format!("decide ({l} = {r})")
+                } else {
+                    let l = emit_shallow_ir_as_lean_data(left, ctx, unsupported_log);
+                    let r = emit_shallow_ir_as_lean_data(right, ctx, unsupported_log);
+                    format!("decide ({l} = {r})")
+                };
+                if matches!(op, ShallowBinOp::NotEq) {
+                    format!("(!{eq})")
+                } else {
+                    eq
+                }
+            }
+            ShallowBinOp::Lt | ShallowBinOp::LtEq | ShallowBinOp::Gt | ShallowBinOp::GtEq => {
+                if let (Some(l), Some(r)) = (
+                    try_emit_shallow_ir_as_lean_integer_exact(left, ctx),
+                    try_emit_shallow_ir_as_lean_integer_exact(right, ctx),
+                ) {
+                    match op {
+                        ShallowBinOp::Lt => format!("decide ({l} < {r})"),
+                        ShallowBinOp::LtEq => format!("decide ({l} <= {r})"),
+                        ShallowBinOp::Gt => format!("decide ({l} > {r})"),
+                        ShallowBinOp::GtEq => format!("decide ({l} >= {r})"),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    push_widening(
+                        unsupported_log,
+                        TransitionWideningKind::BoolFreshening,
+                        format!("unsupported BinOp {:?} freshened while emitting Bool", op),
+                    );
+                    ctx.fresh(&ShallowIrType::Bool)
+                }
+            }
+            _ => {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::BoolFreshening,
+                    format!("unsupported BinOp {:?} freshened while emitting Bool", op),
+                );
+                ctx.fresh(&ShallowIrType::Bool)
+            }
         },
-        // All other shapes fall back to a fresh Bool existential (see doc above).
-        _ => ctx.fresh(&ShallowIrType::Bool),
+        ShallowIr::Var { name, ty } => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::BoolFreshening,
+                format!("Out-of-scope Var freshened while emitting Bool: {name} : {:?}", ty),
+            );
+            ctx.fresh(&ShallowIrType::Bool)
+        }
+        _ => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::BoolFreshening,
+                format!("unsupported Bool shape freshened: {:?}", ir),
+            );
+            ctx.fresh(&ShallowIrType::Bool)
+        }
     }
 }
 
@@ -4653,9 +5631,10 @@ fn emit_shallow_ir_as_lean_bool(
 fn emit_step_fn_predicate(
     fn_name: &str,
     step_ir: &aiken_lang::test_framework::ShallowIr,
-) -> String {
+) -> (String, TransitionWideningLog) {
     let mut ctx = ShallowIrEmitCtx::new();
-    let body_expr = emit_shallow_ir_as_lean_data(step_ir, &mut ctx);
+    let mut unsupported_log = Vec::new();
+    let body_expr = emit_shallow_ir_as_lean_data(step_ir, &mut ctx, &mut unsupported_log);
 
     let mut existentials = String::new();
     for (name, ty) in &ctx.existentials {
@@ -4665,9 +5644,12 @@ fn emit_step_fn_predicate(
         ));
     }
 
-    format!(
-        "def {fn_name} (state : Data) (transition : Data) : Prop :=\n\
-         {existentials}  transition = {body_expr}\n"
+    (
+        format!(
+            "def {fn_name} (state : Data) (transition : Data) : Prop :=\n\
+             {existentials}  transition = {body_expr}\n"
+        ),
+        unsupported_log,
     )
 }
 
@@ -4746,9 +5728,10 @@ fn try_emit_step_fn_sound_as_theorem(
     // Invariant: `emit_shallow_ir_as_lean_data` is deterministic for a given
     // IR subtree; two fresh runs over the same fields produce the same names.
     let mut ctx = ShallowIrEmitCtx::new();
+    let mut unsupported_log = Vec::new();
     let mut field_exprs: Vec<String> = Vec::new();
     for field in fields {
-        let expr = emit_shallow_ir_as_lean_data(field, &mut ctx);
+        let expr = emit_shallow_ir_as_lean_data(field, &mut ctx, &mut unsupported_log);
         field_exprs.push(expr);
     }
 
@@ -4813,6 +5796,7 @@ fn describe_step_ir_shape(ir: &aiken_lang::test_framework::ShallowIr) -> &'stati
     match ir {
         ShallowIr::Const(_) => "Const",
         ShallowIr::Var { .. } => "Var",
+        ShallowIr::BoundVar { .. } => "BoundVar",
         ShallowIr::Let { .. } => "Let",
         ShallowIr::If { .. } => "If",
         ShallowIr::Match { .. } => "Match",
@@ -4836,41 +5820,363 @@ fn describe_step_ir_shape(ir: &aiken_lang::test_framework::ShallowIr) -> &'stati
 /// Every constraint that cannot be lowered is replaced by `True` (sound
 /// widening) and appended to `unsupported_log` for the audit comment block.
 ///
-/// Current status (S4): this is an intentional over-approximation — the
-/// `Pure` / `Match` / boolean-condition paths emit `True` and a log entry,
-/// so the resulting predicate is sound-but-imprecise. Phase 1 of the two-
-/// phase theorem carries a `sorry` that will be discharged in §S5 once the
+/// Current status (S4): this is still an intentional over-approximation, but
+/// the counted compromise is now surfaced structurally. `Pure` conditions emit
+/// precisely for the supported Bool subset; unsupported Bool/Data/Domain cases
+/// freshen with an explicit widening record instead of a silent `True` fallthrough.
 /// conditions have a faithful Bool encoding.
+fn transition_domain_predicate(
+    binder: &str,
+    binder_ty: &aiken_lang::test_framework::ShallowIrType,
+    domain: &aiken_lang::test_framework::FuzzerSemantics,
+    unsupported_log: &mut TransitionWideningLog,
+    domain_shapes: &mut TransitionDomainShapeState<'_>,
+) -> Option<String> {
+    use aiken_lang::test_framework::{
+        FuzzerExactValue as LangFuzzerExactValue, FuzzerSemantics as LangFuzzerSemantics,
+        ShallowIrType as LangShallowIrType,
+    };
+
+    let join_and = |parts: Vec<String>| match parts.len() {
+        0 => None,
+        1 => parts.into_iter().next(),
+        _ => Some(format!("({})", parts.join(&format!(" {AND} ", AND = lean_sym::AND)))),
+    };
+    let is_data_like = matches!(
+        binder_ty,
+        LangShallowIrType::Data | LangShallowIrType::Unknown | LangShallowIrType::Adt(_)
+    );
+
+    match domain {
+        LangFuzzerSemantics::IntRange { min, max } => {
+            let int_pred = match (min, max) {
+                (Some(min), Some(max)) => Some(format!(
+                    "({min} <= VALUE {AND} VALUE <= {max})",
+                    AND = lean_sym::AND
+                )),
+                (Some(min), None) => Some(format!("({min} <= VALUE)")),
+                (None, Some(max)) => Some(format!("(VALUE <= {max})")),
+                (None, None) => None,
+            };
+            match binder_ty {
+                LangShallowIrType::Int => int_pred.map(|pred| pred.replace("VALUE", binder)),
+                _ if is_data_like => int_pred.map(|pred| {
+                    format!(
+                        "(match {binder} with | Data.I value => {} | _ => False)",
+                        pred.replace("VALUE", "value")
+                    )
+                }),
+                _ => Some("False".to_string()),
+            }
+        }
+        LangFuzzerSemantics::ByteArrayRange { min_len, max_len } => {
+            let len_pred = match (min_len, max_len) {
+                (Some(min), Some(max)) => Some(format!(
+                    "({min} <= VALUE.length {AND} VALUE.length <= {max})",
+                    AND = lean_sym::AND
+                )),
+                (Some(min), None) => Some(format!("({min} <= VALUE.length)")),
+                (None, Some(max)) => Some(format!("(VALUE.length <= {max})")),
+                (None, None) => None,
+            };
+            match binder_ty {
+                LangShallowIrType::ByteArray | LangShallowIrType::String => {
+                    len_pred.map(|pred| pred.replace("VALUE", binder))
+                }
+                _ if is_data_like => len_pred.map(|pred| {
+                    format!(
+                        "(match {binder} with | Data.B value => {} | _ => False)",
+                        pred.replace("VALUE", "value")
+                    )
+                }),
+                _ => Some("False".to_string()),
+            }
+        }
+        LangFuzzerSemantics::List {
+            element,
+            min_len,
+            max_len,
+        } => match binder_ty {
+            LangShallowIrType::List(elem_ty) => {
+                let mut parts = Vec::new();
+                match (min_len, max_len) {
+                    (Some(min), Some(max)) => parts.push(format!(
+                        "({min} <= {binder}.length {AND} {binder}.length <= {max})",
+                        AND = lean_sym::AND
+                    )),
+                    (Some(min), None) => parts.push(format!("({min} <= {binder}.length)")),
+                    (None, Some(max)) => parts.push(format!("({binder}.length <= {max})")),
+                    (None, None) => {}
+                }
+                if let Some(elem_predicate) = transition_domain_predicate(
+                    "elem",
+                    elem_ty.as_ref(),
+                    element.as_ref(),
+                    unsupported_log,
+                    domain_shapes,
+                ) {
+                    parts.push(format!(
+                        "AikenVerify.Utils.allProp (fun elem => {elem_predicate}) {binder}"
+                    ));
+                }
+                join_and(parts)
+            }
+            _ if is_data_like => {
+                let mut parts = Vec::new();
+                match (min_len, max_len) {
+                    (Some(min), Some(max)) => parts.push(format!(
+                        "({min} <= xs.length {AND} xs.length <= {max})",
+                        AND = lean_sym::AND
+                    )),
+                    (Some(min), None) => parts.push(format!("({min} <= xs.length)")),
+                    (None, Some(max)) => parts.push(format!("(xs.length <= {max})")),
+                    (None, None) => {}
+                }
+                if let Some(elem_predicate) = transition_domain_predicate(
+                    "elem",
+                    &LangShallowIrType::Data,
+                    element.as_ref(),
+                    unsupported_log,
+                    domain_shapes,
+                ) {
+                    parts.push(format!(
+                        "AikenVerify.Utils.allProp (fun elem => {elem_predicate}) xs"
+                    ));
+                }
+                Some(format!(
+                    "(match {binder} with | Data.List xs => {} | _ => False)",
+                    join_and(parts).unwrap_or_else(|| "True".to_string())
+                ))
+            }
+            _ => Some("False".to_string()),
+        },
+        LangFuzzerSemantics::Exact(LangFuzzerExactValue::Bool(value)) => match binder_ty {
+            LangShallowIrType::Bool => Some(format!(
+                "{binder} = {}",
+                if *value { "true" } else { "false" }
+            )),
+            _ if is_data_like => Some(format!(
+                "{binder} = Data.Constr ({} : Integer) []",
+                if *value { 1 } else { 0 }
+            )),
+            _ => Some("False".to_string()),
+        },
+        LangFuzzerSemantics::Exact(LangFuzzerExactValue::ByteArray(bytes)) => {
+            let lit = lean_bytestring_literal_from_bytes_qualified(bytes);
+            match binder_ty {
+                LangShallowIrType::ByteArray | LangShallowIrType::String => {
+                    Some(format!("{binder} = {lit}"))
+                }
+                _ if is_data_like => Some(format!("{binder} = Data.B ({lit})")),
+                _ => Some("False".to_string()),
+            }
+        }
+        LangFuzzerSemantics::Exact(LangFuzzerExactValue::String(value)) => {
+            let lit = lean_bytestring_literal_from_bytes_qualified(value.as_bytes());
+            match binder_ty {
+                LangShallowIrType::String | LangShallowIrType::ByteArray => {
+                    Some(format!("{binder} = {lit}"))
+                }
+                _ if is_data_like => Some(format!("{binder} = Data.B ({lit})")),
+                _ => Some("False".to_string()),
+            }
+        }
+        LangFuzzerSemantics::OneOf(values) => {
+            let disjuncts: Vec<String> = values
+                .iter()
+                .filter_map(|value| match value {
+                    LangFuzzerExactValue::Bool(b) => Some(match binder_ty {
+                        LangShallowIrType::Bool => format!(
+                            "{binder} = {}",
+                            if *b { "true" } else { "false" }
+                        ),
+                        _ if is_data_like => format!(
+                            "{binder} = Data.Constr ({} : Integer) []",
+                            if *b { 1 } else { 0 }
+                        ),
+                        _ => "False".to_string(),
+                    }),
+                    LangFuzzerExactValue::ByteArray(bytes) => {
+                        let lit = lean_bytestring_literal_from_bytes_qualified(bytes);
+                        Some(match binder_ty {
+                            LangShallowIrType::ByteArray | LangShallowIrType::String => {
+                                format!("{binder} = {lit}")
+                            }
+                            _ if is_data_like => format!("{binder} = Data.B ({lit})"),
+                            _ => "False".to_string(),
+                        })
+                    }
+                    LangFuzzerExactValue::String(value) => {
+                        let lit = lean_bytestring_literal_from_bytes_qualified(value.as_bytes());
+                        Some(match binder_ty {
+                            LangShallowIrType::String | LangShallowIrType::ByteArray => {
+                                format!("{binder} = {lit}")
+                            }
+                            _ if is_data_like => format!("{binder} = Data.B ({lit})"),
+                            _ => "False".to_string(),
+                        })
+                    }
+                    _ => {
+                        push_widening(
+                            unsupported_log,
+                            TransitionWideningKind::Domain,
+                            "non-scalar OneOf existential domain widened to True",
+                        );
+                        None
+                    }
+                })
+                .collect();
+            if disjuncts.is_empty() {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::Domain,
+                    "empty OneOf existential domain widened to True",
+                );
+                None
+            } else {
+                Some(format!("({})", disjuncts.join(" ∨ ")))
+            }
+        }
+        LangFuzzerSemantics::Constructors { tags } => {
+            if let Some(predicate) = data_constructor_tags_predicate(binder, tags) {
+                Some(predicate)
+            } else {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::Domain,
+                    "empty constructor-tag existential domain widened to True",
+                );
+                None
+            }
+        }
+        LangFuzzerSemantics::Bool => {
+            if is_data_like {
+                Some(format!(
+                    "({binder} = Data.Constr (0 : Integer) [] ∨ {binder} = Data.Constr (1 : Integer) [])"
+                ))
+            } else {
+                None
+            }
+        }
+        LangFuzzerSemantics::String => {
+            if is_data_like {
+                Some(format!("(match {binder} with | Data.B _ => True | _ => False)"))
+            } else {
+                None
+            }
+        }
+        LangFuzzerSemantics::Data => None,
+        LangFuzzerSemantics::DataWithSchema { type_name } => domain_shapes
+            .predicate_for_data_with_schema(type_name)
+            .map(|predicate| format!("{predicate} {binder}"))
+            .or_else(|| {
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::Domain,
+                    format!("DataWithSchema<{type_name}> existential domain widened to True"),
+                );
+                None
+            }),
+        LangFuzzerSemantics::Product(items) => match binder_ty {
+            LangShallowIrType::Pair(fst_ty, snd_ty) if items.len() == 2 => {
+                let mut parts = Vec::new();
+                if let Some(predicate) = transition_domain_predicate(
+                    &format!("({binder}.1)"),
+                    fst_ty.as_ref(),
+                    &items[0],
+                    unsupported_log,
+                    domain_shapes,
+                ) {
+                    parts.push(predicate);
+                }
+                if let Some(predicate) = transition_domain_predicate(
+                    &format!("({binder}.2)"),
+                    snd_ty.as_ref(),
+                    &items[1],
+                    unsupported_log,
+                    domain_shapes,
+                ) {
+                    parts.push(predicate);
+                }
+                join_and(parts)
+            }
+            _ if is_data_like => {
+                let vars: Vec<String> = (0..items.len()).map(|i| format!("field_{i}")).collect();
+                let mut parts = Vec::new();
+                for (index, item) in items.iter().enumerate() {
+                    if let Some(predicate) = transition_domain_predicate(
+                        &vars[index],
+                        &LangShallowIrType::Data,
+                        item,
+                        unsupported_log,
+                        domain_shapes,
+                    ) {
+                        parts.push(predicate);
+                    }
+                }
+                Some(format!(
+                    "(match {binder} with | Data.List [{}] => {} | _ => False)",
+                    vars.join(", "),
+                    join_and(parts).unwrap_or_else(|| "True".to_string())
+                ))
+            }
+            _ => Some("False".to_string()),
+        },
+        LangFuzzerSemantics::Opaque { reason } => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::Domain,
+                format!("Opaque existential domain widened to True: {reason}"),
+            );
+            None
+        }
+        LangFuzzerSemantics::StateMachineTrace { .. } => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::Domain,
+                "nested state-machine domain widened to True",
+            );
+            None
+        }
+        _ => {
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::Domain,
+                "unknown existential domain widened to True",
+            );
+            None
+        }
+    }
+}
+
 fn emit_transition_prop_as_lean(
     prop: &aiken_lang::test_framework::TransitionProp,
     state_var: &str,
     transition_var: &str,
     // The variable name most recently bound by an enclosing `Exists` binder.
-    // `SubGenerator` nodes emit `__SGPFX__{name}_prop {state_var} {binding_var}`,
+    // `SubGenerator` nodes emit `__SGPFX__{name}_prop state binding_var`,
     // where `binding_var` is the fork-output variable in scope at the call site.
     binding_var: &str,
     ctx: &mut ShallowIrEmitCtx,
-    unsupported_log: &mut Vec<String>,
+    unsupported_log: &mut TransitionWideningLog,
+    domain_shapes: &mut TransitionDomainShapeState<'_>,
 ) -> String {
     use aiken_lang::test_framework::TransitionProp;
 
     match prop {
-        TransitionProp::Pure(_) => {
-            unsupported_log.push("Pure(ShallowIr) condition widened to True (S4)".to_string());
-            "True".to_string()
+        TransitionProp::Pure(ir) => {
+            let cond = emit_shallow_ir_as_lean_bool(ir, ctx, unsupported_log);
+            format!("({cond} = true)")
         }
         TransitionProp::Exists {
-            binder, ty, body, ..
+            binder,
+            ty,
+            domain,
+            body,
         } => {
             let lean_ty = shallow_ir_type_to_lean(ty);
-            // Deduplicate the binder name so that multiple `Exists` nodes with
-            // the same base name (e.g. four `_backpass_0` from four fork calls)
-            // do not shadow each other in the generated Lean. The first use of
-            // a name is kept as-is; subsequent uses get a numeric suffix
-            // (_backpass_0, _backpass_0_1, _backpass_0_2, …).
             let unique = ctx.unique_binder(binder);
-            // Pass the unique binder name as the new `binding_var` so that any
-            // `SubGenerator` node inside this body references the correct variable.
+            ctx.push_binder(binder, &unique);
             let inner = emit_transition_prop_as_lean(
                 body,
                 state_var,
@@ -4878,12 +6184,20 @@ fn emit_transition_prop_as_lean(
                 &unique,
                 ctx,
                 unsupported_log,
+                domain_shapes,
             );
-            // The `domain` field would ideally restrict the existential to
-            // the fuzzer's support, but we don't have a domain predicate
-            // emitter yet. Widening to the full type is sound.
-            // Prefix unused binders with `_` to suppress Lean 4
-            // `unused variable` warnings.  Skip if already underscored.
+            ctx.pop_binder(binder);
+            let inner = if let Some(domain_predicate) = transition_domain_predicate(
+                &unique,
+                ty,
+                domain.as_ref(),
+                unsupported_log,
+                domain_shapes,
+            ) {
+                format!("({domain_predicate} {AND} {inner})", AND = lean_sym::AND)
+            } else {
+                inner
+            };
             let printed = if unique.starts_with('_') || ident_is_used(&inner, &unique) {
                 unique.clone()
             } else {
@@ -4908,6 +6222,7 @@ fn emit_transition_prop_as_lean(
                             binding_var,
                             ctx,
                             unsupported_log,
+                            domain_shapes,
                         )
                     })
                     .collect();
@@ -4919,7 +6234,11 @@ fn emit_transition_prop_as_lean(
                 // An empty disjunction is `False`, but that would make the
                 // precondition unsatisfiable and is never useful here.
                 // Widen to `True` instead and log.
-                unsupported_log.push("empty Or(branches) widened to True (S4)".to_string());
+                push_widening(
+                    unsupported_log,
+                    TransitionWideningKind::Relation,
+                    "empty Or(branches) widened to True (S4)",
+                );
                 "True".to_string()
             } else {
                 let inner: Vec<String> = branches
@@ -4932,20 +6251,15 @@ fn emit_transition_prop_as_lean(
                             binding_var,
                             ctx,
                             unsupported_log,
+                            domain_shapes,
                         )
                     })
                     .collect();
-                format!("({})", inner.join(" \u{2228} "))
+                format!("({})", inner.join(" ∨ "))
             }
         }
         TransitionProp::IfThenElse { cond, t, e } => {
-            // Emit condition as a Lean Bool expression. Recognised shapes
-            // (BinOp Eq/NotEq/And/Or, literal Bool) are emitted precisely; all
-            // other shapes produce a fresh Bool existential `_fuzz_N`, which —
-            // when bound under `∃ (_fuzz_N : Bool), (cond = true ∧ t) ∨ (cond = false ∧ e)`
-            // — reduces logically to `t ∨ e`, the previous sound over-approximation.
-            // So fallback is always safe; precise emission is a strict improvement.
-            let cond_str = emit_shallow_ir_as_lean_bool(cond, ctx);
+            let cond_str = emit_shallow_ir_as_lean_bool(cond, ctx, unsupported_log);
             let t_prop = emit_transition_prop_as_lean(
                 t,
                 state_var,
@@ -4953,6 +6267,7 @@ fn emit_transition_prop_as_lean(
                 binding_var,
                 ctx,
                 unsupported_log,
+                domain_shapes,
             );
             let e_prop = emit_transition_prop_as_lean(
                 e,
@@ -4961,20 +6276,19 @@ fn emit_transition_prop_as_lean(
                 binding_var,
                 ctx,
                 unsupported_log,
+                domain_shapes,
             );
-            // Precise encoding: `(cond = true ∧ t) ∨ (cond = false ∧ e)`.
-            // We use `cond = true / cond = false` rather than `¬cond` because
-            // `Bool` is decidable and this form is simpler in Lean. Any fresh
-            // Bool existential introduced for `cond` is hoisted to the
-            // surrounding `isValidTransition` `∃` prefix by ShallowIrEmitCtx.
             format!(
-                "(({cond_str} = true {AND} {t_prop}) \u{2228} ({cond_str} = false {AND} {e_prop}))",
+                "(({cond_str} = true {AND} {t_prop}) ∨ ({cond_str} = false {AND} {e_prop}))",
                 AND = lean_sym::AND,
             )
         }
         TransitionProp::Match { scrutinee: _, arms } => {
-            unsupported_log
-                .push("Match scrutinee widened to disjunction over arm bodies (S4)".to_string());
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::Relation,
+                "Match scrutinee widened to disjunction over arm bodies (S4)",
+            );
             if arms.is_empty() {
                 "True".to_string()
             } else {
@@ -4988,25 +6302,20 @@ fn emit_transition_prop_as_lean(
                             binding_var,
                             ctx,
                             unsupported_log,
+                            domain_shapes,
                         )
                     })
                     .collect();
-                format!("({})", inner.join(" \u{2228} "))
+                format!("({})", inner.join(" ∨ "))
             }
         }
         TransitionProp::EqOutput(ir) => {
-            // Use a forked local context so that any fresh existentials
-            // introduced while emitting `ir` (e.g. from FieldAccess or Var
-            // nodes) stay LOCAL to this branch and do not get hoisted to the
-            // top of the surrounding `isValidTransition` definition. A top-level
-            // `∃ _fuzz_0, transition = _fuzz_0` is trivially True and makes the
-            // entire predicate vacuous; wrapping it locally preserves the
-            // structural equality while keeping the scope tight.
             let mut local = ctx.fork();
-            let rhs = emit_shallow_ir_as_lean_data(ir, &mut local);
-            ctx.fresh_counter = local.fresh_counter; // sync counter back, never names
+            let rhs = emit_shallow_ir_as_lean_data(ir, &mut local, unsupported_log);
+            ctx.fresh_counter = local.fresh_counter;
+            ctx.used_names = local.used_names.clone();
+            ctx.binder_counters = local.binder_counters.clone();
             let eq = format!("{transition_var} = {rhs}");
-            // Wrap any local existentials in outermost-first order.
             local
                 .existentials
                 .iter()
@@ -5023,16 +6332,8 @@ fn emit_transition_prop_as_lean(
                     )
                 })
         }
-        // S6: emit a reference to an opaque predicate stub using a placeholder
-        // prefix (`__SGPFX__`) that `try_generate_two_phase_proof` replaces
-        // with the actual test-scoped helper prefix at proof-file generation time.
-        // `state_var` is always `"state"` (the `isValidTransition` parameter);
-        // `binding_var` is the fork-output variable in the enclosing `Exists`.
         TransitionProp::SubGenerator { module: _, fn_name } => {
             let sanitized = sanitize_lean_ident(fn_name);
-            unsupported_log.push(format!(
-                "SubGenerator: {fn_name} (opaque predicate stub, body not inlined)"
-            ));
             format!("(__SGPFX__{sanitized}_prop {state_var} {binding_var})")
         }
         TransitionProp::Unsupported {
@@ -5043,7 +6344,11 @@ fn emit_transition_prop_as_lean(
                 .as_deref()
                 .map(|s| format!(" @ {s}"))
                 .unwrap_or_default();
-            unsupported_log.push(format!("Unsupported: {reason}{src_suffix}"));
+            push_widening(
+                unsupported_log,
+                TransitionWideningKind::Relation,
+                format!("Unsupported: {reason}{src_suffix}"),
+            );
             "True".to_string()
         }
     }
@@ -5170,12 +6475,14 @@ fn sanitize_lean_ident(s: &str) -> String {
 /// `isValidTrace` at export time.
 pub(crate) fn emit_initial_state_as_lean(
     ir: &aiken_lang::test_framework::ShallowIr,
-) -> (String, Vec<(String, String)>) {
+) -> (String, Vec<(String, String)>, TransitionWideningLog) {
     let mut ctx = ShallowIrEmitCtx::new();
-    let body = emit_shallow_ir_as_lean_data(ir, &mut ctx);
-    (body, ctx.existentials)
+    let mut unsupported_log = Vec::new();
+    let body = emit_shallow_ir_as_lean_data(ir, &mut ctx, &mut unsupported_log);
+    (body, ctx.existentials, unsupported_log)
 }
 
+#[cfg(test)]
 type TransitionDefForExport = (
     String,
     Vec<String>,
@@ -5183,31 +6490,61 @@ type TransitionDefForExport = (
     Option<(String, String)>,
 );
 
+type TransitionDefDetailsForExport = (
+    String,
+    Vec<TransitionWidening>,
+    Vec<(String, String)>,
+    Option<(String, String)>,
+);
+
+#[cfg(test)]
 /// S4/S6 — public wrapper around `emit_is_valid_transition_def` for use by
-/// `lib.rs` at export time. Returns the full Lean `def` text, the accumulated
-/// unsupported-constraint log, the list of sub-generators referenced, and
-/// the first S0002 (`ConstructorTagUnresolved`) marker found while walking
-/// the source `TransitionProp`.
-///
-/// The S0002 marker channel exists because `emit_shallow_ir_as_lean_data`
-/// silently widens any `Opaque` (including marker-bearing ones) to a fresh
-/// existential `ctx.fresh(ty)`. Without this side channel, a marker-carrying
-/// `EqOutput(Opaque{S0002})` would surface only as a generic vacuous body —
-/// caught by the structural-vacuity gate (`is_vacuous`, computed at export
-/// time via `aiken_lang::test_framework::transition_prop_is_vacuous`) in
-/// `try_generate_two_phase_proof` and routed to a *skippable*
-/// `FallbackRequired`. By extracting the marker before widening, the
-/// dispatcher can emit a hard, non-skippable `S0002` instead.
+/// tests and legacy callers that still consume the flat string log.
 pub(crate) fn emit_is_valid_transition_def_for_export(
     fn_name: &str,
     prop: &aiken_lang::test_framework::TransitionProp,
-) -> TransitionDefForExport {
-    let mut log = Vec::new();
-    let def = emit_is_valid_transition_def(fn_name, prop, &mut log);
+ ) -> TransitionDefForExport {
+    let (def, widenings, sub_gens, s0002_marker) =
+        emit_is_valid_transition_details_for_export(fn_name, prop);
+    (def, widening_messages(&widenings), sub_gens, s0002_marker)
+}
+
+/// S4/S6 — structured export helper for use by `lib.rs` at export time.
+/// Returns the full Lean `def` text, the structured widening log, the list
+/// of sub-generators referenced, and the first S0002
+/// (`ConstructorTagUnresolved`) marker found while walking the source
+/// `TransitionProp`.
+#[cfg(test)]
+pub(crate) fn emit_is_valid_transition_details_for_export(
+    fn_name: &str,
+    prop: &aiken_lang::test_framework::TransitionProp,
+ ) -> TransitionDefDetailsForExport {
+    emit_is_valid_transition_details_for_export_with_schemas(
+        fn_name,
+        prop,
+        "transition_prop",
+        &BTreeMap::new(),
+    )
+}
+
+pub(crate) fn emit_is_valid_transition_details_for_export_with_schemas(
+    fn_name: &str,
+    prop: &aiken_lang::test_framework::TransitionProp,
+    test_name: &str,
+    inner_data_schemas: &BTreeMap<String, ExportedDataSchema>,
+) -> TransitionDefDetailsForExport {
+    let mut widenings = Vec::new();
+    let mut domain_shapes = TransitionDomainShapeState::enabled(
+        test_name,
+        format!("{fn_name}_shape"),
+        inner_data_schemas,
+    );
+    let mut def = emit_is_valid_transition_def(fn_name, prop, &mut widenings, &mut domain_shapes);
+    let domain_defs = domain_shapes.take_definitions();
+    if !domain_defs.trim().is_empty() {
+        def = format!("{domain_defs}\n\n{def}");
+    }
     let sub_gens = aiken_lang::test_framework::collect_sub_generators_from_prop(prop);
-    // Commit 18: typed-payload migration — pull the `(ctor, type_name)` pair
-    // directly out of the typed `OpaqueCode::ConstructorTagUnresolved` variant
-    // rather than parsing a `S0002:…` string prefix off `Opaque.reason`.
     let s0002_marker = aiken_lang::test_framework::find_first_typed_opaque_in_transition_prop(prop)
         .and_then(|code| match code {
             aiken_lang::test_framework::OpaqueCode::ConstructorTagUnresolved {
@@ -5216,7 +6553,7 @@ pub(crate) fn emit_is_valid_transition_def_for_export(
             } => Some((ctor, type_name)),
             _ => None,
         });
-    (def, log, sub_gens, s0002_marker)
+    (def, widenings, sub_gens, s0002_marker)
 }
 
 /// S4 — emit the full body of `isValidTransition` (existentials + body)
@@ -5224,7 +6561,8 @@ pub(crate) fn emit_is_valid_transition_def_for_export(
 fn emit_is_valid_transition_def(
     fn_name: &str,
     prop: &aiken_lang::test_framework::TransitionProp,
-    unsupported_log: &mut Vec<String>,
+    unsupported_log: &mut TransitionWideningLog,
+    domain_shapes: &mut TransitionDomainShapeState<'_>,
 ) -> String {
     let mut ctx = ShallowIrEmitCtx::new();
     // Initial `binding_var` is `"transition"` — the top-level output of the
@@ -5237,6 +6575,7 @@ fn emit_is_valid_transition_def(
         "transition",
         &mut ctx,
         unsupported_log,
+        domain_shapes,
     );
 
     let mut existentials = String::new();
@@ -5258,38 +6597,24 @@ fn emit_is_valid_transition_def(
 /// Phase 1 (`_valid_input`) is proved by construction once `isValidScriptContext`
 /// is defined as the image of `isValidTrace` under `packTrace` (see §S5). The
 /// term proof `fun trace h => ⟨trace, h, rfl⟩` witnesses the existential trivially.
+/// S5 — emit the universal halt theorem over exact traces.
 ///
-/// Phase 2 (`_halts`) — the CEK halting obligation — remains `sorry`-closed and
-/// is an open research item. Discharging it universally requires relating the
-/// structural validity of the packed Data form to the CEK execution semantics of
-/// the UPLC validator, which goes beyond what Blaster can handle today (S6+).
+/// For supported `scenario.ok(...)` proofs we ultimately need the theorem over
+/// traces, not an intermediate existential `ScriptContext` image theorem. The
+/// direct trace theorem keeps the quantified object concrete (`trace : List Data`)
+/// and avoids the extra existential layer in `isValidScriptContext`, which is
+/// friendlier to Blaster while still expressing the exact property we want.
 fn emit_two_phase_halt_theorems(
     helper_prefix: &str,
     lean_test_name: &str,
     verify_prog: &str,
 ) -> String {
     format!(
-        "-- Phase 1: provable by construction — isValidScriptContext is the image of isValidTrace.\n\
-         theorem {lean_test_name}_valid_input :\n  \
+        "theorem {lean_test_name} :\n  \
            {FORALL} (trace : List Data),\n    \
            {helper_prefix}_isValidTrace trace {IMPLIES}\n    \
-           {helper_prefix}_isValidScriptContext ({helper_prefix}_packTrace trace) :=\n  \
-           fun trace h => \u{27E8}trace, h, rfl\u{27E9}\n\n\
-         -- Phase 2: CEK halting obligation (currently unprovable as stated).\n\
-         -- This theorem cannot be discharged until packTrace has a concrete definition\n\
-         -- encoding the validator's ScriptContext schema, enabling isValidScriptContext\n\
-         -- to be related to the CEK machine execution semantics.  See §S6.\n\
-         theorem {lean_test_name}_halts :\n  \
-           {FORALL} (x : Data),\n    \
-           {helper_prefix}_isValidScriptContext x {IMPLIES}\n    \
-           proveTestsHalt {verify_prog} (dataArg x) := by\n  \
-           sorry -- UNPROVABLE until packTrace is concretely defined; see §S6\n\n\
-         -- Composition: Phase 1 + Phase 2 → final halting claim.\n\
-         theorem {lean_test_name} :\n  \
-           {FORALL} (trace : List Data),\n    \
-           {helper_prefix}_isValidTrace trace {IMPLIES}\n    \
-           proveTestsHalt {verify_prog} (dataArg ({helper_prefix}_packTrace trace)) :=\n  \
-           fun trace hv => {lean_test_name}_halts _ ({lean_test_name}_valid_input _ hv)\n",
+           proveTestsHalt {verify_prog} (dataArg ({helper_prefix}_packTrace trace)) := by\n  \
+           blaster\n",
         FORALL = lean_sym::FORALL,
         IMPLIES = lean_sym::IMPLIES,
     )
@@ -5342,6 +6667,8 @@ fn build_state_machine_trace_reachability_helpers(
     shape_builder: &mut LeanDataShapeBuilder,
     shape_prefix: &str,
     step_function_ir: Option<&aiken_lang::test_framework::ShallowIr>,
+    transition_prop: Option<&crate::export::ExportedTransitionProp>,
+    initial_state_ir: Option<&aiken_lang::test_framework::ShallowIr>,
 ) -> miette::Result<(String, String)> {
     let label_index = transition_semantics.label_field_index;
     let next_state_index = transition_semantics.next_state_field_index;
@@ -5359,81 +6686,8 @@ fn build_state_machine_trace_reachability_helpers(
         ));
     }
 
-    let (state_predicate, state_defs) = build_partial_data_semantics_predicates_into(
-        &format!("{helper_prefix}_state"),
-        transition_semantics.state_semantics.as_ref(),
-        test_name,
-        inner_data_schemas,
-        shape_builder,
-        shape_prefix,
-    )?;
-    let (label_predicate, label_defs) = build_partial_data_semantics_predicates_into(
-        &format!("{helper_prefix}_label"),
-        transition_semantics.label_semantics.as_ref(),
-        test_name,
-        inner_data_schemas,
-        shape_builder,
-        shape_prefix,
-    )?;
-    let (event_predicate, event_defs) = build_partial_data_semantics_predicates_into(
-        &format!("{helper_prefix}_event"),
-        transition_semantics.event_semantics.as_ref(),
-        test_name,
-        inner_data_schemas,
-        shape_builder,
-        shape_prefix,
-    )?;
-
     let mut helper_blocks = Vec::new();
-    helper_blocks.push(state_defs);
-    helper_blocks.push(label_defs);
-    helper_blocks.push(event_defs);
-
-    let mut step_input_predicates = Vec::new();
-    for (index, semantics) in transition_semantics.step_input_semantics.iter().enumerate() {
-        let (predicate, defs) = build_partial_data_semantics_predicates_into(
-            &format!("{helper_prefix}_step_input_{index}"),
-            semantics,
-            test_name,
-            inner_data_schemas,
-            shape_builder,
-            shape_prefix,
-        )?;
-        step_input_predicates.push(predicate);
-        helper_blocks.push(defs);
-    }
-
-    // TODO(4.2): `step_inputs_satisfiable` is a global flag asserting that *some*
-    // satisfying step input exists for each step-input predicate. The `step_relation`
-    // then conjoins this flag with per-transition field predicates. This is sound
-    // (over-approximation: we assume any step is satisfiable when the flag holds)
-    // but imprecise -- it doesn't tie a specific transition to a concrete satisfying
-    // step input. The full fix requires either:
-    //   (a) Nested existentials in Lean: quantify over step inputs within each
-    //       `step_relation` invocation so the SMT solver must find a witness per
-    //       transition, not just globally. This makes the proof obligations harder
-    //       for Blaster/Z3 to discharge.
-    //   (b) Pre-computing witnesses in Rust: for each transition, find a concrete
-    //       step-input value satisfying the predicate and embed it as a Lean witness
-    //       hint. This requires constraint solving at Rust codegen time.
-    // Both approaches are significantly harder than the current design. The current
-    // approach is acceptable for soundness -- it only widens the set of provable
-    // traces, never narrows it.
-    let step_inputs_satisfiable = format!("{helper_prefix}_step_inputs_satisfiable");
-    let step_input_parts: Vec<String> = step_input_predicates
-        .iter()
-        .enumerate()
-        .map(|(index, predicate)| {
-            format!(
-                "({EXISTS} step_input_{index}, {predicate} step_input_{index})",
-                EXISTS = lean_sym::EXISTS,
-            )
-        })
-        .collect();
-    helper_blocks.push(format!(
-        "def {step_inputs_satisfiable} : Prop := {}\n",
-        lean_prop_conjunction(&step_input_parts)
-    ));
+    let mut cached_state_predicate: Option<String> = None;
 
     let terminal_predicate = format!("{helper_prefix}_trace_is_terminal");
     let label_field = format!("{helper_prefix}_trace_step_label");
@@ -5461,32 +6715,84 @@ fn build_state_machine_trace_reachability_helpers(
         "def {event_field} : Data -> Option Data\n  | Data.Constr tag fields =>\n      if tag = {} then fields.get? {} else none\n  | _ => none\n",
         transition_semantics.step_tag, event_index
     ));
+
+    let exact_initial_state_expr = transition_prop
+        .and_then(|tp| tp.initial_state_lean.clone())
+        .or_else(|| {
+            initial_state_ir.and_then(|ir| {
+                let (body, existentials, widenings) = emit_initial_state_as_lean(ir);
+                if existentials.is_empty() && widenings.is_empty() {
+                    Some(body)
+                } else {
+                    None
+                }
+            })
+        });
+
+    let mut precise_step_relation_parts: Vec<String> = Vec::new();
+
+    if let Some(tp) = transition_prop {
+        if let Some((ctor, type_name)) = tp.s0002_marker.as_ref() {
+            return Err(miette::Report::new(error_catalogue::unsupported(
+                "S0002",
+                UnsupportedReason::ConstructorTagUnresolved {
+                    test_name: test_name.to_string(),
+                    ctor: ctor.clone(),
+                    type_name: type_name.clone(),
+                },
+            )));
+        }
+
+        if !tp.opaque_sub_generators.is_empty() {
+            let (first_module, first_fn) = &tp.opaque_sub_generators[0];
+            return Err(miette::Report::new(error_catalogue::unsupported(
+                "E0018",
+                UnsupportedReason::OpaqueSubgeneratorStub {
+                    test_name: test_name.to_string(),
+                    sub_generator: format!("{first_module}::{first_fn}"),
+                },
+            )));
+        }
+
+        let is_valid_transition_name = format!("{helper_prefix}_is_valid_transition");
+        let sg_prefix = format!("{helper_prefix}_");
+        let is_valid_transition_def = tp
+            .is_valid_transition_def
+            .replace("__FN__", &is_valid_transition_name)
+            .replace("__SGPFX__", &sg_prefix);
+        let theorem_widenings = transition_prop_widenings(tp);
+        if !theorem_widenings.is_empty() {
+            helper_blocks.push(format!(
+                "-- transition audit: {} dropped or widened constraints while lowering the step relation\n",
+                theorem_widenings.len()
+            ));
+            for widening in &theorem_widenings {
+                helper_blocks.push(format!("--   {}\n", widening.message));
+            }
+        }
+        helper_blocks.push(is_valid_transition_def);
+        if !tp.is_vacuous {
+            precise_step_relation_parts.push(format!("{is_valid_transition_name} state transition"));
+        }
+    }
+
     if let Some(ir) = step_function_ir {
-        // S0002 dispatch: if the step IR carries the constructor-tag-unresolved
-        // marker emitted by `aiken_lang::test_framework::resolve_constructor_tag`
-        // — at the top level or nested inside structural wrappers like
-        // `Construct { fields: [..., Opaque{S0002}, ...] }` — raise a hard
-        // `ConstructorTagUnresolved` error. We pre-empt the generic S0001
-        // (`StepFnSoundAxiomEmitted`) path below so the user sees the *root
-        // cause* (an unresolved constructor) rather than the downstream
-        // symptom (a non-Construct top-level shape, or a buried-marker
-        // emit that silently widens to a fresh existential).
         if let Some(report) = try_dispatch_s0002_from_shallow_ir(test_name, ir) {
             return Err(report);
         }
 
-        // ShallowIr-derived step predicate: tight, SMT-tractable encoding
-        // of the step function body. Subsumes the structural `state_shape`,
-        // `label_shape`, `event_shape`, and `step_inputs_satisfiable`
-        // approximations that the fallback branch below otherwise conjoins.
         let step_fn_name = format!("{helper_prefix}_step_fn");
-        let step_fn_def = emit_step_fn_predicate(&step_fn_name, ir);
+        let (step_fn_def, step_fn_widenings) = emit_step_fn_predicate(&step_fn_name, ir);
+        if let Some(summary) = widening_summary_suffix(&step_fn_widenings, false, &[]) {
+            return Err(generation_error(
+                GenerationErrorCategory::FallbackRequired,
+                format!(
+                    "Test '{test_name}': step-function helper emission widened the theorem ({summary}); refusing to emit an unaudited state-machine proof.",
+                ),
+            ));
+        }
         helper_blocks.push(step_fn_def);
 
-        // Emit `_sound` as a proved theorem when the step IR is a top-level
-        // Construct with the expected step_tag (the common case); otherwise
-        // produce a hard `S0001` error rather than emit a trusted axiom that
-        // would be logically inconsistent for non-Construct shapes.
         let sound_block = match try_emit_step_fn_sound_as_theorem(
             &step_fn_name,
             ir,
@@ -5510,16 +6816,78 @@ fn build_state_machine_trace_reachability_helpers(
             }
         };
         helper_blocks.push(sound_block);
+        precise_step_relation_parts.push(format!("{step_fn_name} state transition"));
+    }
 
+    if !precise_step_relation_parts.is_empty() {
+        let mut step_relation_parts = precise_step_relation_parts;
+        step_relation_parts.push(format!("{label_field} transition = some label"));
+        step_relation_parts.push(format!("{next_state_field} transition = some nextState"));
+        step_relation_parts.push(format!("{event_field} transition = some event"));
         helper_blocks.push(format!(
-            "def {step_relation} (state transition nextState label event : Data) : Prop :=\n  \
-             {step_fn_name} state transition {AND}\n  \
-             {label_field} transition = some label {AND}\n  \
-             {next_state_field} transition = some nextState {AND}\n  \
-             {event_field} transition = some event\n",
-            AND = lean_sym::AND,
+            "def {step_relation} (state transition nextState label event : Data) : Prop :=\n  {}\n",
+            lean_prop_conjunction(&step_relation_parts)
         ));
     } else {
+        let (state_predicate, state_defs) = build_partial_data_semantics_predicates_into(
+            &format!("{helper_prefix}_state"),
+            transition_semantics.state_semantics.as_ref(),
+            test_name,
+            inner_data_schemas,
+            shape_builder,
+            shape_prefix,
+        )?;
+        let (label_predicate, label_defs) = build_partial_data_semantics_predicates_into(
+            &format!("{helper_prefix}_label"),
+            transition_semantics.label_semantics.as_ref(),
+            test_name,
+            inner_data_schemas,
+            shape_builder,
+            shape_prefix,
+        )?;
+        let (event_predicate, event_defs) = build_partial_data_semantics_predicates_into(
+            &format!("{helper_prefix}_event"),
+            transition_semantics.event_semantics.as_ref(),
+            test_name,
+            inner_data_schemas,
+            shape_builder,
+            shape_prefix,
+        )?;
+        helper_blocks.push(state_defs);
+        helper_blocks.push(label_defs);
+        helper_blocks.push(event_defs);
+        cached_state_predicate = Some(state_predicate.clone());
+
+        let mut step_input_predicates = Vec::new();
+        for (index, semantics) in transition_semantics.step_input_semantics.iter().enumerate() {
+            let (predicate, defs) = build_partial_data_semantics_predicates_into(
+                &format!("{helper_prefix}_step_input_{index}"),
+                semantics,
+                test_name,
+                inner_data_schemas,
+                shape_builder,
+                shape_prefix,
+            )?;
+            step_input_predicates.push(predicate);
+            helper_blocks.push(defs);
+        }
+
+        let step_inputs_satisfiable = format!("{helper_prefix}_step_inputs_satisfiable");
+        let step_input_parts: Vec<String> = step_input_predicates
+            .iter()
+            .enumerate()
+            .map(|(index, predicate)| {
+                format!(
+                    "({EXISTS} step_input_{index}, {predicate} step_input_{index})",
+                    EXISTS = lean_sym::EXISTS,
+                )
+            })
+            .collect();
+        helper_blocks.push(format!(
+            "def {step_inputs_satisfiable} : Prop := {}\n",
+            lean_prop_conjunction(&step_input_parts)
+        ));
+
         helper_blocks.push(format!(
             "def {step_relation} (state transition nextState label event : Data) : Prop :=\n  {state_predicate} state {AND}\n  {state_predicate} nextState {AND}\n  {label_predicate} label {AND}\n  {event_predicate} event {AND}\n  {step_inputs_satisfiable} {AND}\n  {label_field} transition = some label {AND}\n  {next_state_field} transition = some nextState {AND}\n  {event_field} transition = some event\n",
             AND = lean_sym::AND,
@@ -5536,11 +6904,34 @@ fn build_state_machine_trace_reachability_helpers(
             helper_blocks.push(format!(
                 "def {output_projection} (events : List Data) : Data := Data.List events\n"
             ));
-            helper_blocks.push(format!(
-                "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState trace events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace events {AND}\n    x = {output_projection} events\n",
-                AND = lean_sym::AND,
-                EXISTS = lean_sym::EXISTS,
-            ));
+            if let Some(initial_state_expr) = exact_initial_state_expr.as_ref() {
+                helper_blocks.push(format!(
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} trace, events,\n    {reachable_from} ({initial_state_expr}) trace events {AND}\n    x = {output_projection} events\n",
+                    EXISTS = lean_sym::EXISTS,
+                    AND = lean_sym::AND,
+                ));
+            } else {
+                let state_predicate = if let Some(name) = cached_state_predicate.clone() {
+                    name
+                } else {
+                    let (name, defs) = build_partial_data_semantics_predicates_into(
+                        &format!("{helper_prefix}_state"),
+                        transition_semantics.state_semantics.as_ref(),
+                        test_name,
+                        inner_data_schemas,
+                        shape_builder,
+                        shape_prefix,
+                    )?;
+                    helper_blocks.push(defs);
+                    cached_state_predicate = Some(name.clone());
+                    name
+                };
+                helper_blocks.push(format!(
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState, trace, events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace events {AND}\n    x = {output_projection} events\n",
+                    EXISTS = lean_sym::EXISTS,
+                    AND = lean_sym::AND,
+                ));
+            }
         }
         StateMachineAcceptance::AcceptsFailure => {
             helper_blocks.push(format!(
@@ -5551,11 +6942,34 @@ fn build_state_machine_trace_reachability_helpers(
             helper_blocks.push(format!(
                 "def {output_projection} (labels events : List Data) : Data :=\n  Data.List [Data.List labels, Data.List events]\n"
             ));
-            helper_blocks.push(format!(
-                "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState trace labels events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace labels events {AND}\n    x = {output_projection} labels events\n",
-                AND = lean_sym::AND,
-                EXISTS = lean_sym::EXISTS,
-            ));
+            if let Some(initial_state_expr) = exact_initial_state_expr.as_ref() {
+                helper_blocks.push(format!(
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} trace, labels, events,\n    {reachable_from} ({initial_state_expr}) trace labels events {AND}\n    x = {output_projection} labels events\n",
+                    EXISTS = lean_sym::EXISTS,
+                    AND = lean_sym::AND,
+                ));
+            } else {
+                let state_predicate = if let Some(name) = cached_state_predicate.clone() {
+                    name
+                } else {
+                    let (name, defs) = build_partial_data_semantics_predicates_into(
+                        &format!("{helper_prefix}_state"),
+                        transition_semantics.state_semantics.as_ref(),
+                        test_name,
+                        inner_data_schemas,
+                        shape_builder,
+                        shape_prefix,
+                    )?;
+                    helper_blocks.push(defs);
+                    cached_state_predicate = Some(name.clone());
+                    name
+                };
+                helper_blocks.push(format!(
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState, trace, labels, events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace labels events {AND}\n    x = {output_projection} labels events\n",
+                    EXISTS = lean_sym::EXISTS,
+                    AND = lean_sym::AND,
+                ));
+            }
         }
     }
 
@@ -5642,6 +7056,7 @@ fn try_generate_state_machine_trace_proof_from_semantics(
         transition_semantics,
         output_semantics,
         step_function_ir,
+        initial_state_shallow_ir,
         ..
     } = &test.semantics
     else {
@@ -5668,6 +7083,27 @@ fn try_generate_state_machine_trace_proof_from_semantics(
             },
         ));
     }
+
+    if is_state_machine_trace_halt_test(test)
+        && test
+            .transition_prop_lean
+            .as_ref()
+            .is_some_and(|tp| !tp.opaque_sub_generators.is_empty())
+    {
+        let (first_module, first_fn) = &test
+            .transition_prop_lean
+            .as_ref()
+            .expect("checked above")
+            .opaque_sub_generators[0];
+        return Err(miette::Report::new(error_catalogue::unsupported(
+            "E0018",
+            UnsupportedReason::OpaqueSubgeneratorStub {
+                test_name: test.name.clone(),
+                sub_generator: format!("{first_module}::{first_fn}"),
+            },
+        )));
+    }
+
 
     // FallbackRequired: if the state-machine output domain transitively
     // contains an opaque fuzzer semantic (e.g. `List<Transaction>` where the
@@ -5707,6 +7143,7 @@ fn try_generate_state_machine_trace_proof_from_semantics(
     let root_predicate = build_exported_data_shape_predicates_into(
         &test.name,
         schema,
+        Some(&test.inner_data_schemas),
         &helper_prefix,
         &mut shape_builder,
     )?;
@@ -5728,6 +7165,8 @@ fn try_generate_state_machine_trace_proof_from_semantics(
             &mut shape_builder,
             &helper_prefix,
             step_function_ir.as_ref(),
+            test.transition_prop_lean.as_ref(),
+            initial_state_shallow_ir.as_ref(),
         )?;
     // Finalize all shape predicates once, after every contributing section
     // has had a chance to populate the builder.
@@ -7399,8 +8838,10 @@ fn build_direct_header(
     let prog = prog_name(test_id);
     let handler_prog = format!("handler_{}", prog);
     let mut s = format!(
-        "import AikenVerify.Utils\nimport PlutusCore.UPLC.ScriptEncoding\nimport Blaster\n\n\
-         namespace {lean_module}\n"
+        "import AikenVerify.Utils\nimport PlutusCore.Integer\nimport PlutusCore.ByteString\nimport PlutusCore.UPLC.ScriptEncoding\nimport Blaster\n\n\
+         namespace {lean_module}\n\
+         open PlutusCore.Integer (Integer)\n\
+         open PlutusCore.ByteString (ByteString)\n"
     );
     if !extra_opens.is_empty() {
         s.push_str(extra_opens);
@@ -7543,6 +8984,23 @@ fn try_generate_two_phase_proof(
             },
         )));
     }
+    let theorem_widenings = transition_prop_widenings(tp);
+    let disallowed_widenings = disallowed_production_widening_counts(
+        &theorem_widenings,
+        allow_vacuous_subgenerators,
+        &tp.opaque_sub_generators,
+    );
+    if !disallowed_widenings.is_empty() {
+        return Err(generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            format!(
+                "Test '{}': two-phase proof would rely on disallowed widenings ({}); refusing universal proof until the transition relation is exact.",
+                test.name,
+                render_widening_counts(&disallowed_widenings),
+            ),
+        ));
+    }
+
 
     let helper_prefix = format!("{lean_test_name}_s4");
     let is_valid_transition_name = format!("{helper_prefix}_isValidTransition");
@@ -7562,21 +9020,27 @@ fn try_generate_two_phase_proof(
         "open PlutusCore.Data (Data)\nopen PlutusCore.ByteString (ByteString)\nopen PlutusCore.Integer (Integer)\nopen PlutusCore.UPLC.CekMachine (State cekExecuteProgram)",
     );
 
-    content.push_str("set_option maxRecDepth 16384\n\n");
+    content.push_str("set_option maxRecDepth 16384\nset_option maxHeartbeats 2000000\n\n");
 
     // S4 audit: log every constraint that was dropped or widened during
-    // `TransitionProp` → Lean lowering. Each entry widens the
-    // `isValidTransition` precondition; the final proof is sound but
-    // strictly weaker than a faithful translation.
+    // transition/helper lowering. Each entry widens the generated theorem's
+    // preconditions; the proof is sound but strictly weaker than a faithful
+    // translation.
+    let audit_counts = widening_category_counts(
+        &theorem_widenings,
+        allow_vacuous_subgenerators,
+        &tp.opaque_sub_generators,
+    );
+    let audit_total: usize = audit_counts.values().sum();
     content.push_str(&format!(
-        "-- S4 AUDIT: {} constraints dropped or widened during TransitionProp lowering (sound over-approximation).\n\
-         -- Each dropped constraint widens the isValidTransition precondition.\n",
-        tp.unsupported_log.len()
+        "-- S4 AUDIT: {} constraints dropped or widened during transition/helper lowering (sound over-approximation).\n\
+         -- Each dropped constraint widens the generated theorem's preconditions.\n",
+        audit_total
     ));
-    if !tp.unsupported_log.is_empty() {
-        content.push_str("-- Dropped constraints:\n");
-        for reason in &tp.unsupported_log {
-            content.push_str(&format!("--   {reason}\n"));
+    if !theorem_widenings.is_empty() {
+        content.push_str("-- Dropped or widened constraints:\n");
+        for widening in &theorem_widenings {
+            content.push_str(&format!("--   {}\n", widening.message));
         }
     }
     content.push('\n');
@@ -7968,53 +9432,35 @@ fn generate_proof_file(
             );
         });
     }
-    if !two_phase_disabled
-        && let Some(content) = try_generate_two_phase_proof(
+    if !two_phase_disabled {
+        match try_generate_two_phase_proof(
             test,
             lean_test_name,
             &verify_prog,
             &direct_header,
             &footer,
             allow_vacuous_subgenerators,
-        )?
-    {
-        // The two-phase halt proof closes Phase 1 by construction but
-        // currently leaves Phase 2 (the CEK halt obligation) as `sorry`.
-        // Tag the entry so downstream reporting surfaces `Partial` rather
-        // than the misleading `Proved` verdict.
-        //
-        // H4: when the debug-only `--allow-vacuous-subgenerators` flag
-        // is on AND this test's TransitionProp references opaque
-        // sub-generators, escalate the partial note to also call out
-        // the sub-generator widening.  The Lean file already emits
-        // each widened sub-generator explicitly with `def := fun _ _ => True`
-        // and the `[WIDENED: sub-generator stubbed]` comment, but the
-        // surfaced caveat note is what downstream reporting (and the
-        // verify summary) consumes — without it a debug-mode run on a
-        // sub-generator-using test would look identical to a normal
-        // two-phase run, hiding the soundness compromise.
-        // Commit 18 (folds C12 #8): clarified guard. The test escalates
-        // the partial-note text iff (a) debug-mode is on and (b) the
-        // TransitionProp actually references opaque sub-generators
-        // (i.e. `opaque_sub_generators` is non-empty). The previous
-        // `map(is_empty) -> Some(false)` shape inverted the condition
-        // through two layers and was hard to read at a glance.
-        let has_opaque_sub_generators = test
-            .transition_prop_lean
-            .as_ref()
-            .is_some_and(|tp| !tp.opaque_sub_generators.is_empty());
-        let caveat_note = if allow_vacuous_subgenerators && has_opaque_sub_generators {
-            format!("{TWO_PHASE_PARTIAL_NOTE}; opaque sub-generator stubbed to True")
-        } else {
-            TWO_PHASE_PARTIAL_NOTE.to_string()
-        };
-        ensure_equivalence_has_universal_proof(
-            target,
-            &test.name,
-            "the selected state-machine halt proof is still partial (`sorry`-closed)",
-            "Equivalence mode requires a fully discharged universal theorem on both programs.",
-        )?;
-        return Ok((content, ProofCaveat::Partial(caveat_note)));
+        ) {
+            Ok(Some(content)) => {
+                if allow_vacuous_subgenerators
+                    && test
+                        .transition_prop_lean
+                        .as_ref()
+                        .is_some_and(|tp| !tp.opaque_sub_generators.is_empty())
+                {
+                    return Ok((
+                        content,
+                        ProofCaveat::Partial("opaque sub-generator stubbed to True".to_string()),
+                    ));
+                }
+                return Ok((content, ProofCaveat::None));
+            }
+            Ok(None) => {}
+            Err(e) if is_state_machine_trace_halt_test(test) && test.transition_prop_lean.is_some() => {
+                return Err(e);
+            }
+            Err(e) => return Err(e),
+        }
     }
 
     // Intercept state-machine trace halt tests. The universal theorem
@@ -8061,44 +9507,6 @@ fn generate_proof_file(
     // not surface there. If observability of M6 in the witness path
     // matters, instrument a sibling counter rather than promoting M6
     // to a hard error here (which would defeat the witness fallback).
-    if is_state_machine_trace_halt_test(test)
-        && !has_step_ir
-        && !test.concrete_halt_witnesses.is_empty()
-    {
-        ensure_equivalence_has_universal_proof(
-            target,
-            &test.name,
-            "the selected state-machine halt path only has witness-only proofs",
-            "Equivalence mode requires a fully universal theorem rather than concrete witnesses.",
-        )?;
-
-        return generate_state_machine_halt_proof_file(
-            test,
-            lean_test_name,
-            &verify_prog,
-            &direct_header,
-            &footer,
-        )
-        .map(|content| {
-            let instances = test.concrete_halt_witnesses.len();
-            let witnesses = test.concrete_halt_witnesses.clone();
-            let plural = if instances == 1 { "" } else { "es" };
-            (
-                content,
-                ProofCaveat::Witness(WitnessProofNote {
-                    instances,
-                    witnesses,
-                    note: format!(
-                        "state-machine halt test '{}' verified on {} concrete \
-                         fuzzer-seed-{} witness{} only (universal proof of `∀ x, \
-                         reachable x → proveTestsHalt prog (dataArg x)` is not claimed \
-                         because `reachable` is a global over-approximation of the step function)",
-                        test.name, instances, CONCRETE_WITNESS_BASE_SEED, plural,
-                    ),
-                }),
-            )
-        });
-    }
 
     // Soundness guard: if the step function was analyzed (has_step_ir) but the
     // TransitionProp extraction produced no usable constraints
@@ -8109,23 +9517,21 @@ fn generate_proof_file(
     // admits inputs the validator rejects.  That theorem is *false* in
     // general and Blaster must not be asked to prove it.
     //
-    // When concrete witnesses are available the native_decide fallback (line
-    // below) is still sound; only block the case with no witnesses.
+    // Universal halt proofs require some extracted transition relation. When
+    // the step function was analyzed but `transition_prop_lean` is absent, the
+    // remaining reachability theorem would collapse to a structural
+    // over-approximation with no extracted step constraint. Reject it rather than
+    // silently downgrading to a witness-only result.
     if is_state_machine_trace_halt_test(test)
         && has_step_ir
         && test.transition_prop_lean.is_none()
-        && test.concrete_halt_witnesses.is_empty()
     {
         return Err(generation_error(
             GenerationErrorCategory::FallbackRequired,
             format!(
                 "Test '{}': step function body was analysed but produced no \
                  extractable transition constraints — all leaves of the \
-                 TransitionProp were unsupported or vacuous. The resulting \
-                 universal theorem `∀ x, reachable x → proveTestsHalt prog (dataArg x)` \
-                 would degenerate to `True → halt` and is unsound. \
-                 No concrete witnesses are available as a sound fallback. \
-                 Skipping (SKIPPED — zero extractable constraints).",
+                 TransitionProp were unsupported or vacuous. No universal halt theorem can be emitted from this test until transition constraints are recovered soundly.",
                 test.name
             ),
         ));
@@ -8141,16 +9547,14 @@ fn generate_proof_file(
     // path would be misleading.
     if is_state_machine_trace_halt_test(test)
         && has_step_ir
-        && test.concrete_halt_witnesses.is_empty()
+        && test.transition_prop_lean.is_none()
         && two_phase_disabled
     {
         return Err(generation_error(
             GenerationErrorCategory::FallbackRequired,
             format!(
                 "Test '{}': AIKEN_EMIT_TWO_PHASE=0 bypasses two-phase proof emission, but \
-                 the test has step IR and no concrete witnesses. The Blaster reachable \
-                 over-approximation is unsound for this configuration. \
-                 SKIPPED (two-phase disabled, no witness fallback available).",
+                 no sound universal direct theorem is available because transition constraints were not recovered.",
                 test.name
             ),
         ));
@@ -8169,45 +9573,6 @@ fn generate_proof_file(
     ) {
         Ok(Some(content)) => return Ok((content, ProofCaveat::None)),
         Ok(None) => {}
-        Err(e)
-            if is_state_machine_trace_halt_test(test)
-                && !test.concrete_halt_witnesses.is_empty() =>
-        {
-            // Blaster path failed; fall back to native_decide instance proofs.
-            let _ = e; // diagnostic suppressed; native_decide is always sound
-            ensure_equivalence_has_universal_proof(
-                target,
-                &test.name,
-                "the fallback state-machine halt path only has witness-only proofs",
-                "Equivalence mode requires a fully universal theorem rather than concrete witnesses.",
-            )?;
-            return generate_state_machine_halt_proof_file(
-                test,
-                lean_test_name,
-                &verify_prog,
-                &direct_header,
-                &footer,
-            )
-            .map(|content| {
-                let instances = test.concrete_halt_witnesses.len();
-                let witnesses = test.concrete_halt_witnesses.clone();
-                let plural = if instances == 1 { "" } else { "es" };
-                (
-                    content,
-                    ProofCaveat::Witness(WitnessProofNote {
-                        instances,
-                        witnesses,
-                        note: format!(
-                            "state-machine halt test '{}' verified on {} concrete \
-                             fuzzer-seed-{} witness{} only (universal proof of `∀ x, \
-                             reachable x → proveTestsHalt prog (dataArg x)` is not claimed \
-                             because `reachable` is a global over-approximation of the step function)",
-                            test.name, instances, CONCRETE_WITNESS_BASE_SEED, plural,
-                        ),
-                    }),
-                )
-            });
-        }
         Err(e) => return Err(e),
     }
 
@@ -8265,6 +9630,27 @@ fn is_state_machine_trace_error_test(test: &ExportedPropertyTest) -> bool {
 /// `native_decide` proofs hold only for the listed concrete inputs;
 /// universal quantification over the over-approximating `reachable`
 /// predicate is unsound for these tests.
+fn halt_witness_result(
+    test: &ExportedPropertyTest,
+    content: String,
+ ) -> (String, ProofCaveat) {
+    let instances = test.concrete_halt_witnesses.len();
+    let witnesses = test.concrete_halt_witnesses.clone();
+    let plural = if instances == 1 { "" } else { "es" };
+    (
+        content,
+        ProofCaveat::Witness(WitnessProofNote {
+            instances,
+            witnesses,
+            note: format!(
+                "state-machine halt test '{}' verified on {} concrete fuzzer-seed-{} witness{} only (universal proof of `∀ x, reachable x → proveTestsHalt prog (dataArg x)` is not claimed because `reachable` is a global over-approximation of the step function)",
+                test.name, instances, CONCRETE_WITNESS_BASE_SEED, plural,
+            ),
+        }),
+    )
+}
+
+
 fn generate_state_machine_halt_proof_file(
     test: &ExportedPropertyTest,
     lean_test_name: &str,

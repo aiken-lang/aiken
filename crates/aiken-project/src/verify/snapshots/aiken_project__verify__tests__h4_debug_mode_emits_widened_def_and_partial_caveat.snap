@@ -18,9 +18,10 @@ open AikenVerify.Utils
 #import_uplc prog_permissions_test__prop_h4_debug_ok_97ffe25e PlutusV3 single_cbor_hex "./cbor/permissions_test__prop_h4_debug_ok_97ffe25e.cbor"
 
 set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
 
--- S4 AUDIT: 0 constraints dropped or widened during TransitionProp lowering (sound over-approximation).
--- Each dropped constraint widens the isValidTransition precondition.
+-- S4 AUDIT: 1 constraints dropped or widened during transition/helper lowering (sound over-approximation).
+-- Each dropped constraint widens the generated theorem's preconditions.
 
 -- S5: packTrace encodes a trace as a Plutus `Data.List` value,
 -- matching the runtime `apply_data` call that wraps the trace argument.
@@ -73,6 +74,6 @@ theorem prop_h4_debug_ok :
   ∀ (trace : List Data),
     prop_h4_debug_ok_s4_isValidTrace trace →
     proveTestsHalt prog_permissions_test__prop_h4_debug_ok_97ffe25e (dataArg (prop_h4_debug_ok_s4_packTrace trace)) :=
-  fun trace hv => prop_h4_debug_ok_halts _ (prop_h4_debug_ok_valid_input _ hv)
+  fun trace hv => prop_h4_debug_ok_halts (prop_h4_debug_ok_s4_packTrace trace) (prop_h4_debug_ok_valid_input trace hv)
 
 end AikenVerify.Proofs.Permissions.prop_h4_debug_ok

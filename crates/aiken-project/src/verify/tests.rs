@@ -5137,36 +5137,21 @@ fn witness_proved_does_not_count_as_proved() {
 }
 
 #[test]
-fn state_machine_halt_proof_emits_witness_caveat() {
-    // End-to-end check: a state-machine halt test (Void + FailImmediately +
-    // StateMachineTrace) with `step_function_ir = None` and one or more
-    // concrete halt witnesses must take Site B in `generate_proof_file`,
-    // producing `(content, ProofCaveat::Witness(WitnessProofNote { … }))`.
-    // The witness vector and instance count must match what the test fixture
-    // carries; the note string must mention the test name, the witness count,
-    // and the base seed (CONCRETE_WITNESS_BASE_SEED = 42).
+fn state_machine_halt_proof_with_opaque_output_is_unsupported_even_with_witnesses() {
+    // Under the stricter formal-verification goal, a halt test whose output
+    // semantics are still opaque must be rejected rather than silently routed
+    // through a witness-only path.
     let mut test = make_phase12_state_machine_test(
         "prop_halt_caveat_ok",
         StateMachineAcceptance::AcceptsSuccess,
     );
-    // step_function_ir already None from the fixture builder; populate
-    // witnesses to drive Site B (no-step-IR halt path). CBOR-hex `80` is
-    // an empty array, `00` is unsigned int 0 — both decode cleanly as
-    // PlutusData so `generate_state_machine_halt_proof_file` succeeds.
     test.concrete_halt_witnesses = vec!["80".to_string(), "00".to_string()];
-    assert!(matches!(
-        &test.semantics,
-        FuzzerSemantics::StateMachineTrace {
-            step_function_ir: None,
-            ..
-        }
-    ));
 
     let id = test_id("permissions.test", "prop_halt_caveat_ok");
     let lean_name = sanitize_lean_name("prop_halt_caveat_ok");
     let lean_module = "AikenVerify.Proofs.Permissions.prop_halt_caveat_ok";
 
-    let (_content, caveat) = super::generate_proof_file(
+    let err = super::generate_proof_file(
         &test,
         &id,
         &lean_name,
@@ -5175,46 +5160,146 @@ fn state_machine_halt_proof_emits_witness_caveat() {
         &VerificationTargetKind::default(),
         false,
     )
-    .expect("halt proof generation must succeed when witnesses are present");
+    .expect_err("opaque halt output must stay unsupported even when witnesses exist");
 
-    match caveat {
-        ProofCaveat::Witness(WitnessProofNote {
-            instances,
-            witnesses,
-            note,
-        }) => {
-            assert_eq!(
-                instances, 2,
-                "instance count must mirror witness vector len"
-            );
-            assert_eq!(
-                witnesses,
-                vec!["80".to_string(), "00".to_string()],
-                "witnesses must be the CBOR-hex strings cloned from the fixture",
-            );
-            assert!(
-                note.contains(&test.name),
-                "note must mention the test name; got: {note}"
-            );
-            assert!(
-                note.contains("halt"),
-                "note must identify this as a halt-test caveat; got: {note}"
-            );
-            assert!(
-                note.contains("seed-42"),
-                "note must record the base fuzzer seed (42); got: {note}"
-            );
-            // Plural form for two witnesses: `2 ... witnesses only`. Match the
-            // exact phrase to defend against substring collisions with the
-            // test name (e.g. when this fixture's name happens to embed
-            // "witness"); the count makes the match unambiguous.
-            assert!(
-                note.contains("2 concrete fuzzer-seed-42 witnesses only"),
-                "note must use plural form for two witnesses; got: {note}"
-            );
-        }
-        other => panic!("expected ProofCaveat::Witness, got {other:?}"),
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "opaque halt output",
+    );
+    assert!(
+        err.to_string().contains("top-level fuzzer is opaque"),
+        "error should explain the opaque-output rejection, got: {err}"
+    );
+}
+
+#[test]
+fn state_machine_halt_proof_with_opaque_output_is_unsupported_even_with_step_ir() {
+    use aiken_lang::test_framework::ShallowIr;
+
+    let mut test = make_phase12_state_machine_test(
+        "prop_halt_transition_widened_ok",
+        StateMachineAcceptance::AcceptsSuccess,
+    );
+    if let FuzzerSemantics::StateMachineTrace { step_function_ir, .. } = &mut test.semantics {
+        *step_function_ir = Some(ShallowIr::Construct {
+            module: "scenario".to_string(),
+            constructor: "Done".to_string(),
+            tag: 0,
+            fields: vec![],
+        });
     }
+    test.concrete_halt_witnesses = vec!["80".to_string()];
+    test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
+        is_valid_transition_def: "def widened_is_valid_transition (_state : Data) (_transition : Data) : Prop := True\n"
+            .to_string(),
+        initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: vec![crate::export::TransitionWidening {
+            kind: crate::export::TransitionWideningKind::Relation,
+            message: "Unsupported: counted output equality rejected non-exact operands (lhs='BoundVar', rhs='Tuple')"
+                .to_string(),
+        }],
+        unsupported_log: vec![
+            "Unsupported: counted output equality rejected non-exact operands (lhs='BoundVar', rhs='Tuple')"
+                .to_string(),
+        ],
+        opaque_sub_generators: Vec::new(),
+        s0002_marker: None,
+        is_vacuous: false,
+    });
+
+    let id = test_id("permissions.test", "prop_halt_transition_widened_ok");
+    let lean_name = sanitize_lean_name("prop_halt_transition_widened_ok");
+    let lean_module = "AikenVerify.Proofs.Permissions.prop_halt_transition_widened_ok";
+
+    let err = super::generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+        false,
+    )
+    .expect_err("opaque halt output must stay unsupported even when step IR exists");
+
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "opaque halt output with step ir",
+    );
+    assert!(
+        err.to_string().contains("top-level fuzzer is opaque")
+            || err.to_string().contains("two-phase proof would rely on transition widenings"),
+        "error should explain why universal halt proof is rejected, got: {err}"
+    );
+}
+
+#[test]
+fn state_machine_halt_proof_without_witness_still_rejects_opaque_output() {
+    use aiken_lang::test_framework::ShallowIr;
+
+    let mut test = make_phase12_state_machine_test(
+        "prop_halt_transition_widened_needs_witness",
+        StateMachineAcceptance::AcceptsSuccess,
+    );
+    if let FuzzerSemantics::StateMachineTrace { step_function_ir, .. } = &mut test.semantics {
+        *step_function_ir = Some(ShallowIr::Construct {
+            module: "scenario".to_string(),
+            constructor: "Done".to_string(),
+            tag: 0,
+            fields: vec![],
+        });
+    }
+    test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
+        is_valid_transition_def: "def widened_is_valid_transition (_state : Data) (_transition : Data) : Prop := True\n"
+            .to_string(),
+        initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: vec![crate::export::TransitionWidening {
+            kind: crate::export::TransitionWideningKind::Relation,
+            message: "Unsupported: counted output equality rejected non-exact operands (lhs='BoundVar', rhs='Tuple')"
+                .to_string(),
+        }],
+        unsupported_log: vec![
+            "Unsupported: counted output equality rejected non-exact operands (lhs='BoundVar', rhs='Tuple')"
+                .to_string(),
+        ],
+        opaque_sub_generators: Vec::new(),
+        s0002_marker: None,
+        is_vacuous: false,
+    });
+
+    let id = test_id(
+        "permissions.test",
+        "prop_halt_transition_widened_needs_witness",
+    );
+    let lean_name = sanitize_lean_name("prop_halt_transition_widened_needs_witness");
+    let lean_module =
+        "AikenVerify.Proofs.Permissions.prop_halt_transition_widened_needs_witness";
+
+    let err = super::generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+        false,
+    )
+    .expect_err("opaque halt output must remain unsupported without witnesses");
+
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "opaque halt output without witness",
+    );
+    assert!(
+        err.to_string().contains("top-level fuzzer is opaque")
+            || err.to_string().contains("two-phase proof would rely on transition widenings"),
+        "error should explain why universal halt proof is rejected, got: {err}"
+    );
 }
 
 #[test]
@@ -10893,6 +10978,8 @@ fn accepts_failure_reachable_from_preserves_events() {
         &mut shape_builder,
         "failure_events_test_shape",
         None,
+        None,
+        None,
     )
     .unwrap();
 
@@ -10921,6 +11008,8 @@ fn accepts_success_reachable_from_also_preserves_events() {
         &Default::default(),
         &mut shape_builder,
         "success_events_test_shape",
+        None,
+        None,
         None,
     )
     .unwrap();
@@ -11970,6 +12059,674 @@ fn emit_transition_prop_as_lean_golden_fragment() {
     );
 }
 
+#[test]
+fn emit_transition_prop_exists_domain_restricts_bound_output() {
+    use aiken_lang::test_framework::{FuzzerSemantics as LangFuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let prop = TransitionProp::Exists {
+        binder: "n".to_string(),
+        ty: ShallowIrType::Int,
+        domain: Box::new(LangFuzzerSemantics::IntRange {
+            min: Some("0".to_string()),
+            max: Some("10".to_string()),
+        }),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+            name: "n".to_string(),
+            ty: ShallowIrType::Int,
+        })),
+    };
+
+    let (def, log, sub_gens, s0002) =
+        crate::verify::emit_is_valid_transition_def_for_export("domain_ivt", &prop);
+
+    assert!(log.is_empty(), "exact bound-output domain should not widen: {log:?}");
+    assert!(sub_gens.is_empty(), "no sub-generators expected: {sub_gens:?}");
+    assert!(s0002.is_none(), "no S0002 marker expected: {s0002:?}");
+    assert!(
+        def.contains("∃ (n : Int)"),
+        "bound Int witness should keep its typed binder, got:\n{def}"
+    );
+    assert!(
+        def.contains("0 <= n ∧ n <= 10"),
+        "IntRange domain predicate missing, got:\n{def}"
+    );
+    assert!(
+        def.contains("transition = Data.I n"),
+        "BoundVar Int output must lower to the bound witness, got:\n{def}"
+    );
+    assert!(
+        !def.contains("_fuzz_"),
+        "bound witness must not freshen to unrelated existential, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_string_eq_output_is_exact() {
+    use aiken_lang::test_framework::{ShallowConst, ShallowIr, TransitionProp};
+
+    let prop = TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::String(
+        "hello".to_string(),
+    )));
+
+    let (def, log, _, _) =
+        crate::verify::emit_is_valid_transition_def_for_export("string_ivt", &prop);
+
+    assert!(log.is_empty(), "exact string output should not widen: {log:?}");
+    assert!(
+        def.contains("transition = Data.B"),
+        "string output should emit a concrete Data.B literal, got:\n{def}"
+    );
+    assert!(
+        !def.contains("_fuzz_"),
+        "exact string output must not freshen to an unrelated existential, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_field_access_freshens_unknown_bound_data_projection() {
+    use aiken_lang::test_framework::{FuzzerSemantics as LangFuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let prop = TransitionProp::Exists {
+        binder: "pair_data".to_string(),
+        ty: ShallowIrType::Data,
+        domain: Box::new(LangFuzzerSemantics::Data),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::FieldAccess {
+            record: Box::new(ShallowIr::BoundVar {
+                name: "pair_data".to_string(),
+                ty: ShallowIrType::Data,
+            }),
+            index: 1,
+            label: "snd".to_string(),
+            ty: ShallowIrType::Data,
+            kind: aiken_lang::test_framework::ShallowFieldAccessKind::ConstructorField,
+        })),
+    };
+
+    let (def, log, _sub_gens, _s0002) =
+        crate::verify::emit_is_valid_transition_def_for_export("projection_ivt", &prop);
+
+    assert!(
+        log.iter()
+            .any(|entry| entry.contains("field access constructor field `snd` freshened")),
+        "unknown bound-data projections must be logged as freshenings, got: {log:?}"
+    );
+    assert!(
+        def.contains("transition = _fuzz_") || def.contains("transition = Data.List [_fuzz_"),
+        "unknown bound-data projections must freshen to an audited witness, got:\n{def}"
+    );
+    assert!(
+        !def.contains("Data.Constr 0 []"),
+        "field projection must not collapse unknowns to a concrete sentinel datum, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_field_access_preserves_bound_adt_projection() {
+    use aiken_lang::test_framework::{ShallowFieldAccessKind, ShallowIr, ShallowIrType, TransitionProp};
+
+    let prop = TransitionProp::EqOutput(ShallowIr::FieldAccess {
+        record: Box::new(ShallowIr::BoundVar {
+            name: "st".to_string(),
+            ty: ShallowIrType::Adt("permissions/State".to_string()),
+        }),
+        index: 2,
+        label: "done".to_string(),
+        ty: ShallowIrType::Bool,
+        kind: ShallowFieldAccessKind::ConstructorField,
+    });
+
+    let (def, log, _sub_gens, _s0002) =
+        crate::verify::emit_is_valid_transition_def_for_export("projection_state_ivt", &prop);
+
+    assert!(
+        log.iter().any(|entry| entry.contains(
+            "field access constructor field `done` widened via constructor-match fallback"
+        )),
+        "bound ADT projections should be audited when they rely on constructor-match fallback, got: {log:?}"
+    );
+    assert!(
+        def.contains("match st with | Data.Constr _ fields"),
+        "bound ADT projection should emit a structural Data match, got:\n{def}"
+    );
+    assert!(
+        def.contains("fields.get? 2"),
+        "bound ADT projection should preserve the requested field index, got:\n{def}"
+    );
+    assert!(
+        !def.contains("_fuzz_"),
+        "bound ADT projections should keep the structural match rather than freshening, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_record_update_preserves_bound_adt_fields() {
+    use aiken_lang::test_framework::{
+        ShallowConst, ShallowIr, ShallowIrRecordUpdate, ShallowIrType, TransitionProp,
+    };
+
+    let prop = TransitionProp::EqOutput(ShallowIr::RecordUpdate {
+        record: Box::new(ShallowIr::BoundVar {
+            name: "st".to_string(),
+            ty: ShallowIrType::Adt("permissions/State".to_string()),
+        }),
+        tag: 0,
+        field_count: 3,
+        updates: vec![ShallowIrRecordUpdate {
+            label: "done".to_string(),
+            index: 2,
+            value: ShallowIr::Const(ShallowConst::Bool(true)),
+        }],
+    });
+
+    let (def, log, _sub_gens, _s0002) =
+        crate::verify::emit_is_valid_transition_def_for_export("record_update_ivt", &prop);
+
+    assert!(
+        log.iter().any(|entry| entry.contains(
+            "record update constructor field `0` widened via constructor-match fallback"
+        )),
+        "bound ADT record updates should audit fallback-based unchanged-field projections, got: {log:?}"
+    );
+    assert!(
+        def.contains("fields.get? 0") && def.contains("fields.get? 1"),
+        "unchanged record fields should stay as structural projections, got:\n{def}"
+    );
+    assert!(
+        def.contains("Data.Constr (1 : Integer) []"),
+        "updated Bool field should keep the exact constructor literal, got:\n{def}"
+    );
+    assert!(
+        !def.contains("_fuzz_"),
+        "record updates should keep structural projections rather than freshening, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_if_data_is_exact_when_branches_are_exact() {
+    use aiken_lang::test_framework::{ShallowConst, ShallowIr, TransitionProp};
+
+    let prop = TransitionProp::EqOutput(ShallowIr::If {
+        cond: Box::new(ShallowIr::Const(ShallowConst::Bool(true))),
+        then_branch: Box::new(ShallowIr::Const(ShallowConst::Int("1".to_string()))),
+        else_branch: Box::new(ShallowIr::Const(ShallowConst::Int("0".to_string()))),
+    });
+
+    let (def, log, _sub_gens, _s0002) =
+        crate::verify::emit_is_valid_transition_def_for_export("if_data_ivt", &prop);
+
+    assert!(log.is_empty(), "exact Data If nodes should not widen, got: {log:?}");
+    assert!(
+        def.contains("if true then Data.I (1 : Integer) else Data.I (0 : Integer)"),
+        "exact Data If nodes should emit a real Lean `if`, got:\n{def}"
+    );
+    assert!(
+        !def.contains("_fuzz_"),
+        "exact Data If nodes must not freshen to unrelated witnesses, got:\n{def}"
+    );
+}
+
+#[test]
+fn shallow_ir_type_to_lean_parenthesizes_nested_list_elements() {
+    use aiken_lang::test_framework::ShallowIrType;
+
+    assert_eq!(
+        super::shallow_ir_type_to_lean(&ShallowIrType::List(Box::new(ShallowIrType::List(
+            Box::new(ShallowIrType::Int),
+        )))),
+        "List (List (Int))"
+    );
+}
+
+#[test]
+fn emit_transition_prop_untyped_bool_list_domain_emits_data_list_predicate() {
+    use aiken_lang::test_framework::{FuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let prop = TransitionProp::Exists {
+        binder: "xs".to_string(),
+        ty: ShallowIrType::Data,
+        domain: Box::new(FuzzerSemantics::List {
+            element: Box::new(FuzzerSemantics::Bool),
+            min_len: None,
+            max_len: None,
+        }),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+            name: "xs".to_string(),
+            ty: ShallowIrType::Data,
+        })),
+    };
+
+    let (def, widenings, _sub_gens, _s0002) =
+        super::emit_is_valid_transition_details_for_export("bool_list_domain_ivt", &prop);
+
+    assert!(
+        widenings.is_empty(),
+        "Data-encoded List<Bool> domains should lower exactly, got: {widenings:?}"
+    );
+    assert!(
+        def.contains("match xs with | Data.List xs"),
+        "domain predicate should destructure Data.List binders, got:\n{def}"
+    );
+    assert!(
+        def.contains("Data.Constr (0 : Integer) []")
+            && def.contains("Data.Constr (1 : Integer) []"),
+        "domain predicate should constrain elements to encoded booleans, got:\n{def}"
+    );
+}
+
+
+#[test]
+fn emit_transition_prop_pair_domain_emits_component_predicates() {
+    use aiken_lang::test_framework::{FuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let prop = TransitionProp::Exists {
+        binder: "p".to_string(),
+        ty: ShallowIrType::Pair(Box::new(ShallowIrType::Int), Box::new(ShallowIrType::Bool)),
+        domain: Box::new(FuzzerSemantics::Product(vec![
+            FuzzerSemantics::IntRange {
+                min: Some("0".to_string()),
+                max: Some("10".to_string()),
+            },
+            FuzzerSemantics::Bool,
+        ])),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+            name: "p".to_string(),
+            ty: ShallowIrType::Pair(Box::new(ShallowIrType::Int), Box::new(ShallowIrType::Bool)),
+        })),
+    };
+
+    let (def, widenings, _sub_gens, _s0002) =
+        super::emit_is_valid_transition_details_for_export("pair_domain_ivt", &prop);
+
+    assert!(
+        !widenings.iter().any(|entry| entry.message.contains("product existential domain widened to True")),
+        "pair-typed product domains should emit real component predicates, got: {widenings:?}"
+    );
+    assert!(
+        def.contains("(p.1)"),
+        "pair domains should constrain exact component projections when available, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_data_with_schema_domain_accepts_dot_type_name() {
+    use aiken_lang::test_framework::{FuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let mut inner_data_schemas = BTreeMap::new();
+    inner_data_schemas.insert(
+        "cardano/transaction.Transaction".to_string(),
+        make_state_machine_trace_success_schema(),
+    );
+
+    let prop = TransitionProp::Exists {
+        binder: "input".to_string(),
+        ty: ShallowIrType::Data,
+        domain: Box::new(FuzzerSemantics::DataWithSchema {
+            type_name: "cardano/transaction.Input".to_string(),
+        }),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+            name: "input".to_string(),
+            ty: ShallowIrType::Data,
+        })),
+    };
+
+    let (_def, widenings, _sub_gens, _s0002) =
+        super::emit_is_valid_transition_details_for_export_with_schemas(
+            "dot_shape_domain_ivt",
+            &prop,
+            "permissions.test.dot_shape_domain",
+            &inner_data_schemas,
+        );
+
+    assert!(
+        !widenings.iter().any(|entry| {
+            entry.message.contains("DataWithSchema<cardano/transaction.Input> existential domain widened to True")
+        }),
+        "dot-style DataWithSchema names from live transition props must resolve against slash-style schema refs, got: {widenings:?}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_data_with_schema_domain_uses_nested_schema_definition() {
+    use aiken_lang::test_framework::{FuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let mut inner_data_schemas = BTreeMap::new();
+    inner_data_schemas.insert(
+        "cardano/transaction.Transaction".to_string(),
+        make_state_machine_trace_success_schema(),
+    );
+
+    let prop = TransitionProp::Exists {
+        binder: "input".to_string(),
+        ty: ShallowIrType::Data,
+        domain: Box::new(FuzzerSemantics::DataWithSchema {
+            type_name: "cardano/transaction/Input".to_string(),
+        }),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+            name: "input".to_string(),
+            ty: ShallowIrType::Data,
+        })),
+    };
+
+    let (_def, widenings, _sub_gens, _s0002) =
+        super::emit_is_valid_transition_details_for_export_with_schemas(
+            "nested_shape_domain_ivt",
+            &prop,
+            "permissions.test.nested_shape_domain",
+            &inner_data_schemas,
+        );
+
+    assert!(
+        !widenings.iter().any(|entry| {
+            entry.message.contains("DataWithSchema<cardano/transaction/Input> existential domain widened to True")
+        }),
+        "nested schema definitions should satisfy DataWithSchema existential domains, got: {widenings:?}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_data_with_schema_domain_uses_shape_predicate() {
+    use aiken_lang::test_framework::{FuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let schema = make_state_machine_trace_success_schema();
+    let mut inner_data_schemas = BTreeMap::new();
+    inner_data_schemas.insert(
+        "cardano/transaction/Input".to_string(),
+        ExportedDataSchema {
+            root: Reference::new("cardano/transaction/Input"),
+            definitions: schema.definitions.clone(),
+        },
+    );
+
+    let prop = TransitionProp::Exists {
+        binder: "input".to_string(),
+        ty: ShallowIrType::Data,
+        domain: Box::new(FuzzerSemantics::DataWithSchema {
+            type_name: "cardano/transaction/Input".to_string(),
+        }),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+            name: "input".to_string(),
+            ty: ShallowIrType::Data,
+        })),
+    };
+
+    let (def, widenings, _sub_gens, _s0002) =
+        super::emit_is_valid_transition_details_for_export_with_schemas(
+            "shape_domain_ivt",
+            &prop,
+            "permissions.test.shape_domain",
+            &inner_data_schemas,
+        );
+
+    assert!(
+        !widenings.iter().any(|entry| {
+            entry.message.contains("DataWithSchema<cardano/transaction/Input> existential domain widened to True")
+        }),
+        "schema-backed existential domains should emit a real shape predicate, got: {widenings:?}"
+    );
+    assert!(
+        def.contains("shape_domain_ivt_shape") && def.contains("input"),
+        "schema-backed existential domains should inject shape predicate definitions and use them, got:\n{def}"
+    );
+}
+
+#[test]
+fn disallowed_production_widening_counts_blocks_opaque_domain_gaps() {
+    let widenings = vec![crate::export::TransitionWidening {
+        kind: crate::export::TransitionWideningKind::Domain,
+        message: "Opaque existential domain widened to True: missing schema".to_string(),
+    }];
+
+    let counts = super::disallowed_production_widening_counts(&widenings, false, &[]);
+    assert_eq!(
+        counts.get(&crate::export::TransitionWideningKind::Domain),
+        Some(&1),
+        "opaque existential domains must block production Partial/Proved instead of being treated as harmless domain-only widening"
+    );
+}
+
+#[test]
+fn emit_transition_prop_permissions_style_step_output_stays_exact() {
+    use aiken_lang::test_framework::{
+        ShallowConst, ShallowFieldAccessKind, ShallowIr, ShallowIrRecordUpdate, ShallowIrType,
+        TransitionProp,
+    };
+
+    let state_var = || ShallowIr::BoundVar {
+        name: "st".to_string(),
+        ty: ShallowIrType::Adt("permissions/State".to_string()),
+    };
+    let tx_var = || ShallowIr::BoundVar {
+        name: "tx".to_string(),
+        ty: ShallowIrType::Adt("cardano/transaction/Transaction".to_string()),
+    };
+
+    let prop = TransitionProp::EqOutput(ShallowIr::If {
+        cond: Box::new(ShallowIr::FieldAccess {
+            record: Box::new(state_var()),
+            index: 2,
+            label: "done".to_string(),
+            ty: ShallowIrType::Bool,
+            kind: ShallowFieldAccessKind::ConstructorField,
+        }),
+        then_branch: Box::new(ShallowIr::Construct {
+            module: "scenario".to_string(),
+            constructor: "Done".to_string(),
+            tag: 0,
+            fields: vec![],
+        }),
+        else_branch: Box::new(ShallowIr::Construct {
+            module: "scenario".to_string(),
+            constructor: "Step".to_string(),
+            tag: 1,
+            fields: vec![
+                ShallowIr::FieldAccess {
+                    record: Box::new(state_var()),
+                    index: 0,
+                    label: "labels".to_string(),
+                    ty: ShallowIrType::List(Box::new(ShallowIrType::String)),
+                    kind: ShallowFieldAccessKind::ConstructorField,
+                },
+                ShallowIr::RecordUpdate {
+                    record: Box::new(state_var()),
+                    tag: 0,
+                    field_count: 3,
+                    updates: vec![
+                        ShallowIrRecordUpdate {
+                            label: "labels".to_string(),
+                            index: 0,
+                            value: ShallowIr::ListLit {
+                                elements: vec![],
+                                tail: None,
+                                ty: ShallowIrType::List(Box::new(ShallowIrType::String)),
+                            },
+                        },
+                        ShallowIrRecordUpdate {
+                            label: "done".to_string(),
+                            index: 2,
+                            value: ShallowIr::Const(ShallowConst::Bool(true)),
+                        },
+                    ],
+                },
+                ShallowIr::RecordUpdate {
+                    record: Box::new(tx_var()),
+                    tag: 0,
+                    field_count: 2,
+                    updates: vec![ShallowIrRecordUpdate {
+                        label: "inputs".to_string(),
+                        index: 0,
+                        value: ShallowIr::ListLit {
+                            elements: vec![],
+                            tail: None,
+                            ty: ShallowIrType::List(Box::new(ShallowIrType::Data)),
+                        },
+                    }],
+                },
+            ],
+        }),
+    });
+
+    let (def, log, _sub_gens, _s0002) =
+        crate::verify::emit_is_valid_transition_def_for_export("permissions_style_ivt", &prop);
+
+    assert!(log.is_empty(), "permissions-style step output should stay exact, got: {log:?}");
+    assert!(
+        def.contains("if decide (") || def.contains("if (decide ("),
+        "permissions-style step output should emit an exact Lean if, got:\n{def}"
+    );
+    assert!(
+        def.contains("fields.get? 2") && def.contains("fields.get? 0"),
+        "permissions-style step output should preserve record projections, got:\n{def}"
+    );
+    assert!(
+        !def.contains("_fuzz_"),
+        "permissions-style exact output must not freshen to unrelated witnesses, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_alpha_renames_duplicate_binders() {
+    use aiken_lang::test_framework::{
+        FuzzerSemantics, ShallowBinOp, ShallowConst, ShallowIr, ShallowIrType, TransitionProp,
+    };
+
+    let prop = TransitionProp::Exists {
+        binder: "x".to_string(),
+        ty: ShallowIrType::Int,
+        domain: Box::new(FuzzerSemantics::Data),
+        body: Box::new(TransitionProp::And(vec![
+            TransitionProp::Pure(ShallowIr::BinOp {
+                op: ShallowBinOp::Eq,
+                left: Box::new(ShallowIr::BoundVar {
+                    name: "x".to_string(),
+                    ty: ShallowIrType::Int,
+                }),
+                right: Box::new(ShallowIr::Const(ShallowConst::Int("0".to_string()))),
+            }),
+            TransitionProp::Exists {
+                binder: "x".to_string(),
+                ty: ShallowIrType::Int,
+                domain: Box::new(FuzzerSemantics::Data),
+                body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+                    name: "x".to_string(),
+                    ty: ShallowIrType::Int,
+                })),
+            },
+        ])),
+    };
+
+    let (def, log, _, _) = crate::verify::emit_is_valid_transition_def_for_export("alpha_ivt", &prop);
+    assert!(log.is_empty(), "alpha-renaming alone must not widen: {log:?}");
+    assert!(def.contains("∃ (x : Int)"), "outer binder missing, got:\n{def}");
+    assert!(
+        def.contains("∃ (x_1 : Int)"),
+        "inner duplicate binder should be alpha-renamed, got:\n{def}"
+    );
+    assert!(
+        def.contains("Data.I x = Data.I (0 : Integer)"),
+        "outer Pure(BoundVar x == 0) must keep the outer binder, got:\n{def}"
+    );
+    assert!(
+        def.contains("transition = Data.I x_1"),
+        "inner BoundVar reference must follow the renamed binder, got:\n{def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_pair_literals_and_projections_use_data_list_shape() {
+    use aiken_lang::test_framework::{
+        FuzzerSemantics, ShallowFieldAccessKind, ShallowConst, ShallowIr, ShallowIrType,
+        TransitionProp,
+    };
+
+    let pair_ty = ShallowIrType::Pair(Box::new(ShallowIrType::Int), Box::new(ShallowIrType::Bool));
+    let pair_projection = TransitionProp::Exists {
+        binder: "pair".to_string(),
+        ty: pair_ty.clone(),
+        domain: Box::new(FuzzerSemantics::Data),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::FieldAccess {
+            record: Box::new(ShallowIr::BoundVar {
+                name: "pair".to_string(),
+                ty: pair_ty,
+            }),
+            index: 1,
+            label: "1".to_string(),
+            ty: ShallowIrType::Bool,
+            kind: ShallowFieldAccessKind::ListElement,
+        })),
+    };
+    let (projection_def, projection_log, _, _) =
+        crate::verify::emit_is_valid_transition_def_for_export("pair_projection_ivt", &pair_projection);
+    assert!(projection_log.is_empty(), "pair projection should stay structural: {projection_log:?}");
+    assert!(
+        projection_def.contains("let (_pair_pair_0, _pair_pair_1) := pair"),
+        "pair projections must destructure the typed pair witness directly, got:\n{projection_def}"
+    );
+    assert!(
+        projection_def.contains("Data.Constr (if _pair_pair_1 then 1 else 0) []"),
+        "pair Bool projections must preserve the exact Bool encoding, got:\n{projection_def}"
+    );
+    assert!(
+        !projection_def.contains("_fuzz_"),
+        "pair projection should not introduce unrelated fresh witnesses, got:\n{projection_def}"
+    );
+
+    let pair_literal = TransitionProp::EqOutput(ShallowIr::Tuple(vec![
+        ShallowIr::Const(ShallowConst::Int("1".to_string())),
+        ShallowIr::Const(ShallowConst::Int("2".to_string())),
+    ]));
+    let (literal_def, literal_log, _, _) =
+        crate::verify::emit_is_valid_transition_def_for_export("pair_literal_ivt", &pair_literal);
+    assert!(literal_log.is_empty(), "pair literal should stay structural: {literal_log:?}");
+    assert!(
+        literal_def.contains("transition = Data.List [Data.I (1 : Integer), Data.I (2 : Integer)]"),
+        "pair literals must emit as Data.List, got:\n{literal_def}"
+    );
+}
+
+#[test]
+fn emit_transition_prop_logs_structured_domain_widening() {
+    use aiken_lang::test_framework::{FuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+
+    let prop = TransitionProp::Exists {
+        binder: "xs".to_string(),
+        ty: ShallowIrType::List(Box::new(ShallowIrType::Data)),
+        domain: Box::new(FuzzerSemantics::List {
+            element: Box::new(FuzzerSemantics::DataWithSchema {
+                type_name: "mod.Input".to_string(),
+            }),
+            min_len: Some(1),
+            max_len: Some(2),
+        }),
+        body: Box::new(TransitionProp::EqOutput(ShallowIr::BoundVar {
+            name: "xs".to_string(),
+            ty: ShallowIrType::List(Box::new(ShallowIrType::Data)),
+        })),
+    };
+
+    let (def, log, _, _) = crate::verify::emit_is_valid_transition_def_for_export("domain_log_ivt", &prop);
+    assert!(
+        def.contains("1 <= xs.length ∧ xs.length <= 2"),
+        "list length bounds should still emit exactly, got:\n{def}"
+    );
+    assert!(
+        log.iter().any(|entry| entry.contains("DataWithSchema<mod.Input> existential domain widened to True")),
+        "structured element-domain widening must be logged, got: {log:?}"
+    );
+}
+
+#[test]
+fn describe_step_ir_shape_reports_bound_var() {
+    use aiken_lang::test_framework::{ShallowIr, ShallowIrType};
+
+    assert_eq!(
+        super::describe_step_ir_shape(&ShallowIr::BoundVar {
+            name: "x".to_string(),
+            ty: ShallowIrType::Int,
+        }),
+        "BoundVar"
+    );
+}
+
 /// S6 — `SubGenerator` leaves emit opaque-predicate references using the
 /// `__SGPFX__` placeholder (replaced at proof-file generation time) and record
 /// the sub-generator in the returned list.
@@ -11997,19 +12754,11 @@ fn emit_transition_prop_sub_generator_emits_opaque_ref_and_collects_name() {
     let (def, log, sub_gens, _s0002) =
         crate::verify::emit_is_valid_transition_def_for_export("myTest_ivt", &prop);
 
-    // The log should record both sub-generators.
-    assert_eq!(
-        log.len(),
-        2,
-        "expected 2 sub-generator log entries, got: {log:?}"
-    );
+    // Sub-generators are tracked separately from counted widenings.
+
     assert!(
-        log.iter().any(|l| l.contains("scenario_inputs_baseline")),
-        "log should mention scenario_inputs_baseline, got: {log:?}"
-    );
-    assert!(
-        log.iter().any(|l| l.contains("scenario_inputs_no_scripts")),
-        "log should mention scenario_inputs_no_scripts, got: {log:?}"
+        log.is_empty(),
+        "sub-generator references should not be counted as direct widenings here: {log:?}"
     );
 
     // The def should contain placeholder references for both sub-generators.
@@ -12161,6 +12910,7 @@ fn unused_binder_gets_underscore_prefix() {
     };
     let mut ctx = super::ShallowIrEmitCtx::new();
     let mut log = vec![];
+    let mut domain_shapes = super::TransitionDomainShapeState::disabled();
     let out = super::emit_transition_prop_as_lean(
         &prop,
         "state",
@@ -12168,6 +12918,7 @@ fn unused_binder_gets_underscore_prefix() {
         "_ignored",
         &mut ctx,
         &mut log,
+        &mut domain_shapes,
     );
     assert!(out.contains("_action"), "expected `_action` in: {out}");
     assert!(
@@ -12193,6 +12944,7 @@ fn used_binder_keeps_original_name() {
     };
     let mut ctx = super::ShallowIrEmitCtx::new();
     let mut log = vec![];
+    let mut domain_shapes = super::TransitionDomainShapeState::disabled();
     let out = super::emit_transition_prop_as_lean(
         &prop,
         "state",
@@ -12200,6 +12952,7 @@ fn used_binder_keeps_original_name() {
         "_ignored",
         &mut ctx,
         &mut log,
+        &mut domain_shapes,
     );
     // SubGenerator emits `__SGPFX__other_gen_prop state myvar` — `myvar` IS in
     // inner (as the trailing binding_var argument), so the binder keeps its bare name.
@@ -12228,6 +12981,7 @@ fn already_underscored_binder_not_double_prefixed() {
     };
     let mut ctx = super::ShallowIrEmitCtx::new();
     let mut log = vec![];
+    let mut domain_shapes = super::TransitionDomainShapeState::disabled();
     let out = super::emit_transition_prop_as_lean(
         &prop,
         "state",
@@ -12235,6 +12989,7 @@ fn already_underscored_binder_not_double_prefixed() {
         "_ignored",
         &mut ctx,
         &mut log,
+        &mut domain_shapes,
     );
     assert!(!out.contains("__backpass"), "double underscore in: {out}");
     assert!(
@@ -12353,6 +13108,8 @@ fn state_machine_halt_with_step_ir_and_transition_prop_but_no_witnesses_is_skipp
         is_valid_transition_def:
             "def t_isValidTransition (state : Data) (transition : Data) : Prop := True".to_string(),
         initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: Vec::new(),
         unsupported_log: Vec::new(),
         opaque_sub_generators: Vec::new(),
         s0002_marker: None,
@@ -12915,6 +13672,8 @@ fn m6_inner_data_schema_lookup_failure_propagates_e0015() {
         &mut shape_builder,
         "inner_schema_test_shape",
         None,
+        None,
+        None,
     );
 
     let report = result.expect_err(
@@ -12984,6 +13743,8 @@ fn vacuous_transition_prop_is_skipped() {
             "def foo_s4_isValidTransition (state : Data) (transition : Data) : Prop :=\n  True\n"
                 .to_string(),
         initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: Vec::new(),
         unsupported_log: Vec::new(),
         opaque_sub_generators: Vec::new(),
         s0002_marker: None,
@@ -13056,10 +13817,12 @@ fn eq_output_var_transition_prop_is_skipped_as_vacuous() {
         name: "transition".to_string(),
         ty: ShallowIrType::Data,
     });
-    let (def, log, sub_gens, s0002_marker) = crate::verify::emit_is_valid_transition_def_for_export(
-        "foo_eq_var_isValidTransition",
-        &prop,
-    );
+    let (def, widenings, sub_gens, s0002_marker) =
+        crate::verify::emit_is_valid_transition_details_for_export(
+            "foo_eq_var_isValidTransition",
+            &prop,
+        );
+    let log: Vec<String> = widenings.iter().map(|entry| entry.message.clone()).collect();
     let is_vacuous = transition_prop_is_vacuous(&prop);
     assert!(
         is_vacuous,
@@ -13069,6 +13832,8 @@ fn eq_output_var_transition_prop_is_skipped_as_vacuous() {
     test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
         is_valid_transition_def: def,
         initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings,
         unsupported_log: log,
         opaque_sub_generators: sub_gens,
         s0002_marker,
@@ -13144,12 +13909,19 @@ fn emit_lean_bool_const_true_and_false() {
     use aiken_lang::test_framework::{ShallowConst, ShallowIr};
 
     let mut ctx = super::ShallowIrEmitCtx::new();
-    let out_t =
-        super::emit_shallow_ir_as_lean_bool(&ShallowIr::Const(ShallowConst::Bool(true)), &mut ctx);
+    let mut log = Vec::new();
+    let out_t = super::emit_shallow_ir_as_lean_bool(
+        &ShallowIr::Const(ShallowConst::Bool(true)),
+        &mut ctx,
+        &mut log,
+    );
     assert_eq!(out_t, "true", "Const(Bool(true)) should emit `true`");
 
-    let out_f =
-        super::emit_shallow_ir_as_lean_bool(&ShallowIr::Const(ShallowConst::Bool(false)), &mut ctx);
+    let out_f = super::emit_shallow_ir_as_lean_bool(
+        &ShallowIr::Const(ShallowConst::Bool(false)),
+        &mut ctx,
+        &mut log,
+    );
     assert_eq!(out_f, "false", "Const(Bool(false)) should emit `false`");
 
     // Neither path should have introduced any existential.
@@ -13162,10 +13934,6 @@ fn emit_lean_bool_const_true_and_false() {
 
 #[test]
 fn emit_lean_bool_eq_comparison() {
-    // Eq/NotEq require `DecidableEq Data` which is not yet confirmed to exist
-    // in the Blaster prelude. Until confirmed, these fall back to a fresh Bool
-    // existential (safe — under IfThenElse encoding this widens to t ∨ e).
-    // TODO: when `DecidableEq Data` is confirmed, re-enable `decide (l = r)`.
     use aiken_lang::test_framework::{ShallowBinOp, ShallowConst, ShallowIr};
 
     let prop = ShallowIr::BinOp {
@@ -13174,23 +13942,19 @@ fn emit_lean_bool_eq_comparison() {
         right: Box::new(ShallowIr::Const(ShallowConst::Int("42".to_string()))),
     };
     let mut ctx = super::ShallowIrEmitCtx::new();
-    let out = super::emit_shallow_ir_as_lean_bool(&prop, &mut ctx);
-    // Falls back to a fresh Bool existential since DecidableEq Data is unconfirmed.
-    assert!(
-        out.starts_with('_'),
-        "Eq comparison should fall back to fresh Bool existential, got: {out}"
-    );
+    let mut log = Vec::new();
+    let out = super::emit_shallow_ir_as_lean_bool(&prop, &mut ctx, &mut log);
     assert_eq!(
-        ctx.existentials.len(),
-        1,
-        "one fresh Bool existential expected, got: {:?}",
+        out,
+        "decide (Data.I (42 : Integer) = Data.I (42 : Integer))",
+        "Eq comparison should emit a precise data equality test, got: {out}"
+    );
+    assert!(
+        ctx.existentials.is_empty(),
+        "precise Eq emission must not allocate fresh existentials, got: {:?}",
         ctx.existentials
     );
-    assert_eq!(
-        ctx.existentials[0].1, "Bool",
-        "existential must be typed Bool, got: {:?}",
-        ctx.existentials[0]
-    );
+    assert!(log.is_empty(), "precise Eq emission must not log widenings: {log:?}");
 }
 
 #[test]
@@ -13215,6 +13979,7 @@ fn if_then_else_emits_precise_encoding() {
 
     let mut ctx = super::ShallowIrEmitCtx::new();
     let mut log = vec![];
+    let mut domain_shapes = super::TransitionDomainShapeState::disabled();
     let out = super::emit_transition_prop_as_lean(
         &prop,
         "state",
@@ -13222,6 +13987,7 @@ fn if_then_else_emits_precise_encoding() {
         "_ignored",
         &mut ctx,
         &mut log,
+        &mut domain_shapes,
     );
 
     // Precise encoding must include both `= true` (then-branch) and `= false`
@@ -13247,7 +14013,7 @@ fn if_then_else_emits_precise_encoding() {
     // since we now emit precisely.
     assert!(
         !log.iter()
-            .any(|e| e.contains("widened to branch disjunction")),
+            .any(|e| e.message.contains("widened to branch disjunction")),
         "precise IfThenElse emission must not log a widening entry, got: {log:?}"
     );
 }
@@ -13585,6 +14351,8 @@ fn step_fn_sound_via_reachability_helpers_emits_s0002_for_unresolved_tag() {
         &mut shape_builder,
         "step_sound_test_shape",
         Some(&s0002_ir),
+        None,
+        None,
     );
 
     let report = result.expect_err("S0002-marked Opaque step IR must produce a hard error");
@@ -13676,6 +14444,8 @@ fn step_fn_sound_dispatch_walks_into_construct_fields_for_s0002() {
         &mut shape_builder,
         "nested_s0002_test_shape",
         Some(&step_ir),
+        None,
+        None,
     );
 
     let report = result.expect_err("nested S0002 marker must produce a hard error");
@@ -13780,6 +14550,8 @@ fn transition_prop_eq_output_s0002_marker_round_trips_through_export() {
     test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
         is_valid_transition_def: def,
         initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: Vec::new(),
         unsupported_log: Vec::new(),
         opaque_sub_generators: Vec::new(),
         s0002_marker: Some((ctor, type_name)),
@@ -13912,6 +14684,8 @@ fn make_h4_subgenerator_halt_test(name: &str) -> ExportedPropertyTest {
     test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
         is_valid_transition_def: def,
         initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: Vec::new(),
         unsupported_log: Vec::new(),
         opaque_sub_generators: vec![(
             "permissions/test".to_string(),
@@ -14176,6 +14950,13 @@ fn h4_debug_mode_emits_widened_def_and_partial_caveat() {
         "debug-mode emission must mark each widened sub-generator with \
          `[WIDENED: sub-generator stubbed]` so the proof file is self-documenting. Got:\n{content}",
     );
+    assert!(
+        content.contains(
+            "-- S4 AUDIT: 1 constraints dropped or widened during transition/helper lowering"
+        ),
+        "debug-mode audit header must count opaque sub-generator widenings, got:\n{content}"
+    );
+
 
     // Commit 12 follow-up #7 — H4 / E0018 rendering snapshot.  The above
     // `contains()` checks pin the soundness invariants (the absence of the
@@ -14308,6 +15089,8 @@ fn h4_no_subgenerators_default_and_debug_proof_files_are_identical() {
     test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
         is_valid_transition_def: def,
         initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: Vec::new(),
         unsupported_log: Vec::new(),
         opaque_sub_generators: Vec::new(), // <-- empty
         s0002_marker: None,
@@ -14385,12 +15168,223 @@ fn h4_no_subgenerators_default_and_debug_proof_files_are_identical() {
 }
 
 #[test]
+fn two_phase_relation_widenings_are_rejected_from_partial_status() {
+    use aiken_lang::test_framework::{ShallowConst, ShallowIr, TransitionProp};
+
+    let mut test = make_phase12_state_machine_test(
+        "prop_partial_note_mentions_widening_ok",
+        StateMachineAcceptance::AcceptsSuccess,
+    );
+    let prop = TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int("0".to_string())));
+    let (def, _log, sub_gens, s0002_marker) =
+        crate::verify::emit_is_valid_transition_def_for_export("note_ivt", &prop);
+    test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
+        is_valid_transition_def: def,
+        initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: vec![crate::export::TransitionWidening {
+            kind: crate::export::TransitionWideningKind::Relation,
+            message: "Unsupported: demo widening".to_string(),
+        }],
+        unsupported_log: vec!["Unsupported: demo widening".to_string()],
+        opaque_sub_generators: sub_gens,
+        s0002_marker,
+        is_vacuous: false,
+    });
+
+    let id = test_id("permissions.test", "prop_partial_note_mentions_widening_ok");
+    let lean_name = sanitize_lean_name("prop_partial_note_mentions_widening_ok");
+    let lean_module = "AikenVerify.Proofs.Permissions.prop_partial_note_mentions_widening_ok";
+
+    let _guard = env_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    let prior = std::env::var("AIKEN_EMIT_TWO_PHASE").ok();
+    unsafe {
+        std::env::set_var("AIKEN_EMIT_TWO_PHASE", "1");
+    }
+
+    let result = super::generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+        false,
+    );
+
+    unsafe {
+        match prior {
+            Some(v) => std::env::set_var("AIKEN_EMIT_TWO_PHASE", v),
+            None => std::env::remove_var("AIKEN_EMIT_TWO_PHASE"),
+        }
+    }
+
+    let report = result.expect_err(
+        "relation-bearing widenings must be rejected rather than surfaced as production Partial",
+    );
+    let err = report
+        .downcast_ref::<GenerationError>()
+        .expect("error must downcast to GenerationError");
+    assert_eq!(err.category, GenerationErrorCategory::FallbackRequired);
+    assert!(
+        err.message.contains("non-domain widenings"),
+        "skip reason must explain the production status gate, got: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("1 relation"),
+        "skip reason must summarize widening categories, got: {}",
+        err.message
+    );
+}
+
+#[test]
+fn two_phase_domain_only_widening_remains_partial() {
+    use aiken_lang::test_framework::{ShallowConst, ShallowIr, TransitionProp};
+
+    let mut test = make_phase12_state_machine_test(
+        "prop_domain_only_partial_ok",
+        StateMachineAcceptance::AcceptsSuccess,
+    );
+    let prop = TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int("0".to_string())));
+    let (def, _log, sub_gens, s0002_marker) =
+        crate::verify::emit_is_valid_transition_def_for_export("domain_note_ivt", &prop);
+    test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
+        is_valid_transition_def: def,
+        initial_state_lean: None,
+        helper_widenings: Vec::new(),
+        widenings: vec![crate::export::TransitionWidening {
+            kind: crate::export::TransitionWideningKind::Domain,
+            message: "domain-only widening".to_string(),
+        }],
+        unsupported_log: vec!["domain-only widening".to_string()],
+        opaque_sub_generators: sub_gens,
+        s0002_marker,
+        is_vacuous: false,
+    });
+
+    let id = test_id("permissions.test", "prop_domain_only_partial_ok");
+    let lean_name = sanitize_lean_name("prop_domain_only_partial_ok");
+    let lean_module = "AikenVerify.Proofs.Permissions.prop_domain_only_partial_ok";
+
+    let _guard = env_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    let prior = std::env::var("AIKEN_EMIT_TWO_PHASE").ok();
+    unsafe {
+        std::env::set_var("AIKEN_EMIT_TWO_PHASE", "1");
+    }
+
+    let result = super::generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+        false,
+    );
+
+    unsafe {
+        match prior {
+            Some(v) => std::env::set_var("AIKEN_EMIT_TWO_PHASE", v),
+            None => std::env::remove_var("AIKEN_EMIT_TWO_PHASE"),
+        }
+    }
+
+    let (_content, caveat) = result.expect("domain-only widenings should remain eligible for Partial");
+    match caveat {
+        ProofCaveat::Partial(note) => {
+            assert!(note.contains("Phase 2 (CEK halt obligation) is sorry-closed — see §S6"));
+            assert!(note.contains("counted theorem widened"));
+            assert!(note.contains("1 domain"));
+        }
+        other => panic!("expected Partial caveat, got {other:?}"),
+    }
+}
+
+#[test]
+fn two_phase_helper_widenings_are_rejected_from_partial_status() {
+    use aiken_lang::test_framework::{ShallowConst, ShallowIr, TransitionProp};
+
+    let mut test = make_phase12_state_machine_test(
+        "prop_helper_widening_rejected_ok",
+        StateMachineAcceptance::AcceptsSuccess,
+    );
+    let prop = TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int("0".to_string())));
+    let (def, _log, sub_gens, s0002_marker) =
+        crate::verify::emit_is_valid_transition_def_for_export("helper_note_ivt", &prop);
+    test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
+        is_valid_transition_def: def,
+        initial_state_lean: None,
+        helper_widenings: vec![crate::export::TransitionWidening {
+            kind: crate::export::TransitionWideningKind::DataFreshening,
+            message: "initial-state helper widened to existential".to_string(),
+        }],
+        widenings: Vec::new(),
+        unsupported_log: Vec::new(),
+        opaque_sub_generators: sub_gens,
+        s0002_marker,
+        is_vacuous: false,
+    });
+
+    let id = test_id("permissions.test", "prop_helper_widening_rejected_ok");
+    let lean_name = sanitize_lean_name("prop_helper_widening_rejected_ok");
+    let lean_module = "AikenVerify.Proofs.Permissions.prop_helper_widening_rejected_ok";
+
+    let _guard = env_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    let prior = std::env::var("AIKEN_EMIT_TWO_PHASE").ok();
+    unsafe {
+        std::env::set_var("AIKEN_EMIT_TWO_PHASE", "1");
+    }
+
+    let result = super::generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+        false,
+    );
+
+    unsafe {
+        match prior {
+            Some(v) => std::env::set_var("AIKEN_EMIT_TWO_PHASE", v),
+            None => std::env::remove_var("AIKEN_EMIT_TWO_PHASE"),
+        }
+    }
+
+    let report = result.expect_err(
+        "helper-emission widenings must be rejected rather than surfacing as production Partial",
+    );
+    let err = report
+        .downcast_ref::<GenerationError>()
+        .expect("error must downcast to GenerationError");
+    assert_eq!(err.category, GenerationErrorCategory::FallbackRequired);
+    assert!(err.message.contains("1 data-freshening"));
+}
+
+#[test]
 fn step_fn_sound_via_reachability_helpers_emits_theorem() {
     // Integration test: when build_state_machine_trace_reachability_helpers is
     // called with a Construct step IR, the emitted definitions must contain
     // `private theorem` for the soundness block.
     let transition_semantics = make_non_opaque_transition_semantics();
-    let step_ir = make_flat_construct_ir();
+    let step_ir = aiken_lang::test_framework::ShallowIr::Construct {
+        module: "test".to_string(),
+        constructor: "Step".to_string(),
+        tag: 1,
+        fields: vec![
+            aiken_lang::test_framework::ShallowIr::Const(
+                aiken_lang::test_framework::ShallowConst::Int("0".to_string()),
+            ),
+            aiken_lang::test_framework::ShallowIr::Const(
+                aiken_lang::test_framework::ShallowConst::Int("1".to_string()),
+            ),
+            aiken_lang::test_framework::ShallowIr::Const(
+                aiken_lang::test_framework::ShallowConst::Int("2".to_string()),
+            ),
+        ],
+    };
 
     let mut shape_builder = LeanDataShapeBuilder::default();
     let (_reachable_output, definitions) = build_state_machine_trace_reachability_helpers(
@@ -14402,6 +15396,8 @@ fn step_fn_sound_via_reachability_helpers_emits_theorem() {
         &mut shape_builder,
         "step_sound_test_shape",
         Some(&step_ir),
+        None,
+        None,
     )
     .unwrap();
 
@@ -14412,6 +15408,52 @@ fn step_fn_sound_via_reachability_helpers_emits_theorem() {
     assert!(
         !definitions.contains("private axiom"),
         "Construct step IR must NOT produce `private axiom`, got:\n{definitions}"
+    );
+}
+
+#[test]
+fn build_state_machine_trace_reachability_helpers_rejects_step_fn_widenings() {
+    use aiken_lang::test_framework::{
+        ShallowFieldAccessKind, ShallowIr, ShallowIrType,
+    };
+
+    let transition_semantics = make_non_opaque_transition_semantics();
+    let step_ir = ShallowIr::FieldAccess {
+        record: Box::new(ShallowIr::BoundVar {
+            name: "step".to_string(),
+            ty: ShallowIrType::Data,
+        }),
+        index: 0,
+        label: "payload".to_string(),
+        ty: ShallowIrType::Data,
+        kind: ShallowFieldAccessKind::ConstructorField,
+    };
+
+    let mut shape_builder = LeanDataShapeBuilder::default();
+    let result = build_state_machine_trace_reachability_helpers(
+        "step_widen_test",
+        "step_widen_test",
+        &StateMachineAcceptance::AcceptsSuccess,
+        &transition_semantics,
+        &Default::default(),
+        &mut shape_builder,
+        "step_widen_test_shape",
+        Some(&step_ir),
+        None,
+        None,
+    );
+
+    let report = result.expect_err(
+        "step-function helper widenings must surface as fallback-required generation errors",
+    );
+    let err = report
+        .downcast_ref::<GenerationError>()
+        .expect("error must downcast to GenerationError");
+    assert_eq!(err.category, GenerationErrorCategory::FallbackRequired);
+    assert!(
+        err.message.contains("step-function helper emission widened the theorem"),
+        "helper widening reason must be surfaced, got: {}",
+        err.message
     );
 }
 

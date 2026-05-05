@@ -24,7 +24,10 @@ use crate::{
     blueprint::{
         Blueprint,
         definitions::Definitions,
-        schema::{Annotated, Schema},
+        schema::{
+            Annotated, Data as BlueprintSchemaData, Declaration as BlueprintSchemaDeclaration,
+            Items as BlueprintSchemaItems, Schema,
+        },
     },
     config::ProjectConfig,
     error::{Error, Warning},
@@ -197,6 +200,17 @@ fn convert_state_machine_transition_semantics(
     }
 }
 
+fn transition_unsupported_log(
+    widenings: &[crate::export::TransitionWidening],
+    helper_widenings: &[crate::export::TransitionWidening],
+) -> Vec<String> {
+    widenings
+        .iter()
+        .chain(helper_widenings.iter())
+        .map(|entry| entry.message.clone())
+        .collect()
+}
+
 fn convert_semantics(lang: &LangFuzzerSemantics) -> FuzzerSemantics {
     match lang {
         LangFuzzerSemantics::Bool => FuzzerSemantics::Bool,
@@ -327,31 +341,201 @@ fn collect_data_with_schema_type_names_into(semantics: &FuzzerSemantics, out: &m
     }
 }
 
+fn collect_lang_transition_prop_data_with_schema_type_names(
+    prop: &aiken_lang::test_framework::TransitionProp,
+    out: &mut Vec<String>,
+) {
+    use aiken_lang::test_framework::TransitionProp as LangTransitionProp;
+
+    match prop {
+        LangTransitionProp::Exists { domain, body, .. } => {
+            collect_data_with_schema_type_names_into(&convert_semantics(domain.as_ref()), out);
+            collect_lang_transition_prop_data_with_schema_type_names(body.as_ref(), out);
+        }
+        LangTransitionProp::And(parts) | LangTransitionProp::Or(parts) => {
+            for part in parts {
+                collect_lang_transition_prop_data_with_schema_type_names(part, out);
+            }
+        }
+        LangTransitionProp::IfThenElse { t, e, .. } => {
+            collect_lang_transition_prop_data_with_schema_type_names(t.as_ref(), out);
+            collect_lang_transition_prop_data_with_schema_type_names(e.as_ref(), out);
+        }
+        LangTransitionProp::Match { arms, .. } => {
+            for arm in arms {
+                collect_lang_transition_prop_data_with_schema_type_names(&arm.body, out);
+            }
+        }
+        LangTransitionProp::Pure(_)
+        | LangTransitionProp::EqOutput(_)
+        | LangTransitionProp::SubGenerator { .. }
+        | LangTransitionProp::Unsupported { .. } => {}
+    }
+}
+
+fn schema_type_name_candidates(type_name: &str) -> Vec<String> {
+    let mut candidates = vec![type_name.to_string()];
+    if let Some((module, name)) = type_name.rsplit_once('.') {
+        let slash = format!("{module}/{name}");
+        if !candidates.contains(&slash) {
+            candidates.push(slash);
+        }
+    }
+    if let Some((module, name)) = type_name.rsplit_once('/') {
+        let dotted = format!("{module}.{name}");
+        if !candidates.contains(&dotted) {
+            candidates.push(dotted);
+        }
+    }
+    candidates
+}
+
+fn collect_schema_reference_keys_from_declaration(
+    declaration: &BlueprintSchemaDeclaration<BlueprintSchemaData>,
+    out: &mut Vec<String>,
+) {
+    match declaration {
+        BlueprintSchemaDeclaration::Referenced(reference) => out.push(reference.as_key()),
+        BlueprintSchemaDeclaration::Inline(data) => collect_schema_reference_keys_from_data(data, out),
+    }
+}
+
+fn collect_schema_reference_keys_from_data(data: &BlueprintSchemaData, out: &mut Vec<String>) {
+    match data {
+        BlueprintSchemaData::Integer | BlueprintSchemaData::Bytes | BlueprintSchemaData::Opaque => {}
+        BlueprintSchemaData::List(BlueprintSchemaItems::One(item)) => {
+            collect_schema_reference_keys_from_declaration(item, out);
+        }
+        BlueprintSchemaData::List(BlueprintSchemaItems::Many(items)) => {
+            for item in items {
+                collect_schema_reference_keys_from_declaration(&item.annotated, out);
+            }
+        }
+        BlueprintSchemaData::Map(keys, values) => {
+            collect_schema_reference_keys_from_declaration(keys, out);
+            collect_schema_reference_keys_from_declaration(values, out);
+        }
+        BlueprintSchemaData::AnyOf(constructors) => {
+            for constructor in constructors {
+                for field in &constructor.annotated.fields {
+                    collect_schema_reference_keys_from_declaration(&field.annotated, out);
+                }
+            }
+        }
+    }
+}
+
+fn collect_exported_schema_dependency_keys(schema: &ExportedDataSchema) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(annotated) = schema.definitions.try_lookup(&schema.root)
+        && let Schema::Data(data) = &annotated.annotated
+    {
+        collect_schema_reference_keys_from_data(data, &mut out);
+    }
+    for (_key, annotated) in schema.definitions.iter() {
+        if let Schema::Data(data) = &annotated.annotated {
+            collect_schema_reference_keys_from_data(data, &mut out);
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn insert_inner_data_schema_with_dependencies(
+    modules: &CheckedModules,
+    data_types: &IndexMap<DataTypeKey, TypedDataType>,
+    type_name: &str,
+    test_name: &str,
+    inner_data_schemas: &mut BTreeMap<String, ExportedDataSchema>,
+) -> Result<(), Error> {
+    if inner_data_schemas.contains_key(type_name) {
+        return Ok(());
+    }
+
+    let (resolved_name, tipo) = schema_type_name_candidates(type_name)
+        .into_iter()
+        .find_map(|candidate| {
+            resolve_type_name_to_type(data_types, &candidate).map(|tipo| (candidate, tipo))
+        })
+        .ok_or_else(|| {
+            Error::StandardIo(std::io::Error::other(format!(
+                "Test '{test_name}': DataWithSchema leaf '{type_name}' could not be resolved to a unique custom type for inner_data_schemas export."
+            )))
+        })?;
+
+    if inner_data_schemas.contains_key(&resolved_name) {
+        return Ok(());
+    }
+
+    let schema = export_data_schema(modules, data_types, &tipo).ok_or_else(|| {
+        Error::StandardIo(std::io::Error::other(format!(
+            "Test '{test_name}': DataWithSchema leaf '{type_name}' could not be exported to inner_data_schemas."
+        )))
+    })?;
+    let dependency_keys = collect_exported_schema_dependency_keys(&schema);
+    inner_data_schemas.insert(resolved_name, schema);
+
+    for dependency in dependency_keys {
+        if inner_data_schemas.contains_key(&dependency) {
+            continue;
+        }
+        if let Some((candidate, _)) = schema_type_name_candidates(&dependency)
+            .into_iter()
+            .find_map(|candidate| {
+                resolve_type_name_to_type(data_types, &candidate).map(|tipo| (candidate, tipo))
+            })
+        {
+            insert_inner_data_schema_with_dependencies(
+                modules,
+                data_types,
+                &candidate,
+                test_name,
+                inner_data_schemas,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn extend_inner_data_schemas_from_transition_prop(
+    modules: &CheckedModules,
+    data_types: &IndexMap<DataTypeKey, TypedDataType>,
+    prop: &aiken_lang::test_framework::TransitionProp,
+    test_name: &str,
+    inner_data_schemas: &mut BTreeMap<String, ExportedDataSchema>,
+) -> Result<(), Error> {
+    let mut type_names = Vec::new();
+    collect_lang_transition_prop_data_with_schema_type_names(prop, &mut type_names);
+    for type_name in type_names {
+        let _ = insert_inner_data_schema_with_dependencies(
+            modules,
+            data_types,
+            &type_name,
+            test_name,
+            inner_data_schemas,
+        );
+    }
+    Ok(())
+}
+
 fn collect_inner_data_schemas(
     modules: &CheckedModules,
     data_types: &IndexMap<DataTypeKey, TypedDataType>,
     semantics: &FuzzerSemantics,
     test_name: &str,
-) -> Result<BTreeMap<String, ExportedDataSchema>, Error> {
+ ) -> Result<BTreeMap<String, ExportedDataSchema>, Error> {
     let mut inner_data_schemas = BTreeMap::new();
 
     for type_name in collect_data_with_schema_type_names(semantics) {
-        if inner_data_schemas.contains_key(&type_name) {
-            continue;
-        }
-
-        let tipo = resolve_type_name_to_type(data_types, &type_name).ok_or_else(|| {
-            Error::StandardIo(std::io::Error::other(format!(
-                "Test '{test_name}': DataWithSchema leaf '{type_name}' could not be resolved to a unique custom type for inner_data_schemas export."
-            )))
-        })?;
-        let schema = export_data_schema(modules, data_types, &tipo).ok_or_else(|| {
-            Error::StandardIo(std::io::Error::other(format!(
-                "Test '{test_name}': DataWithSchema leaf '{type_name}' could not be exported to inner_data_schemas."
-            )))
-        })?;
-
-        inner_data_schemas.insert(type_name, schema);
+        insert_inner_data_schema_with_dependencies(
+            modules,
+            data_types,
+            &type_name,
+            test_name,
+            &mut inner_data_schemas,
+        )?;
     }
 
     Ok(inner_data_schemas)
@@ -2607,7 +2791,7 @@ where
         // predicates for the state / event / output domains of state-machine
         // traces, rather than defaulting to a vacuous `True` placeholder.
         let test_qualified_name = format!("{}.{}", test.module, test.name);
-        let inner_data_schemas = collect_inner_data_schemas(
+        let mut inner_data_schemas = collect_inner_data_schemas(
             &self.checked_modules,
             &self.data_types,
             &semantics,
@@ -2643,29 +2827,49 @@ where
                     initial_state_shallow_ir,
                     ..
                 } => {
+                    extend_inner_data_schemas_from_transition_prop(
+                        &self.checked_modules,
+                        &self.data_types,
+                        prop,
+                        &test_qualified_name,
+                        &mut inner_data_schemas,
+                    )?;
                     // Use a placeholder function name; `verify.rs`
                     // rewrites `__FN__` into the actual prefixed name at
                     // proof-file generation time (the prefix depends on
                     // `lean_test_name`, which is sanitised there).
-                    let (def, log, sub_gens, s0002_marker) =
-                        crate::verify::emit_is_valid_transition_def_for_export("__FN__", prop);
-                    let initial_state_lean = initial_state_shallow_ir
+                    let (def, widenings, sub_gens, s0002_marker) =
+                        crate::verify::emit_is_valid_transition_details_for_export_with_schemas(
+                            "__FN__",
+                            prop,
+                            &test.name,
+                            &inner_data_schemas,
+                        );
+                    let (initial_state_lean, helper_widenings) = initial_state_shallow_ir
                         .as_ref()
                         .map(|ir| {
-                            let (body, existentials) =
+                            let (body, existentials, mut helper_widenings) =
                                 crate::verify::emit_initial_state_as_lean(ir);
-                            // If existentials leaked through, discard
-                            // them — the initial-state path needs a
-                            // closed `Data` literal. A failure here
-                            // keeps `isValidTrace` defined over an
-                            // unconstrained existential.
+                            // If existentials leaked through, discard the
+                            // literal — the initial-state path needs a closed
+                            // `Data` value. Record the widening explicitly so
+                            // verify-side status gating can reject production
+                            // `Partial`/`Proved` results that rely on the
+                            // fallback existential.
                             if existentials.is_empty() {
-                                Some(body)
+                                (Some(body), helper_widenings)
                             } else {
-                                None
+                                helper_widenings.push(crate::export::TransitionWidening {
+                                    kind: crate::export::TransitionWideningKind::DataFreshening,
+                                    message: "initial-state helper could not emit a closed Data literal; isValidTrace falls back to an unconstrained initial-state witness".to_string(),
+                                });
+                                (None, helper_widenings)
                             }
                         })
-                        .unwrap_or(None);
+                        .unwrap_or_else(|| (None, Vec::new()));
+                    let unsupported_log =
+                        transition_unsupported_log(&widenings, &helper_widenings);
+
                     // M3: pre-compute structural vacuity from the source
                     // AST.  The rendered Lean text we ship in
                     // `is_valid_transition_def` is opaque to the
@@ -2679,7 +2883,9 @@ where
                     Some(crate::export::ExportedTransitionProp {
                         is_valid_transition_def: def,
                         initial_state_lean,
-                        unsupported_log: log,
+                        helper_widenings,
+                        widenings,
+                        unsupported_log,
                         opaque_sub_generators: sub_gens,
                         s0002_marker,
                         is_vacuous,

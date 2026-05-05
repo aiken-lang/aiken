@@ -358,12 +358,29 @@ pub struct StateMachineTransitionSemantics {
     pub event_semantics: Box<FuzzerSemantics>,
 }
 
-/// Pre-emitted Lean text for the `isValidTransition` predicate + audit log
-/// of over-approximations introduced during lowering.
+/// Pre-emitted Lean text for the `isValidTransition` predicate + audit data
+/// about over-approximations introduced during lowering.
 ///
 /// Computed at export time (see `aiken_project::lib::convert_semantics`)
 /// because the aiken-lang `TransitionProp` tree is not serializable
 /// (it holds `FuzzerSemantics` in existential domains).
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransitionWideningKind {
+    Relation,
+    DataFreshening,
+    BoolFreshening,
+    Domain,
+    OpaqueSubGenerator,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct TransitionWidening {
+    pub kind: TransitionWideningKind,
+    pub message: String,
+}
+
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct ExportedTransitionProp {
@@ -377,6 +394,20 @@ pub struct ExportedTransitionProp {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub initial_state_lean: Option<String>,
+    /// Structured widening records introduced while emitting helper-side Lean
+    /// expressions that are not represented inside the source `TransitionProp`
+    /// itself (today: initial-state literal emission). Verify-time helper
+    /// emission may add more local widenings before theorem status is decided.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
+    pub helper_widenings: Vec<TransitionWidening>,
+    /// Structured widening records for every counted relation/output/domain
+    /// compromise introduced while exporting `isValidTransition`. This is the
+    /// canonical machine-readable audit trail; `unsupported_log` is kept as a
+    /// derived compatibility mirror of the messages.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
+    pub widenings: Vec<TransitionWidening>,
     /// Human-readable list of constraints that were dropped or widened
     /// during lowering. Each entry becomes a line in the `S4 AUDIT`
     /// comment block of the generated file.
@@ -633,7 +664,7 @@ pub struct ExportedPropertyTest {
 }
 
 /// Schema version for `aiken export-tests` JSON output.
-pub const EXPORT_TESTS_VERSION: &str = "2";
+pub const EXPORT_TESTS_VERSION: &str = "3";
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]

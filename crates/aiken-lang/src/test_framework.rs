@@ -48,7 +48,6 @@ use vec1::{Vec1, vec1};
 const STDLIB_FUZZ_MODULE: &str = "aiken/fuzz";
 const MAX_FINITE_MAPPER_SOURCE_CASES: usize = 64;
 const MAX_FINITE_DOMAIN_CASES: usize = 64;
-#[cfg(test)]
 const STDLIB_FUZZ_SCENARIO_MODULE: &str = "aiken/fuzz/scenario";
 
 /// A simplified intermediate representation of a step function body, suitable
@@ -60,8 +59,10 @@ const STDLIB_FUZZ_SCENARIO_MODULE: &str = "aiken/fuzz/scenario";
 pub enum ShallowIr {
     /// Integer / UInt / Bool / ByteArray / String literal
     Const(ShallowConst),
-    /// Local variable reference
+    /// Local variable reference that is not known to be in Lean scope; verifier lowers it conservatively.
     Var { name: String, ty: ShallowIrType },
+    /// Variable introduced by a transition-proposition existential and therefore in Lean scope.
+    BoundVar { name: String, ty: ShallowIrType },
     /// Let binding: `let name = value; body`
     Let {
         name: String,
@@ -91,11 +92,15 @@ pub enum ShallowIr {
         record: Box<ShallowIr>,
         index: u64,
         label: String,
+        ty: ShallowIrType,
+        kind: ShallowFieldAccessKind,
     },
-    /// Record update `{ rec | field: val, ... }`
+    /// Record update `{ rec | field: val, ... }` represented as a full constructor update.
     RecordUpdate {
         record: Box<ShallowIr>,
-        updates: Vec<(String, ShallowIr)>,
+        tag: u64,
+        field_count: usize,
+        updates: Vec<ShallowIrRecordUpdate>,
     },
     /// Binary operator
     BinOp {
@@ -105,9 +110,10 @@ pub enum ShallowIr {
     },
     /// Tuple / pair literal
     Tuple(Vec<ShallowIr>),
-    /// List literal
+    /// List literal. `tail` preserves spread lists like `[head, ..tail]`.
     ListLit {
         elements: Vec<ShallowIr>,
+        tail: Option<Box<ShallowIr>>,
         ty: ShallowIrType,
     },
     /// A fuzzer combinator call — becomes ∃-bound variable in Lean.
@@ -153,6 +159,19 @@ pub enum OpaqueCode {
     /// constructor name and the qualified type name for diagnostic
     /// attribution.
     ConstructorTagUnresolved { ctor: String, type_name: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ShallowFieldAccessKind {
+    ConstructorField,
+    ListElement,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ShallowIrRecordUpdate {
+    pub label: String,
+    pub index: usize,
+    pub value: ShallowIr,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -258,6 +277,9 @@ pub fn typed_expr_to_shallow_ir(
             } = &constructor.variant
             {
                 if *arity == 0 {
+                    if let Some(value) = bool_constructor_literal(ctor_name, &constructor.tipo) {
+                        return ShallowIr::Const(ShallowConst::Bool(value));
+                    }
                     return match resolve_constructor_tag(&constructor.tipo, ctor_name, data_types) {
                         Some(tag) => ShallowIr::Construct {
                             module: module.clone(),
@@ -330,7 +352,7 @@ pub fn typed_expr_to_shallow_ir(
             // with a tag-0 arm that is vacuously satisfiable.
             let arms: Result<Vec<_>, _> = clauses
                 .iter()
-                .map(|c| translate_clause(c, &subject_tipo, data_types))
+                .map(|c| translate_clause(c, subject.as_ref(), &subject_tipo, data_types))
                 .collect();
             match arms {
                 Ok(arms) => ShallowIr::Match {
@@ -354,6 +376,8 @@ pub fn typed_expr_to_shallow_ir(
             record: Box::new(typed_expr_to_shallow_ir(record, data_types)),
             index: *index,
             label: label.clone(),
+            ty: shallow_ir_type(&expr.tipo()),
+            kind: ShallowFieldAccessKind::ConstructorField,
         },
 
         TypedExpr::BinOp {
@@ -374,11 +398,14 @@ pub fn typed_expr_to_shallow_ir(
             }
         }
 
-        TypedExpr::List { elements, .. } => ShallowIr::ListLit {
+        TypedExpr::List { elements, tail, .. } => ShallowIr::ListLit {
             elements: elements
                 .iter()
                 .map(|e| typed_expr_to_shallow_ir(e, data_types))
                 .collect(),
+            tail: tail
+                .as_ref()
+                .map(|tail| Box::new(typed_expr_to_shallow_ir(tail.as_ref(), data_types))),
             ty: shallow_ir_type(&expr.tipo()),
         },
 
@@ -426,22 +453,28 @@ pub fn typed_expr_to_shallow_ir(
                 },
             module_alias,
             ..
-        } => match resolve_constructor_tag(tipo, ctor_name, data_types) {
-            Some(tag) => ShallowIr::Construct {
-                module: module_alias.clone(),
-                constructor: ctor_name.clone(),
-                tag,
-                fields: vec![],
-            },
-            None => {
-                let type_name = describe_tipo(tipo);
-                ShallowIr::Opaque {
-                    ty: shallow_ir_type(&expr.tipo()),
-                    reason: s0002_reason_message(ctor_name, &type_name),
-                    code: Some(OpaqueCode::ConstructorTagUnresolved {
-                        ctor: ctor_name.clone(),
-                        type_name,
-                    }),
+        } => {
+            if let Some(value) = bool_constructor_literal(ctor_name, tipo) {
+                ShallowIr::Const(ShallowConst::Bool(value))
+            } else {
+                match resolve_constructor_tag(tipo, ctor_name, data_types) {
+                    Some(tag) => ShallowIr::Construct {
+                        module: module_alias.clone(),
+                        constructor: ctor_name.clone(),
+                        tag,
+                        fields: vec![],
+                    },
+                    None => {
+                        let type_name = describe_tipo(tipo);
+                        ShallowIr::Opaque {
+                            ty: shallow_ir_type(&expr.tipo()),
+                            reason: s0002_reason_message(ctor_name, &type_name),
+                            code: Some(OpaqueCode::ConstructorTagUnresolved {
+                                ctor: ctor_name.clone(),
+                                type_name,
+                            }),
+                        }
+                    }
                 }
             }
         },
@@ -452,6 +485,920 @@ pub fn typed_expr_to_shallow_ir(
             reason: "unsupported TypedExpr variant".to_string(),
             code: None,
         },
+    }
+}
+
+fn binding_shallow_ir_type(binding: &LocalBinding) -> ShallowIrType {
+    match binding {
+        LocalBinding::PureExpr(expr) => shallow_ir_type(&expr.tipo()),
+        LocalBinding::ExactIr { ty, .. }
+        | LocalBinding::DrawnValue { ty, .. }
+        | LocalBinding::Projection { ty, .. } => ty.clone(),
+    }
+}
+
+fn projected_binding(
+    binding: &LocalBinding,
+    index: u64,
+    label: impl Into<String>,
+    ty: ShallowIrType,
+    kind: ShallowFieldAccessKind,
+ ) -> Option<LocalBinding> {
+    let label = label.into();
+    let item = match kind {
+        ShallowFieldAccessKind::ConstructorField => ProjectionPathItem::ConstructorField {
+            index,
+            label,
+            ty: ty.clone(),
+        },
+        ShallowFieldAccessKind::ListElement => ProjectionPathItem::ListElement {
+            index,
+            label,
+            ty: ty.clone(),
+        },
+    };
+    match binding {
+        LocalBinding::DrawnValue { lean_name, ty: source_ty, .. } => Some(LocalBinding::Projection {
+            source_lean_name: lean_name.clone(),
+            source_ty: source_ty.clone(),
+            path: vec![item],
+            ty,
+        }),
+        LocalBinding::Projection {
+            source_lean_name,
+            source_ty,
+            path,
+            ..
+        } => {
+            let mut path = path.clone();
+            path.push(item);
+            Some(LocalBinding::Projection {
+                source_lean_name: source_lean_name.clone(),
+                source_ty: source_ty.clone(),
+                path,
+                ty,
+            })
+        }
+        LocalBinding::ExactIr { ir, .. } => {
+            let projected_ir = exact_field_ir_from_shallow_ir(ir, index, kind)?;
+            Some(LocalBinding::ExactIr { ty, ir: projected_ir })
+        }
+        LocalBinding::PureExpr(_) => None,
+    }
+}
+
+fn constructor_pattern_argument_types(
+    pattern: &TypedPattern,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Vec<ShallowIrType> {
+    let TypedPattern::Constructor {
+        name: ctor_name,
+        arguments,
+        tipo,
+        ..
+    } = pattern
+    else {
+        return Vec::new();
+    };
+
+    let fallback = || vec![ShallowIrType::Data; arguments.len()];
+    let Some(data_type) = lookup_data_type_by_tipo(data_types, tipo.as_ref()) else {
+        return fallback();
+    };
+    let Some(constructor) = data_type
+        .constructors
+        .iter()
+        .find(|constructor| constructor.name == *ctor_name)
+    else {
+        return fallback();
+    };
+
+    constructor
+        .arguments
+        .iter()
+        .map(|arg| shallow_ir_type(&arg.tipo))
+        .collect()
+}
+
+fn pure_expr_constructor_fields(expr: &TypedExpr) -> Option<Vec<TypedExpr>> {
+    match terminal_expression(expr) {
+        TypedExpr::Call { fun, args, .. } => match terminal_expression(fun) {
+            TypedExpr::Var { constructor, .. } => match &constructor.variant {
+                ValueConstructorVariant::Record { arity, .. } if *arity == args.len() => {
+                    Some(args.iter().map(|arg| arg.value.clone()).collect())
+                }
+                _ => None,
+            },
+            TypedExpr::ModuleSelect {
+                constructor: ModuleValueConstructor::Record { arity, .. },
+                ..
+            } if *arity == args.len() => Some(args.iter().map(|arg| arg.value.clone()).collect()),
+            _ => None,
+        },
+        TypedExpr::Var { constructor, .. } => match &constructor.variant {
+            ValueConstructorVariant::Record { arity, .. } if *arity == 0 => Some(Vec::new()),
+            _ => None,
+        },
+        TypedExpr::ModuleSelect {
+            constructor: ModuleValueConstructor::Record { arity, .. },
+            ..
+        } if *arity == 0 => Some(Vec::new()),
+        _ => None,
+    }
+}
+
+fn bool_constructor_literal(ctor_name: &str, tipo: &Rc<Type>) -> Option<bool> {
+    if tipo != &Type::bool() {
+        return None;
+    }
+    match ctor_name {
+        "True" => Some(true),
+        "False" => Some(false),
+        _ => None,
+    }
+}
+
+
+fn bind_pattern_to_locals(
+    pattern: &TypedPattern,
+    binding: &LocalBinding,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    locals: &mut BTreeMap<String, LocalBinding>,
+) {
+    match pattern {
+        TypedPattern::Var { name, .. } => {
+            locals.insert(name.clone(), binding.clone());
+        }
+        TypedPattern::Assign { name, pattern, .. } => {
+            locals.insert(name.clone(), binding.clone());
+            bind_pattern_to_locals(pattern, binding, data_types, locals);
+        }
+        TypedPattern::Discard { .. } => {}
+        TypedPattern::Pair { fst, snd, .. } => {
+            if let LocalBinding::PureExpr(expr) = binding {
+                if let TypedExpr::Pair { fst: expr_fst, snd: expr_snd, .. } = terminal_expression(expr) {
+                    bind_pattern_to_locals(
+                        fst,
+                        &LocalBinding::PureExpr(expr_fst.as_ref().clone()),
+                        data_types,
+                        locals,
+                    );
+                    bind_pattern_to_locals(
+                        snd,
+                        &LocalBinding::PureExpr(expr_snd.as_ref().clone()),
+                        data_types,
+                        locals,
+                    );
+                    return;
+                }
+            }
+
+            let (fst_ty, snd_ty) = match binding_shallow_ir_type(binding) {
+                ShallowIrType::Pair(fst_ty, snd_ty) => ((*fst_ty).clone(), (*snd_ty).clone()),
+                _ => (ShallowIrType::Data, ShallowIrType::Data),
+            };
+            if let Some(fst_binding) = projected_binding(
+                binding,
+                0,
+                "0",
+                fst_ty,
+                ShallowFieldAccessKind::ListElement,
+            ) {
+                bind_pattern_to_locals(fst, &fst_binding, data_types, locals);
+            }
+            if let Some(snd_binding) = projected_binding(
+                binding,
+                1,
+                "1",
+                snd_ty,
+                ShallowFieldAccessKind::ListElement,
+            ) {
+                bind_pattern_to_locals(snd, &snd_binding, data_types, locals);
+            }
+        }
+        TypedPattern::Tuple { elems, .. } => {
+            if let LocalBinding::PureExpr(expr) = binding {
+                if let TypedExpr::Tuple { elems: expr_elems, .. } = terminal_expression(expr) {
+                    for (pat, expr) in elems.iter().zip(expr_elems.iter()) {
+                        bind_pattern_to_locals(
+                            pat,
+                            &LocalBinding::PureExpr(expr.clone()),
+                            data_types,
+                            locals,
+                        );
+                    }
+                    return;
+                }
+            }
+
+            let pair_types = match binding_shallow_ir_type(binding) {
+                ShallowIrType::Pair(fst_ty, snd_ty) if elems.len() == 2 => {
+                    Some([(*fst_ty).clone(), (*snd_ty).clone()])
+                }
+                _ => None,
+            };
+
+            for (index, pat) in elems.iter().enumerate() {
+                let ty = pair_types
+                    .as_ref()
+                    .and_then(|tys| tys.get(index))
+                    .cloned()
+                    .unwrap_or(ShallowIrType::Data);
+                if let Some(projected) = projected_binding(
+                    binding,
+                    index as u64,
+                    index.to_string(),
+                    ty,
+                    ShallowFieldAccessKind::ListElement,
+                ) {
+                    bind_pattern_to_locals(pat, &projected, data_types, locals);
+                }
+            }
+        }
+        TypedPattern::Constructor { arguments, .. } => {
+            if let LocalBinding::PureExpr(expr) = binding {
+                if let Some(expr_args) = pure_expr_constructor_fields(expr) {
+                    for (arg, expr_arg) in arguments.iter().zip(expr_args.iter()) {
+                        bind_pattern_to_locals(
+                            &arg.value,
+                            &LocalBinding::PureExpr(expr_arg.clone()),
+                            data_types,
+                            locals,
+                        );
+                    }
+                    return;
+                }
+            }
+
+            let field_types = constructor_pattern_argument_types(pattern, data_types);
+            for (index, arg) in arguments.iter().enumerate() {
+                let ty = field_types
+                    .get(index)
+                    .cloned()
+                    .unwrap_or(ShallowIrType::Data);
+                let label = arg.label.clone().unwrap_or_else(|| index.to_string());
+                if let Some(projected) = projected_binding(
+                    binding,
+                    index as u64,
+                    label,
+                    ty,
+                    ShallowFieldAccessKind::ConstructorField,
+                ) {
+                    bind_pattern_to_locals(&arg.value, &projected, data_types, locals);
+                }
+            }
+        }
+        TypedPattern::List { .. } | TypedPattern::Int { .. } | TypedPattern::ByteArray { .. } => {}
+    }
+}
+
+fn unsupported_assignment_pattern_reason(pattern: &TypedPattern) -> Option<&'static str> {
+    match pattern {
+        TypedPattern::Var { .. } | TypedPattern::Discard { .. } => None,
+        TypedPattern::Int { .. } => {
+            Some("int-pattern bindings require an equality guard that is not emitted yet")
+        }
+        TypedPattern::ByteArray { .. } => {
+            Some("bytearray-pattern bindings require an equality guard that is not emitted yet")
+        }
+        TypedPattern::Assign { pattern, .. } => unsupported_assignment_pattern_reason(pattern),
+        TypedPattern::Pair { fst, snd, .. } => unsupported_assignment_pattern_reason(fst)
+            .or_else(|| unsupported_assignment_pattern_reason(snd)),
+        TypedPattern::Tuple { elems, .. } => elems
+            .iter()
+            .find_map(unsupported_assignment_pattern_reason),
+        TypedPattern::Constructor { arguments, .. } => arguments
+            .iter()
+            .find_map(|arg| unsupported_assignment_pattern_reason(&arg.value)),
+        TypedPattern::List { .. } => {
+            Some("list-pattern bindings are not lowered faithfully yet")
+        }
+    }
+}
+
+fn unsupported_pattern_binding_reason(pattern: &TypedPattern) -> Option<&'static str> {
+    match pattern {
+        TypedPattern::Var { .. }
+        | TypedPattern::Discard { .. }
+        | TypedPattern::Int { .. }
+        | TypedPattern::ByteArray { .. } => None,
+        TypedPattern::Assign { pattern, .. } => unsupported_pattern_binding_reason(pattern),
+        TypedPattern::Pair { fst, snd, .. } => unsupported_pattern_binding_reason(fst)
+            .or_else(|| unsupported_pattern_binding_reason(snd)),
+        TypedPattern::Tuple { elems, .. } => elems
+            .iter()
+            .find_map(unsupported_pattern_binding_reason),
+        TypedPattern::Constructor { arguments, .. } => arguments
+            .iter()
+            .find_map(|arg| unsupported_pattern_binding_reason(&arg.value)),
+        TypedPattern::List { .. } => {
+            Some("list-pattern bindings are not lowered faithfully yet")
+        }
+    }
+}
+
+fn guarded_when_clause_fallback(
+    unsupported: TransitionProp,
+    body: TransitionProp,
+    fallback: TransitionProp,
+) -> TransitionProp {
+    TransitionProp::Or(vec![TransitionProp::And(vec![unsupported, body]), fallback])
+}
+
+fn local_binding_to_shallow_ir(
+    binding: &LocalBinding,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    locals: &BTreeMap<String, LocalBinding>,
+    visiting: &mut BTreeSet<String>,
+) -> ShallowIr {
+    match binding {
+        LocalBinding::PureExpr(expr) => {
+            typed_expr_to_shallow_ir_with_locals(expr, data_types, locals, visiting)
+        }
+        LocalBinding::ExactIr { ir, .. } => ir.clone(),
+        LocalBinding::DrawnValue { lean_name, ty, .. } => ShallowIr::BoundVar {
+            name: lean_name.clone(),
+            ty: ty.clone(),
+        },
+        LocalBinding::Projection {
+            source_lean_name,
+            source_ty,
+            path,
+            ..
+        } => {
+            let mut ir = ShallowIr::BoundVar {
+                name: source_lean_name.clone(),
+                ty: source_ty.clone(),
+            };
+            for item in path {
+                ir = match item {
+                    ProjectionPathItem::ConstructorField { index, label, ty } => ShallowIr::FieldAccess {
+                        record: Box::new(ir),
+                        index: *index,
+                        label: label.clone(),
+                        ty: ty.clone(),
+                        kind: ShallowFieldAccessKind::ConstructorField,
+                    },
+                    ProjectionPathItem::ListElement { index, label, ty } => ShallowIr::FieldAccess {
+                        record: Box::new(ir),
+                        index: *index,
+                        label: label.clone(),
+                        ty: ty.clone(),
+                        kind: ShallowFieldAccessKind::ListElement,
+                    },
+                };
+            }
+            ir
+        }
+    }
+}
+
+fn record_constructor_shape(
+    tipo: &Rc<Type>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<(String, String, u64, usize)> {
+    let dt = lookup_data_type_by_tipo(data_types, tipo.as_ref())?;
+    if dt.constructors.len() != 1 {
+        return None;
+    }
+    let ctor = dt.constructors.first()?;
+    let tag = resolve_constructor_tag(tipo, &ctor.name, data_types)?;
+    Some((dt.name.clone(), ctor.name.clone(), tag, ctor.arguments.len()))
+}
+
+fn typed_expr_to_shallow_ir_with_locals(
+    expr: &TypedExpr,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    locals: &BTreeMap<String, LocalBinding>,
+    visiting: &mut BTreeSet<String>,
+) -> ShallowIr {
+    match expr {
+        TypedExpr::Var { name, constructor, .. } if locals.contains_key(name) => {
+            if let Some(binding) = locals.get(name) {
+                if !visiting.insert(name.clone()) {
+                    return ShallowIr::Opaque {
+                        ty: shallow_ir_type(&constructor.tipo),
+                        reason: format!("local binding cycle on '{name}' while lowering value"),
+                        code: None,
+                    };
+                }
+                let lowered = local_binding_to_shallow_ir(binding, data_types, locals, visiting);
+                visiting.remove(name);
+                return lowered;
+            }
+            ShallowIr::Var {
+                name: name.clone(),
+                ty: shallow_ir_type(&constructor.tipo),
+            }
+        }
+        TypedExpr::UInt { value, .. } => ShallowIr::Const(ShallowConst::Int(value.clone())),
+        TypedExpr::String { value, .. } => ShallowIr::Const(ShallowConst::String(value.clone())),
+        TypedExpr::ByteArray { bytes, .. } => {
+            ShallowIr::Const(ShallowConst::ByteArray(hex::encode(bytes)))
+        }
+        TypedExpr::Var { constructor, name, .. } => {
+            if let ValueConstructorVariant::Record {
+                arity,
+                module,
+                name: ctor_name,
+                ..
+            } = &constructor.variant
+            {
+                if *arity == 0 {
+                    if let Some(value) = bool_constructor_literal(ctor_name, &constructor.tipo) {
+                        return ShallowIr::Const(ShallowConst::Bool(value));
+                    }
+                    return match resolve_constructor_tag(&constructor.tipo, ctor_name, data_types) {
+                        Some(tag) => ShallowIr::Construct {
+                            module: module.clone(),
+                            constructor: ctor_name.clone(),
+                            tag,
+                            fields: vec![],
+                        },
+                        None => {
+                            let type_name = describe_tipo(&constructor.tipo);
+                            ShallowIr::Opaque {
+                                ty: shallow_ir_type(&constructor.tipo),
+                                reason: s0002_reason_message(ctor_name, &type_name),
+                                code: Some(OpaqueCode::ConstructorTagUnresolved {
+                                    ctor: ctor_name.clone(),
+                                    type_name,
+                                }),
+                            }
+                        }
+                    };
+                }
+            }
+            ShallowIr::Var {
+                name: name.clone(),
+                ty: shallow_ir_type(&constructor.tipo),
+            }
+        }
+        TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+            translate_sequence_with_locals(expressions, data_types, locals, visiting)
+        }
+        TypedExpr::If { branches, final_else, .. } => {
+            let mut result = typed_expr_to_shallow_ir_with_locals(
+                final_else,
+                data_types,
+                locals,
+                visiting,
+            );
+            for branch in branches.iter().rev() {
+                result = ShallowIr::If {
+                    cond: Box::new(typed_expr_to_shallow_ir_with_locals(
+                        &branch.condition,
+                        data_types,
+                        locals,
+                        visiting,
+                    )),
+                    then_branch: Box::new(typed_expr_to_shallow_ir_with_locals(
+                        &branch.body,
+                        data_types,
+                        locals,
+                        visiting,
+                    )),
+                    else_branch: Box::new(result),
+                };
+            }
+            result
+        }
+        TypedExpr::When { subject, clauses, .. } => {
+            let subject_tipo = subject.tipo();
+            let mut visiting_subject_binding = BTreeSet::new();
+            let subject_binding =
+                binding_from_expr_with_locals(subject.as_ref(), locals, &mut visiting_subject_binding);
+            let arms: Result<Vec<_>, _> = clauses
+                .iter()
+                .map(|clause| {
+                    translate_clause_with_locals(
+                        clause,
+                        &subject_tipo,
+                        &subject_binding,
+                        data_types,
+                        locals,
+                        visiting,
+                    )
+                })
+                .collect();
+            match arms {
+                Ok(arms) => ShallowIr::Match {
+                    subject: Box::new(typed_expr_to_shallow_ir_with_locals(
+                        subject,
+                        data_types,
+                        locals,
+                        visiting,
+                    )),
+                    arms,
+                },
+                Err(failure) => ShallowIr::Opaque {
+                    ty: shallow_ir_type(&expr.tipo()),
+                    reason: failure.reason,
+                    code: Some(failure.code),
+                },
+            }
+        }
+        TypedExpr::RecordAccess { record, index, label, .. } => ShallowIr::FieldAccess {
+            record: Box::new(typed_expr_to_shallow_ir_with_locals(
+                record,
+                data_types,
+                locals,
+                visiting,
+            )),
+            index: *index,
+            label: label.clone(),
+            ty: shallow_ir_type(&expr.tipo()),
+            kind: ShallowFieldAccessKind::ConstructorField,
+        },
+        TypedExpr::RecordUpdate { spread, args, tipo, .. } => {
+            if let Some((_type_name, _ctor_name, tag, field_count)) =
+                record_constructor_shape(tipo, data_types)
+            {
+                ShallowIr::RecordUpdate {
+                    record: Box::new(typed_expr_to_shallow_ir_with_locals(
+                        spread,
+                        data_types,
+                        locals,
+                        visiting,
+                    )),
+                    tag,
+                    field_count,
+                    updates: args
+                        .iter()
+                        .map(|arg| ShallowIrRecordUpdate {
+                            label: arg.label.clone(),
+                            index: arg.index,
+                            value: typed_expr_to_shallow_ir_with_locals(
+                                &arg.value,
+                                data_types,
+                                locals,
+                                visiting,
+                            ),
+                        })
+                        .collect(),
+                }
+            } else {
+                ShallowIr::Opaque {
+                    ty: shallow_ir_type(tipo),
+                    reason: "record update target is not a single-constructor record".to_string(),
+                    code: None,
+                }
+            }
+        }
+        TypedExpr::BinOp { name, left, right, .. } => {
+            if let Some(op) = translate_binop(name) {
+                ShallowIr::BinOp {
+                    op,
+                    left: Box::new(typed_expr_to_shallow_ir_with_locals(
+                        left,
+                        data_types,
+                        locals,
+                        visiting,
+                    )),
+                    right: Box::new(typed_expr_to_shallow_ir_with_locals(
+                        right,
+                        data_types,
+                        locals,
+                        visiting,
+                    )),
+                }
+            } else {
+                ShallowIr::Opaque {
+                    ty: shallow_ir_type(&expr.tipo()),
+                    reason: format!("unsupported binary operator `{}`", describe_binop(name)),
+                    code: None,
+                }
+            }
+        }
+        TypedExpr::List { elements, tail, .. } => ShallowIr::ListLit {
+            elements: elements
+                .iter()
+                .map(|e| typed_expr_to_shallow_ir_with_locals(e, data_types, locals, visiting))
+                .collect(),
+            tail: tail.as_ref().map(|tail| {
+                Box::new(typed_expr_to_shallow_ir_with_locals(
+                    tail.as_ref(),
+                    data_types,
+                    locals,
+                    visiting,
+                ))
+            }),
+            ty: shallow_ir_type(&expr.tipo()),
+        },
+        TypedExpr::Tuple { elems, .. } => ShallowIr::Tuple(
+            elems.iter()
+                .map(|e| typed_expr_to_shallow_ir_with_locals(e, data_types, locals, visiting))
+                .collect(),
+        ),
+        TypedExpr::Pair { fst, snd, .. } => ShallowIr::Tuple(vec![
+            typed_expr_to_shallow_ir_with_locals(fst, data_types, locals, visiting),
+            typed_expr_to_shallow_ir_with_locals(snd, data_types, locals, visiting),
+        ]),
+        TypedExpr::Call { fun, args, tipo, .. } => {
+            translate_call_with_locals(fun, args, tipo, data_types, locals, visiting)
+        }
+        TypedExpr::Fn { body, .. } => {
+            typed_expr_to_shallow_ir_with_locals(body, data_types, locals, visiting)
+        }
+        TypedExpr::Trace { then, .. } => {
+            typed_expr_to_shallow_ir_with_locals(then, data_types, locals, visiting)
+        }
+        TypedExpr::ModuleSelect {
+            constructor:
+                ModuleValueConstructor::Record {
+                    arity: 0,
+                    name: ctor_name,
+                    tipo,
+                    ..
+                },
+            module_alias,
+            ..
+        } => {
+            if let Some(value) = bool_constructor_literal(ctor_name, tipo) {
+                ShallowIr::Const(ShallowConst::Bool(value))
+            } else {
+                match resolve_constructor_tag(tipo, ctor_name, data_types) {
+                    Some(tag) => ShallowIr::Construct {
+                        module: module_alias.clone(),
+                        constructor: ctor_name.clone(),
+                        tag,
+                        fields: vec![],
+                    },
+                    None => {
+                        let type_name = describe_tipo(tipo);
+                        ShallowIr::Opaque {
+                            ty: shallow_ir_type(&expr.tipo()),
+                            reason: s0002_reason_message(ctor_name, &type_name),
+                            code: Some(OpaqueCode::ConstructorTagUnresolved {
+                                ctor: ctor_name.clone(),
+                                type_name,
+                            }),
+                        }
+                    }
+                }
+            }
+        }
+        _ => ShallowIr::Opaque {
+            ty: shallow_ir_type(&expr.tipo()),
+            reason: "unsupported TypedExpr variant".to_string(),
+            code: None,
+        },
+    }
+}
+
+fn translate_sequence_with_locals(
+    expressions: &[TypedExpr],
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    locals: &BTreeMap<String, LocalBinding>,
+    visiting: &mut BTreeSet<String>,
+) -> ShallowIr {
+    match expressions {
+        [] => ShallowIr::Const(ShallowConst::Unit),
+        [single] => typed_expr_to_shallow_ir_with_locals(single, data_types, locals, visiting),
+        [
+            TypedExpr::Assignment { value, pattern, .. },
+            rest @ ..,
+        ] => {
+            let mut scoped = locals.clone();
+            if let Some(reason) = unsupported_assignment_pattern_reason(pattern) {
+                let ty = rest
+                    .last()
+                    .map(|expr| shallow_ir_type(&expr.tipo()))
+                    .unwrap_or(ShallowIrType::Unit);
+                return ShallowIr::Opaque {
+                    ty,
+                    reason: reason.to_string(),
+                    code: None,
+                };
+            }
+
+            if let Some(payload_tipo) = extract_fuzzer_payload_type(value.tipo().as_ref()) {
+                let binder = pattern_var_name(pattern)
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| format!("_draw_{}", expressions.len()));
+                let binding = LocalBinding::DrawnValue {
+                    lean_name: binder,
+                    ty: shallow_ir_type(&payload_tipo),
+                    domain: FuzzerSemantics::Data,
+                };
+                bind_pattern_to_locals(pattern, &binding, data_types, &mut scoped);
+                translate_sequence_with_locals(rest, data_types, &scoped, visiting)
+            } else {
+                let value_ir =
+                    typed_expr_to_shallow_ir_with_locals(value, data_types, locals, visiting);
+                let mut binding_visiting = BTreeSet::new();
+                let binding = binding_from_expr_with_locals(value, locals, &mut binding_visiting);
+                bind_pattern_to_locals(pattern, &binding, data_types, &mut scoped);
+                if let TypedPattern::Var { name, .. } = pattern {
+                    ShallowIr::Let {
+                        name: name.clone(),
+                        value: Box::new(value_ir),
+                        body: Box::new(translate_sequence_with_locals(
+                            rest, data_types, &scoped, visiting,
+                        )),
+                    }
+                } else {
+                    ShallowIr::Let {
+                        name: "_".into(),
+                        value: Box::new(value_ir),
+                        body: Box::new(translate_sequence_with_locals(
+                            rest, data_types, &scoped, visiting,
+                        )),
+                    }
+                }
+            }
+        }
+        [head, rest @ ..] => ShallowIr::Let {
+            name: "_".into(),
+            value: Box::new(typed_expr_to_shallow_ir_with_locals(
+                head, data_types, locals, visiting,
+            )),
+            body: Box::new(translate_sequence_with_locals(rest, data_types, locals, visiting)),
+        },
+    }
+}
+
+fn translate_clause_with_locals(
+    clause: &TypedClause,
+    subject_tipo: &Rc<Type>,
+    subject_binding: &LocalBinding,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    locals: &BTreeMap<String, LocalBinding>,
+    visiting: &mut BTreeSet<String>,
+) -> Result<ShallowIrArm, ClauseTranslationFailure> {
+    let (tag, bindings) = match &clause.pattern {
+        TypedPattern::Constructor {
+            name: ctor_name,
+            arguments,
+            ..
+        } => {
+            let tag = resolve_constructor_tag(subject_tipo, ctor_name, data_types).ok_or_else(|| {
+                let type_name = describe_tipo(subject_tipo);
+                ClauseTranslationFailure {
+                    reason: s0002_reason_message(ctor_name, &type_name),
+                    code: OpaqueCode::ConstructorTagUnresolved {
+                        ctor: ctor_name.clone(),
+                        type_name,
+                    },
+                }
+            })?;
+            let bindings = arguments
+                .iter()
+                .map(|arg| match &arg.value {
+                    TypedPattern::Var { name, .. } => name.clone(),
+                    _ => "_".into(),
+                })
+                .collect();
+            (Some(tag), bindings)
+        }
+        TypedPattern::Var { name, .. } => (None, vec![name.clone()]),
+        TypedPattern::Discard { .. } => (None, vec!["_".into()]),
+        _ => (None, vec![]),
+    };
+    let mut clause_locals = locals.clone();
+    bind_pattern_to_locals(&clause.pattern, subject_binding, data_types, &mut clause_locals);
+    Ok(ShallowIrArm {
+        tag,
+        bindings,
+        body: typed_expr_to_shallow_ir_with_locals(
+            &clause.then,
+            data_types,
+            &clause_locals,
+            visiting,
+        ),
+    })
+}
+
+fn translate_call_with_locals(
+    fun: &TypedExpr,
+    args: &[CallArg<TypedExpr>],
+    tipo: &Rc<Type>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    locals: &BTreeMap<String, LocalBinding>,
+    visiting: &mut BTreeSet<String>,
+) -> ShallowIr {
+    if let Some(fuzz_ir) = try_fuzz_existential(fun, args, tipo) {
+        return fuzz_ir;
+    }
+    if extract_module_fn_identity(fun).is_some_and(|(module, name)| module.is_empty() && name == "as_data")
+        && let [value] = args
+    {
+        return typed_expr_to_shallow_ir_with_locals(
+            &value.value,
+            data_types,
+            locals,
+            visiting,
+        );
+    }
+    if extract_module_fn_identity(fun)
+        .is_some_and(|(module, name)| module == "aiken/collection/list" && name == "concat")
+        && let [left, right] = args
+    {
+        return ShallowIr::BinOp {
+            op: ShallowBinOp::Append,
+            left: Box::new(typed_expr_to_shallow_ir_with_locals(
+                &left.value,
+                data_types,
+                locals,
+                visiting,
+            )),
+            right: Box::new(typed_expr_to_shallow_ir_with_locals(
+                &right.value,
+                data_types,
+                locals,
+                visiting,
+            )),
+        };
+    }
+    if let TypedExpr::Var { constructor, .. } = fun {
+        if let ValueConstructorVariant::Record {
+            name: ctor_name,
+            arity,
+            module,
+            ..
+        } = &constructor.variant
+        {
+            if *arity == args.len() {
+                return match resolve_constructor_tag(&constructor.tipo, ctor_name, data_types) {
+                    Some(tag) => ShallowIr::Construct {
+                        module: module.clone(),
+                        constructor: ctor_name.clone(),
+                        tag,
+                        fields: args
+                            .iter()
+                            .map(|a| {
+                                typed_expr_to_shallow_ir_with_locals(
+                                    &a.value,
+                                    data_types,
+                                    locals,
+                                    visiting,
+                                )
+                            })
+                            .collect(),
+                    },
+                    None => {
+                        let type_name = describe_tipo(&constructor.tipo);
+                        ShallowIr::Opaque {
+                            ty: shallow_ir_type(tipo),
+                            reason: s0002_reason_message(ctor_name, &type_name),
+                            code: Some(OpaqueCode::ConstructorTagUnresolved {
+                                ctor: ctor_name.clone(),
+                                type_name,
+                            }),
+                        }
+                    }
+                };
+            }
+        }
+    }
+    if let TypedExpr::ModuleSelect {
+        constructor:
+            ModuleValueConstructor::Record {
+                name: ctor_name,
+                arity,
+                tipo: ctor_tipo,
+                ..
+            },
+        module_alias,
+        ..
+    } = fun
+    {
+        if *arity == args.len() {
+            return match resolve_constructor_tag(ctor_tipo, ctor_name, data_types) {
+                Some(tag) => ShallowIr::Construct {
+                    module: module_alias.clone(),
+                    constructor: ctor_name.clone(),
+                    tag,
+                    fields: args
+                        .iter()
+                        .map(|a| {
+                            typed_expr_to_shallow_ir_with_locals(
+                                &a.value,
+                                data_types,
+                                locals,
+                                visiting,
+                            )
+                        })
+                        .collect(),
+                },
+                None => {
+                    let type_name = describe_tipo(ctor_tipo);
+                    ShallowIr::Opaque {
+                        ty: shallow_ir_type(tipo),
+                        reason: s0002_reason_message(ctor_name, &type_name),
+                        code: Some(OpaqueCode::ConstructorTagUnresolved {
+                            ctor: ctor_name.clone(),
+                            type_name,
+                        }),
+                    }
+                }
+            };
+        }
+    }
+    ShallowIr::Opaque {
+        ty: shallow_ir_type(tipo),
+        reason: "unrecognised function call".into(),
+        code: None,
     }
 }
 
@@ -720,72 +1667,261 @@ fn describe_semantics(semantics: &FuzzerSemantics) -> String {
     }
 }
 
-/// A `ShallowIr` tree is *vacuous* when the emitter in `verify.rs` would
-/// reify its root as a fresh `Data` existential `∃ v : Data, transition = v`
-/// instead of a structural equality.  Handing such a trivially-True
-/// predicate to Blaster as the precondition of a halt theorem gives no
-/// additional precision but forces Z3 to chew through the encoding,
-/// which the 84c32cae commit message recorded as a cause of hangs.
-///
-/// The root shapes currently widened to fresh existentials by
-/// `emit_shallow_ir_as_lean_data` in `verify.rs` are:
-///   - `ShallowIr::Var`       (unresolved reference, e.g. a named step fn)
-///   - `ShallowIr::Opaque`    (translator did not recognise this shape)
-///   - `ShallowIr::If`        (no direct Data-level literal form)
-///   - `ShallowIr::Match`     (ditto)
-///   - `ShallowIr::FieldAccess`/`RecordUpdate`/`BinOp` (ditto)
-///
-/// `Let` is not itself vacuous — the emitter passes through to its body —
-/// so we strip `Let` layers before classifying the root.  A tree rooted
-/// at `Construct`, `Tuple`, `ListLit`, or `Const` is not vacuous: the
-/// emitter produces a structural `Data.Constr`/`Data.List`/primitive
-/// expression that yields a useful `transition = <constructor>` Lean
-/// predicate.  For those the step_fn path is safe to take.
-///
-/// S1 deliberately classifies monadic step bodies (which begin with
-/// `TypedExpr::If` or sequenced `Let`-into-`If`) as vacuous: the fuzzer
-/// combinators inside still erase to `ctx.fresh(Data)` in the current
-/// emitter.  S2 (combinator recognizers) is expected to enrich the IR so
-/// this predicate can return `false` for those cases as well.
-///
-/// Typed-code carve-out: an `Opaque` carrying a typed `OpaqueCode` (today,
-/// `ConstructorTagUnresolved` for S0002) is *not* vacuous. Even though its
-/// emitter shape is identical to a generic `Opaque` (both reduce to a
-/// fresh existential), the verify-side dispatcher in
-/// `aiken-project::verify::build_state_machine_trace_reachability_helpers`
-/// must inspect the typed payload to raise a hard, non-skippable error.
-/// Treating typed-code `Opaque`s as vacuous would let the upstream filter
-/// in `state_machine_trace_from_test_arguments` swallow the marker,
-/// leaving the user with a generic skippable `FallbackRequired` rather
-/// than the promised hard error. All other `Opaque` shapes remain
-/// vacuous.
-fn shallow_ir_is_vacuous(ir: &ShallowIr) -> bool {
-    let mut current = ir;
-    loop {
-        match current {
-            ShallowIr::Let { body, .. } => current = body.as_ref(),
-            // S0002 carve-out: typed-code-bearing `Opaque` must reach the
-            // verify-side dispatcher to emit a hard error rather than be
-            // absorbed as a vacuous existential. Today only
-            // `OpaqueCode::ConstructorTagUnresolved` is defined; future
-            // typed codes will share this carve-out.
-            ShallowIr::Opaque { code: Some(_), .. } => {
-                return false;
-            }
-            ShallowIr::Var { .. }
-            | ShallowIr::Opaque { .. }
-            | ShallowIr::If { .. }
-            | ShallowIr::Match { .. }
-            | ShallowIr::FieldAccess { .. }
-            | ShallowIr::RecordUpdate { .. }
-            | ShallowIr::BinOp { .. } => return true,
-            ShallowIr::Const(_)
-            | ShallowIr::Construct { .. }
-            | ShallowIr::Tuple(_)
-            | ShallowIr::ListLit { .. }
-            | ShallowIr::FuzzExistential { .. } => return false,
+fn shallow_ir_type_from_semantics(semantics: &FuzzerSemantics) -> ShallowIrType {
+    match semantics {
+        FuzzerSemantics::Bool => ShallowIrType::Bool,
+        FuzzerSemantics::IntRange { .. } => ShallowIrType::Int,
+        FuzzerSemantics::ByteArrayRange { .. } => ShallowIrType::ByteArray,
+        FuzzerSemantics::String => ShallowIrType::String,
+        FuzzerSemantics::Data | FuzzerSemantics::DataWithSchema { .. } => ShallowIrType::Data,
+        FuzzerSemantics::Exact(FuzzerExactValue::Bool(_)) => ShallowIrType::Bool,
+        FuzzerSemantics::Exact(FuzzerExactValue::ByteArray(_)) => ShallowIrType::ByteArray,
+        FuzzerSemantics::Exact(FuzzerExactValue::String(_)) => ShallowIrType::String,
+        FuzzerSemantics::OneOf(values) => values.first().map_or(ShallowIrType::Data, |value| match value {
+            FuzzerExactValue::Bool(_) => ShallowIrType::Bool,
+            FuzzerExactValue::ByteArray(_) => ShallowIrType::ByteArray,
+            FuzzerExactValue::String(_) => ShallowIrType::String,
+        }),
+        FuzzerSemantics::Product(items) if items.len() == 2 => ShallowIrType::Pair(
+            Box::new(shallow_ir_type_from_semantics(&items[0])),
+            Box::new(shallow_ir_type_from_semantics(&items[1])),
+        ),
+        FuzzerSemantics::Product(_) => ShallowIrType::Data,
+        FuzzerSemantics::List { element, .. } => {
+            ShallowIrType::List(Box::new(shallow_ir_type_from_semantics(element)))
         }
+        FuzzerSemantics::Constructors { .. }
+        | FuzzerSemantics::StateMachineTrace { .. }
+        | FuzzerSemantics::Opaque { .. } => ShallowIrType::Data,
     }
+}
+
+/// A `ShallowIr` tree is *vacuous* when the verifier cannot emit it as an exact
+/// counted-output `Data` expression on the theorem path.
+///
+/// This is stricter than “contains some structure”: a root only counts as
+/// non-vacuous when the downstream `verify.rs` emitter can preserve the value
+/// relationship without freshening it to a new existential witness. Typed-code
+/// `Opaque` markers (for example `S0002`) remain a carve-out: they are not
+/// exact data, but they must survive to the verify-side hard-error dispatcher.
+fn shallow_ir_has_known_constructor_layout(ir: &ShallowIr) -> bool {
+    match ir {
+        ShallowIr::Construct { .. } => true,
+        ShallowIr::RecordUpdate { record, updates, .. } => {
+            shallow_ir_has_known_constructor_layout(record)
+                && updates
+                    .iter()
+                    .all(|update| shallow_ir_is_exact_data_expr(&update.value))
+        }
+        ShallowIr::BoundVar {
+            ty: ShallowIrType::Adt(_),
+            ..
+        } => true,
+        ShallowIr::FieldAccess {
+            record,
+            ty: ShallowIrType::Adt(_),
+            ..
+        } => shallow_ir_is_exact_data_expr(record),
+        ShallowIr::Let { body, .. } => shallow_ir_has_known_constructor_layout(body),
+        ShallowIr::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            shallow_ir_has_known_constructor_layout(then_branch)
+                && shallow_ir_has_known_constructor_layout(else_branch)
+        }
+        ShallowIr::Match { arms, .. } => {
+            !arms.is_empty()
+                && arms
+                    .iter()
+                    .all(|arm| shallow_ir_has_known_constructor_layout(&arm.body))
+        }
+        _ => false,
+    }
+}
+
+fn shallow_ir_field_access_is_exact(
+    record: &ShallowIr,
+    index: u64,
+    kind: ShallowFieldAccessKind,
+) -> bool {
+    if let Some(projected) = exact_field_ir_from_shallow_ir(record, index, kind) {
+        return shallow_ir_is_exact_data_expr(&projected);
+    }
+
+    match (record, kind) {
+        (
+            ShallowIr::BoundVar {
+                ty: ShallowIrType::Pair(_, _),
+                ..
+            },
+            ShallowFieldAccessKind::ListElement,
+        ) => index < 2,
+        (_, ShallowFieldAccessKind::ConstructorField) => {
+            shallow_ir_has_known_constructor_layout(record)
+        }
+        _ => false,
+    }
+}
+
+fn shallow_ir_is_exact_int_expr(ir: &ShallowIr) -> bool {
+    if find_first_typed_opaque_in_shallow_ir(ir).is_some() {
+        return true;
+    }
+
+    match ir {
+        ShallowIr::Const(ShallowConst::Int(_)) => true,
+        ShallowIr::BoundVar {
+            ty: ShallowIrType::Int,
+            ..
+        } => true,
+        ShallowIr::FieldAccess {
+            record,
+            index,
+            kind,
+            ty: ShallowIrType::Int,
+            ..
+        } => shallow_ir_field_access_is_exact(record, *index, *kind),
+        ShallowIr::BinOp { op, left, right } => match op {
+            ShallowBinOp::Add
+            | ShallowBinOp::Sub
+            | ShallowBinOp::Mul
+            | ShallowBinOp::Div
+            | ShallowBinOp::Mod => {
+                shallow_ir_is_exact_int_expr(left) && shallow_ir_is_exact_int_expr(right)
+            }
+            _ => false,
+        },
+        ShallowIr::Let { value, body, .. } => {
+            shallow_ir_is_exact_data_expr(value) && shallow_ir_is_exact_int_expr(body)
+        }
+        ShallowIr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            shallow_ir_is_exact_bool_expr(cond)
+                && shallow_ir_is_exact_int_expr(then_branch)
+                && shallow_ir_is_exact_int_expr(else_branch)
+        }
+        ShallowIr::Match { subject, arms } => {
+            shallow_ir_is_exact_data_expr(subject)
+                && arms
+                    .iter()
+                    .all(|arm| shallow_ir_is_exact_int_expr(&arm.body))
+        }
+        _ => false,
+    }
+}
+
+fn shallow_ir_is_exact_bool_expr(ir: &ShallowIr) -> bool {
+    if find_first_typed_opaque_in_shallow_ir(ir).is_some() {
+        return true;
+    }
+
+    match ir {
+        ShallowIr::Const(ShallowConst::Bool(_)) => true,
+        ShallowIr::BoundVar {
+            ty: ShallowIrType::Bool,
+            ..
+        } => true,
+        ShallowIr::FieldAccess {
+            record,
+            index,
+            kind,
+            ty: ShallowIrType::Bool,
+            ..
+        } => shallow_ir_field_access_is_exact(record, *index, *kind),
+        ShallowIr::BinOp { op, left, right } => match op {
+            ShallowBinOp::And | ShallowBinOp::Or => {
+                shallow_ir_is_exact_bool_expr(left) && shallow_ir_is_exact_bool_expr(right)
+            }
+            ShallowBinOp::Eq | ShallowBinOp::NotEq => {
+                (shallow_ir_is_exact_int_expr(left) && shallow_ir_is_exact_int_expr(right))
+                    || (shallow_ir_is_exact_data_expr(left) && shallow_ir_is_exact_data_expr(right))
+            }
+            ShallowBinOp::Lt | ShallowBinOp::LtEq | ShallowBinOp::Gt | ShallowBinOp::GtEq => {
+                shallow_ir_is_exact_int_expr(left) && shallow_ir_is_exact_int_expr(right)
+            }
+            _ => false,
+        },
+        ShallowIr::Match { subject, arms } => {
+            shallow_ir_is_exact_data_expr(subject)
+                && arms
+                    .iter()
+                    .all(|arm| shallow_ir_is_exact_data_expr(&arm.body))
+        }
+        _ => false,
+    }
+}
+
+fn shallow_ir_is_exact_data_expr(ir: &ShallowIr) -> bool {
+    if find_first_typed_opaque_in_shallow_ir(ir).is_some() {
+        return true;
+    }
+
+    match ir {
+        ShallowIr::Const(_) | ShallowIr::BoundVar { .. } => true,
+        ShallowIr::Construct { fields, .. } => fields.iter().all(shallow_ir_is_exact_data_expr),
+        ShallowIr::Tuple(elems) => elems.iter().all(shallow_ir_is_exact_data_expr),
+        ShallowIr::ListLit { elements, tail, .. } => {
+            elements.iter().all(shallow_ir_is_exact_data_expr)
+                && tail
+                    .as_ref()
+                    .is_none_or(|tail| shallow_ir_is_exact_data_expr(tail.as_ref()))
+        }
+        ShallowIr::FieldAccess {
+            record,
+            index,
+            kind,
+            ..
+        } => shallow_ir_field_access_is_exact(record, *index, *kind),
+        ShallowIr::RecordUpdate { record, updates, .. } => {
+            shallow_ir_has_known_constructor_layout(record)
+                && updates
+                    .iter()
+                    .all(|update| shallow_ir_is_exact_data_expr(&update.value))
+        }
+        ShallowIr::BinOp { op, left, right } => match op {
+            ShallowBinOp::Append => {
+                shallow_ir_is_exact_data_expr(left) && shallow_ir_is_exact_data_expr(right)
+            }
+            ShallowBinOp::Add
+            | ShallowBinOp::Sub
+            | ShallowBinOp::Mul
+            | ShallowBinOp::Div
+            | ShallowBinOp::Mod => {
+                shallow_ir_is_exact_int_expr(left) && shallow_ir_is_exact_int_expr(right)
+            }
+            _ => false,
+        },
+        ShallowIr::Let { value, body, .. } => {
+            shallow_ir_is_exact_data_expr(value) && shallow_ir_is_exact_data_expr(body)
+        }
+        ShallowIr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            shallow_ir_is_exact_bool_expr(cond)
+                && shallow_ir_is_exact_data_expr(then_branch)
+                && shallow_ir_is_exact_data_expr(else_branch)
+        }
+        ShallowIr::Match { subject, arms } => {
+            shallow_ir_is_exact_data_expr(subject)
+                && arms
+                    .iter()
+                    .all(|arm| shallow_ir_is_exact_data_expr(&arm.body))
+        }
+        ShallowIr::Var { .. }
+        | ShallowIr::FuzzExistential { .. }
+        | ShallowIr::Opaque { .. } => false,
+    }
+}
+
+fn shallow_ir_is_vacuous(ir: &ShallowIr) -> bool {
+    !shallow_ir_is_exact_data_expr(ir)
 }
 
 fn shallow_ir_type(tipo: &Rc<Type>) -> ShallowIrType {
@@ -877,6 +2013,7 @@ struct ClauseTranslationFailure {
 
 fn translate_clause(
     clause: &TypedClause,
+    subject_expr: &TypedExpr,
     subject_tipo: &Rc<Type>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Result<ShallowIrArm, ClauseTranslationFailure> {
@@ -915,10 +2052,23 @@ fn translate_clause(
         TypedPattern::Discard { .. } => (None, vec!["_".into()]),
         _ => (None, vec![]),
     };
+    let mut clause_locals = BTreeMap::new();
+    bind_pattern_to_locals(
+        &clause.pattern,
+        &LocalBinding::PureExpr(subject_expr.clone()),
+        data_types,
+        &mut clause_locals,
+    );
+    let mut visiting = BTreeSet::new();
     Ok(ShallowIrArm {
         tag,
         bindings,
-        body: typed_expr_to_shallow_ir(&clause.then, data_types),
+        body: typed_expr_to_shallow_ir_with_locals(
+            &clause.then,
+            data_types,
+            &clause_locals,
+            &mut visiting,
+        ),
     })
 }
 
@@ -931,6 +2081,21 @@ fn translate_call(
     // Check for fuzzer combinator calls — these become FuzzExistential
     if let Some(fuzz_ir) = try_fuzz_existential(fun, args, tipo) {
         return fuzz_ir;
+    }
+    if extract_module_fn_identity(fun).is_some_and(|(module, name)| module.is_empty() && name == "as_data")
+        && let [value] = args
+    {
+        return typed_expr_to_shallow_ir(&value.value, data_types);
+    }
+    if extract_module_fn_identity(fun)
+        .is_some_and(|(module, name)| module == "aiken/collection/list" && name == "concat")
+        && let [left, right] = args
+    {
+        return ShallowIr::BinOp {
+            op: ShallowBinOp::Append,
+            left: Box::new(typed_expr_to_shallow_ir(&left.value, data_types)),
+            right: Box::new(typed_expr_to_shallow_ir(&right.value, data_types)),
+        };
     }
 
     // Constructor call: Var that resolves to a constructor
@@ -1625,6 +2790,81 @@ pub enum TransitionProp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+enum ProjectionPathItem {
+    ConstructorField {
+        index: u64,
+        label: String,
+        ty: ShallowIrType,
+    },
+    ListElement {
+        index: u64,
+        label: String,
+        ty: ShallowIrType,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum LocalBinding {
+    PureExpr(TypedExpr),
+    ExactIr {
+        ir: ShallowIr,
+        ty: ShallowIrType,
+    },
+    DrawnValue {
+        lean_name: String,
+        ty: ShallowIrType,
+        domain: FuzzerSemantics,
+    },
+    Projection {
+        source_lean_name: String,
+        source_ty: ShallowIrType,
+        path: Vec<ProjectionPathItem>,
+        ty: ShallowIrType,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubGeneratorBlocker {
+    KnownPrimitiveCombinator,
+    UnsupportedButInspectableShape,
+    RecursiveHelper,
+    ExternalOrUninspectableHelper,
+    UserDefinedLookalikeCombinator,
+}
+
+struct TransitionLoweringContext<'a> {
+    current_module: String,
+    function_index: &'a FunctionIndex<'a>,
+    constant_index: &'a ConstantIndex<'a>,
+    data_types: &'a IndexMap<&'a DataTypeKey, &'a TypedDataType>,
+    locals: BTreeMap<String, LocalBinding>,
+    visiting_functions: BTreeSet<(String, String)>,
+    visiting_locals: BTreeSet<String>,
+    visiting_value_aliases: BTreeSet<String>,
+    next_synthetic_binder: usize,
+}
+
+impl<'a> TransitionLoweringContext<'a> {
+    fn expr_locals(&self) -> BTreeMap<String, TypedExpr> {
+        self.locals
+            .iter()
+            .filter_map(|(name, binding)| match binding {
+                LocalBinding::PureExpr(expr) => Some((name.clone(), expr.clone())),
+                LocalBinding::ExactIr { .. }
+                | LocalBinding::DrawnValue { .. }
+                | LocalBinding::Projection { .. } => None,
+            })
+            .collect()
+    }
+
+    fn fresh_synthetic_binder(&mut self, prefix: &str) -> String {
+        let name = format!("{prefix}_{}", self.next_synthetic_binder);
+        self.next_synthetic_binder += 1;
+        name
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct TransitionPropArm {
     /// Constructor tag this arm matches (None for a catch-all variable pattern).
     pub tag: Option<u64>,
@@ -1747,6 +2987,19 @@ fn normalize_fuzzer_from_expr(
         normalize_state_machine_trace_from_expr(expr, local_values, &mut visiting_local_aliases)
     {
         return normalized;
+    }
+
+    if let TypedExpr::Fn { args, body, .. } = expr {
+        if args.is_empty() && expression_has_fuzzer_type(body.as_ref()) {
+            return normalize_fuzzer_from_expr(
+                body.as_ref(),
+                current_module,
+                function_index,
+                constant_index,
+                local_values,
+                visiting_functions,
+            );
+        }
     }
 
     if extract_fuzzer_payload_type(expr.tipo().as_ref()).is_none() {
@@ -2760,7 +4013,10 @@ fn normalize_structural_fuzzer_call(
 
                 if is_such_that_filter
                     && mapper_returns_bool
-                    && source_output_type.as_ref() == output_type.as_ref()
+                    && types_semantically_equal(
+                        source_output_type.as_ref(),
+                        output_type.as_ref(),
+                    )
                 {
                     return Some(source);
                 }
@@ -2855,7 +4111,10 @@ fn normalize_structural_fuzzer_call(
                 if let Some(source_output_type) =
                     extract_fuzzer_payload_type(fuzzer_args[0].value.tipo().as_ref())
                 {
-                    if source_output_type.as_ref() == inner_types[0].as_ref() {
+                    if types_semantically_equal(
+                        source_output_type.as_ref(),
+                        inner_types[0].as_ref(),
+                    ) {
                         let (min_len, max_len) = try_extract_list_length_bounds(
                             expr,
                             args,
@@ -4475,6 +5734,7 @@ fn normalized_fuzzer_constraint(
             step_function,
             data_types,
             function_index,
+            constant_index,
             visiting_functions,
         ) {
             Some(FuzzerSemantics::StateMachineTrace { acceptance, .. }) => {
@@ -4496,6 +5756,71 @@ fn normalized_fuzzer_constraint(
 }
 
 #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
+fn typed_expr_constructor_tag(
+    expr: &TypedExpr,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<u64> {
+    let container_tipo = expr.tipo();
+    match terminal_expression(expr) {
+        TypedExpr::Var { constructor, .. } => match &constructor.variant {
+            ValueConstructorVariant::Record { name, .. } => {
+                resolve_constructor_tag(&container_tipo, name, data_types)
+            }
+            _ => None,
+        },
+        TypedExpr::ModuleSelect { constructor, .. } => match constructor {
+            ModuleValueConstructor::Record { name, .. } => {
+                resolve_constructor_tag(&container_tipo, name, data_types)
+            }
+            _ => None,
+        },
+        TypedExpr::Call { fun, .. } => match terminal_expression(fun.as_ref()) {
+            TypedExpr::Var { constructor, .. } => match &constructor.variant {
+                ValueConstructorVariant::Record { name, .. } => {
+                    resolve_constructor_tag(&container_tipo, name, data_types)
+                }
+                _ => None,
+            },
+            TypedExpr::ModuleSelect { constructor, .. } => match constructor {
+                ModuleValueConstructor::Record { name, .. } => {
+                    resolve_constructor_tag(&container_tipo, name, data_types)
+                }
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn recover_constructor_choice_semantics(
+    expr: &TypedExpr,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<FuzzerSemantics> {
+    let TypedExpr::Call { fun, args, .. } = terminal_expression(expr) else {
+        return None;
+    };
+    let Some((module, fn_name)) = extract_module_fn_identity(fun.as_ref()) else {
+        return None;
+    };
+    if module != STDLIB_FUZZ_MODULE || fn_name != "one_of" {
+        return None;
+    }
+    let [values] = args.as_slice() else {
+        return None;
+    };
+    let TypedExpr::List { elements, .. } = terminal_expression(&values.value) else {
+        return None;
+    };
+    let mut tags = Vec::new();
+    for element in elements {
+        tags.push(typed_expr_constructor_tag(element, data_types)?);
+    }
+    tags.sort_unstable();
+    tags.dedup();
+    Some(FuzzerSemantics::Constructors { tags })
+}
+
 fn normalized_fuzzer_semantics(
     normalized: &NormalizedFuzzer,
     current_module: &str,
@@ -4507,7 +5832,10 @@ fn normalized_fuzzer_semantics(
     visiting_functions: &mut BTreeSet<(String, String)>,
 ) -> FuzzerSemantics {
     match normalized {
-        NormalizedFuzzer::Opaque { reason, .. } => opaque_semantics(reason.clone()),
+        NormalizedFuzzer::Opaque { expr, reason } => {
+            recover_constructor_choice_semantics(expr.as_ref(), data_types)
+        }
+        .unwrap_or_else(|| opaque_semantics(reason.clone())),
         NormalizedFuzzer::Primitive {
             known_constraint, ..
         } => {
@@ -4591,7 +5919,7 @@ fn normalized_fuzzer_semantics(
                     .iter()
                     .zip(inner_types.iter())
                     .map(|(element, inner_type)| {
-                        normalized_fuzzer_semantics(
+                        let semantics = normalized_fuzzer_semantics(
                             element,
                             current_module,
                             function_index,
@@ -4600,7 +5928,12 @@ fn normalized_fuzzer_semantics(
                             inner_type.as_ref(),
                             local_values,
                             visiting_functions,
-                        )
+                        );
+                        if matches!(semantics, FuzzerSemantics::Opaque { .. }) {
+                            default_semantics_for_type(inner_type.as_ref(), data_types)
+                        } else {
+                            semantics
+                        }
                     })
                     .collect(),
             )
@@ -4618,17 +5951,23 @@ fn normalized_fuzzer_semantics(
                 ));
             }
 
+            let element_semantics = normalized_fuzzer_semantics(
+                element,
+                current_module,
+                function_index,
+                constant_index,
+                data_types,
+                inner_types[0].as_ref(),
+                local_values,
+                visiting_functions,
+            );
+
             FuzzerSemantics::List {
-                element: Box::new(normalized_fuzzer_semantics(
-                    element,
-                    current_module,
-                    function_index,
-                    constant_index,
-                    data_types,
-                    inner_types[0].as_ref(),
-                    local_values,
-                    visiting_functions,
-                )),
+                element: Box::new(if matches!(element_semantics, FuzzerSemantics::Opaque { .. }) {
+                    default_semantics_for_type(inner_types[0].as_ref(), data_types)
+                } else {
+                    element_semantics
+                }),
                 min_len: *min_len,
                 max_len: *max_len,
             }
@@ -4644,6 +5983,7 @@ fn normalized_fuzzer_semantics(
             step_function,
             data_types,
             function_index,
+            constant_index,
             visiting_functions,
         )
         .unwrap_or_else(|| {
@@ -5207,6 +6547,7 @@ fn state_machine_trace_semantics_from_normalized(
     step_function: &TypedExpr,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     function_index: &FunctionIndex<'_>,
+    constant_index: &ConstantIndex<'_>,
     visiting_functions: &mut BTreeSet<(String, String)>,
 ) -> Option<FuzzerSemantics> {
     let output_type = convert_opaque_type(&Rc::new(output_type.clone()), data_types, true);
@@ -5217,6 +6558,7 @@ fn state_machine_trace_semantics_from_normalized(
         &args,
         data_types,
         function_index,
+        constant_index,
         visiting_functions,
     )
 }
@@ -5226,6 +6568,7 @@ fn extract_state_machine_trace_semantics_from_call(
     args: &[CallArg<TypedExpr>],
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     function_index: &FunctionIndex<'_>,
+    constant_index: &ConstantIndex<'_>,
     visiting_functions: &mut BTreeSet<(String, String)>,
 ) -> Option<FuzzerSemantics> {
     let acceptance = infer_state_machine_acceptance_from_output_type(output_type)?;
@@ -5354,52 +6697,108 @@ fn extract_state_machine_trace_semantics_from_call(
     );
 
     // For inline lambda step functions the expression is a `TypedExpr::Fn`
-    // and `typed_expr_to_shallow_ir` translates it directly.  For a named
-    // function reference (e.g. `scenario.ok(initial_state, step)`) the
-    // expression is a `TypedExpr::Var`.  In that case the translator would
-    // produce a bare `ShallowIr::Var { name: "step" }`, which the Lean
-    // emitter reifies as a fresh existential `∃ _fuzz_0 : Data,
-    // transition = _fuzz_0` — trivially True and therefore useless.
-    //
-    // S1: resolve a `ModuleFn` Var to its body via `function_index` and
-    // translate that body to `ShallowIr`.  If the result is trivially
-    // vacuous (see `shallow_ir_is_vacuous`), fall back to `None` so the
-    // caller takes the concrete `native_decide` witness path — sound and
-    // efficient — instead of handing Blaster a premise that simplifies to
-    // True.  Monadic step bodies (`if st.done { return(Done) } else {
-    // let action <- and_then(...) ... }`) classify as vacuous today
-    // because their root reduces to `ShallowIr::If` and the combinators
-    // erase to `ctx.fresh(Data)`; future IR enrichment can make
-    // those bodies structurally useful.
-    //
-    // Recursion is guarded by `visiting_functions`: if the step function
-    // is already being visited (mutual recursion through an `and_then`
-    // continuation, etc.), we bail out with `None`.
-    let step_function_ir = match &args[1].value {
+    // and we lower the body with the state argument bound to the theorem-side
+    // `state` variable. For a named function reference (e.g.
+    // `scenario.ok(initial_state, step)`) the expression is a `TypedExpr::Var`;
+    // in that case we resolve the function body first and apply the same local
+    // binding. Without this, named steps that reference their `state` parameter
+    // degrade to out-of-scope `Var`s and freshen during Lean emission.
+    let (step_function_ir, step_ir_unsupported_reason) = match &args[1].value {
         TypedExpr::Var { constructor, .. } => {
             if let ValueConstructorVariant::ModuleFn { module, name, .. } = &constructor.variant {
                 let key = (module.clone(), name.clone());
                 if !visiting_functions.insert(key.clone()) {
-                    // Recursive step function — body lookup would loop.
-                    None
+                    (None, None)
                 } else {
-                    let ir = find_function(function_index, module, name)
-                        .map(|function| typed_expr_to_shallow_ir(&function.body, data_types))
-                        .filter(|ir| !shallow_ir_is_vacuous(ir));
+                    let result = find_function(function_index, module, name)
+                        .map(|function| {
+                            if function.arguments.len() > 1 {
+                                return (
+                                    None,
+                                    Some(
+                                        "state-machine step functions with non-state parameters are not lowered faithfully yet"
+                                            .to_string(),
+                                    ),
+                                );
+                            }
+
+                            let mut locals: BTreeMap<String, LocalBinding> = BTreeMap::new();
+                            if let Some(state_arg) = function.arguments.first() {
+                                locals.insert(
+                                    state_arg.get_name(),
+                                    LocalBinding::DrawnValue {
+                                        lean_name: "state".to_string(),
+                                        ty: shallow_ir_type(&state_arg.tipo),
+                                        domain: FuzzerSemantics::Data,
+                                    },
+                                );
+                            }
+                            inject_module_constants(&mut locals, module, constant_index);
+
+
+                            let mut visiting = BTreeSet::new();
+                            let ir = typed_expr_to_shallow_ir_with_locals(
+                                &function.body,
+                                data_types,
+                                &locals,
+                                &mut visiting,
+                            );
+                            if shallow_ir_is_vacuous(&ir) {
+                                (None, None)
+                            } else {
+                                (Some(ir), None)
+                            }
+                        })
+                        .unwrap_or((None, None));
                     visiting_functions.remove(&key);
-                    ir
+                    result
                 }
             } else {
-                // Local or other non-resolvable Var — no body to retrieve.
-                None
+                (None, None)
+            }
+        }
+        TypedExpr::Fn { args: step_args, body, .. } => {
+            if step_args.len() > 1 {
+                (
+                    None,
+                    Some(
+                        "state-machine step functions with non-state parameters are not lowered faithfully yet"
+                            .to_string(),
+                    ),
+                )
+            } else {
+                let mut locals: BTreeMap<String, LocalBinding> = BTreeMap::new();
+                if let Some(state_arg) = step_args.first() {
+                    locals.insert(
+                        state_arg.get_name(),
+                        LocalBinding::DrawnValue {
+                            lean_name: "state".to_string(),
+                            ty: shallow_ir_type(&state_arg.tipo),
+                            domain: FuzzerSemantics::Data,
+                        },
+                    );
+                }
+
+                let mut visiting = BTreeSet::new();
+                let ir = typed_expr_to_shallow_ir_with_locals(
+                    body.as_ref(),
+                    data_types,
+                    &locals,
+                    &mut visiting,
+                );
+                if shallow_ir_is_vacuous(&ir) {
+                    (None, None)
+                } else {
+                    (Some(ir), None)
+                }
             }
         }
         expr => {
             let ir = typed_expr_to_shallow_ir(expr, data_types);
             if shallow_ir_is_vacuous(&ir) {
-                None
+                (None, None)
             } else {
-                Some(ir)
+                (Some(ir), None)
             }
         }
     };
@@ -5416,7 +6815,9 @@ fn extract_state_machine_trace_semantics_from_call(
     // further changes here.
     let transition_prop = transition_prop_from_step_function(
         &args[1].value,
+        Some(&args[0].value),
         function_index,
+        constant_index,
         data_types,
         visiting_functions,
     );
@@ -5426,6 +6827,26 @@ fn extract_state_machine_trace_semantics_from_call(
     // rather than an unconstrained existential.
     let initial_state_shallow_ir = {
         let ir = typed_expr_to_shallow_ir(&args[0].value, data_types);
+        let ir = if shallow_ir_is_vacuous(&ir) {
+            let empty_locals: BTreeMap<String, TypedExpr> = BTreeMap::new();
+            resolve_function_with_applied_args(&args[0].value, "", function_index, &empty_locals)
+                .map(|(resolved, resolved_locals, _)| {
+                    let resolved_locals = resolved_locals
+                        .into_iter()
+                        .map(|(name, expr)| (name, LocalBinding::PureExpr(expr)))
+                        .collect();
+                    let mut visiting = BTreeSet::new();
+                    typed_expr_to_shallow_ir_with_locals(
+                        &resolved.function.body,
+                        data_types,
+                        &resolved_locals,
+                        &mut visiting,
+                    )
+                })
+                .unwrap_or(ir)
+        } else {
+            ir
+        };
         if shallow_ir_is_vacuous(&ir) {
             None
         } else {
@@ -5442,7 +6863,7 @@ fn extract_state_machine_trace_semantics_from_call(
         transition_semantics,
         output_semantics,
         step_function_ir,
-        step_ir_unsupported_reason: None,
+        step_ir_unsupported_reason,
         transition_prop,
         initial_state_shallow_ir,
     })
@@ -5460,50 +6881,98 @@ fn extract_state_machine_trace_semantics_from_call(
 /// `typed_expr_to_transition_prop` for the supported shapes.
 fn transition_prop_from_step_function(
     step_function: &TypedExpr,
+    initial_state: Option<&TypedExpr>,
     function_index: &FunctionIndex<'_>,
+    constant_index: &ConstantIndex<'_>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     visiting_functions: &mut BTreeSet<(String, String)>,
 ) -> Option<TransitionProp> {
     // Resolve `step` to its body when it's a module-level function reference,
     // mirroring the `step_function_ir` path above. For inline `TypedExpr::Fn`
     // step functions we descend into the body directly.
-    let (body_expr, current_module): (&TypedExpr, String) = match step_function {
+    let (body_expr, current_module, step_arguments): (&TypedExpr, String, &[TypedArg]) = match step_function {
         TypedExpr::Var { constructor, .. } => {
             if let ValueConstructorVariant::ModuleFn { module, name, .. } = &constructor.variant {
                 let key = (module.clone(), name.clone());
-                // Guard recursion: if we're already inside this function,
-                // bail out rather than loop.
                 if visiting_functions.contains(&key) {
                     return None;
                 }
                 match find_function(function_index, module, name) {
-                    Some(function) => (&function.body, module.clone()),
+                    Some(function) => (&function.body, module.clone(), function.arguments.as_slice()),
                     None => return None,
                 }
             } else {
                 return None;
             }
         }
-        TypedExpr::Fn { body, .. } => (body.as_ref(), String::new()),
+        TypedExpr::Fn { args, body, .. } => (body.as_ref(), String::new(), args.as_slice()),
         _ => return None,
     };
 
-    let constant_index: ConstantIndex<'_> = HashMap::new();
-    let local_values: BTreeMap<String, TypedExpr> = BTreeMap::new();
-    let visiting_locals: BTreeSet<String> = BTreeSet::new();
-    let mut visiting_value_aliases: BTreeSet<String> = BTreeSet::new();
+    if step_arguments.len() > 1 {
+        return None;
+    }
 
-    let prop = typed_expr_to_transition_prop(
-        body_expr,
-        &current_module,
+    let mut locals: BTreeMap<String, LocalBinding> = BTreeMap::new();
+    if let Some(state_arg) = step_arguments.first() {
+        let binding = if let Some(expr) = initial_state {
+            let ir = typed_expr_to_shallow_ir(expr, data_types);
+            let ir = if shallow_ir_is_vacuous(&ir) {
+                let empty_locals: BTreeMap<String, TypedExpr> = BTreeMap::new();
+                resolve_function_with_applied_args(expr, "", function_index, &empty_locals)
+                    .map(|(resolved, resolved_locals, _)| {
+                        let resolved_locals = resolved_locals
+                            .into_iter()
+                            .map(|(name, expr)| (name, LocalBinding::PureExpr(expr)))
+                            .collect();
+                        let mut visiting = BTreeSet::new();
+                        typed_expr_to_shallow_ir_with_locals(
+                            &resolved.function.body,
+                            data_types,
+                            &resolved_locals,
+                            &mut visiting,
+                        )
+                    })
+                    .unwrap_or(ir)
+            } else {
+                ir
+            };
+
+            if shallow_ir_is_vacuous(&ir) {
+                LocalBinding::PureExpr(expr.clone())
+            } else {
+                LocalBinding::ExactIr {
+                    ty: shallow_ir_type(&state_arg.tipo),
+                    ir,
+                }
+            }
+        } else {
+            LocalBinding::DrawnValue {
+                lean_name: "state".to_string(),
+                ty: shallow_ir_type(&state_arg.tipo),
+                domain: FuzzerSemantics::Data,
+            }
+        };
+        locals.insert(state_arg.get_name(), binding);
+    }
+    let visiting_locals: BTreeSet<String> = BTreeSet::new();
+    let visiting_value_aliases: BTreeSet<String> = BTreeSet::new();
+
+    let mut locals = locals;
+    inject_module_constants(&mut locals, &current_module, constant_index);
+    let mut ctx = TransitionLoweringContext {
+        current_module: current_module.to_string(),
         function_index,
-        &constant_index,
-        &local_values,
+        constant_index,
         data_types,
-        visiting_functions,
-        &visiting_locals,
-        &mut visiting_value_aliases,
-    );
+        locals,
+        visiting_functions: visiting_functions.clone(),
+        visiting_locals: visiting_locals.clone(),
+        visiting_value_aliases,
+        next_synthetic_binder: 0,
+    };
+    let prop = typed_expr_to_transition_prop_ctx(body_expr, &mut ctx);
+    *visiting_functions = ctx.visiting_functions;
 
     if transition_prop_is_trivially_unsupported(&prop) {
         None
@@ -5680,9 +7149,10 @@ fn shallow_ir_from_fuzzer_exact_value(exact: &FuzzerExactValue) -> ShallowIr {
 /// every prop the text predicate flags as vacuous, this one flags too.
 ///
 /// **Why not just match the AST shape directly?**  Because the lowering
-/// step in `verify::emit_transition_prop_as_lean` widens several
-/// variants to literal `True`:
-///   * `Pure(_)`   — S4-widened (the inner `ShallowIr` is dropped).
+/// step in `verify::emit_transition_prop_as_lean` can still make several
+/// variants vacuous or universally satisfiable:
+///   * `Pure(_)`   — treated conservatively here until the structural vacuity
+///     model learns the verifier's supported Bool subset precisely.
 ///   * `Unsupported { .. }` — widened by definition. The soundness rule is
 ///     that we never silently drop an unlowerable constraint without a
 ///     `True` over-approximation.
@@ -5690,9 +7160,9 @@ fn shallow_ir_from_fuzzer_exact_value(exact: &FuzzerExactValue) -> ShallowIr {
 ///     literal `True` (an empty conjunction is `True` and an empty
 ///     disjunction was deliberately widened to `True` in the emitter
 ///     to avoid an unsatisfiable precondition).
-///
-/// Mirroring those widenings here keeps the structural verdict in lock-
-/// step with what actually lands in the generated `.lean` file.
+
+/// Mirroring those semantics conservatively here keeps the structural verdict
+/// in step with what actually lands in the generated `.lean` file.
 ///
 /// **Exhaustive match (no wildcard).**  Any future `TransitionProp`
 /// variant must be classified explicitly.  Default-falsing a new variant
@@ -5706,6 +7176,7 @@ fn exists_bound_output_domain_constrains_transition(
     matches!(
         body,
         TransitionProp::EqOutput(ShallowIr::Var { name, .. })
+            | TransitionProp::EqOutput(ShallowIr::BoundVar { name, .. })
             if name == binder
                 && !matches!(domain, FuzzerSemantics::Data | FuzzerSemantics::Opaque { .. })
     )
@@ -5713,10 +7184,9 @@ fn exists_bound_output_domain_constrains_transition(
 
 pub fn transition_prop_is_vacuous(tp: &TransitionProp) -> bool {
     match tp {
-        // `Pure(_)` is currently widened to literal `True` by the Lean
-        // emitter (S4 audit log entry "Pure(ShallowIr) condition widened
-        // to True").  Until the emitter learns to lower `Pure` precisely,
-        // this is structurally equivalent to a `True` widening.
+        // `Pure(_)` now emits as `(cond = true)` for supported Bool shapes, but
+        // the structural vacuity check still treats it conservatively until it
+        // models the verifier's supported Bool subset precisely.
         TransitionProp::Pure(_) => true,
         // `EqOutput(ir)` is only non-vacuous when the rhs lowers to a real
         // structural `Data` expression. Roots that `emit_shallow_ir_as_lean_data`
@@ -5820,6 +7290,25 @@ fn transition_prop_is_trivially_unsupported(prop: &TransitionProp) -> bool {
     }
 }
 
+fn transition_prop_contains_unsupported(prop: &TransitionProp) -> bool {
+    match prop {
+        TransitionProp::Unsupported { .. } => true,
+        TransitionProp::SubGenerator { .. } | TransitionProp::EqOutput(_) | TransitionProp::Pure(_) => {
+            false
+        }
+        TransitionProp::Exists { body, .. } => transition_prop_contains_unsupported(body),
+        TransitionProp::And(children) | TransitionProp::Or(children) => {
+            children.iter().any(transition_prop_contains_unsupported)
+        }
+        TransitionProp::IfThenElse { t, e, .. } => {
+            transition_prop_contains_unsupported(t) || transition_prop_contains_unsupported(e)
+        }
+        TransitionProp::Match { arms, .. } => arms
+            .iter()
+            .any(|arm| transition_prop_contains_unsupported(&arm.body)),
+    }
+}
+
 /// Collect all unique `(module, fn_name)` pairs from `SubGenerator` leaves
 /// in `prop`. Used by the Lean emitter to pre-declare opaque predicate stubs.
 /// Order is deterministic (DFS, left-to-right) and duplicates are removed
@@ -5881,6 +7370,7 @@ pub fn find_first_typed_opaque_in_shallow_ir(ir: &ShallowIr) -> Option<&OpaqueCo
             ShallowIr::Opaque { .. }
             | ShallowIr::Const(_)
             | ShallowIr::Var { .. }
+            | ShallowIr::BoundVar { .. }
             | ShallowIr::FuzzExistential { .. } => None,
             ShallowIr::Let { value, body, .. } => visit(value).or_else(|| visit(body)),
             ShallowIr::If {
@@ -5907,9 +7397,9 @@ pub fn find_first_typed_opaque_in_shallow_ir(ir: &ShallowIr) -> Option<&OpaqueCo
                 None
             }
             ShallowIr::FieldAccess { record, .. } => visit(record),
-            ShallowIr::RecordUpdate { record, updates } => visit(record).or_else(|| {
-                for (_, val) in updates {
-                    if let Some(found) = visit(val) {
+            ShallowIr::RecordUpdate { record, updates, .. } => visit(record).or_else(|| {
+                for update in updates {
+                    if let Some(found) = visit(&update.value) {
                         return Some(found);
                     }
                 }
@@ -5924,6 +7414,9 @@ pub fn find_first_typed_opaque_in_shallow_ir(ir: &ShallowIr) -> Option<&OpaqueCo
                     if let Some(found) = visit(elem) {
                         return Some(found);
                     }
+                }
+                if let ShallowIr::ListLit { tail: Some(tail), .. } = ir {
+                    return visit(tail);
                 }
                 None
             }
@@ -6014,6 +7507,7 @@ pub fn find_first_typed_opaque_in_transition_prop(prop: &TransitionProp) -> Opti
 /// | `Fn { args, body }`                          | translate body             |
 /// | `Sequence`/`Pipeline`                        | translate terminal expr    |
 /// | everything else                              | `Unsupported { reason }`   |
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn typed_expr_to_transition_prop(
     expr: &TypedExpr,
@@ -6023,96 +7517,774 @@ fn typed_expr_to_transition_prop(
     local_values: &BTreeMap<String, TypedExpr>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     visiting_functions: &mut BTreeSet<(String, String)>,
-    // H3: track binder names whose substitution is currently in flight so that
-    // `translate_bind` can detect a re-binding cycle (a nested bind that
-    // shadows the same name) and avoid infinite recursion. The naive scheme
-    // here just *prevents* the cycle — a faithful inner-shadowing rewrite is
-    // explicitly deferred (see plan §H3 / debate-outcome row 6: the
-    // `LocalValueKind` refactor is post-merge).
     visiting_locals: &BTreeSet<String>,
-    // H3 follow-up — lookup-side visited-set guard. Tracks the chain of
-    // `local_values` keys whose RHS is currently being recursively
-    // resolved by the `Var`-arm lookup. Mirrors the pattern used by
-    // `materialize_local_alias_argument`: insert on entry, remove on exit.
-    // This makes the Var arm self-protecting against ANY cyclic
-    // `local_values` entry — bind-site self-references, leading-let
-    // shadow chains (`let x = 1; let x = x` or
-    // `let x = 0; let y = x; let x = y`), or any future writer that
-    // produces a self- or mutually-referential entry. See the safety
-    // comment at the Var arm for the architectural rationale.
-    //
-    // Mutability rationale: this differs from `visiting_locals` (which
-    // is `&BTreeSet`) because the Var-arm guard is a per-step
-    // insert/remove pattern (matching `materialize_local_alias_argument`
-    // at line 6341) rather than a clone-and-extend at a single call
-    // site. Cloning per Var lookup would be wasteful in the common
-    // no-cycle case.
     visiting_value_aliases: &mut BTreeSet<String>,
 ) -> TransitionProp {
-    // Collect non-monadic `let` bindings from the leading elements of any
-    // Sequence/Pipeline before peeling to the terminal expression. A binding
-    // `let x = v` (Assignment with a non-Fuzzer value) extends local_values
-    // so that `Var "x"` references inside the terminal body can be substituted.
-    // Fuzzer-typed assignments are NOT collected here — they are monadic binds
-    // and must be handled by the bind/fork shape detectors below.
-    let mut local_values_extended;
-    let local_values = if let TypedExpr::Sequence { expressions, .. }
-    | TypedExpr::Pipeline { expressions, .. } = expr
-    {
-        if expressions.len() > 1 {
-            local_values_extended = local_values.clone();
-            for e in expressions.iter().take(expressions.len().saturating_sub(1)) {
-                if let TypedExpr::Assignment { pattern, value, .. } = e {
-                    // Only collect pure (non-Fuzzer) bindings.
-                    if extract_fuzzer_payload_type(value.tipo().as_ref()).is_none() {
-                        if let Some(name) = pattern_var_name(pattern) {
-                            local_values_extended.insert(name.to_string(), value.as_ref().clone());
-                        }
-                    }
-                }
+    let mut locals: BTreeMap<String, LocalBinding> = local_values
+        .iter()
+        .map(|(name, expr)| (name.clone(), LocalBinding::PureExpr(expr.clone())))
+        .collect();
+    inject_module_constants(&mut locals, current_module, constant_index);
+    let mut ctx = TransitionLoweringContext {
+        current_module: current_module.to_string(),
+        function_index,
+        constant_index,
+        data_types,
+        locals,
+        visiting_functions: visiting_functions.clone(),
+        visiting_locals: visiting_locals.clone(),
+        visiting_value_aliases: visiting_value_aliases.clone(),
+        next_synthetic_binder: 0,
+    };
+    let prop = typed_expr_to_transition_prop_ctx(expr, &mut ctx);
+    *visiting_functions = ctx.visiting_functions;
+    *visiting_value_aliases = ctx.visiting_value_aliases;
+    prop
+}
+fn module_name_candidates(module_name: &str) -> Vec<String> {
+    let mut candidates = vec![module_name.to_string()];
+    let dotted = module_name.replace('/', ".");
+    if !candidates.contains(&dotted) {
+        candidates.push(dotted);
+    }
+    let slashed = module_name.replace('.', "/");
+    if !candidates.contains(&slashed) {
+        candidates.push(slashed);
+    }
+    candidates
+}
+
+fn inject_module_constants(
+    locals: &mut BTreeMap<String, LocalBinding>,
+    current_module: &str,
+    constant_index: &ConstantIndex<'_>,
+) {
+    for module_name in module_name_candidates(current_module) {
+        if let Some(constants) = constant_index.get(&module_name) {
+            for (name, expr) in constants {
+                locals
+                    .entry(name.clone())
+                    .or_insert_with(|| LocalBinding::PureExpr((*expr).clone()));
             }
-            &local_values_extended
+        }
+    }
+}
+
+
+fn with_scoped_locals<R>(
+    ctx: &mut TransitionLoweringContext<'_>,
+    locals: BTreeMap<String, LocalBinding>,
+    f: impl FnOnce(&mut TransitionLoweringContext<'_>) -> R,
+) -> R {
+    let mut locals = locals;
+    inject_module_constants(&mut locals, &ctx.current_module, ctx.constant_index);
+    let saved = std::mem::replace(&mut ctx.locals, locals);
+    let result = f(ctx);
+    ctx.locals = saved;
+    result
+}
+
+fn with_current_module<R>(
+    ctx: &mut TransitionLoweringContext<'_>,
+    module: String,
+    f: impl FnOnce(&mut TransitionLoweringContext<'_>) -> R,
+) -> R {
+    let saved_module = std::mem::replace(&mut ctx.current_module, module.clone());
+    let saved_locals = ctx.locals.clone();
+    inject_module_constants(&mut ctx.locals, &module, ctx.constant_index);
+    let result = f(ctx);
+    ctx.locals = saved_locals;
+    ctx.current_module = saved_module;
+    result
+}
+
+fn binding_from_expr_with_locals(
+    expr: &TypedExpr,
+    locals: &BTreeMap<String, LocalBinding>,
+    visiting: &mut BTreeSet<String>,
+) -> LocalBinding {
+    match terminal_expression(expr) {
+        TypedExpr::Var { name, .. } if locals.contains_key(name) => {
+            let Some(binding) = locals.get(name).cloned() else {
+                return LocalBinding::PureExpr(expr.clone());
+            };
+            if !visiting.insert(name.clone()) {
+                return LocalBinding::PureExpr(expr.clone());
+            }
+            let resolved = match binding {
+                LocalBinding::PureExpr(bound_expr) => {
+                    binding_from_expr_with_locals(&bound_expr, locals, visiting)
+                }
+                other => other,
+            };
+            visiting.remove(name);
+            resolved
+        }
+        _ => LocalBinding::PureExpr(expr.clone()),
+    }
+}
+
+fn binding_from_expr(expr: &TypedExpr, ctx: &TransitionLoweringContext<'_>) -> LocalBinding {
+    let mut visiting = BTreeSet::new();
+    binding_from_expr_with_locals(expr, &ctx.locals, &mut visiting)
+}
+
+fn extend_locals_with_leading_assignments(
+    expr: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Option<BTreeMap<String, LocalBinding>> {
+    let expressions = match expr {
+        TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+            expressions
+        }
+        _ => return None,
+    };
+    if expressions.len() <= 1 {
+        return None;
+    }
+    let mut scoped = ctx.locals.clone();
+    for e in expressions.iter().take(expressions.len().saturating_sub(1)) {
+        if let TypedExpr::Assignment {
+            pattern, value, kind, ..
+        } = e
+        {
+            if !kind.is_let() {
+                return None;
+            }
+            if extract_fuzzer_payload_type(value.tipo().as_ref()).is_some() {
+                return None;
+            }
+            let mut visiting = BTreeSet::new();
+            let binding = binding_from_expr_with_locals(value, &scoped, &mut visiting);
+            bind_pattern_to_locals(pattern, &binding, ctx.data_types, &mut scoped);
+        }
+    }
+    Some(scoped)
+}
+
+fn transition_output_binding() -> LocalBinding {
+    LocalBinding::DrawnValue {
+        lean_name: "transition".to_string(),
+        ty: ShallowIrType::Data,
+        domain: FuzzerSemantics::Data,
+    }
+}
+
+fn binding_is_transition_output(binding: &LocalBinding) -> bool {
+    matches!(
+        binding,
+        LocalBinding::DrawnValue { lean_name, ty, .. }
+            if lean_name == "transition" && matches!(ty, ShallowIrType::Data)
+    )
+}
+
+fn shallow_ir_root_kind(ir: &ShallowIr) -> &'static str {
+    match ir {
+        ShallowIr::Const(_) => "Const",
+        ShallowIr::Var { .. } => "Var",
+        ShallowIr::BoundVar { .. } => "BoundVar",
+        ShallowIr::Let { .. } => "Let",
+        ShallowIr::If { .. } => "If",
+        ShallowIr::Match { .. } => "Match",
+        ShallowIr::Construct { .. } => "Construct",
+        ShallowIr::FieldAccess { .. } => "FieldAccess",
+        ShallowIr::RecordUpdate { .. } => "RecordUpdate",
+        ShallowIr::BinOp { .. } => "BinOp",
+        ShallowIr::Tuple(_) => "Tuple",
+        ShallowIr::ListLit { .. } => "ListLit",
+        ShallowIr::FuzzExistential { .. } => "FuzzExistential",
+        ShallowIr::Opaque { .. } => "Opaque",
+    }
+}
+
+fn transition_prop_is_noop(prop: &TransitionProp) -> bool {
+    matches!(prop, TransitionProp::And(parts) if parts.is_empty())
+}
+
+fn transition_prop_from_parts(parts: Vec<TransitionProp>) -> TransitionProp {
+    let mut kept = Vec::new();
+    for part in parts {
+        if !transition_prop_is_noop(&part) {
+            kept.push(part);
+        }
+    }
+
+    match kept.len() {
+        0 => TransitionProp::And(vec![]),
+        1 => kept.into_iter().next().expect("one kept element"),
+        _ => TransitionProp::And(kept),
+    }
+}
+
+fn lower_relation_with_bound_domain(
+    source: &TypedExpr,
+    output_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> TransitionProp {
+    let relation = lower_fuzzer_relation_with_locals(source, output_binding, ctx);
+    if !binding_is_transition_output(output_binding)
+        && transition_prop_is_trivially_unsupported(&relation)
+    {
+        TransitionProp::And(vec![])
+    } else {
+        relation
+    }
+}
+
+fn output_match_prop(
+    output_binding: &LocalBinding,
+    rhs: ShallowIr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> TransitionProp {
+    if binding_is_transition_output(output_binding) {
+        if shallow_ir_is_exact_data_expr(&rhs) {
+            TransitionProp::EqOutput(rhs)
         } else {
-            local_values
+            TransitionProp::Unsupported {
+                reason: format!(
+                    "counted output equality rejected non-exact rhs root '{}'",
+                    shallow_ir_root_kind(&rhs)
+                ),
+                source_location: None,
+            }
         }
     } else {
-        local_values
-    };
-    let expr = terminal_expression(expr);
+        let lhs = output_binding_ir(output_binding, ctx);
+        if shallow_ir_is_exact_data_expr(&lhs) && shallow_ir_is_exact_data_expr(&rhs) {
+            equality_prop(lhs, rhs)
+        } else {
+            TransitionProp::Unsupported {
+                reason: format!(
+                    "counted output equality rejected non-exact operands (lhs='{}', rhs='{}')",
+                    shallow_ir_root_kind(&lhs),
+                    shallow_ir_root_kind(&rhs)
+                ),
+                source_location: None,
+            }
+        }
+    }
+}
 
-    match expr {
+fn pattern_source_location(
+    pattern: &TypedPattern,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Option<String> {
+    Some(format!("{}:{}", ctx.current_module, pattern.location().start))
+}
+
+fn unsupported_when_pattern(
+    pattern: &TypedPattern,
+    ctx: &TransitionLoweringContext<'_>,
+    reason: impl Into<String>,
+) -> TransitionProp {
+    TransitionProp::Unsupported {
+        reason: reason.into(),
+        source_location: pattern_source_location(pattern, ctx),
+    }
+}
+
+fn pattern_value_from_binding(
+    pattern: &TypedPattern,
+    binding: &LocalBinding,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Result<ShallowIr, TransitionProp> {
+    match pattern {
+        TypedPattern::Var { .. } | TypedPattern::Discard { .. } => Ok(local_binding_to_shallow_ir(
+            binding,
+            ctx.data_types,
+            &ctx.locals,
+            &mut BTreeSet::new(),
+        )),
+        TypedPattern::Assign { pattern, .. } => pattern_value_from_binding(pattern, binding, ctx),
+        TypedPattern::Int { value, .. } => Ok(ShallowIr::Const(ShallowConst::Int(value.clone()))),
+        TypedPattern::ByteArray { value, .. } => {
+            Ok(ShallowIr::Const(ShallowConst::ByteArray(hex::encode(value))))
+        }
+        TypedPattern::Pair { fst, snd, .. } => {
+            let (fst_ty, snd_ty) = match binding_shallow_ir_type(binding) {
+                ShallowIrType::Pair(fst_ty, snd_ty) => ((*fst_ty).clone(), (*snd_ty).clone()),
+                _ => (ShallowIrType::Data, ShallowIrType::Data),
+            };
+            let Some(fst_binding) = projected_binding(
+                binding,
+                0,
+                "0",
+                fst_ty,
+                ShallowFieldAccessKind::ListElement,
+            ) else {
+                return Err(unsupported_when_pattern(
+                    pattern,
+                    ctx,
+                    "pair-pattern subject cannot be projected faithfully",
+                ));
+            };
+            let Some(snd_binding) = projected_binding(
+                binding,
+                1,
+                "1",
+                snd_ty,
+                ShallowFieldAccessKind::ListElement,
+            ) else {
+                return Err(unsupported_when_pattern(
+                    pattern,
+                    ctx,
+                    "pair-pattern subject cannot be projected faithfully",
+                ));
+            };
+            Ok(ShallowIr::Tuple(vec![
+                pattern_value_from_binding(fst, &fst_binding, ctx)?,
+                pattern_value_from_binding(snd, &snd_binding, ctx)?,
+            ]))
+        }
+        TypedPattern::Tuple { elems, .. } => {
+            let pair_types = match binding_shallow_ir_type(binding) {
+                ShallowIrType::Pair(fst_ty, snd_ty) if elems.len() == 2 => {
+                    Some([(*fst_ty).clone(), (*snd_ty).clone()])
+                }
+                _ => None,
+            };
+            let mut fields = Vec::with_capacity(elems.len());
+            for (index, elem) in elems.iter().enumerate() {
+                let ty = pair_types
+                    .as_ref()
+                    .and_then(|tys| tys.get(index))
+                    .cloned()
+                    .unwrap_or(ShallowIrType::Data);
+                let Some(projected) = projected_binding(
+                    binding,
+                    index as u64,
+                    index.to_string(),
+                    ty,
+                    ShallowFieldAccessKind::ListElement,
+                ) else {
+                    return Err(unsupported_when_pattern(
+                        pattern,
+                        ctx,
+                        "tuple-pattern subject cannot be projected faithfully",
+                    ));
+                };
+                fields.push(pattern_value_from_binding(elem, &projected, ctx)?);
+            }
+            Ok(ShallowIr::Tuple(fields))
+        }
+        TypedPattern::Constructor {
+            name: ctor_name,
+            arguments,
+            tipo,
+            ..
+        } => {
+            let Some(tag) = resolve_constructor_tag(tipo, ctor_name, ctx.data_types) else {
+                return Err(unsupported_when_pattern(
+                    pattern,
+                    ctx,
+                    s0002_reason_message(ctor_name, &describe_tipo(tipo)),
+                ));
+            };
+            let field_types = constructor_pattern_argument_types(pattern, ctx.data_types);
+            if let LocalBinding::PureExpr(expr) = binding {
+                if let Some(expr_args) = pure_expr_constructor_fields(expr) {
+                    let fields = if expr_args.len() == arguments.len() {
+                        arguments
+                            .iter()
+                            .zip(expr_args.iter())
+                            .map(|(arg, expr_arg)| {
+                                pattern_value_from_binding(
+                                    &arg.value,
+                                    &LocalBinding::PureExpr(expr_arg.clone()),
+                                    ctx,
+                                )
+                            })
+                            .collect::<Result<Vec<_>, _>>()?
+                    } else {
+                        vec![ShallowIr::Const(ShallowConst::Unit); arguments.len()]
+                    };
+                    return Ok(ShallowIr::Construct {
+                        module: "".to_string(),
+                        constructor: ctor_name.clone(),
+                        tag,
+                        fields,
+                    });
+                }
+            }
+
+            let mut fields = Vec::with_capacity(arguments.len());
+            for (index, arg) in arguments.iter().enumerate() {
+                let field_ty = field_types
+                    .get(index)
+                    .cloned()
+                    .unwrap_or(ShallowIrType::Data);
+                let label = arg.label.clone().unwrap_or_else(|| index.to_string());
+                let Some(projected) = projected_binding(
+                    binding,
+                    index as u64,
+                    label,
+                    field_ty,
+                    ShallowFieldAccessKind::ConstructorField,
+                ) else {
+                    return Err(unsupported_when_pattern(
+                        pattern,
+                        ctx,
+                        "constructor-pattern subject cannot be projected faithfully",
+                    ));
+                };
+                fields.push(pattern_value_from_binding(&arg.value, &projected, ctx)?);
+            }
+            Ok(ShallowIr::Construct {
+                module: "".to_string(),
+                constructor: ctor_name.clone(),
+                tag,
+                fields,
+            })
+        }
+        TypedPattern::List { .. } => Err(unsupported_when_pattern(
+            pattern,
+            ctx,
+            "list-pattern when clauses are not lowered faithfully yet",
+        )),
+    }
+}
+
+fn when_clause_condition(
+    pattern: &TypedPattern,
+    subject_binding: &LocalBinding,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Result<Option<ShallowIr>, TransitionProp> {
+    match pattern {
+        TypedPattern::Var { .. } | TypedPattern::Discard { .. } => Ok(None),
+        TypedPattern::Assign { pattern, .. } => when_clause_condition(pattern, subject_binding, ctx),
+        _ => {
+            let mut visiting = BTreeSet::new();
+            let subject_ir = local_binding_to_shallow_ir(
+                subject_binding,
+                ctx.data_types,
+                &ctx.locals,
+                &mut visiting,
+            );
+            let pattern_ir = pattern_value_from_binding(pattern, subject_binding, ctx)?;
+            Ok(Some(ShallowIr::BinOp {
+                op: ShallowBinOp::Eq,
+                left: Box::new(subject_ir),
+                right: Box::new(pattern_ir),
+            }))
+        }
+    }
+}
+
+fn lower_when_clause_body(
+    clause: &TypedClause,
+    subject_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+ ) -> TransitionProp {
+    if let Some(reason) = unsupported_pattern_binding_reason(&clause.pattern) {
+        return unsupported_when_pattern(&clause.pattern, ctx, reason);
+    }
+
+    let mut clause_locals = ctx.locals.clone();
+    bind_pattern_to_locals(
+        &clause.pattern,
+        subject_binding,
+        ctx.data_types,
+        &mut clause_locals,
+    );
+    with_scoped_locals(ctx, clause_locals, |ctx| {
+        typed_expr_to_transition_prop_ctx(&clause.then, ctx)
+    })
+}
+
+fn data_type_for_shallow_adt_name<'a>(
+    name: &str,
+    data_types: &'a IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<&'a TypedDataType> {
+    data_types.iter().find_map(|(key, data_type)| {
+        let slash = format!("{}/{}", key.module_name, key.defined_type);
+        let dot = format!("{}.{}", key.module_name, key.defined_type);
+        (name == slash || name == dot).then_some(*data_type)
+    })
+}
+
+fn exact_field_ir_from_shallow_ir(
+    record: &ShallowIr,
+    index: u64,
+    kind: ShallowFieldAccessKind,
+) -> Option<ShallowIr> {
+    match (record, kind) {
+        (ShallowIr::Construct { fields, .. }, ShallowFieldAccessKind::ConstructorField) => {
+            fields.get(index as usize).cloned()
+        }
+        (ShallowIr::Tuple(elems), ShallowFieldAccessKind::ListElement) => {
+            elems.get(index as usize).cloned()
+        }
+        (ShallowIr::ListLit { elements, tail, .. }, ShallowFieldAccessKind::ListElement) => {
+            if tail.is_none() {
+                elements.get(index as usize).cloned()
+            } else {
+                None
+            }
+        }
+        (ShallowIr::RecordUpdate { record, updates, .. }, ShallowFieldAccessKind::ConstructorField) => {
+            if let Some(update) = updates.iter().find(|update| update.index == index as usize) {
+                Some(update.value.clone())
+            } else {
+                exact_field_ir_from_shallow_ir(record, index, kind)
+            }
+        }
+        (ShallowIr::Let { body, .. }, _) => exact_field_ir_from_shallow_ir(body, index, kind),
+        (
+            ShallowIr::If {
+                cond,
+                then_branch,
+                else_branch,
+            },
+            _,
+        ) => Some(ShallowIr::If {
+            cond: cond.clone(),
+            then_branch: Box::new(exact_field_ir_from_shallow_ir(then_branch, index, kind)?),
+            else_branch: Box::new(exact_field_ir_from_shallow_ir(else_branch, index, kind)?),
+        }),
+        (ShallowIr::Match { subject, arms }, _) => Some(ShallowIr::Match {
+            subject: subject.clone(),
+            arms: arms
+                .iter()
+                .map(|arm| {
+                    Some(ShallowIrArm {
+                        tag: arm.tag,
+                        bindings: arm.bindings.clone(),
+                        body: exact_field_ir_from_shallow_ir(&arm.body, index, kind)?,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?,
+        }),
+        _ => None,
+    }
+}
+
+fn exact_constructor_tags_from_ir(
+    ir: &ShallowIr,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<BTreeSet<u64>> {
+    match ir {
+        ShallowIr::Construct { tag, .. } | ShallowIr::RecordUpdate { tag, .. } => {
+            Some(std::iter::once(*tag).collect())
+        }
+        ShallowIr::FieldAccess {
+            record,
+            index,
+            kind,
+            ..
+        } => {
+            let field = exact_field_ir_from_shallow_ir(record, *index, *kind)?;
+            exact_constructor_tags_from_ir(&field, data_types)
+        }
+        ShallowIr::Let { body, .. } => exact_constructor_tags_from_ir(body, data_types),
+        ShallowIr::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let mut tags = exact_constructor_tags_from_ir(then_branch, data_types)?;
+            tags.extend(exact_constructor_tags_from_ir(else_branch, data_types)?);
+            Some(tags)
+        }
+        ShallowIr::Match { arms, .. } => {
+            let mut tags = BTreeSet::new();
+            for arm in arms {
+                tags.extend(exact_constructor_tags_from_ir(&arm.body, data_types)?);
+            }
+            Some(tags)
+        }
+        ShallowIr::BoundVar {
+            ty: ShallowIrType::Adt(type_name),
+            ..
+        } => {
+            let data_type = data_type_for_shallow_adt_name(type_name, data_types)?;
+            Some(
+                data_type
+                    .constructors
+                    .iter()
+                    .filter_map(|constructor| {
+                        get_constr_index_variant(data_type, &constructor.name)
+                            .map(|(index, _)| index as u64)
+                    })
+                    .collect(),
+            )
+        }
+        _ => None,
+    }
+}
+
+fn binding_possible_constructor_tags(
+    binding: &LocalBinding,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<BTreeSet<u64>> {
+    if let LocalBinding::DrawnValue {
+        domain: FuzzerSemantics::Constructors { tags },
+        ..
+    } = binding
+    {
+        return Some(tags.iter().copied().collect());
+    }
+
+    if let LocalBinding::ExactIr { ir, .. } = binding
+        && let Some(tags) = exact_constructor_tags_from_ir(ir, data_types)
+    {
+        return Some(tags);
+    }
+
+    let ShallowIrType::Adt(type_name) = binding_shallow_ir_type(binding) else {
+        return None;
+    };
+    let data_type = data_type_for_shallow_adt_name(&type_name, data_types)?;
+    Some(
+        data_type
+            .constructors
+            .iter()
+            .filter_map(|constructor| {
+                get_constr_index_variant(data_type, &constructor.name).map(|(index, _)| index as u64)
+            })
+            .collect(),
+    )
+}
+
+fn clause_pattern_tag(
+    pattern: &TypedPattern,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<u64> {
+    match pattern {
+        TypedPattern::Assign { pattern, .. } => clause_pattern_tag(pattern, data_types),
+        TypedPattern::Constructor { name, tipo, .. } => {
+            resolve_constructor_tag(tipo, name, data_types)
+        }
+        _ => None,
+    }
+}
+
+fn clause_pattern_is_catchall(pattern: &TypedPattern) -> bool {
+    match pattern {
+        TypedPattern::Var { .. } | TypedPattern::Discard { .. } => true,
+        TypedPattern::Assign { pattern, .. } => clause_pattern_is_catchall(pattern),
+        _ => false,
+    }
+}
+
+fn filter_reachable_when_clauses<'a>(
+    clauses: &'a [TypedClause],
+    subject_binding: &LocalBinding,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Vec<&'a TypedClause> {
+    let Some(possible_tags) = binding_possible_constructor_tags(subject_binding, ctx.data_types) else {
+        return clauses.iter().collect();
+    };
+    clauses
+        .iter()
+        .filter(|clause| {
+            clause_pattern_tag(&clause.pattern, ctx.data_types)
+                .map(|tag| possible_tags.contains(&tag))
+                .unwrap_or(true)
+        })
+        .collect()
+}
+
+fn when_clauses_are_exhaustive(
+    clauses: &[&TypedClause],
+    subject_binding: &LocalBinding,
+    ctx: &TransitionLoweringContext<'_>,
+) -> bool {
+    if clauses.iter().any(|clause| clause_pattern_is_catchall(&clause.pattern)) {
+        return true;
+    }
+    let Some(possible_tags) = binding_possible_constructor_tags(subject_binding, ctx.data_types) else {
+        return false;
+    };
+    let covered: BTreeSet<u64> = clauses
+        .iter()
+        .filter_map(|clause| clause_pattern_tag(&clause.pattern, ctx.data_types))
+        .collect();
+    !possible_tags.is_empty() && possible_tags.is_subset(&covered)
+}
+
+fn lower_when_clause_relation(
+    clause: &TypedClause,
+    subject_binding: &LocalBinding,
+    output_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> TransitionProp {
+    if let Some(reason) = unsupported_pattern_binding_reason(&clause.pattern) {
+        return unsupported_when_pattern(&clause.pattern, ctx, reason);
+    }
+
+    let mut clause_locals = ctx.locals.clone();
+    bind_pattern_to_locals(
+        &clause.pattern,
+        subject_binding,
+        ctx.data_types,
+        &mut clause_locals,
+    );
+    with_scoped_locals(ctx, clause_locals, |ctx| {
+        lower_fuzzer_relation_with_locals(&clause.then, output_binding, ctx)
+    })
+}
+
+
+fn typed_expr_to_transition_prop_ctx(
+    expr: &TypedExpr,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> TransitionProp {
+    if let TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } = expr {
+        for expression in expressions.iter().take(expressions.len().saturating_sub(1)) {
+            if let TypedExpr::Assignment { pattern, kind, .. } = expression {
+                if !kind.is_let() {
+                    return TransitionProp::Unsupported {
+                        reason: "refutable assignments are not lowered faithfully yet".to_string(),
+                        source_location: pattern_source_location(pattern, ctx),
+                    };
+                }
+                if let Some(reason) = unsupported_assignment_pattern_reason(pattern) {
+                    return TransitionProp::Unsupported {
+                        reason: reason.to_string(),
+                        source_location: pattern_source_location(pattern, ctx),
+                    };
+                }
+            }
+        }
+        if expressions
+            .iter()
+            .take(expressions.len().saturating_sub(1))
+            .any(|expression| matches!(
+                expression,
+                TypedExpr::Assignment { value, .. }
+                    if extract_fuzzer_payload_type(value.tipo().as_ref()).is_some()
+            ))
+        {
+            return lower_sequence_relation_with_locals(
+                expressions,
+                &transition_output_binding(),
+                ctx,
+            );
+        }
+    }
+
+    if let Some(scoped) = extend_locals_with_leading_assignments(expr, ctx) {
+        return with_scoped_locals(ctx, scoped, |ctx| {
+            typed_expr_to_transition_prop_ctx(terminal_expression(expr), ctx)
+        });
+    }
+
+    match terminal_expression(expr) {
         TypedExpr::If {
             branches,
             final_else,
             ..
         } => {
-            // Build the if/else-if/else chain right-associated: the final
-            // `else` is the innermost branch. Single-branch `if` becomes a
-            // straight `IfThenElse`.
-            let mut result = typed_expr_to_transition_prop(
-                final_else.as_ref(),
-                current_module,
-                function_index,
-                constant_index,
-                local_values,
-                data_types,
-                visiting_functions,
-                visiting_locals,
-                visiting_value_aliases,
-            );
+            let mut result = typed_expr_to_transition_prop_ctx(final_else.as_ref(), ctx);
             for branch in branches.iter().rev() {
-                let cond_ir = typed_expr_to_shallow_ir(&branch.condition, data_types);
-                let then_prop = typed_expr_to_transition_prop(
-                    &branch.body,
-                    current_module,
-                    function_index,
-                    constant_index,
-                    local_values,
-                    data_types,
-                    visiting_functions,
-                    visiting_locals,
-                    visiting_value_aliases,
+                let mut visiting = BTreeSet::new();
+                let cond_ir = typed_expr_to_shallow_ir_with_locals(
+                    &branch.condition,
+                    ctx.data_types,
+                    &ctx.locals,
+                    &mut visiting,
                 );
+                let then_prop = typed_expr_to_transition_prop_ctx(&branch.body, ctx);
                 result = TransitionProp::IfThenElse {
                     cond: cond_ir,
                     t: Box::new(then_prop),
@@ -6122,401 +8294,1249 @@ fn typed_expr_to_transition_prop(
             result
         }
 
-        TypedExpr::Call {
-            fun, args, tipo, ..
-        } => {
-            // Shape-based recognizers. Order matters: try the most specific
-            // shapes (bind, fork) before falling back to return/unsupported.
-            if let Some((source, binder, cont_body)) = detect_bind_call(args) {
-                return translate_bind(
-                    source,
-                    binder,
-                    cont_body,
-                    current_module,
-                    function_index,
-                    constant_index,
-                    local_values,
-                    data_types,
-                    visiting_functions,
-                    visiting_locals,
-                    visiting_value_aliases,
-                );
-            }
-
-            if let Some((thunk_bodies, continuation)) = detect_fork_call(args) {
-                let branches: Vec<TransitionProp> = thunk_bodies
-                    .into_iter()
-                    .map(|body| {
-                        typed_expr_to_transition_prop(
-                            body,
-                            current_module,
-                            function_index,
-                            constant_index,
-                            local_values,
-                            data_types,
-                            visiting_functions,
-                            visiting_locals,
-                            visiting_value_aliases,
-                        )
-                    })
-                    .collect();
-                let or_prop = TransitionProp::Or(branches);
-
-                // `fork*_and_then(..., cont)` — wrap the Or-of-thunks in
-                // `Exists { binder, body = translate(cont_body) }`. The
-                // fork chooses one thunk; its output flows through `cont`
-                // as the binder of an existential. Leaving the binder type
-                // as `Data` / falling back to the call result type is a
-                // SOUND over-approximation: any actual fork output still
-                // lies in the domain of the chosen thunk.
-                //
-                // NOTE: H3 only threads binders through `translate_bind`
-                // (the `and_then` path). The fork continuation's binder
-                // is not added to `local_values` here — the plan scopes
-                // H3 to bind only. We still pass `visiting_locals`
-                // through unchanged so any nested `translate_bind` inside
-                // `cont_body` keeps the cycle guard accurate.
-                if let Some((binder, cont_body)) = continuation {
-                    let body_prop = typed_expr_to_transition_prop(
-                        cont_body,
-                        current_module,
-                        function_index,
-                        constant_index,
-                        local_values,
-                        data_types,
-                        visiting_functions,
-                        visiting_locals,
-                        visiting_value_aliases,
-                    );
-                    return TransitionProp::Exists {
-                        binder,
-                        ty: ShallowIrType::Data,
-                        domain: Box::new(FuzzerSemantics::Data),
-                        body: Box::new(TransitionProp::And(vec![or_prop, body_prop])),
-                    };
+        TypedExpr::Call { fun, args, tipo, .. } => {
+            if is_known_bind_call(fun, ctx) {
+                if let Some((source, binder, cont_body)) = detect_bind_call(args) {
+                    return translate_bind_ctx(source, binder, cont_body, ctx);
                 }
-
-                return or_prop;
             }
 
             if let Some(inner) = detect_return_call(fun, args, tipo.as_ref()) {
-                return TransitionProp::EqOutput(typed_expr_to_shallow_ir(inner, data_types));
+                let mut visiting = BTreeSet::new();
+                return output_match_prop(
+                    &transition_output_binding(),
+                    typed_expr_to_shallow_ir_with_locals(
+                        inner,
+                        ctx.data_types,
+                        &ctx.locals,
+                        &mut visiting,
+                    ),
+                    ctx,
+                );
             }
 
-            // NOTE: fuzz.map(src, fn(x) { f(x) }) is NOT specially handled here.
-            // A `detect_map_call` path was considered but removed because
-            // `typed_expr_to_shallow_ir` does not consult `local_values`, so any
-            // `Var "x"` inside the mapper body would become a fresh existential
-            // unrelated to the outer binder — producing a misleading predicate.
-            // TODO: once `typed_expr_to_shallow_ir` accepts a substitution map,
-            // re-introduce `detect_map_call` with proper binder threading.
-            // For now, fuzz.map calls fall through to the S6 sub-generator inliner,
-            // which may resolve them if the mapper is a named stdlib function.
-
-            // S6: if the callee is a module-level function whose result is a
-            // Fuzzer, first attempt to inline its body as a nested TransitionProp.
-            // This eliminates opaque stubs for sub-generators whose bodies can be
-            // faithfully translated with the existing machinery.
-            // Fall back to a named `SubGenerator` stub if:
-            //   (a) the callee can't be resolved (external / opaque),
-            //   (b) we're already visiting it (cycle guard), or
-            //   (c) the inlined result is `Unsupported` (body not translatable).
             if extract_fuzzer_payload_type(tipo.as_ref()).is_some() {
-                if let TypedExpr::Var { constructor, .. } = fun.as_ref() {
-                    if let ValueConstructorVariant::ModuleFn { module, name, .. } =
-                        &constructor.variant
-                    {
-                        // Attempt inlining via function resolution.
-                        // Track the resolved identity separately so the fallback
-                        // stub uses the *defined* module/name (which may differ
-                        // from the constructor's textual module when the call is
-                        // resolved through a local-alias chain).
-                        let mut stub_module = module.clone();
-                        let mut stub_name = name.clone();
-                        if let Some((resolved, resolved_locals, _)) =
-                            resolve_function_with_applied_args(
-                                expr,
-                                current_module,
-                                function_index,
-                                local_values,
-                            )
-                        {
-                            // Use the resolved identity for the fallback stub so it
-                            // correctly names the defining module even when the call
-                            // was reached via a local alias in a different module.
-                            stub_module = resolved.module_name.clone();
-                            stub_name = resolved.function_name.clone();
-                            let key =
-                                (resolved.module_name.clone(), resolved.function_name.clone());
-                            if visiting_functions.insert(key.clone()) {
-                                // Crossing a function boundary into the sub-generator's
-                                // body: start with a fresh `visiting_locals` set since
-                                // the binders inside the inlined function body live in
-                                // a different scope than the caller's binders.
-                                //
-                                // Same scope-reset rationale applies to
-                                // `visiting_value_aliases`: the sub-generator's
-                                // body has its own `local_values` (`resolved_locals`),
-                                // so any alias-chain cycle is an intra-callee
-                                // concern. Reusing the caller's set would
-                                // incorrectly poison lookups inside the callee.
-                                let fresh_visiting_locals: BTreeSet<String> = BTreeSet::new();
-                                let mut fresh_visiting_value_aliases: BTreeSet<String> =
-                                    BTreeSet::new();
-                                let inlined = typed_expr_to_transition_prop(
-                                    &resolved.function.body,
-                                    &resolved.module_name,
-                                    function_index,
-                                    constant_index,
-                                    &resolved_locals,
-                                    data_types,
-                                    visiting_functions,
-                                    &fresh_visiting_locals,
-                                    &mut fresh_visiting_value_aliases,
-                                );
-                                visiting_functions.remove(&key);
-                                // Only use the inlined result when it's not
-                                // trivially Unsupported — otherwise fall through
-                                // to the named stub which is more auditable.
-                                if !matches!(inlined, TransitionProp::Unsupported { .. }) {
-                                    return inlined;
-                                }
-                            }
-                        }
-                        // Fallback: emit named opaque stub using the resolved
-                        // (defining) module/name for accurate auditability.
-                        return TransitionProp::SubGenerator {
-                            module: stub_module,
-                            fn_name: stub_name,
-                        };
-                    }
-                }
+                return lower_fuzzer_relation_with_locals(
+                    expr,
+                    &transition_output_binding(),
+                    ctx,
+                );
             }
 
             TransitionProp::Unsupported {
                 reason: format!(
-                    "step-function call '{}' is not a recognized bind/fork/return shape",
+                    "step-function call '{}' is not a recognized transition relation",
                     describe_expr(fun)
                 ),
                 source_location: None,
             }
         }
 
-        TypedExpr::Var {
-            name, constructor, ..
-        } if matches!(
-            constructor.variant,
-            ValueConstructorVariant::LocalVariable { .. }
-        ) =>
+        TypedExpr::Var { name, constructor, .. }
+            if matches!(constructor.variant, ValueConstructorVariant::LocalVariable { .. }) =>
         {
-            // Substitute local aliases, if any. Otherwise this is an opaque
-            // reference (e.g. the state parameter `st`) that carries no
-            // extractable proposition on its own.
-            //
-            // H3 termination — lookup-side visited-set guard. This arm
-            // recurses into the substituted expression. To guarantee
-            // termination regardless of what entries `local_values`
-            // contains, the Var arm self-protects with the
-            // `visiting_value_aliases` set: we insert `name` before
-            // recursing on the looked-up value and remove it after the
-            // recursive call returns. If `name` is already present, we
-            // emit a precision-imprecise `TransitionProp::Unsupported`
-            // marker and bail. Architecturally this mirrors
-            // `materialize_local_alias_argument` (line 6341) which uses
-            // the same pattern for a similar resolution path.
-            //
-            // Why lookup-side and not writer-side: the bind/fork
-            // pipeline has TWO writers into `local_values`
-            // (`translate_bind`'s `extended_locals.insert` and the
-            // leading-`let` collector's `local_values_extended.insert`),
-            // and any future writer would have to re-prove
-            // non-cyclicity to be sound. Auditing every writer is
-            // brittle; absorbing the risk at the single lookup point
-            // is robust. The Var arm is now unconditionally
-            // terminating against ANY current or future
-            // `local_values` entry, including:
-            //   - bind-site self-references (`and_then(g, fn(g) {..})`),
-            //     which `translate_bind`'s self-reference guard
-            //     (`free_vars_in_typed_expr(source).contains(&binder)`)
-            //     catches early as belt-and-suspenders for a clearer
-            //     error phrase;
-            //   - leading-let direct shadows (`let x = 1; let x = x`),
-            //     which the leading-`let` collector installs as
-            //     `local_values["x"] = Var "x"`;
-            //   - leading-let mutual shadows
-            //     (`let x = 0; let y = x; let x = y`), which install
-            //     `lv["x"] = Var "y"` and `lv["y"] = Var "x"`.
-            //
-            // The `visiting_locals` parameter is threaded through but
-            // NOT consulted here: it tracks bind-site cycles for
-            // `translate_bind`, a different concern than alias-chain
-            // cycles. The two are orthogonal.
-            //
-            // Cross-function recursion (sub-generator inlining) is
-            // handled by `visiting_functions`, which is independent of
-            // `visiting_value_aliases`.
-            if let Some(bound) = local_values.get(name) {
-                // Visited-set guard: if we're already resolving this
-                // name, we have a cycle in the alias chain. Bail with
-                // a precision-imprecise marker. This is the safety
-                // net against ALL local_values writers — bind-site
-                // and leading-let alike.
-                if !visiting_value_aliases.insert(name.clone()) {
-                    return TransitionProp::Unsupported {
+            if !ctx.visiting_value_aliases.insert(name.clone()) {
+                return TransitionProp::Unsupported {
+                    reason: format!("local-alias cycle on '{name}' detected"),
+                    source_location: None,
+                };
+            }
+            let result = match ctx.locals.get(name).cloned() {
+                Some(LocalBinding::PureExpr(expr)) => typed_expr_to_transition_prop_ctx(&expr, ctx),
+                Some(LocalBinding::ExactIr { .. })
+                | Some(LocalBinding::DrawnValue { .. })
+                | Some(LocalBinding::Projection { .. }) => {
+                    TransitionProp::Unsupported {
                         reason: format!(
-                            "Unsupported: local-alias cycle on '{name}' detected; \
-                             lookup recursion bailed to prevent infinite loop. \
-                             This precision gap will be closed in a future Aiken release."
+                            "step-function variable '{name}' is a value binding, not a transition predicate"
                         ),
                         source_location: None,
-                    };
+                    }
                 }
-                let result = typed_expr_to_transition_prop(
-                    bound,
-                    current_module,
-                    function_index,
-                    constant_index,
-                    local_values,
-                    data_types,
-                    visiting_functions,
-                    visiting_locals,
-                    visiting_value_aliases,
-                );
-                visiting_value_aliases.remove(name);
-                result
-            } else {
-                TransitionProp::Unsupported {
+                None => TransitionProp::Unsupported {
                     reason: format!(
                         "step-function variable '{name}' has no known transition content",
                     ),
                     source_location: None,
-                }
-            }
+                },
+            };
+            ctx.visiting_value_aliases.remove(name);
+            result
         }
 
-        TypedExpr::Fn { body, .. } => typed_expr_to_transition_prop(
-            body.as_ref(),
-            current_module,
-            function_index,
-            constant_index,
-            local_values,
-            data_types,
-            visiting_functions,
-            visiting_locals,
-            visiting_value_aliases,
-        ),
+        TypedExpr::Fn { body, .. } => typed_expr_to_transition_prop_ctx(body.as_ref(), ctx),
+        TypedExpr::Trace { then, .. } => typed_expr_to_transition_prop_ctx(then.as_ref(), ctx),
 
-        TypedExpr::Trace { then, .. } => typed_expr_to_transition_prop(
-            then.as_ref(),
-            current_module,
-            function_index,
-            constant_index,
-            local_values,
-            data_types,
-            visiting_functions,
-            visiting_locals,
-            visiting_value_aliases,
-        ),
-
-        TypedExpr::When {
-            subject, clauses, ..
-        } => {
-            // Translate each clause's body and produce Or over all branches.
-            // Pattern-bound `Var` patterns are added to local_values as aliases
-            // for the subject so clauses that reference the bound name via a
-            // `Var` lookup can substitute. More complex patterns are not
-            // destructured here — clauses fall through to whatever shape their
-            // body translates into; Or over branches remains sound.
-            //
-            // H2 (E0033) — When → Or per-clause logging: any clause whose
-            // pattern is NOT `Var` and NOT `Discard` introduces binders that
-            // we cannot thread through the precondition (constructor-
-            // conditional lowering is not yet implemented). The clause body
-            // is therefore wrapped in `And([Unsupported, clause_prop])` so
-            // that the verify-side lowering (`emit_transition_prop_as_lean`)
-            // pushes a per-clause `[E0033]` entry into `unsupported_log`,
-            // bumping the test's `over_approximations` counter. The wrap
-            // does NOT change semantics: the Lean translation widens
-            // `Unsupported` to `True`, and `True ∧ clause_prop` is
-            // logically `clause_prop`. Per the debate-outcome row, we emit
-            // ONLY per-clause; no aggregate `When → Or` log is added — that
-            // would false-positive on `fork`-derived `Or` nodes.
+        TypedExpr::When { subject, clauses, .. } => {
             if clauses.is_empty() {
                 return TransitionProp::Unsupported {
                     reason: "When expression with no clauses".to_string(),
                     source_location: None,
                 };
             }
-            let branches: Vec<TransitionProp> = clauses
-                .iter()
-                .map(|clause| {
-                    let mut clause_locals = local_values.clone();
-                    if let TypedPattern::Var { name, .. } = &clause.pattern {
-                        // Add the clause's pattern variable as a local alias for subject.
-                        clause_locals.insert(name.clone(), subject.as_ref().clone());
-                    }
-                    let clause_prop = typed_expr_to_transition_prop(
-                        &clause.then,
-                        current_module,
-                        function_index,
-                        constant_index,
-                        &clause_locals,
-                        data_types,
-                        visiting_functions,
-                        visiting_locals,
-                        visiting_value_aliases,
-                    );
-                    // Per-clause E0033 widening log. `Var` and `Discard`
-                    // patterns introduce no constructor-conditional
-                    // constraint and therefore need no widening note.
-                    match &clause.pattern {
-                        TypedPattern::Var { .. } | TypedPattern::Discard { .. } => clause_prop,
-                        other => {
-                            let pattern_desc = describe_pattern(other);
-                            let binders = collect_pattern_binders(other);
-                            let location = other.location();
-                            TransitionProp::And(vec![
-                                TransitionProp::Unsupported {
-                                    reason: format!(
-                                        "[E0033] when_pattern_constructor_var_dropped: \
-                                         clause pattern `{}` dropped binders {} @ {}:{}; \
-                                         constructor-conditional constraints not yet enforced \
-                                         (will be supported in a future Aiken release)",
-                                        pattern_desc,
-                                        binders.join(", "),
-                                        current_module,
-                                        location.start,
-                                    ),
-                                    source_location: Some(format!(
-                                        "{}:{}",
-                                        current_module, location.start,
-                                    )),
-                                },
-                                clause_prop,
-                            ])
-                        }
-                    }
-                })
-                .collect();
-            if branches.len() == 1 {
-                branches.into_iter().next().unwrap()
-            } else {
-                TransitionProp::Or(branches)
+
+            let subject_binding = binding_from_expr(subject, ctx);
+            let reachable_clauses = filter_reachable_when_clauses(clauses, &subject_binding, ctx);
+            if reachable_clauses.is_empty() {
+                return TransitionProp::Unsupported {
+                    reason: "when-expression has no reachable clauses under the current domain"
+                        .to_string(),
+                    source_location: None,
+                };
             }
+
+            let exhaustive = when_clauses_are_exhaustive(&reachable_clauses, &subject_binding, ctx);
+            let mut clauses_rev = reachable_clauses.iter().rev();
+            let Some(last_clause) = clauses_rev.next() else {
+                return TransitionProp::Unsupported {
+                    reason: "When expression with no clauses".to_string(),
+                    source_location: None,
+                };
+            };
+            let mut result = lower_when_clause_body(last_clause, &subject_binding, ctx);
+            if !exhaustive {
+                let fallback = TransitionProp::Unsupported {
+                    reason: "when-expression fell through all clauses".to_string(),
+                    source_location: pattern_source_location(&last_clause.pattern, ctx),
+                };
+                result = match when_clause_condition(&last_clause.pattern, &subject_binding, ctx) {
+                    Ok(None) => lower_when_clause_body(last_clause, &subject_binding, ctx),
+                    Ok(Some(cond_ir)) => TransitionProp::IfThenElse {
+                        cond: cond_ir,
+                        t: Box::new(lower_when_clause_body(last_clause, &subject_binding, ctx)),
+                        e: Box::new(fallback),
+                    },
+                    Err(unsupported) => guarded_when_clause_fallback(
+                        unsupported,
+                        lower_when_clause_body(last_clause, &subject_binding, ctx),
+                        fallback,
+                    ),
+                };
+            }
+
+            for clause in clauses_rev {
+                let body = lower_when_clause_body(clause, &subject_binding, ctx);
+                result = match when_clause_condition(&clause.pattern, &subject_binding, ctx) {
+                    Ok(None) => body,
+                    Ok(Some(cond_ir)) => TransitionProp::IfThenElse {
+                        cond: cond_ir,
+                        t: Box::new(body),
+                        e: Box::new(result),
+                    },
+                    Err(unsupported) => guarded_when_clause_fallback(unsupported, body, result),
+                };
+            }
+
+            result
         }
 
         _ => TransitionProp::Unsupported {
             reason: format!(
                 "step-function expression '{}' is not a recognized transition shape",
-                describe_expr(expr)
+                describe_expr(terminal_expression(expr))
             ),
             source_location: None,
         },
     }
 }
+fn is_known_bind_call(fun: &TypedExpr, ctx: &TransitionLoweringContext<'_>) -> bool {
+    let mut local_aliases = BTreeSet::new();
+    resolve_function_from_expr(
+        fun,
+        &ctx.current_module,
+        ctx.function_index,
+        &ctx.expr_locals(),
+        &mut local_aliases,
+    )
+    .is_some_and(|resolved| {
+        resolved.module_name == STDLIB_FUZZ_MODULE && resolved.function_name == "and_then"
+    }) || extract_module_fn_identity(fun).is_some_and(|(module, name)| {
+        module == STDLIB_FUZZ_MODULE && name == "and_then"
+    })
+}
+
+fn known_fork_call_name(
+    fun: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Option<String> {
+    let mut local_aliases = BTreeSet::new();
+    resolve_function_from_expr(
+        fun,
+        &ctx.current_module,
+        ctx.function_index,
+        &ctx.expr_locals(),
+        &mut local_aliases,
+    )
+    .and_then(|resolved| {
+        (resolved.module_name == STDLIB_FUZZ_SCENARIO_MODULE
+            && matches!(
+                resolved.function_name.as_str(),
+                "fork_and_then" | "fork2_and_then" | "fork_if_and_then"
+            ))
+        .then_some(resolved.function_name)
+    })
+    .or_else(|| {
+        extract_module_fn_identity(fun).and_then(|(module, name)| {
+            (module == STDLIB_FUZZ_SCENARIO_MODULE
+                && matches!(name.as_str(), "fork_and_then" | "fork2_and_then" | "fork_if_and_then"))
+            .then_some(name)
+        })
+    })
+}
+
+
+fn is_known_relation_lookalike_name(name: &str) -> bool {
+    matches!(
+        name,
+        "and_then"
+            | "map"
+            | "such_that"
+            | "one_of"
+            | "either"
+            | "fork_and_then"
+            | "fork2_and_then"
+            | "fork_if_and_then"
+    )
+}
+
+fn is_known_fuzz_call(
+    fun: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+    fn_name: &str,
+) -> bool {
+    let mut local_aliases = BTreeSet::new();
+    resolve_function_from_expr(
+        fun,
+        &ctx.current_module,
+        ctx.function_index,
+        &ctx.expr_locals(),
+        &mut local_aliases,
+    )
+    .is_some_and(|resolved| {
+        resolved.module_name == STDLIB_FUZZ_MODULE && resolved.function_name == fn_name
+    }) || extract_module_fn_identity(fun).is_some_and(|(module, name)| {
+        module == STDLIB_FUZZ_MODULE && name == fn_name
+    })
+}
+
+fn resolve_relation_function_identity(
+    fun: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Option<(String, String)> {
+    let mut local_aliases = BTreeSet::new();
+    resolve_function_from_expr(
+        fun,
+        &ctx.current_module,
+        ctx.function_index,
+        &ctx.expr_locals(),
+        &mut local_aliases,
+    )
+    .map(|resolved| (resolved.module_name, resolved.function_name))
+    .or_else(|| extract_module_fn_identity(fun))
+}
+
+fn classify_sub_generator_blocker(
+    fun: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> SubGeneratorBlocker {
+    let Some((module, name)) = resolve_relation_function_identity(fun, ctx) else {
+        return SubGeneratorBlocker::ExternalOrUninspectableHelper;
+    };
+
+    if module == STDLIB_FUZZ_MODULE || module == STDLIB_FUZZ_SCENARIO_MODULE {
+        return SubGeneratorBlocker::KnownPrimitiveCombinator;
+    }
+
+    if is_known_relation_lookalike_name(&name) {
+        return SubGeneratorBlocker::UserDefinedLookalikeCombinator;
+    }
+
+    if ctx.visiting_functions.contains(&(module.clone(), name.clone())) {
+        SubGeneratorBlocker::RecursiveHelper
+    } else {
+        SubGeneratorBlocker::UnsupportedButInspectableShape
+    }
+}
+
+fn relation_fallback_for_call(
+    fun: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+    reason: impl Into<String>,
+) -> TransitionProp {
+    let reason = reason.into();
+    match classify_sub_generator_blocker(fun, ctx) {
+        SubGeneratorBlocker::KnownPrimitiveCombinator => TransitionProp::Unsupported {
+            reason,
+            source_location: None,
+        },
+        SubGeneratorBlocker::UnsupportedButInspectableShape
+        | SubGeneratorBlocker::RecursiveHelper
+        | SubGeneratorBlocker::ExternalOrUninspectableHelper
+        | SubGeneratorBlocker::UserDefinedLookalikeCombinator => {
+            match resolve_relation_function_identity(fun, ctx) {
+                Some((module, fn_name)) => TransitionProp::SubGenerator { module, fn_name },
+                None => TransitionProp::Unsupported {
+                    reason,
+                    source_location: None,
+                },
+            }
+        }
+    }
+}
+
+fn lower_known_fork_call_with_locals(
+    fun: &TypedExpr,
+    args: &[CallArg<TypedExpr>],
+    output_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> Option<TransitionProp> {
+    let fork_name = known_fork_call_name(fun, ctx)?;
+    let thunk_bodies = detect_fork_call(args)?;
+    let continuation = match args.iter().find(|arg| expression_is_bind_continuation(&arg.value)) {
+        Some(arg) => match resolve_relation_continuation(&arg.value, ctx) {
+            Some(continuation) => Some(continuation),
+            None => {
+                return Some(TransitionProp::Unsupported {
+                    reason: "fork continuation is not a visible unary function".to_string(),
+                    source_location: None,
+                });
+            }
+        },
+        None => None,
+    };
+    let cond_ir = if fork_name == "fork_if_and_then" {
+        let cond_expr = args.iter().find_map(|arg| {
+            let value = &arg.value;
+            (!expression_has_fuzzer_type(value)
+                && zero_arg_fuzzer_thunk_body(value).is_none()
+                && !expression_is_bind_continuation(value))
+            .then_some(value)
+        })?;
+        let mut visiting = BTreeSet::new();
+        Some(typed_expr_to_shallow_ir_with_locals(
+            cond_expr,
+            ctx.data_types,
+            &ctx.locals,
+            &mut visiting,
+        ))
+    } else {
+        None
+    };
+
+    let branch_relation = |ctx: &mut TransitionLoweringContext<'_>,
+                           output_binding: &LocalBinding,
+                           cond_ir: Option<ShallowIr>| {
+        if let Some(cond_ir) = cond_ir {
+            if thunk_bodies.len() != 2 {
+                return TransitionProp::Unsupported {
+                    reason: format!(
+                        "fork_if_and_then expects exactly 2 branch thunks, found {}",
+                        thunk_bodies.len()
+                    ),
+                    source_location: None,
+                };
+            }
+            TransitionProp::IfThenElse {
+                cond: cond_ir,
+                t: Box::new(lower_fuzzer_relation_with_locals(
+                    thunk_bodies[0],
+                    output_binding,
+                    ctx,
+                )),
+                e: Box::new(lower_fuzzer_relation_with_locals(
+                    thunk_bodies[1],
+                    output_binding,
+                    ctx,
+                )),
+            }
+        } else {
+            let mut branches = Vec::with_capacity(thunk_bodies.len());
+            for body in &thunk_bodies {
+                branches.push(lower_fuzzer_relation_with_locals(body, output_binding, ctx));
+            }
+            TransitionProp::Or(branches)
+        }
+    };
+
+    Some(if let Some(ResolvedRelationContinuation {
+        binder,
+        binder_ty,
+        body: cont_body,
+        module,
+        locals: cont_locals,
+    }) = continuation
+    {
+        let exact_branch_bindings = thunk_bodies
+            .iter()
+            .map(|body| exact_output_binding_from_fuzzer_expr(body, ctx))
+            .collect::<Option<Vec<_>>>();
+
+        if let Some(exact_branch_bindings) = exact_branch_bindings {
+            let lower_exact_branch = |ctx: &mut TransitionLoweringContext<'_>,
+                                      body: &TypedExpr,
+                                      binding: LocalBinding| {
+                let source_relation = lower_relation_with_bound_domain(body, &binding, ctx);
+                let mut scoped = cont_locals.clone();
+                scoped.insert(binder.clone(), binding);
+                let continuation = with_current_module(ctx, module.clone(), |ctx| {
+                    with_scoped_locals(ctx, scoped, |ctx| {
+                        lower_fuzzer_relation_with_locals(&cont_body, output_binding, ctx)
+                    })
+                });
+                transition_prop_from_parts(vec![source_relation, continuation])
+            };
+
+            if let Some(cond_ir) = cond_ir {
+                if thunk_bodies.len() != 2 || exact_branch_bindings.len() != 2 {
+                    TransitionProp::Unsupported {
+                        reason: format!(
+                            "fork_if_and_then expects exactly 2 branch thunks, found {}",
+                            thunk_bodies.len()
+                        ),
+                        source_location: None,
+                    }
+                } else {
+                    TransitionProp::IfThenElse {
+                        cond: cond_ir,
+                        t: Box::new(lower_exact_branch(
+                            ctx,
+                            thunk_bodies[0],
+                            exact_branch_bindings[0].clone(),
+                        )),
+                        e: Box::new(lower_exact_branch(
+                            ctx,
+                            thunk_bodies[1],
+                            exact_branch_bindings[1].clone(),
+                        )),
+                    }
+                }
+            } else {
+                TransitionProp::Or(
+                    thunk_bodies
+                        .iter()
+                        .zip(exact_branch_bindings.into_iter())
+                        .map(|(body, binding)| lower_exact_branch(ctx, body, binding))
+                        .collect(),
+                )
+            }
+        } else {
+            let binding = LocalBinding::DrawnValue {
+                lean_name: binder.clone(),
+                ty: binder_ty.clone(),
+                domain: FuzzerSemantics::Data,
+            };
+            let branches = branch_relation(ctx, &binding, cond_ir);
+            let mut scoped = cont_locals;
+            scoped.insert(binder.clone(), binding);
+            let continuation = with_current_module(ctx, module, |ctx| {
+                with_scoped_locals(ctx, scoped, |ctx| {
+                    lower_fuzzer_relation_with_locals(&cont_body, output_binding, ctx)
+                })
+            });
+            TransitionProp::Exists {
+                binder,
+                ty: binder_ty,
+                domain: Box::new(FuzzerSemantics::Data),
+                body: Box::new(TransitionProp::And(vec![branches, continuation])),
+            }
+        }
+    } else {
+        branch_relation(ctx, output_binding, cond_ir)
+    })
+}
+struct ResolvedUnaryCallbackBody {
+    binder: String,
+    body: TypedExpr,
+    module: String,
+    locals: BTreeMap<String, LocalBinding>,
+}
+
+fn resolve_unary_callback_body(
+    callback: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Option<ResolvedUnaryCallbackBody> {
+    let mut callback_expr = terminal_expression(callback).clone();
+    let mut callback_module = ctx.current_module.clone();
+    let mut callback_expr_locals = ctx.expr_locals();
+    let mut callback_locals = ctx.locals.clone();
+    let mut visiting_functions = BTreeSet::new();
+
+    loop {
+        match terminal_expression(&callback_expr) {
+            TypedExpr::Fn { args, body, .. } if args.len() == 1 => {
+                let binder = args[0]
+                    .get_variable_name()
+                    .unwrap_or("_callback")
+                    .to_string();
+                return Some(ResolvedUnaryCallbackBody {
+                    binder,
+                    body: body.as_ref().clone(),
+                    module: callback_module.clone(),
+
+                    locals: callback_locals.clone(),
+                });
+            }
+            TypedExpr::Trace { then, .. } => {
+                callback_expr = then.as_ref().clone();
+            }
+            _ => {
+                let (resolved, resolved_expr_locals, applied_arg_count) =
+                    resolve_function_with_applied_args(
+                        &callback_expr,
+                        &callback_module,
+                        ctx.function_index,
+                        &callback_expr_locals,
+                    )?;
+                let key = (resolved.module_name.clone(), resolved.function_name.clone());
+                if !visiting_functions.insert(key) {
+                    return None;
+                }
+
+                let resolved_locals: BTreeMap<String, LocalBinding> = resolved_expr_locals
+                    .iter()
+                    .map(|(name, expr)| {
+                        let mut visiting = BTreeSet::new();
+                        (
+                            name.clone(),
+                            binding_from_expr_with_locals(expr, &callback_locals, &mut visiting),
+                        )
+                    })
+                    .collect();
+
+                let remaining_args = resolved
+                    .function
+                    .arguments
+                    .len()
+                    .saturating_sub(applied_arg_count);
+
+                if remaining_args == 1 {
+                    let binder = resolved.function.arguments[applied_arg_count]
+                        .get_variable_name()
+                        .unwrap_or("_callback")
+                        .to_string();
+                    return Some(ResolvedUnaryCallbackBody {
+                        binder,
+                        body: resolved.function.body.clone(),
+                        module: resolved.module_name,
+                        locals: resolved_locals,
+                    });
+                }
+
+                if remaining_args == 0 {
+                    callback_expr = resolved.function.body.clone();
+                    callback_module = resolved.module_name;
+                    callback_expr_locals = resolved_expr_locals;
+                    callback_locals = resolved_locals;
+                    continue;
+                }
+
+                return None;
+            }
+        }
+    }
+}
+
+fn lower_bool_predicate_with_locals(
+    predicate: &TypedExpr,
+    output_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> TransitionProp {
+    let Some(ResolvedUnaryCallbackBody {
+        binder,
+        body,
+        module,
+        locals,
+    }) = resolve_unary_callback_body(predicate, ctx)
+    else {
+        return TransitionProp::Unsupported {
+            reason: "predicate callback is not a visible unary function".to_string(),
+            source_location: None,
+        };
+    };
+
+    let mut scoped = locals;
+    scoped.insert(binder, output_binding.clone());
+    let bool_ir = with_current_module(ctx, module, |ctx| {
+        with_scoped_locals(ctx, scoped, |ctx| {
+            let mut visiting = BTreeSet::new();
+            typed_expr_to_shallow_ir_with_locals(&body, ctx.data_types, &ctx.locals, &mut visiting)
+        })
+    });
+
+    if shallow_ir_is_exact_bool_expr(&bool_ir) {
+        TransitionProp::Pure(bool_ir)
+    } else {
+        TransitionProp::Unsupported {
+            reason: format!(
+                "predicate body is not emitted exactly on counted path (root='{}')",
+                shallow_ir_root_kind(&bool_ir)
+            ),
+            source_location: None,
+        }
+    }
+}
+
+fn equality_prop(left: ShallowIr, right: ShallowIr) -> TransitionProp {
+    TransitionProp::Pure(ShallowIr::BinOp {
+        op: ShallowBinOp::Eq,
+        left: Box::new(left),
+        right: Box::new(right),
+    })
+}
+
+fn exact_output_binding_from_fuzzer_expr(
+    source: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Option<LocalBinding> {
+    let payload_ty = extract_fuzzer_payload_type(source.tipo().as_ref())
+        .map(|ty| shallow_ir_type(&ty))?;
+
+    if let Some((resolved_head, applied_args)) =
+        flatten_call_head_and_args(source, &[], &ctx.expr_locals())
+    {
+        let mut visiting_local_aliases = BTreeSet::new();
+        if let Some(resolved) = resolve_function_from_expr(
+            &resolved_head,
+            &ctx.current_module,
+            ctx.function_index,
+            &ctx.expr_locals(),
+            &mut visiting_local_aliases,
+        ) {
+            if applied_args.len() == resolved.function.arguments.len() {
+                let mut locals = BTreeMap::new();
+                for (param, arg) in resolved.function.arguments.iter().zip(applied_args.iter()) {
+                    if let Some(name) = param.get_variable_name() {
+                        let mut visiting_bindings = BTreeSet::new();
+                        locals.insert(
+                            name.to_string(),
+                            binding_from_expr_with_locals(arg, &ctx.locals, &mut visiting_bindings),
+                        );
+                    }
+                }
+                inject_module_constants(&mut locals, &resolved.module_name, ctx.constant_index);
+
+                let mut visiting = BTreeSet::new();
+                let ir = typed_expr_to_shallow_ir_with_locals(
+                    &resolved.function.body,
+                    ctx.data_types,
+                    &locals,
+                    &mut visiting,
+                );
+                if !shallow_ir_is_vacuous(&ir) {
+                    return Some(LocalBinding::ExactIr { ty: payload_ty, ir });
+                }
+            }
+        }
+    }
+
+    let mut visiting = BTreeSet::new();
+    let ir = typed_expr_to_shallow_ir_with_locals(
+        source,
+        ctx.data_types,
+        &ctx.locals,
+        &mut visiting,
+    );
+    (!shallow_ir_is_vacuous(&ir)).then_some(LocalBinding::ExactIr {
+        ty: payload_ty,
+        ir,
+    })
+}
+
+fn output_binding_ir(
+    output_binding: &LocalBinding,
+    ctx: &TransitionLoweringContext<'_>,
+) -> ShallowIr {
+    let mut visiting = BTreeSet::new();
+    local_binding_to_shallow_ir(output_binding, ctx.data_types, &ctx.locals, &mut visiting)
+}
+
+fn constructor_choice_domain_from_expr(
+    expr: &TypedExpr,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<FuzzerSemantics> {
+    let TypedExpr::Call { fun, args, .. } = terminal_expression(expr) else {
+        return None;
+    };
+    let Some((module, fn_name)) = extract_module_fn_identity(fun.as_ref()) else {
+        return None;
+    };
+    if module != STDLIB_FUZZ_MODULE || fn_name != "one_of" {
+        return None;
+    }
+    let [values] = args.as_slice() else {
+        return None;
+    };
+    let TypedExpr::List { elements, .. } = terminal_expression(&values.value) else {
+        return None;
+    };
+    let mut tags = Vec::new();
+    for element in elements {
+        tags.push(typed_expr_constructor_tag(element, data_types)?);
+    }
+    tags.sort_unstable();
+    tags.dedup();
+    Some(FuzzerSemantics::Constructors { tags })
+}
+
+
+fn normalize_source_domain(source: &TypedExpr, ctx: &mut TransitionLoweringContext<'_>) -> FuzzerSemantics {
+    if let Some(domain) = constructor_choice_domain_from_expr(source, ctx.data_types) {
+        return domain;
+    }
+
+    if let TypedExpr::Call { fun, args, .. } = terminal_expression(source) {
+        if is_known_fuzz_call(fun, ctx, "and_then") || is_known_fuzz_call(fun, ctx, "map") {
+            if let Some(source_arg) = args.first() {
+                return normalize_source_domain(&source_arg.value, ctx);
+            }
+        }
+        if is_known_fuzz_call(fun, ctx, "such_that") {
+            if let [source_arg, _] = args.as_slice() {
+                return normalize_source_domain(&source_arg.value, ctx);
+            }
+        }
+    }
+    let payload_type = extract_fuzzer_payload_type(source.tipo().as_ref());
+    let normalized = normalize_fuzzer_from_expr(
+        source,
+        &ctx.current_module,
+        ctx.function_index,
+        ctx.constant_index,
+        &ctx.expr_locals(),
+        &mut ctx.visiting_functions,
+    );
+    let semantics = if let Some(payload_type) = payload_type.as_ref() {
+        normalized_fuzzer_semantics(
+            &normalized,
+            &ctx.current_module,
+            ctx.function_index,
+            ctx.constant_index,
+            ctx.data_types,
+            payload_type.as_ref(),
+            &ctx.expr_locals(),
+            &mut ctx.visiting_functions,
+        )
+    } else {
+        fuzzer_semantics_of_normalized(&normalized)
+    };
+    if matches!(semantics, FuzzerSemantics::Opaque { .. }) {
+        if let Some(payload_type) = payload_type {
+            return default_semantics_for_type(payload_type.as_ref(), ctx.data_types);
+        }
+    }
+    semantics
+}
+
+fn lower_sequence_relation_with_locals(
+    expressions: &[TypedExpr],
+    output_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> TransitionProp {
+    let Some((first, rest)) = expressions.split_first() else {
+        return TransitionProp::And(vec![]);
+    };
+    match first {
+        TypedExpr::Assignment {
+            pattern, value, kind, ..
+        } => {
+            if !kind.is_let() {
+                return TransitionProp::Unsupported {
+                    reason: "refutable assignments are not lowered faithfully yet".to_string(),
+                    source_location: pattern_source_location(pattern, ctx),
+                };
+            }
+            if let Some(reason) = unsupported_assignment_pattern_reason(pattern) {
+                return TransitionProp::Unsupported {
+                    reason: reason.to_string(),
+                    source_location: pattern_source_location(pattern, ctx),
+                };
+            }
+
+            if extract_fuzzer_payload_type(value.tipo().as_ref()).is_some() {
+                let binder = pattern_var_name(pattern)
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| ctx.fresh_synthetic_binder("_backpass"));
+                let domain = normalize_source_domain(value, ctx);
+                let mut binder_ty = extract_fuzzer_payload_type(value.tipo().as_ref())
+                    .map(|ty| shallow_ir_type(&ty))
+                    .unwrap_or(ShallowIrType::Unknown);
+                if matches!(binder_ty, ShallowIrType::Unknown | ShallowIrType::Data) {
+                    binder_ty = shallow_ir_type_from_semantics(&domain);
+                }
+                let binding = LocalBinding::DrawnValue {
+                    lean_name: binder.clone(),
+                    ty: binder_ty.clone(),
+                    domain: domain.clone(),
+                };
+                let relation_binding =
+                    exact_output_binding_from_fuzzer_expr(value, ctx).unwrap_or_else(|| binding.clone());
+                let source_relation = lower_relation_with_bound_domain(value, &relation_binding, ctx);
+                let mut scoped = ctx.locals.clone();
+                bind_pattern_to_locals(pattern, &relation_binding, ctx.data_types, &mut scoped);
+                let continuation = with_scoped_locals(ctx, scoped, |ctx| {
+                    lower_sequence_relation_with_locals(rest, output_binding, ctx)
+                });
+                TransitionProp::Exists {
+                    binder,
+                    ty: binder_ty,
+                    domain: Box::new(domain),
+                    body: Box::new(transition_prop_from_parts(vec![source_relation, continuation])),
+                }
+            } else {
+                let binding = binding_from_expr(value, ctx);
+                let mut scoped = ctx.locals.clone();
+                bind_pattern_to_locals(pattern, &binding, ctx.data_types, &mut scoped);
+                with_scoped_locals(ctx, scoped, |ctx| {
+                    lower_sequence_relation_with_locals(rest, output_binding, ctx)
+                })
+            }
+        }
+        TypedExpr::Trace { then, .. } if rest.is_empty() => {
+            lower_fuzzer_relation_with_locals(then, output_binding, ctx)
+        }
+        _ if rest.is_empty() => lower_fuzzer_relation_with_locals(first, output_binding, ctx),
+        _ => lower_sequence_relation_with_locals(rest, output_binding, ctx),
+    }
+}
+
+fn lower_fuzzer_relation_with_locals(
+    source: &TypedExpr,
+    output_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+ ) -> TransitionProp {
+    match terminal_expression(source) {
+        TypedExpr::Trace { then, .. } => lower_fuzzer_relation_with_locals(then, output_binding, ctx),
+        TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+            lower_sequence_relation_with_locals(expressions, output_binding, ctx)
+        }
+        TypedExpr::If {
+            branches,
+            final_else,
+            ..
+        } => {
+            let mut result = lower_fuzzer_relation_with_locals(final_else.as_ref(), output_binding, ctx);
+            for branch in branches.iter().rev() {
+                let mut visiting = BTreeSet::new();
+                let cond_ir = typed_expr_to_shallow_ir_with_locals(
+                    &branch.condition,
+                    ctx.data_types,
+                    &ctx.locals,
+                    &mut visiting,
+                );
+                let then_prop = lower_fuzzer_relation_with_locals(&branch.body, output_binding, ctx);
+                result = TransitionProp::IfThenElse {
+                    cond: cond_ir,
+                    t: Box::new(then_prop),
+                    e: Box::new(result),
+                };
+            }
+            result
+        }
+        TypedExpr::When { subject, clauses, .. } => {
+            if clauses.is_empty() {
+                return TransitionProp::Unsupported {
+                    reason: "When expression with no clauses".to_string(),
+                    source_location: None,
+                };
+            }
+
+            let subject_binding = binding_from_expr(subject, ctx);
+            let reachable_clauses = filter_reachable_when_clauses(clauses, &subject_binding, ctx);
+            if reachable_clauses.is_empty() {
+                return TransitionProp::Unsupported {
+                    reason: "when-expression has no reachable clauses under the current domain"
+                        .to_string(),
+                    source_location: None,
+                };
+            }
+
+            let exhaustive = when_clauses_are_exhaustive(&reachable_clauses, &subject_binding, ctx);
+            let mut clauses_rev = reachable_clauses.iter().rev();
+            let Some(last_clause) = clauses_rev.next() else {
+                return TransitionProp::Unsupported {
+                    reason: "When expression with no clauses".to_string(),
+                    source_location: None,
+                };
+            };
+            let mut result = lower_when_clause_relation(last_clause, &subject_binding, output_binding, ctx);
+            if !exhaustive {
+                let fallback = TransitionProp::Unsupported {
+                    reason: "when-expression fell through all clauses".to_string(),
+                    source_location: pattern_source_location(&last_clause.pattern, ctx),
+                };
+                result = match when_clause_condition(&last_clause.pattern, &subject_binding, ctx) {
+                    Ok(None) => lower_when_clause_relation(
+                        last_clause,
+                        &subject_binding,
+                        output_binding,
+                        ctx,
+                    ),
+                    Ok(Some(cond_ir)) => TransitionProp::IfThenElse {
+                        cond: cond_ir,
+                        t: Box::new(lower_when_clause_relation(
+                            last_clause,
+                            &subject_binding,
+                            output_binding,
+                            ctx,
+                        )),
+                        e: Box::new(fallback),
+                    },
+                    Err(unsupported) => guarded_when_clause_fallback(
+                        unsupported,
+                        lower_when_clause_relation(
+                            last_clause,
+                            &subject_binding,
+                            output_binding,
+                            ctx,
+                        ),
+                        fallback,
+                    ),
+                };
+            }
+
+            for clause in clauses_rev {
+                let body = lower_when_clause_relation(clause, &subject_binding, output_binding, ctx);
+                result = match when_clause_condition(&clause.pattern, &subject_binding, ctx) {
+                    Ok(None) => body,
+                    Ok(Some(cond_ir)) => TransitionProp::IfThenElse {
+                        cond: cond_ir,
+                        t: Box::new(body),
+                        e: Box::new(result),
+                    },
+                    Err(unsupported) => guarded_when_clause_fallback(unsupported, body, result),
+                };
+            }
+
+            result
+        }
+        TypedExpr::Call { fun, args, tipo, .. } => {
+            if let Some(inner) = detect_return_call(fun, args, tipo.as_ref()) {
+                let mut visiting = BTreeSet::new();
+                return output_match_prop(
+                    output_binding,
+                    typed_expr_to_shallow_ir_with_locals(
+                        inner,
+                        ctx.data_types,
+                        &ctx.locals,
+                        &mut visiting,
+                    ),
+                    ctx,
+                );
+            }
+            if is_known_fuzz_call(fun, ctx, "and_then") && args.len() == 1 {
+                return relation_fallback_for_call(
+                    fun,
+                    ctx,
+                    "relation-bearing and_then call is missing a recognized continuation",
+                );
+            }
+            if let Some(fork_relation) = lower_known_fork_call_with_locals(fun, args, output_binding, ctx) {
+                return fork_relation;
+            }
+            if is_known_fuzz_call(fun, ctx, "one_of") {
+                return match args.as_slice() {
+                    [values] => match terminal_expression(&values.value) {
+                        TypedExpr::List { elements, .. } if elements.is_empty() => {
+                            TransitionProp::Unsupported {
+                                reason: "one_of requires a non-empty literal list".to_string(),
+                                source_location: None,
+                            }
+                        }
+                        TypedExpr::List { elements, .. } if elements.len() <= MAX_FINITE_DOMAIN_CASES => {
+                            let mut branches = Vec::with_capacity(elements.len());
+                            for elem in elements {
+                                let mut visiting = BTreeSet::new();
+                                let branch = output_match_prop(
+                                    output_binding,
+                                    typed_expr_to_shallow_ir_with_locals(
+                                        elem,
+                                        ctx.data_types,
+                                        &ctx.locals,
+                                        &mut visiting,
+                                    ),
+                                    ctx,
+                                );
+                                if matches!(branch, TransitionProp::Unsupported { .. }) {
+                                    return TransitionProp::Unsupported {
+                                        reason: "one_of literal element is not emitted exactly on counted path"
+                                            .to_string(),
+                                        source_location: None,
+                                    };
+                                }
+                                branches.push(branch);
+                            }
+                            TransitionProp::Or(branches)
+                        }
+                        TypedExpr::List { .. } => TransitionProp::Unsupported {
+                            reason: format!(
+                                "one_of literal list exceeds exact support cap of {} elements",
+                                MAX_FINITE_DOMAIN_CASES
+                            ),
+                            source_location: None,
+                        },
+                        _ => TransitionProp::Unsupported {
+                            reason: "one_of requires a literal list domain".to_string(),
+                            source_location: None,
+                        },
+                    },
+                    _ => TransitionProp::Unsupported {
+                        reason: "one_of requires exactly one list argument".to_string(),
+                        source_location: None,
+                    },
+                };
+            }
+            if is_known_fuzz_call(fun, ctx, "either") {
+                if let [left, right] = args.as_slice() {
+                    let left_prop = lower_fuzzer_relation_with_locals(&left.value, output_binding, ctx);
+                    let right_prop = lower_fuzzer_relation_with_locals(&right.value, output_binding, ctx);
+                    if transition_prop_contains_unsupported(&left_prop)
+                        || transition_prop_contains_unsupported(&right_prop)
+                    {
+                        return relation_fallback_for_call(
+                            fun,
+                            ctx,
+                            "either branch is not lowered faithfully yet",
+                        );
+                    }
+                    return TransitionProp::Or(vec![left_prop, right_prop]);
+                }
+            }
+            if is_known_fuzz_call(fun, ctx, "such_that") {
+                if let [source_arg, predicate_arg] = args.as_slice() {
+                    let source_relation =
+                        lower_relation_with_bound_domain(&source_arg.value, output_binding, ctx);
+                    let predicate_relation =
+                        lower_bool_predicate_with_locals(&predicate_arg.value, output_binding, ctx);
+                    return transition_prop_from_parts(vec![source_relation, predicate_relation]);
+                }
+            }
+            if is_known_fuzz_call(fun, ctx, "map") {
+                match args.as_slice() {
+                    [source_arg] => {
+                        return lower_relation_with_bound_domain(
+                            &source_arg.value,
+                            output_binding,
+                            ctx,
+                        );
+                    }
+                    [source_arg, mapper_arg] => {
+                        let source_binder = "_map_source".to_string();
+                        let source_domain = normalize_source_domain(&source_arg.value, ctx);
+                        let mut source_ty = extract_fuzzer_payload_type(source_arg.value.tipo().as_ref())
+                            .map(|ty| shallow_ir_type(&ty))
+                            .unwrap_or(ShallowIrType::Unknown);
+                        if matches!(source_ty, ShallowIrType::Unknown | ShallowIrType::Data) {
+                            source_ty = shallow_ir_type_from_semantics(&source_domain);
+                        }
+                        let source_binding = LocalBinding::DrawnValue {
+                            lean_name: source_binder.clone(),
+                            ty: source_ty.clone(),
+                            domain: source_domain.clone(),
+                        };
+                        let source_relation =
+                            lower_relation_with_bound_domain(&source_arg.value, &source_binding, ctx);
+                        if let Some(ResolvedUnaryCallbackBody {
+                            binder,
+                            body,
+                            module,
+                            locals,
+                        }) = resolve_unary_callback_body(&mapper_arg.value, ctx)
+                        {
+                            let mut scoped = locals;
+                            scoped.insert(binder, source_binding.clone());
+                            let mapped = with_current_module(ctx, module, |ctx| {
+                                with_scoped_locals(ctx, scoped, |ctx| {
+                                    let mut visiting = BTreeSet::new();
+                                    typed_expr_to_shallow_ir_with_locals(
+                                        &body,
+                                        ctx.data_types,
+                                        &ctx.locals,
+                                        &mut visiting,
+                                    )
+                                })
+                            });
+                            let eq = output_match_prop(output_binding, mapped, ctx);
+                            return TransitionProp::Exists {
+                                binder: source_binder,
+                                ty: source_ty,
+                                domain: Box::new(source_domain),
+                                body: Box::new(transition_prop_from_parts(vec![source_relation, eq])),
+                            };
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if is_known_bind_call(fun, ctx) {
+                if let Some((bind_source, binder, cont_body)) = detect_bind_call(args) {
+                    let source_domain = normalize_source_domain(bind_source, ctx);
+                    let mut source_ty = extract_fuzzer_payload_type(bind_source.tipo().as_ref())
+                        .map(|ty| shallow_ir_type(&ty))
+                        .unwrap_or(ShallowIrType::Unknown);
+                    if matches!(source_ty, ShallowIrType::Unknown | ShallowIrType::Data) {
+                        source_ty = shallow_ir_type_from_semantics(&source_domain);
+                    }
+                    let source_binding = LocalBinding::DrawnValue {
+                        lean_name: binder.clone(),
+                        ty: source_ty.clone(),
+                        domain: source_domain.clone(),
+                    };
+                    let source_relation =
+                        lower_relation_with_bound_domain(bind_source, &source_binding, ctx);
+                    let mut scoped = ctx.locals.clone();
+                    scoped.insert(binder.clone(), source_binding);
+                    let continuation = with_scoped_locals(ctx, scoped, |ctx| {
+                        lower_fuzzer_relation_with_locals(cont_body, output_binding, ctx)
+                    });
+                    return TransitionProp::Exists {
+                        binder,
+                        ty: source_ty,
+                        domain: Box::new(source_domain),
+                        body: Box::new(transition_prop_from_parts(vec![source_relation, continuation])),
+                    };
+                }
+            }
+            if let Some(inlined) = inline_resolved_fuzzer_relation_call(source, output_binding, ctx) {
+                return inlined;
+            }
+            relation_fallback_for_call(
+                fun,
+                ctx,
+                format!(
+                    "relation-bearing call '{}' is not lowered faithfully yet",
+                    describe_expr(fun)
+                ),
+            )
+        }
+        _ => {
+            let mut visiting = BTreeSet::new();
+            output_match_prop(
+                output_binding,
+                typed_expr_to_shallow_ir_with_locals(
+                    source,
+                    ctx.data_types,
+                    &ctx.locals,
+                    &mut visiting,
+                ),
+                ctx,
+            )
+        }
+    }
+}
+
+fn translate_bind_ctx(
+    source: &TypedExpr,
+    binder: String,
+    cont_body: &TypedExpr,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> TransitionProp {
+    let domain = normalize_source_domain(source, ctx);
+    let mut binder_ty = extract_fuzzer_payload_type(source.tipo().as_ref())
+        .map(|ty| shallow_ir_type(&ty))
+        .unwrap_or(ShallowIrType::Unknown);
+    if matches!(binder_ty, ShallowIrType::Unknown | ShallowIrType::Data) {
+        binder_ty = shallow_ir_type_from_semantics(&domain);
+    }
+    let cyclic = ctx.visiting_locals.contains(&binder);
+    let self_referential = !cyclic && free_vars_in_typed_expr(source).contains(&binder);
+    let binding = LocalBinding::DrawnValue {
+        lean_name: binder.clone(),
+        ty: binder_ty.clone(),
+        domain: domain.clone(),
+    };
+    let source_relation = lower_relation_with_bound_domain(source, &binding, ctx);
+    let mut scoped = ctx.locals.clone();
+    if !cyclic && !self_referential {
+        scoped.insert(binder.clone(), binding);
+    }
+    let saved_visiting = ctx.visiting_locals.clone();
+    ctx.visiting_locals.insert(binder.clone());
+    let body_prop = with_scoped_locals(ctx, scoped, |ctx| {
+        typed_expr_to_transition_prop_ctx(cont_body, ctx)
+    });
+    ctx.visiting_locals = saved_visiting;
+    let body = if self_referential || cyclic {
+        transition_prop_from_parts(vec![
+            TransitionProp::Unsupported {
+                reason: if self_referential {
+                    format!("self-referential monadic-bind binder '{binder}' detected")
+                } else {
+                    format!("cyclic monadic-bind binder '{binder}' detected")
+                },
+                source_location: None,
+            },
+            source_relation,
+            body_prop,
+        ])
+    } else {
+        transition_prop_from_parts(vec![source_relation, body_prop])
+    };
+    TransitionProp::Exists {
+        binder,
+        ty: binder_ty,
+        domain: Box::new(domain),
+        body: Box::new(body),
+    }
+}
+
+fn inline_resolved_fuzzer_relation_call(
+    expr: &TypedExpr,
+    output_binding: &LocalBinding,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> Option<TransitionProp> {
+    let expr_locals = ctx.expr_locals();
+    let (resolved_head, applied_args) = flatten_call_head_and_args(expr, &[], &expr_locals)
+        .unwrap_or_else(|| (terminal_expression(expr).clone(), Vec::new()));
+    let mut local_aliases = BTreeSet::new();
+    let resolved = resolve_function_from_expr(
+        &resolved_head,
+        &ctx.current_module,
+        ctx.function_index,
+        &expr_locals,
+        &mut local_aliases,
+    )?;
+    if resolved.module_name == STDLIB_FUZZ_MODULE
+        || applied_args.len() > resolved.function.arguments.len()
+    {
+        return None;
+    }
+    let key = (resolved.module_name.clone(), resolved.function_name.clone());
+    if !ctx.visiting_functions.insert(key.clone()) {
+        return Some(TransitionProp::Unsupported {
+            reason: format!(
+                "recursive helper relation detected at {}.{}",
+                resolved.module_name, resolved.function_name
+            ),
+            source_location: None,
+        });
+    }
+    let mut callee_locals = BTreeMap::new();
+    for (param, arg) in resolved.function.arguments.iter().zip(applied_args.iter()) {
+        if let Some(name) = param.get_variable_name() {
+            callee_locals.insert(name.to_string(), binding_from_expr(arg, ctx));
+        }
+    }
+    let inlined = with_current_module(ctx, resolved.module_name.clone(), |ctx| {
+        with_scoped_locals(ctx, callee_locals, |ctx| {
+            lower_fuzzer_relation_with_locals(&resolved.function.body, output_binding, ctx)
+        })
+    });
+    ctx.visiting_functions.remove(&key);
+    Some(inlined)
+}
+
+
+#[derive(Debug, Clone)]
+struct ResolvedRelationContinuation {
+    binder: String,
+    binder_ty: ShallowIrType,
+    body: TypedExpr,
+    module: String,
+    locals: BTreeMap<String, LocalBinding>,
+}
 
 type BindCall<'a> = (&'a TypedExpr, String, &'a TypedExpr);
-type ForkCall<'a> = (Vec<&'a TypedExpr>, Option<(String, &'a TypedExpr)>);
+type ForkCall<'a> = Vec<&'a TypedExpr>;
 
 /// Detect `and_then`/bind-style calls by *shape*:
 ///   - exactly two arguments,
@@ -6555,196 +9575,77 @@ fn detect_bind_call(args: &[CallArg<TypedExpr>]) -> Option<BindCall<'_>> {
     }
 }
 
-/// Build the `Exists { binder, domain, body }` node for a recognized bind
-/// call. The domain is extracted from the source fuzzer via
-/// `normalize_fuzzer_from_expr` + `fuzzer_semantics_of_normalized`.
-///
-/// H3 (plan §H3) — naive substitute-on-recurse: extend `local_values` with
-/// `binder -> source` so that `Var binder` references inside `cont_body`
-/// can resolve through the threaded substitution map instead of widening
-/// to `True`. The substitution is intentionally the *source fuzzer
-/// expression* (not a witness) — the `LocalValueKind` refactor that would
-/// distinguish "alias to source" from "drawn-from-domain witness" is
-/// explicitly deferred (see plan debate-outcome row 6).
-///
-/// Two guards prevent infinite recursion in the `Var`-lookup arm of
-/// `typed_expr_to_transition_prop`:
-///
-/// 1. **Bind-on-bind cycle guard**: if `binder` already appears in
-///    `visiting_locals` (a nested re-bind of the same name shadows an
-///    outer one) we skip the `local_values` extension to avoid losing
-///    the outer binding to a subsequent `Var` lookup, and emit a
-///    `TransitionProp::Unsupported` marker whose reason contains the
-///    stable substring `cyclic monadic-bind binder`.
-///
-/// 2. **Self-referential source guard** (H3 follow-up): if `binder`
-///    appears as a free `Var` *inside* `source` (e.g. `and_then(g,
-///    fn(g) { ... })` where the source is `Var g`), inserting
-///    `local_values[binder] = source` would create a self-referential
-///    entry like `local_values["g"] = Var "g"`. The `Var`-lookup arm
-///    would then recurse on itself indefinitely and stack-overflow the
-///    lowering. The fix is identical in shape to the cycle guard: skip
-///    the insertion and emit a marker, but with the distinct phrase
-///    `self-referential monadic-bind binder` so future error-filtering
-///    logic can disambiguate.
-///
-/// In either skipped-insertion case the body still contributes its
-/// constraints — the result is `And([Unsupported, body_prop])`, which
-/// under the Lean widening rule (`Unsupported ↦ True`) collapses to
-/// `True ∧ body_prop = body_prop` semantically while preserving the
-/// audit log. If both guards would fire (a cyclic re-bind whose source
-/// also references the binder), the cyclic guard takes priority: the
-/// `cyclic` test runs first and short-circuits the `self_referential`
-/// computation (`let self_referential = !cyclic && ...`), so the
-/// emitted marker carries the stable substring
-/// `cyclic monadic-bind binder`.
-///
-/// Note: both guards are precision-preserving early terminations.
-/// Even if a future change altered or removed them, termination is
-/// still guaranteed by the lookup-side visited-set guard
-/// (`visiting_value_aliases`) at the `Var` arm of
-/// `typed_expr_to_transition_prop`. These bind-site guards remain
-/// useful for clearer error phrases and for stopping the recursion
-/// one step earlier (at the bind site) than the lookup-site fallback
-/// (at the next Var dereference).
-#[allow(clippy::too_many_arguments)]
-fn translate_bind(
-    source: &TypedExpr,
-    binder: String,
-    cont_body: &TypedExpr,
-    current_module: &str,
-    function_index: &FunctionIndex<'_>,
-    constant_index: &ConstantIndex<'_>,
-    local_values: &BTreeMap<String, TypedExpr>,
-    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-    visiting_functions: &mut BTreeSet<(String, String)>,
-    visiting_locals: &BTreeSet<String>,
-    visiting_value_aliases: &mut BTreeSet<String>,
-) -> TransitionProp {
-    let normalized_source = normalize_fuzzer_from_expr(
-        source,
-        current_module,
-        function_index,
-        constant_index,
-        local_values,
-        visiting_functions,
-    );
-    let domain = fuzzer_semantics_of_normalized(&normalized_source);
-
-    let binder_ty = extract_fuzzer_payload_type(source.tipo().as_ref())
-        .map(|t| shallow_ir_type(&t))
-        .unwrap_or(ShallowIrType::Data);
-
-    // H3: thread `binder -> source` into `local_values` for the
-    // continuation body, gated by the two guards described in the doc
-    // comment above (bind-on-bind cycle vs self-referential source).
-    let cyclic = visiting_locals.contains(&binder);
-    let self_referential = !cyclic && free_vars_in_typed_expr(source).contains(&binder);
-    let mut extended_locals = local_values.clone();
-    if !cyclic && !self_referential {
-        extended_locals.insert(binder.clone(), source.clone());
+fn resolve_relation_continuation(
+    continuation: &TypedExpr,
+    ctx: &TransitionLoweringContext<'_>,
+) -> Option<ResolvedRelationContinuation> {
+    if !expression_is_bind_continuation(continuation) {
+        return None;
     }
 
-    // Recurse with the binder added to `visiting_locals` so any nested
-    // `translate_bind` re-binding the same name detects the cycle.
-    let mut extended_visiting = visiting_locals.clone();
-    extended_visiting.insert(binder.clone());
-
-    let body_prop = typed_expr_to_transition_prop(
-        cont_body,
-        current_module,
-        function_index,
-        constant_index,
-        &extended_locals,
-        data_types,
-        visiting_functions,
-        &extended_visiting,
-        visiting_value_aliases,
-    );
-
-    // Use the bind-site location (the continuation body's location is
-    // the closest available — the bind call wraps it). This mirrors
-    // commit 10's H2 source-location convention.
-    let final_body = if self_referential {
-        let location = cont_body.location();
-        let marker = TransitionProp::Unsupported {
-            reason: format!(
-                "Unsupported: self-referential monadic-bind binder '{binder}' \
-                 detected (binder name appears free in the bind's source \
-                 expression); threading skipped to prevent infinite recursion \
-                 in Var-lookup. This precision gap will be closed in a future \
-                 Aiken release."
-            ),
-            source_location: Some(format!("{}:{}", current_module, location.start)),
-        };
-        TransitionProp::And(vec![marker, body_prop])
-    } else if cyclic {
-        let location = cont_body.location();
-        let cycle_marker = TransitionProp::Unsupported {
-            reason: format!(
-                "Unsupported: cyclic monadic-bind binder '{binder}' detected; \
-                 threading skipped to prevent infinite recursion. \
-                 This precision gap will be closed in a future Aiken release."
-            ),
-            source_location: Some(format!("{}:{}", current_module, location.start)),
-        };
-        TransitionProp::And(vec![cycle_marker, body_prop])
-    } else {
-        body_prop
-    };
-
-    TransitionProp::Exists {
-        binder,
-        ty: binder_ty,
-        domain: Box::new(domain),
-        body: Box::new(final_body),
+    if let TypedExpr::Fn { args, body, .. } = terminal_expression(continuation) {
+        if args.len() == 1 {
+            return Some(ResolvedRelationContinuation {
+                binder: args[0]
+                    .get_variable_name()
+                    .unwrap_or("_fork_cont")
+                    .to_string(),
+                binder_ty: shallow_ir_type(&args[0].tipo),
+                body: body.as_ref().clone(),
+                module: ctx.current_module.clone(),
+                locals: ctx.locals.clone(),
+            });
+        }
     }
+
+    let (resolved, resolved_locals, applied_arg_count) = resolve_function_with_applied_args(
+        continuation,
+        &ctx.current_module,
+        ctx.function_index,
+        &ctx.expr_locals(),
+    )?;
+    let remaining_args = resolved
+        .function
+        .arguments
+        .len()
+        .checked_sub(applied_arg_count)?;
+    if remaining_args != 1 {
+        return None;
+    }
+
+    let binder_arg = &resolved.function.arguments[applied_arg_count];
+    Some(ResolvedRelationContinuation {
+        binder: binder_arg
+            .get_variable_name()
+            .unwrap_or("_fork_cont")
+            .to_string(),
+        binder_ty: shallow_ir_type(&binder_arg.tipo),
+        body: resolved.function.body.clone(),
+        module: resolved.module_name,
+        locals: resolved_locals
+            .into_iter()
+            .map(|(name, expr)| (name, LocalBinding::PureExpr(expr)))
+            .collect(),
+    })
 }
+
 
 /// Detect `fork*_and_then`-style calls by *shape*:
 ///   - at least two arguments that are zero-arg `fn() -> Fuzzer<T>` thunks
 ///     (the branches).
-///   - optionally a continuation `fn(a) -> Fuzzer<b>` as a later argument
-///     (the `let (x, ...) <- fork_and_then(...)` desugaring).
 ///
-/// Returns `Some((vec_of_thunk_bodies, optional_continuation))` when the
-/// call matches. The thunk bodies are the peeled `Fn { body: ... }` of
-/// each branch; the continuation (if any) is its `(binder_name, body)`.
+/// Returns the peeled thunk bodies when the call matches. Continuations are
+/// resolved separately so named/aliased visible functions can reuse the normal
+/// resolver pipeline instead of being silently dropped when they are not inline
+/// `fn` literals.
 fn detect_fork_call(args: &[CallArg<TypedExpr>]) -> Option<ForkCall<'_>> {
     let thunk_bodies: Vec<&TypedExpr> = args
         .iter()
         .filter_map(|a| zero_arg_fuzzer_thunk_body(&a.value))
         .collect();
-    if thunk_bodies.len() < 2 {
-        return None;
-    }
-
-    // Look for a bind-style continuation argument. In `fork2_and_then`
-    // this is the trailing `continue: fn(a) -> Fuzzer<b>` parameter.
-    let continuation = args.iter().find_map(|a| {
-        if expression_is_bind_continuation(&a.value) {
-            let term = terminal_expression(&a.value);
-            match term {
-                TypedExpr::Fn {
-                    args: fn_args,
-                    body,
-                    ..
-                } if fn_args.len() == 1 => {
-                    let name = fn_args[0]
-                        .get_variable_name()
-                        .unwrap_or("_fork_cont")
-                        .to_string();
-                    Some((name, body.as_ref()))
-                }
-                _ => None,
-            }
-        } else {
-            None
-        }
-    });
-
-    Some((thunk_bodies, continuation))
+    (thunk_bodies.len() >= 2).then_some(thunk_bodies)
 }
+
 
 /// If `expr` is an inline `fn() -> Fuzzer<T>` zero-arg thunk, return its
 /// body. Otherwise `None`.
@@ -7315,6 +10216,7 @@ fn describe_expr(expr: &TypedExpr) -> String {
 /// Used by the `When → Or` widening site to record which patterns were
 /// dropped (their constructor-tag conditional was widened to `True`)
 /// in the per-clause `[E0033]` `unsupported_log` entry.
+#[allow(dead_code)]
 fn describe_pattern(pat: &TypedPattern) -> String {
     match pat {
         TypedPattern::Var { name, .. } => name.clone(),
@@ -10065,6 +12967,84 @@ mod test {
         }
     }
 
+    fn make_stdlib_bind_call(
+        source: TypedExpr,
+        continuation: TypedExpr,
+        output_type: Rc<Type>,
+    ) -> TypedExpr {
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::fuzzer(output_type.clone()),
+            fun: Box::new(module_fn_var(
+                "and_then",
+                STDLIB_FUZZ_MODULE,
+                Type::function(
+                    vec![source.tipo(), continuation.tipo()],
+                    Type::fuzzer(output_type),
+                ),
+            )),
+            args: vec![call_arg(source), call_arg(continuation)],
+        }
+    }
+
+    fn make_zero_arg_fuzzer_thunk(body: TypedExpr) -> TypedExpr {
+        let return_type = body.tipo();
+        TypedExpr::Fn {
+            location: Span::empty(),
+            tipo: Type::function(vec![], return_type),
+            is_capture: false,
+            args: vec![],
+            body: Box::new(body),
+            return_annotation: None,
+        }
+    }
+
+    fn make_named_fuzzer_continuation_function(
+        name: &str,
+        arg_name: &str,
+        input_type: Rc<Type>,
+        body: TypedExpr,
+        output_type: Rc<Type>,
+    ) -> (FunctionAccessKey, TypedFunction) {
+        (
+            FunctionAccessKey {
+                module_name: "math".to_string(),
+                function_name: name.to_string(),
+            },
+            TypedFunction {
+                arguments: vec![TypedArg::new(arg_name, input_type)],
+                body,
+                doc: None,
+                location: Span::empty(),
+                name: name.to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: Type::fuzzer(output_type),
+                end_position: 0,
+                on_test_failure: OnTestFailure::FailImmediately,
+            },
+        )
+    }
+
+    fn make_stdlib_fork_call(
+        fork_name: &str,
+        args: Vec<TypedExpr>,
+        output_type: Rc<Type>,
+    ) -> TypedExpr {
+        let arg_types = args.iter().map(TypedExpr::tipo).collect();
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::fuzzer(output_type.clone()),
+            fun: Box::new(module_fn_var(
+                fork_name,
+                STDLIB_FUZZ_SCENARIO_MODULE,
+                Type::function(arg_types, Type::fuzzer(output_type)),
+            )),
+            args: args.into_iter().map(call_arg).collect(),
+        }
+    }
+
+
     /// Build a filter/such_that call: (Fuzzer<a>, fn(a) -> Bool) -> Fuzzer<a>
     fn make_typed_filter_call(source: TypedExpr, predicate: TypedExpr) -> TypedExpr {
         let payload_type =
@@ -10977,6 +13957,7 @@ mod test {
             FuzzerConstraint::Exact(FuzzerExactValue::Bool(true))
         );
     }
+
 
     #[test]
     fn extract_constraint_name_agnostic_constant_int_map_is_singleton_range() {
@@ -15656,8 +18637,8 @@ mod test {
     #[test]
     fn typed_expr_to_transition_prop_and_then_produces_exists() {
         // `and_then(int_between(0, 10), fn(x) { return(x) })` — the
-        // continuation is the pure passthrough, so the body translates to
-        // `EqOutput(Var x)`.
+        // continuation is the pure passthrough, so the body preserves `x` as
+        // the drawn witness rather than an unrelated fresh existential.
         let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
             empty_transition_prop_context();
 
@@ -15679,7 +18660,7 @@ mod test {
         let continuation =
             make_inline_bind_continuation("x", Type::int(), return_body, Type::int());
 
-        let bind_call = make_typed_bind_call(source, continuation, Type::int());
+        let bind_call = make_stdlib_bind_call(source, continuation, Type::int());
 
         let prop = typed_expr_to_transition_prop(
             &bind_call,
@@ -15699,12 +18680,142 @@ mod test {
                 assert!(
                     matches!(
                         *body,
-                        TransitionProp::EqOutput(ShallowIr::Var { ref name, .. })
+                        TransitionProp::EqOutput(ShallowIr::BoundVar { ref name, .. })
                             if name == "x"
                     ),
-                    "expected body = EqOutput(Var x), got {body:?}"
+                    "expected continuation to return the drawn witness x exactly, got {body:?}"
                 );
             }
+            other => panic!("expected Exists, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_fake_and_then_is_not_stdlib_bind() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let return_body = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::int()], int_fuzzer),
+            )),
+            args: vec![call_arg(local_var("x", Type::int()))],
+        };
+        let continuation =
+            make_inline_bind_continuation("x", Type::int(), return_body, Type::int());
+        let fake = make_typed_bind_call(make_typed_int_between_fuzzer("0", "10"), continuation, Type::int());
+
+        let prop = typed_expr_to_transition_prop(
+            &fake,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        assert!(
+            matches!(prop, TransitionProp::SubGenerator { ref module, ref fn_name } if module == "math" && fn_name == "anything_but_and_then"),
+            "fake and_then lookalike must not receive stdlib bind semantics: {prop:?}"
+        );
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_bind_opaque_int_source_defaults_domain() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let source = module_fn_var("opaque_rand", "math", int_fuzzer.clone());
+        let return_body = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::int()], int_fuzzer.clone()),
+            )),
+            args: vec![call_arg(local_var("x", Type::int()))],
+        };
+        let continuation =
+            make_inline_bind_continuation("x", Type::int(), return_body, Type::int());
+        let bind_call = make_stdlib_bind_call(source, continuation, Type::int());
+
+        let prop = typed_expr_to_transition_prop(
+            &bind_call,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Exists { domain, .. } => assert!(
+                matches!(*domain, FuzzerSemantics::IntRange { min: None, max: None }),
+                "opaque Int source should widen to unconstrained Int domain, got {domain:?}"
+            ),
+            other => panic!("expected Exists, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_bind_opaque_adt_source_defaults_schema_domain() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+        let input_type = Rc::new(Type::App {
+            public: true,
+            contains_opaque: false,
+            module: "cardano/transaction".to_string(),
+            name: "Input".to_string(),
+            args: vec![],
+            alias: None,
+        });
+        let source = module_fn_var("opaque_input", "cardano", Type::fuzzer(input_type.clone()));
+        let return_body = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::fuzzer(input_type.clone()),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![input_type.clone()], Type::fuzzer(input_type.clone())),
+            )),
+            args: vec![call_arg(local_var("x", input_type.clone()))],
+        };
+        let continuation = make_inline_bind_continuation(
+            "x",
+            input_type.clone(),
+            return_body,
+            input_type.clone(),
+        );
+        let bind_call = make_stdlib_bind_call(source, continuation, input_type);
+
+        let prop = typed_expr_to_transition_prop(
+            &bind_call,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Exists { domain, .. } => assert!(
+                matches!(*domain, FuzzerSemantics::DataWithSchema { ref type_name } if type_name == "cardano/transaction.Input"),
+                "opaque ADT source should widen to schema-aware Data domain, got {domain:?}"
+            ),
             other => panic!("expected Exists, got {other:?}"),
         }
     }
@@ -15888,10 +18999,10 @@ mod test {
                             other => panic!("expected Or as first And leg, got {other:?}"),
                         }
                         match &parts[1] {
-                            TransitionProp::EqOutput(ShallowIr::Var { name, .. })
+                            TransitionProp::EqOutput(ShallowIr::BoundVar { name, .. })
                                 if name == "x" => {}
                             other => {
-                                panic!("expected EqOutput(Var x) as second And leg, got {other:?}")
+                                panic!("expected EqOutput(BoundVar x) as second And leg, got {other:?}")
                             }
                         }
                     }
@@ -15901,6 +19012,1312 @@ mod test {
             other => panic!("expected Exists wrapping fork, got {other:?}"),
         }
     }
+
+    #[test]
+    fn typed_expr_to_transition_prop_fork_if_preserves_condition() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let return_fn_type = Type::function(vec![Type::int()], int_fuzzer.clone());
+        let make_return_thunk = |value: &str| TypedExpr::Fn {
+            location: Span::empty(),
+            tipo: Type::function(vec![], int_fuzzer.clone()),
+            is_capture: false,
+            args: vec![],
+            body: Box::new(TypedExpr::Call {
+                location: Span::empty(),
+                tipo: int_fuzzer.clone(),
+                fun: Box::new(module_fn_var(
+                    "constant",
+                    STDLIB_FUZZ_MODULE,
+                    return_fn_type.clone(),
+                )),
+                args: vec![call_arg(uint_lit(value))],
+            }),
+            return_annotation: None,
+        };
+
+        let call_expr = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "fork_if_and_then",
+                STDLIB_FUZZ_SCENARIO_MODULE,
+                Type::function(
+                    vec![
+                        Type::bool(),
+                        Type::int(),
+                        Type::function(vec![], int_fuzzer.clone()),
+                        Type::function(vec![], int_fuzzer.clone()),
+                    ],
+                    int_fuzzer.clone(),
+                ),
+            )),
+            args: vec![
+                call_arg(TypedExpr::BinOp {
+                    location: Span::empty(),
+                    tipo: Type::bool(),
+                    name: BinOp::Eq,
+                    left: Box::new(uint_lit("1")),
+                    right: Box::new(uint_lit("1")),
+                }),
+                call_arg(uint_lit("1")),
+                call_arg(make_return_thunk("0")),
+                call_arg(make_return_thunk("1")),
+            ],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &call_expr,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::IfThenElse { cond, t, e } => {
+                assert!(
+                    matches!(cond, ShallowIr::BinOp { op: ShallowBinOp::Eq, .. }),
+                    "fork_if_and_then must preserve its Bool condition, got {cond:?}",
+                );
+                assert!(
+                    matches!(*t, TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(ref v))) if v == "0"),
+                    "true branch should return 0, got {t:?}",
+                );
+                assert!(
+                    matches!(*e, TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(ref v))) if v == "1"),
+                    "false branch should return 1, got {e:?}",
+                );
+            }
+            other => panic!("expected IfThenElse for fork_if_and_then, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_one_of_uses_relation_lowering() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let values = TypedExpr::List {
+            location: Span::empty(),
+            tipo: Type::list(Type::int()),
+            elements: vec![uint_lit("0"), uint_lit("1")],
+            tail: None,
+        };
+        let call_expr = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "one_of",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::list(Type::int())], int_fuzzer.clone()),
+            )),
+            args: vec![call_arg(values)],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &call_expr,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Or(branches) => {
+                assert_eq!(branches.len(), 2);
+                assert!(matches!(&branches[0], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "0"));
+                assert!(matches!(&branches[1], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "1"));
+            }
+            other => panic!("expected Or for top-level one_of, got {other:?}"),
+        }
+    }
+
+#[test]
+    fn typed_expr_to_transition_prop_one_of_rejects_inexact_literal_element() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let values = TypedExpr::List {
+            location: Span::empty(),
+            tipo: Type::list(Type::int()),
+            elements: vec![local_var("mystery", Type::int())],
+            tail: None,
+        };
+        let call_expr = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "one_of",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::list(Type::int())], int_fuzzer.clone()),
+            )),
+            args: vec![call_arg(values)],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &call_expr,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        assert!(
+            matches!(
+                prop,
+                TransitionProp::Unsupported { ref reason, .. }
+                    if reason.contains("one_of literal element is not emitted exactly on counted path")
+            ),
+            "one_of must reject non-exact literal elements instead of emitting vacuous equalities"
+        );
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_map_resolves_named_helper() {
+        let (identity_key, identity_fn) =
+            make_named_unary_identity_mapper_function("identity", Type::int());
+        let mut known_functions = empty_known_functions();
+        known_functions.insert(&identity_key, &identity_fn);
+        let function_index = index_known_functions(&known_functions);
+        let constant_index: ConstantIndex<'_> = HashMap::new();
+        let empty_data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let mut visiting = BTreeSet::new();
+
+        let source = make_typed_int_between_fuzzer("0", "1");
+        let mapper = module_fn_var(
+            "identity",
+            "math",
+            Type::function(vec![Type::int()], Type::int()),
+        );
+        let expr = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::fuzzer(Type::int()),
+            fun: Box::new(module_fn_var(
+                "map",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![source.tipo(), mapper.tipo()], Type::fuzzer(Type::int())),
+            )),
+            args: vec![call_arg(source), call_arg(mapper)],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &expr,
+            "math",
+            &function_index,
+            &constant_index,
+            &BTreeMap::new(),
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Exists { binder, body, .. } => {
+                assert_eq!(binder, "_map_source");
+                assert!(
+                    matches!(
+                        *body,
+                        TransitionProp::EqOutput(ShallowIr::BoundVar { ref name, .. })
+                            if name == "_map_source"
+                    ),
+                    "named unary mappers must resolve through the general callback resolver, got {body:?}"
+                );
+            }
+            other => panic!("expected Exists(_map_source), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_either_uses_relation_lowering() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let return_fn_type = Type::function(vec![Type::int()], int_fuzzer.clone());
+        let make_return = |value: &str| TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                return_fn_type.clone(),
+            )),
+            args: vec![call_arg(uint_lit(value))],
+        };
+        let call_expr = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "either",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![int_fuzzer.clone(), int_fuzzer.clone()], int_fuzzer.clone()),
+            )),
+            args: vec![call_arg(make_return("0")), call_arg(make_return("1"))],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &call_expr,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Or(branches) => {
+                assert_eq!(branches.len(), 2);
+                assert!(matches!(&branches[0], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "0"));
+                assert!(matches!(&branches[1], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "1"));
+            }
+            other => panic!("expected Or for top-level either, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_either_with_unsupported_branch_stays_unsupported() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let return_fn_type = Type::function(vec![Type::int()], int_fuzzer.clone());
+        let make_return = |value: &str| TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                return_fn_type.clone(),
+            )),
+            args: vec![call_arg(uint_lit(value))],
+        };
+        let call_expr = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "either",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![int_fuzzer.clone(), int_fuzzer.clone()], int_fuzzer.clone()),
+            )),
+            args: vec![
+                call_arg(make_return("0")),
+                call_arg(TypedExpr::Call {
+                    location: Span::empty(),
+                    tipo: int_fuzzer.clone(),
+                    fun: Box::new(module_fn_var(
+                        "and_then",
+                        STDLIB_FUZZ_MODULE,
+                        Type::function(vec![int_fuzzer.clone()], int_fuzzer.clone()),
+                    )),
+                    args: vec![call_arg(make_return("1"))],
+                }),
+            ],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &call_expr,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Unsupported { reason, .. } => {
+                assert!(
+                    reason.contains("either branch is not lowered faithfully yet"),
+                    "unexpected Unsupported reason: {reason}"
+                );
+            }
+            other => panic!("expected Unsupported for either-with-unsupported-branch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_when_unsupported_clause_preserves_fallback() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let return_fn_type = Type::function(vec![Type::int()], int_fuzzer.clone());
+        let make_return = |value: &str| TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                return_fn_type.clone(),
+            )),
+            args: vec![call_arg(uint_lit(value))],
+        };
+
+        let when_expr = TypedExpr::When {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            subject: Box::new(TypedExpr::List {
+                location: Span::empty(),
+                tipo: Type::list(Type::int()),
+                elements: vec![uint_lit("1")],
+                tail: None,
+            }),
+            clauses: vec![
+                TypedClause {
+                    location: Span::empty(),
+                    pattern: TypedPattern::List {
+                        location: Span::empty(),
+                        elements: vec![TypedPattern::var("head")],
+                        tail: None,
+                    },
+                    then: make_return("1"),
+                },
+                TypedClause {
+                    location: Span::empty(),
+                    pattern: TypedPattern::Discard {
+                        name: "_rest".to_string(),
+                        location: Span::empty(),
+                    },
+                    then: make_return("2"),
+                },
+            ],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &when_expr,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Or(branches) => {
+                assert_eq!(branches.len(), 2, "expected unsupported clause + fallback, got {branches:?}");
+                match &branches[1] {
+                    TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) => {
+                        assert_eq!(v, "2", "fallback branch should remain reachable");
+                    }
+                    other => panic!("expected fallback EqOutput(2), got {other:?}"),
+                }
+            }
+            other => panic!("expected Or preserving fallback after unsupported clause, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn transition_prop_from_named_step_function_binds_state_parameter() {
+        let (_, _, _, empty_data_types, mut visiting) = empty_transition_prop_context();
+
+        let int_tipo = Type::int();
+        let int_fuzzer = Type::fuzzer(int_tipo.clone());
+        let return_fn_type = Type::function(vec![int_tipo.clone()], int_fuzzer.clone());
+        let step_fn = TypedFunction {
+            arguments: vec![TypedArg::new("st", int_tipo.clone())],
+            body: TypedExpr::Call {
+                location: Span::empty(),
+                tipo: int_fuzzer.clone(),
+                fun: Box::new(module_fn_var(
+                    "constant",
+                    STDLIB_FUZZ_MODULE,
+                    return_fn_type,
+                )),
+                args: vec![call_arg(local_var("st", int_tipo.clone()))],
+            },
+            doc: None,
+            location: Span::empty(),
+            name: "step".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: int_fuzzer.clone(),
+            end_position: 0,
+            on_test_failure: OnTestFailure::FailImmediately,
+        };
+        let key = FunctionAccessKey {
+            module_name: "mod".to_string(),
+            function_name: "step".to_string(),
+        };
+        let known_functions = IndexMap::from([(&key, &step_fn)]);
+        let function_index = index_known_functions(&known_functions);
+        let step_ref = module_fn_var(
+            "step",
+            "mod",
+            Type::function(vec![int_tipo.clone()], int_fuzzer),
+        );
+
+        let prop = transition_prop_from_step_function(
+            &step_ref,
+            None,
+            &function_index,
+            &HashMap::new(),
+            &empty_data_types,
+            &mut visiting,
+        )
+        .expect("named step function should lower");
+
+        match prop {
+            TransitionProp::EqOutput(ShallowIr::BoundVar { name, ty }) => {
+                assert_eq!(name, "state");
+                assert_eq!(ty, ShallowIrType::Int);
+            }
+            other => panic!("expected EqOutput(BoundVar(state)), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn transition_prop_from_multiarg_step_function_returns_none() {
+        let (_, _, _, empty_data_types, mut visiting) = empty_transition_prop_context();
+
+        let int_tipo = Type::int();
+        let int_fuzzer = Type::fuzzer(int_tipo.clone());
+        let return_fn_type = Type::function(vec![int_tipo.clone()], int_fuzzer.clone());
+        let step_fn = TypedExpr::Fn {
+            location: Span::empty(),
+            tipo: Type::function(vec![int_tipo.clone(), int_tipo.clone()], int_fuzzer.clone()),
+            is_capture: false,
+            args: vec![TypedArg::new("st", int_tipo.clone()), TypedArg::new("input", int_tipo.clone())],
+            body: Box::new(TypedExpr::Call {
+                location: Span::empty(),
+                tipo: int_fuzzer,
+                fun: Box::new(module_fn_var(
+                    "constant",
+                    STDLIB_FUZZ_MODULE,
+                    return_fn_type,
+                )),
+                args: vec![call_arg(local_var("input", int_tipo))],
+            }),
+            return_annotation: None,
+        };
+
+        assert!(
+            transition_prop_from_step_function(
+                &step_fn,
+                None,
+                &HashMap::new(),
+                &HashMap::new(),
+                &empty_data_types,
+                &mut visiting,
+            )
+            .is_none(),
+            "multi-arg step functions should stay unsupported until their non-state parameters have an honest theorem-side representation"
+        );
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_top_level_map_uses_relation_lowering() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let source = make_typed_int_between_fuzzer("0", "0");
+        let mapper = make_constant_int_mapper(Type::int(), "7");
+        let map_call = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "map",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![source.tipo(), mapper.tipo()], int_fuzzer.clone()),
+            )),
+            args: vec![call_arg(source), call_arg(mapper)],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &map_call,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Exists { binder, body, .. } => {
+                assert_eq!(binder, "_map_source");
+                assert!(
+                    matches!(
+                        *body,
+                        TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(ref v)))
+                            if v == "7"
+                    ),
+                    "mapped branch should constrain the transition output exactly, got {body:?}"
+                );
+            }
+            other => panic!("expected Exists for top-level map, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pair_projection_bindings_preserve_scalar_types() {
+        let binding = LocalBinding::DrawnValue {
+            lean_name: "pair".to_string(),
+            ty: ShallowIrType::Pair(
+                Box::new(ShallowIrType::Int),
+                Box::new(ShallowIrType::Bool),
+            ),
+            domain: FuzzerSemantics::Data,
+        };
+        let pattern = TypedPattern::Pair {
+            location: Span::empty(),
+            fst: Box::new(TypedPattern::var("n")),
+            snd: Box::new(TypedPattern::var("flag")),
+        };
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let mut locals = BTreeMap::new();
+        bind_pattern_to_locals(&pattern, &binding, &data_types, &mut locals);
+
+        match locals.get("n") {
+            Some(LocalBinding::Projection { ty, .. }) => assert_eq!(*ty, ShallowIrType::Int),
+            other => panic!("expected projected Int binding for fst, got {other:?}"),
+        }
+        let flag_binding = locals
+            .get("flag")
+            .expect("pair-pattern binding should create a flag projection");
+        match local_binding_to_shallow_ir(flag_binding, &data_types, &locals, &mut BTreeSet::new()) {
+            ShallowIr::FieldAccess { ty, kind, .. } => {
+                assert_eq!(ty, ShallowIrType::Bool);
+                assert_eq!(kind, ShallowFieldAccessKind::ListElement);
+            }
+            other => panic!("expected FieldAccess projection for flag, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn extend_locals_with_leading_assignments_preserves_alias_chain_destructuring_identity() {
+        let (function_index, constant_index, _, _, _) = empty_transition_prop_context();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let pair_type = Type::pair(Type::int(), Type::bool());
+        let pair_binding = LocalBinding::DrawnValue {
+            lean_name: "pair_input".to_string(),
+            ty: ShallowIrType::Pair(
+                Box::new(ShallowIrType::Int),
+                Box::new(ShallowIrType::Bool),
+            ),
+            domain: FuzzerSemantics::Data,
+        };
+        let mut locals = BTreeMap::new();
+        locals.insert("pair".to_string(), pair_binding);
+
+        let expr = TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: vec![
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: pair_type.clone(),
+                    value: Box::new(local_var("pair", pair_type.clone())),
+                    pattern: TypedPattern::var("p"),
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: pair_type.clone(),
+                    value: Box::new(local_var("p", pair_type.clone())),
+                    pattern: TypedPattern::Pair {
+                        location: Span::empty(),
+                        fst: Box::new(TypedPattern::var("x")),
+                        snd: Box::new(TypedPattern::Discard {
+                            name: "_".to_string(),
+                            location: Span::empty(),
+                        }),
+                    },
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                local_var("x", Type::int()),
+            ],
+        };
+
+        let ctx = TransitionLoweringContext {
+            current_module: "test_mod".to_string(),
+            function_index: &function_index,
+            constant_index: &constant_index,
+            data_types: &data_types,
+            locals,
+            visiting_functions: BTreeSet::new(),
+            visiting_locals: BTreeSet::new(),
+            visiting_value_aliases: BTreeSet::new(),
+            next_synthetic_binder: 0,
+        };
+
+        let scoped = extend_locals_with_leading_assignments(&expr, &ctx)
+            .expect("sequence with leading assignments should extend locals");
+        let x_binding = scoped
+            .get("x")
+            .expect("destructured alias chain should bind x in the extended scope");
+
+        match local_binding_to_shallow_ir(x_binding, &data_types, &scoped, &mut BTreeSet::new()) {
+            ShallowIr::FieldAccess {
+                record,
+                index,
+                ty,
+                kind,
+                ..
+            } => {
+                assert_eq!(index, 0);
+                assert_eq!(ty, ShallowIrType::Int);
+                assert_eq!(kind, ShallowFieldAccessKind::ListElement);
+                assert!(
+                    matches!(
+                        record.as_ref(),
+                        ShallowIr::BoundVar { name, ty }
+                            if name == "pair_input"
+                                && matches!(
+                                    ty,
+                                    ShallowIrType::Pair(fst, snd)
+                                        if **fst == ShallowIrType::Int
+                                            && **snd == ShallowIrType::Bool
+                                )
+                    ),
+                    "projection must stay rooted in the original drawn pair, got {record:?}"
+                );
+            }
+            other => panic!(
+                "expected alias-chain destructuring to lower to a projection from the original pair, got {other:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn translate_sequence_with_locals_preserves_nested_derived_local_identity() {
+        fn terminal_let_body(ir: &ShallowIr) -> &ShallowIr {
+            match ir {
+                ShallowIr::Let { body, .. } => terminal_let_body(body),
+                other => other,
+            }
+        }
+
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let pair_type = Type::pair(Type::int(), Type::bool());
+        let mut locals = BTreeMap::new();
+        locals.insert(
+            "pair".to_string(),
+            LocalBinding::DrawnValue {
+                lean_name: "pair_input".to_string(),
+                ty: ShallowIrType::Pair(
+                    Box::new(ShallowIrType::Int),
+                    Box::new(ShallowIrType::Bool),
+                ),
+                domain: FuzzerSemantics::Data,
+            },
+        );
+
+        let expr = TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: vec![
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: pair_type.clone(),
+                    value: Box::new(local_var("pair", pair_type.clone())),
+                    pattern: TypedPattern::var("q"),
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: pair_type.clone(),
+                    value: Box::new(local_var("q", pair_type.clone())),
+                    pattern: TypedPattern::Pair {
+                        location: Span::empty(),
+                        fst: Box::new(TypedPattern::var("x")),
+                        snd: Box::new(TypedPattern::Discard {
+                            name: "_".to_string(),
+                            location: Span::empty(),
+                        }),
+                    },
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: Type::int(),
+                    value: Box::new(local_var("x", Type::int())),
+                    pattern: TypedPattern::var("y"),
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                local_var("y", Type::int()),
+            ],
+        };
+
+        let ir = typed_expr_to_shallow_ir_with_locals(
+            &expr,
+            &data_types,
+            &locals,
+            &mut BTreeSet::new(),
+        );
+
+        match terminal_let_body(&ir) {
+            ShallowIr::FieldAccess {
+                record,
+                index,
+                ty,
+                kind,
+                ..
+            } => {
+                assert_eq!(*index, 0);
+                assert_eq!(*ty, ShallowIrType::Int);
+                assert_eq!(*kind, ShallowFieldAccessKind::ListElement);
+                assert!(
+                    matches!(
+                        record.as_ref(),
+                        ShallowIr::BoundVar { name, ty }
+                            if name == "pair_input"
+                                && matches!(
+                                    ty,
+                                    ShallowIrType::Pair(fst, snd)
+                                        if **fst == ShallowIrType::Int
+                                            && **snd == ShallowIrType::Bool
+                                )
+                    ),
+                    "derived local should stay rooted in the original drawn pair, got {record:?}"
+                );
+            }
+            other => panic!(
+                "expected nested derived local to lower to the original pair projection, got {other:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn translate_sequence_with_locals_alias_cycle_remains_explicit() {
+        fn terminal_let_body(ir: &ShallowIr) -> &ShallowIr {
+            match ir {
+                ShallowIr::Let { body, .. } => terminal_let_body(body),
+                other => other,
+            }
+        }
+
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let int_type = Type::int();
+        let expr = TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: vec![
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: int_type.clone(),
+                    value: Box::new(local_var("y", int_type.clone())),
+                    pattern: TypedPattern::var("x"),
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: int_type.clone(),
+                    value: Box::new(local_var("x", int_type.clone())),
+                    pattern: TypedPattern::var("y"),
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                local_var("y", int_type),
+            ],
+        };
+
+        let ir = typed_expr_to_shallow_ir_with_locals(
+            &expr,
+            &data_types,
+            &BTreeMap::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match terminal_let_body(&ir) {
+            ShallowIr::Opaque { reason, .. } => assert!(
+                reason.contains("local binding cycle on 'y' while lowering value"),
+                "alias cycle must stay explicit rather than looping or widening silently, got: {reason}"
+            ),
+            other => panic!("expected explicit cycle marker, got {other:?}"),
+        }
+    }
+
+
+    #[test]
+    fn lower_bool_predicate_with_locals_preserves_constructor_false_literal() {
+        let (function_index, constant_index, _, _, _) = empty_transition_prop_context();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let output_binding = LocalBinding::DrawnValue {
+            lean_name: "candidate".to_string(),
+            ty: ShallowIrType::Bool,
+            domain: FuzzerSemantics::Bool,
+        };
+        let mut ctx = TransitionLoweringContext {
+            current_module: "test_mod".to_string(),
+            function_index: &function_index,
+            constant_index: &constant_index,
+            data_types: &data_types,
+            locals: BTreeMap::new(),
+            visiting_functions: BTreeSet::new(),
+            visiting_locals: BTreeSet::new(),
+            visiting_value_aliases: BTreeSet::new(),
+            next_synthetic_binder: 0,
+        };
+
+        let predicate = make_constant_bool_mapper(Type::bool(), false);
+        let prop = lower_bool_predicate_with_locals(
+            &predicate,
+            &output_binding,
+            &mut ctx,
+        );
+
+        assert!(
+            matches!(
+                prop,
+                TransitionProp::Pure(ShallowIr::Const(ShallowConst::Bool(false)))
+            ),
+            "constructor-style False must stay as a constraining Bool literal on the relation path"
+        );
+    }
+
+#[test]
+    fn lower_bool_predicate_with_locals_resolves_named_helper() {
+        let (predicate_key, predicate_fn) =
+            make_named_unary_tautology_mapper_function("always_true", Type::bool());
+        let mut known_functions = empty_known_functions();
+        known_functions.insert(&predicate_key, &predicate_fn);
+        let function_index = index_known_functions(&known_functions);
+        let constant_index: ConstantIndex<'_> = HashMap::new();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let output_binding = LocalBinding::DrawnValue {
+            lean_name: "candidate".to_string(),
+            ty: ShallowIrType::Bool,
+            domain: FuzzerSemantics::Bool,
+        };
+        let mut ctx = TransitionLoweringContext {
+            current_module: "math".to_string(),
+            function_index: &function_index,
+            constant_index: &constant_index,
+            data_types: &data_types,
+            locals: BTreeMap::new(),
+            visiting_functions: BTreeSet::new(),
+            visiting_locals: BTreeSet::new(),
+            visiting_value_aliases: BTreeSet::new(),
+            next_synthetic_binder: 0,
+        };
+
+        let predicate = module_fn_var(
+            "always_true",
+            "math",
+            Type::function(vec![Type::bool()], Type::bool()),
+        );
+        let prop = lower_bool_predicate_with_locals(&predicate, &output_binding, &mut ctx);
+
+        assert!(
+            matches!(
+                prop,
+                TransitionProp::Pure(ShallowIr::BinOp {
+                    op: ShallowBinOp::Eq,
+                    ref left,
+                    ref right,
+                }) if matches!(
+                    (left.as_ref(), right.as_ref()),
+                    (
+                        ShallowIr::BoundVar { name: left_name, .. },
+                        ShallowIr::BoundVar { name: right_name, .. },
+                    ) if left_name == "candidate" && right_name == "candidate"
+                )
+            ),
+            "named unary predicate helpers must resolve through the general callback resolver, got {prop:?}"
+        );
+    }
+
+    #[test]
+    fn lower_bool_predicate_with_locals_rejects_inexact_body() {
+        let (function_index, constant_index, _, _, _) = empty_transition_prop_context();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let output_binding = LocalBinding::DrawnValue {
+            lean_name: "candidate".to_string(),
+            ty: ShallowIrType::Int,
+            domain: FuzzerSemantics::IntRange {
+                min: None,
+                max: None,
+            },
+        };
+        let mut ctx = TransitionLoweringContext {
+            current_module: "test_mod".to_string(),
+            function_index: &function_index,
+            constant_index: &constant_index,
+            data_types: &data_types,
+            locals: BTreeMap::new(),
+            visiting_functions: BTreeSet::new(),
+            visiting_locals: BTreeSet::new(),
+            visiting_value_aliases: BTreeSet::new(),
+            next_synthetic_binder: 0,
+        };
+
+        let predicate = make_unary_mapper(
+            "n",
+            Type::int(),
+            Type::bool(),
+            TypedExpr::BinOp {
+                location: Span::empty(),
+                tipo: Type::bool(),
+                name: BinOp::GtEqInt,
+                left: Box::new(local_var("n", Type::int())),
+                right: Box::new(uint_lit("0")),
+            },
+        );
+        let prop = lower_bool_predicate_with_locals(&predicate, &output_binding, &mut ctx);
+
+        assert!(
+            matches!(
+                prop,
+                TransitionProp::Unsupported { ref reason, .. }
+                    if reason.contains("predicate body is not emitted exactly on counted path")
+            ),
+            "unsupported predicate bodies must stay explicit Unsupported rather than degrading to Pure(...)"
+        );
+    }
+
+    #[test]
+    fn normalize_source_domain_strips_map_bind_and_filter_wrappers() {
+        let (function_index, constant_index, _, _, _) = empty_transition_prop_context();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let mut ctx = TransitionLoweringContext {
+            current_module: "math".to_string(),
+            function_index: &function_index,
+            constant_index: &constant_index,
+            data_types: &data_types,
+            locals: BTreeMap::new(),
+            visiting_functions: BTreeSet::new(),
+            visiting_locals: BTreeSet::new(),
+            visiting_value_aliases: BTreeSet::new(),
+            next_synthetic_binder: 0,
+        };
+
+        let source = make_typed_int_between_fuzzer("1", "3");
+        let mapped = make_typed_map_call(
+            source.clone(),
+            make_identity_mapper("n", Type::int()),
+            Type::int(),
+        );
+        let bound = make_stdlib_bind_call(
+            source.clone(),
+            make_inline_bind_continuation(
+                "n",
+                Type::int(),
+                make_typed_int_between_fuzzer("5", "8"),
+                Type::int(),
+            ),
+            Type::int(),
+        );
+        let filtered = make_typed_filter_call(
+            source,
+            make_bool_predicate("n", Type::int()),
+        );
+
+        let expected = FuzzerSemantics::IntRange {
+            min: Some("1".to_string()),
+            max: Some("3".to_string()),
+        };
+        assert_eq!(normalize_source_domain(&mapped, &mut ctx), expected);
+        assert_eq!(normalize_source_domain(&bound, &mut ctx), expected);
+        assert_eq!(normalize_source_domain(&filtered, &mut ctx), expected);
+    }
+
+    #[test]
+    fn output_match_prop_rejects_non_exact_var_rhs() {
+        let (function_index, constant_index, _, _, _) = empty_transition_prop_context();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let ctx = TransitionLoweringContext {
+            current_module: "test_mod".to_string(),
+            function_index: &function_index,
+            constant_index: &constant_index,
+            data_types: &data_types,
+            locals: BTreeMap::new(),
+            visiting_functions: BTreeSet::new(),
+            visiting_locals: BTreeSet::new(),
+            visiting_value_aliases: BTreeSet::new(),
+            next_synthetic_binder: 0,
+        };
+
+        let prop = output_match_prop(
+            &transition_output_binding(),
+            ShallowIr::Var {
+                name: "x".to_string(),
+                ty: ShallowIrType::Data,
+            },
+            &ctx,
+        );
+
+        assert!(
+            matches!(
+                prop,
+                TransitionProp::Unsupported { ref reason, .. }
+                    if reason.contains("counted output equality rejected non-exact rhs root 'Var'")
+            ),
+            "counted output equality must reject roots that would freshen later"
+        );
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_resolves_aliased_fork_continuation() {
+        let int_type = Type::int();
+        let int_fuzzer = Type::fuzzer(int_type.clone());
+        let return_body = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer.clone(),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![int_type.clone()], int_fuzzer.clone()),
+            )),
+            args: vec![call_arg(local_var("picked", int_type.clone()))],
+        };
+        let (cont_key, cont_fn) = make_named_fuzzer_continuation_function(
+            "keep_picked",
+            "picked",
+            int_type.clone(),
+            return_body,
+            int_type.clone(),
+        );
+        let mut known_functions: IndexMap<&FunctionAccessKey, &TypedFunction> = IndexMap::new();
+        known_functions.insert(&cont_key, &cont_fn);
+        let function_index = index_known_functions(&known_functions);
+        let constant_index: ConstantIndex<'_> = HashMap::new();
+        let empty_data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let mut visiting = BTreeSet::new();
+
+        let continuation_type = Type::function(vec![int_type.clone()], int_fuzzer.clone());
+        let mut local_values = BTreeMap::new();
+        local_values.insert(
+            "keep_alias".to_string(),
+            module_fn_var("keep_picked", "math", continuation_type.clone()),
+        );
+
+        let fork_call = make_stdlib_fork_call(
+            "fork_and_then",
+            vec![
+                make_zero_arg_fuzzer_thunk(make_typed_int_between_fuzzer("0", "1")),
+                make_zero_arg_fuzzer_thunk(make_typed_int_between_fuzzer("2", "3")),
+                local_var("keep_alias", continuation_type),
+            ],
+            int_type.clone(),
+        );
+
+        let prop = typed_expr_to_transition_prop(
+            &fork_call,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Exists { binder, body, .. } => {
+                assert_eq!(binder, "picked");
+                match *body {
+                    TransitionProp::And(parts) => {
+                        assert_eq!(parts.len(), 2);
+                        assert!(
+                            matches!(&parts[0], TransitionProp::Or(branches) if branches.len() == 2),
+                            "fork branches must still be preserved, got {:?}",
+                            parts[0]
+                        );
+                        assert!(
+                            matches!(
+                                &parts[1],
+                                TransitionProp::EqOutput(ShallowIr::BoundVar { name, ty })
+                                    if name == "picked" && *ty == ShallowIrType::Int
+                            ),
+                            "resolved continuation must lower its visible body with the bound witness, got {:?}",
+                            parts[1]
+                        );
+                    }
+                    other => panic!("expected fork continuation body And([...]), got {other:?}"),
+                }
+            }
+            other => panic!("expected fork continuation to lower to Exists, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_rejects_unresolved_fork_continuation() {
+        let int_type = Type::int();
+        let continuation_type = Type::function(vec![int_type.clone()], Type::fuzzer(int_type.clone()));
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let fork_call = make_stdlib_fork_call(
+            "fork_and_then",
+            vec![
+                make_zero_arg_fuzzer_thunk(make_typed_int_between_fuzzer("0", "1")),
+                make_zero_arg_fuzzer_thunk(make_typed_int_between_fuzzer("2", "3")),
+                module_fn_var("missing_visible_continuation", "math", continuation_type),
+            ],
+            int_type,
+        );
+
+        let prop = typed_expr_to_transition_prop(
+            &fork_call,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Unsupported { reason, .. } => assert!(
+                reason.contains("fork continuation"),
+                "unresolved fork continuations must surface explicitly, got: {reason}"
+            ),
+            other => panic!("expected explicit unsupported fork continuation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_expr_to_transition_prop_int_assignment_pattern_is_explicitly_unsupported() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+        let int_fuzzer = Type::fuzzer(Type::int());
+        let expr = TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: vec![
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: Type::int(),
+                    value: Box::new(uint_lit("0")),
+                    pattern: TypedPattern::Int {
+                        location: Span::empty(),
+                        value: "0".to_string(),
+                        base: Base::Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                TypedExpr::Call {
+                    location: Span::empty(),
+                    tipo: int_fuzzer.clone(),
+                    fun: Box::new(module_fn_var(
+                        "constant",
+                        STDLIB_FUZZ_MODULE,
+                        Type::function(vec![Type::int()], int_fuzzer),
+                    )),
+                    args: vec![call_arg(uint_lit("42"))],
+                },
+            ],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &expr,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Unsupported { reason, .. } => assert!(
+                reason.contains("int-pattern bindings require an equality guard"),
+                "literal assignment patterns must be rejected explicitly, got: {reason}"
+            ),
+            other => panic!("expected explicit unsupported literal pattern, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_sequence_with_locals_list_assignment_pattern_is_explicitly_opaque() {
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+        let list_type = Type::list(Type::int());
+        let expr = TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: vec![
+                TypedExpr::Assignment {
+                    location: Span::empty(),
+                    tipo: list_type.clone(),
+                    value: Box::new(TypedExpr::List {
+                        location: Span::empty(),
+                        tipo: list_type.clone(),
+                        elements: vec![uint_lit("1")],
+                        tail: None,
+                    }),
+                    pattern: TypedPattern::List {
+                        location: Span::empty(),
+                        elements: vec![TypedPattern::var("head")],
+                        tail: None,
+                    },
+                    kind: crate::ast::AssignmentKind::Let { backpassing: () },
+                    comment: None,
+                },
+                local_var("head", Type::int()),
+            ],
+        };
+
+        let ir = typed_expr_to_shallow_ir_with_locals(
+            &expr,
+            &data_types,
+            &BTreeMap::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match ir {
+            ShallowIr::Opaque { reason, .. } => assert!(
+                reason.contains("list-pattern bindings are not lowered faithfully yet"),
+                "list assignment patterns must surface as opaque until a real guard exists, got: {reason}"
+            ),
+            other => panic!("expected explicit opaque list-pattern binding, got {other:?}"),
+        }
+    }
+
+
+    #[test]
+    fn shallow_ir_record_update_is_not_vacuous() {
+        let ir = ShallowIr::RecordUpdate {
+            record: Box::new(ShallowIr::BoundVar {
+                name: "state".to_string(),
+                ty: ShallowIrType::Data,
+            }),
+            tag: 1,
+            field_count: 1,
+            updates: vec![],
+        };
+        assert!(
+            !shallow_ir_is_vacuous(&ir),
+            "RecordUpdate now emits structural Data and must not be classified as vacuous",
+        );
+    }
+
 
     #[test]
     fn typed_expr_to_transition_prop_return_produces_eq_output() {
@@ -15942,8 +20359,10 @@ mod test {
 
     #[test]
     fn typed_expr_to_transition_prop_when_produces_or_of_clauses() {
-        // `when x is { a -> constant(42); b -> constant(0) }` — two arms,
-        // each returning a pure Fuzzer value. Expect: Or([EqOutput 42, EqOutput 0]).
+        // `when x is { a -> constant(42); b -> constant(0) }` — the first
+        // `Var` clause is a catch-all, so later clauses are unreachable. The
+        // lowering should collapse to the first branch body rather than widen
+        // to an unordered disjunction.
         let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
             empty_transition_prop_context();
 
@@ -15993,63 +20412,14 @@ mod test {
         );
 
         match prop {
-            TransitionProp::Or(branches) => {
-                assert_eq!(branches.len(), 2, "expected 2 branches, got {branches:?}");
-                assert!(
-                    matches!(
-                        &branches[0],
-                        TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v)))
-                            if v == "42"
-                    ),
-                    "expected branch 0 = EqOutput(Int 42), got {:?}",
-                    branches[0]
-                );
-                assert!(
-                    matches!(
-                        &branches[1],
-                        TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v)))
-                            if v == "0"
-                    ),
-                    "expected branch 1 = EqOutput(Int 0), got {:?}",
-                    branches[1]
-                );
+            TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) => {
+                assert_eq!(v, "42", "catch-all first clause must short-circuit later clauses");
             }
-            other => panic!("expected Or for When, got {other:?}"),
+            other => panic!("expected EqOutput(Int 42) for catch-all when, got {other:?}"),
         }
     }
 
     /// Helper: traverse a `TransitionProp` tree and count the leaves that
-    /// would, after `verify.rs::emit_transition_prop_as_lean` runs, push
-    /// an entry onto `unsupported_log`. This mirrors the production
-    /// counter exactly: every `Pure`, `Unsupported`, `SubGenerator`,
-    /// `Match` (with arms), and empty `Or` widens; `EqOutput`,
-    /// `Exists`/`And`/`Or`/`IfThenElse` are walked recursively.
-    fn count_widening_leaves(prop: &TransitionProp) -> usize {
-        match prop {
-            TransitionProp::Pure(_) => 1,
-            TransitionProp::Unsupported { .. } => 1,
-            TransitionProp::SubGenerator { .. } => 1,
-            TransitionProp::Match { arms, .. } => {
-                let mut n = 1; // the Match itself widens the scrutinee dispatch
-                for arm in arms {
-                    n += count_widening_leaves(&arm.body);
-                }
-                n
-            }
-            TransitionProp::EqOutput(_) => 0,
-            TransitionProp::Exists { body, .. } => count_widening_leaves(body),
-            TransitionProp::And(parts) | TransitionProp::Or(parts) => {
-                if parts.is_empty() {
-                    1 // empty Or widens to True
-                } else {
-                    parts.iter().map(count_widening_leaves).sum()
-                }
-            }
-            TransitionProp::IfThenElse { t, e, .. } => {
-                count_widening_leaves(t) + count_widening_leaves(e)
-            }
-        }
-    }
 
     /// Helper: collect every `Unsupported.reason` whose text contains a
     /// given substring. Used to assert that the per-clause `[E0033]`
@@ -16087,17 +20457,13 @@ mod test {
         out
     }
 
-    /// H2 / E0033 — `when` clauses that destructure constructor patterns
-    /// must each contribute one widening note to `unsupported_log`. The
-    /// counter the verify-side pipeline reads (`over_approximations`) is
-    /// the length of that log, so we assert the structural invariant
-    /// directly: every constructor clause produces exactly one
-    /// `Unsupported` leaf carrying the `[E0033]` marker. This is the
-    /// `when_constructor_pattern_increments_over_approximations` row
-    /// from plan §"Test Plan" §B.
+    /// Constructor-pattern `when` clauses on the counted transition path must
+    /// lower to explicit branch guards rather than `[E0033]` widenings.
+    /// This regression test asserts the repaired shape: nested `IfThenElse`
+    /// guards with the discard clause preserved as the final fallback.
     #[test]
     fn when_constructor_pattern_increments_over_approximations() {
-        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+        let (function_index, constant_index, local_values, _empty_data_types, mut visiting) =
             empty_transition_prop_context();
 
         let int_fuzzer = Type::fuzzer(Type::int());
@@ -16113,44 +20479,55 @@ mod test {
             args: vec![call_arg(uint_lit(value))],
         };
 
+        let (owned, scenario_ty) = scenario_like_data_types();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = owned.iter().collect();
+
         // Build a `when` with three clauses:
-        //   Some(x) -> constant(1)        (constructor: should log)
-        //   None    -> constant(2)        (constructor, no binders: should still log)
-        //   _other  -> constant(3)        (Discard: must NOT log)
-        let option_ty = Rc::new(Type::App {
-            public: true,
-            contains_opaque: false,
-            module: "option".to_string(),
-            name: "Option".to_string(),
-            args: vec![Type::int()],
-            alias: None,
-        });
-        let some_pattern = TypedPattern::constructor(
-            "Some",
-            &[CallArg::var("x", Span::empty())],
-            option_ty.clone(),
+        //   Step(payload) -> constant(1)
+        //   Done         -> constant(2)
+        //   _other       -> constant(3)
+        let step_pattern = TypedPattern::constructor(
+            "Step",
+            &[CallArg::var("payload", Span::empty())],
+            scenario_ty.clone(),
             Span::create(10, 7),
         );
-        let none_pattern =
-            TypedPattern::constructor("None", &[], option_ty.clone(), Span::create(20, 4));
+        let done_pattern =
+            TypedPattern::constructor("Done", &[], scenario_ty.clone(), Span::create(20, 4));
         let discard_pattern = TypedPattern::Discard {
             name: "_other".to_string(),
             location: Span::create(30, 6),
         };
 
+        let done_subject = TypedExpr::Var {
+            location: Span::empty(),
+            constructor: ValueConstructor::public(
+                scenario_ty.clone(),
+                ValueConstructorVariant::Record {
+                    name: "Done".to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: "mod".to_string(),
+                    constructors_count: 2,
+                },
+            ),
+            name: "Done".to_string(),
+        };
+
         let when_expr = TypedExpr::When {
             location: Span::empty(),
             tipo: int_fuzzer.clone(),
-            subject: Box::new(local_var("x", option_ty)),
+            subject: Box::new(done_subject),
             clauses: vec![
                 TypedClause {
                     location: Span::empty(),
-                    pattern: some_pattern,
+                    pattern: step_pattern,
                     then: make_return("1"),
                 },
                 TypedClause {
                     location: Span::empty(),
-                    pattern: none_pattern,
+                    pattern: done_pattern,
                     then: make_return("2"),
                 },
                 TypedClause {
@@ -16163,61 +20540,54 @@ mod test {
 
         let prop = typed_expr_to_transition_prop(
             &when_expr,
-            "test_mod",
+            "mod",
             &function_index,
             &constant_index,
             &local_values,
-            &empty_data_types,
+            &data_types,
             &mut visiting,
             &BTreeSet::new(),
             &mut BTreeSet::new(),
         );
 
-        // The two constructor clauses contribute one `[E0033]` Unsupported
-        // each; the discard clause contributes none. The remaining branch
-        // bodies are pure `EqOutput` and don't widen.
+        // Constructor patterns are now lowered faithfully via explicit
+        // conditions. No widening leaves should remain, and the shape should be
+        // a nested IfThenElse ending in the discard-clause body.
         let e0033_entries = collect_unsupported_reasons_containing(&prop, "[E0033]");
-        assert_eq!(
-            e0033_entries.len(),
-            2,
-            "expected exactly 2 [E0033] widening entries (one per constructor clause), \
-             got {} — entries: {:?}",
-            e0033_entries.len(),
-            e0033_entries,
+        assert!(
+            e0033_entries.is_empty(),
+            "constructor patterns should no longer emit [E0033] widenings: {e0033_entries:?}",
         );
 
-        // The total widening-leaf count (the production
-        // `over_approximations` counter when the verify-side lowering
-        // runs) must be exactly 2 here — no other widening source is
-        // present in this lowered tree.
-        let total = count_widening_leaves(&prop);
-        assert_eq!(
-            total, 2,
-            "expected over_approximations=2 (one per constructor clause), got {total}",
-        );
-
-        // Outer shape is still `Or` over branches — the wrap is
-        // structurally inside each branch via `And`, not a sibling.
         match &prop {
-            TransitionProp::Or(branches) => {
-                assert_eq!(branches.len(), 3, "expected 3 branches, got {branches:?}");
+            TransitionProp::IfThenElse { cond, t, e } => {
                 assert!(
-                    matches!(&branches[0], TransitionProp::And(parts) if parts.len() == 2),
-                    "branch 0 (Some) must be And([Unsupported, body]), got {:?}",
-                    branches[0],
+                    matches!(cond, ShallowIr::BinOp { op: ShallowBinOp::Eq, .. }),
+                    "outer constructor clause should lower to an Eq guard, got {cond:?}",
                 );
                 assert!(
-                    matches!(&branches[1], TransitionProp::And(parts) if parts.len() == 2),
-                    "branch 1 (None) must be And([Unsupported, body]), got {:?}",
-                    branches[1],
+                    matches!(&**t, TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "1"),
+                    "Some(x) branch should return 1, got {t:?}",
                 );
-                assert!(
-                    !matches!(&branches[2], TransitionProp::And(_)),
-                    "branch 2 (Discard) must NOT be wrapped in And, got {:?}",
-                    branches[2],
-                );
+                match &**e {
+                    TransitionProp::IfThenElse { cond, t, e } => {
+                        assert!(
+                            matches!(cond, ShallowIr::BinOp { op: ShallowBinOp::Eq, .. }),
+                            "inner constructor clause should lower to an Eq guard, got {cond:?}",
+                        );
+                        assert!(
+                            matches!(&**t, TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "2"),
+                            "None branch should return 2, got {t:?}",
+                        );
+                        assert!(
+                            matches!(&**e, TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "3"),
+                            "discard branch should remain the final fallback, got {e:?}",
+                        );
+                    }
+                    other => panic!("expected nested IfThenElse for second constructor clause, got {other:?}"),
+                }
             }
-            other => panic!("expected Or for When, got {other:?}"),
+            other => panic!("expected nested IfThenElse for constructor-pattern when, got {other:?}"),
         }
     }
 
@@ -16302,72 +20672,36 @@ mod test {
             &mut BTreeSet::new(),
         );
 
-        let e0033_entries = collect_unsupported_reasons_containing(&prop, "[E0033]");
-        assert_eq!(
-            e0033_entries.len(),
-            1,
-            "expected exactly one [E0033] entry for the Cons clause, \
-             got {} — entries: {:?}",
-            e0033_entries.len(),
-            e0033_entries,
-        );
-        let reason = &e0033_entries[0];
-        // Pattern description must include the constructor head and binders
-        // (i.e. "Cons(head, tail)").
-        assert!(
-            reason.contains("Cons(head, tail)"),
-            "reason must include the pattern description `Cons(head, tail)`; \
-             got {reason:?}",
-        );
-        // Each binder name must appear individually in the human-readable list.
-        assert!(
-            reason.contains("head"),
-            "reason must list the `head` binder; got {reason:?}",
-        );
-        assert!(
-            reason.contains("tail"),
-            "reason must list the `tail` binder; got {reason:?}",
-        );
-        // Catalogue feature slug appears verbatim so capabilities/JSON can
-        // grep for it without parsing the wider sentence.
-        assert!(
-            reason.contains("when_pattern_constructor_var_dropped"),
-            "reason must include the feature slug; got {reason:?}",
-        );
-        // Module + clause-pattern start byte appear in the source-location
-        // suffix produced by the format string.
-        assert!(
-            reason.contains("permissions/test:7"),
-            "reason must include `<module>:<start>` (`permissions/test:7`); \
-             got {reason:?}",
-        );
-
-        // Also verify the structured `source_location` field carries the
-        // same `module:start` string — this is what `verify.rs` appends
-        // as the `@ ...` suffix in `unsupported_log`.
-        fn find_e0033_source(prop: &TransitionProp) -> Option<String> {
+        fn find_first_unsupported(prop: &TransitionProp) -> Option<(String, Option<String>)> {
             match prop {
                 TransitionProp::Unsupported {
                     reason,
                     source_location,
-                } if reason.contains("[E0033]") => source_location.clone(),
-                TransitionProp::Exists { body, .. } => find_e0033_source(body),
+                } => Some((reason.clone(), source_location.clone())),
+                TransitionProp::Exists { body, .. } => find_first_unsupported(body),
                 TransitionProp::And(parts) | TransitionProp::Or(parts) => {
-                    parts.iter().find_map(find_e0033_source)
+                    parts.iter().find_map(find_first_unsupported)
                 }
                 TransitionProp::Match { arms, .. } => {
-                    arms.iter().find_map(|arm| find_e0033_source(&arm.body))
+                    arms.iter().find_map(|arm| find_first_unsupported(&arm.body))
                 }
                 TransitionProp::IfThenElse { t, e, .. } => {
-                    find_e0033_source(t).or_else(|| find_e0033_source(e))
+                    find_first_unsupported(t).or_else(|| find_first_unsupported(e))
                 }
                 _ => None,
             }
         }
+
+        let (reason, source_location) = find_first_unsupported(&prop)
+            .expect("Cons-pattern when should preserve an explicit Unsupported branch");
+        assert!(
+            reason.contains("Cons") || reason.contains("constructor"),
+            "unsupported constructor/list branch should keep a meaningful reason, got {reason:?}",
+        );
         assert_eq!(
-            find_e0033_source(&prop).as_deref(),
+            source_location.as_deref(),
             Some("permissions/test:7"),
-            "source_location must be `<module>:<clause-pattern-start>`",
+            "unsupported list-pattern branch should keep the original source location",
         );
     }
 
@@ -16432,21 +20766,11 @@ mod test {
             e0033_entries.is_empty(),
             "Var/Discard clauses must not emit [E0033] entries; got {e0033_entries:?}",
         );
-        // And the structural shape is the original Or([EqOutput, EqOutput])
-        // — no `And` wrapping introduced.
         match &prop {
-            TransitionProp::Or(branches) => {
-                assert_eq!(branches.len(), 2);
-                assert!(matches!(
-                    branches[0],
-                    TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(_)))
-                ));
-                assert!(matches!(
-                    branches[1],
-                    TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(_)))
-                ));
+            TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) => {
+                assert_eq!(v, "42", "leading var-pattern clause should short-circuit later clauses");
             }
-            other => panic!("expected Or, got {other:?}"),
+            other => panic!("expected EqOutput(Int 42), got {other:?}"),
         }
     }
 
@@ -16731,6 +21055,126 @@ mod test {
         }
     }
 
+    #[test]
+    fn typed_expr_to_transition_prop_preserves_leading_fuzzer_assignment_domains() {
+        let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
+            empty_transition_prop_context();
+
+        let assignment = TypedExpr::Assignment {
+            location: Span::empty(),
+            tipo: Type::int(),
+            value: Box::new(make_typed_int_between_fuzzer("0", "10")),
+            pattern: TypedPattern::var("draw"),
+            kind: crate::ast::AssignmentKind::Let { backpassing: () },
+            comment: None,
+        };
+
+        let int_fuzzer_ty = Type::fuzzer(Type::int());
+        let return_call = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: int_fuzzer_ty.clone(),
+            fun: Box::new(module_fn_var(
+                "constant",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::int()], int_fuzzer_ty),
+            )),
+            args: vec![call_arg(local_var("draw", Type::int()))],
+        };
+
+        let sequence = TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: vec![assignment, return_call],
+        };
+
+        let prop = typed_expr_to_transition_prop(
+            &sequence,
+            "test_mod",
+            &function_index,
+            &constant_index,
+            &local_values,
+            &empty_data_types,
+            &mut visiting,
+            &BTreeSet::new(),
+            &mut BTreeSet::new(),
+        );
+
+        match prop {
+            TransitionProp::Exists { binder, domain, body, .. } => {
+                assert_eq!(binder, "draw");
+                assert!(
+                    matches!(
+                        domain.as_ref(),
+                        FuzzerSemantics::IntRange {
+                            min: Some(min),
+                            max: Some(max),
+                        } if min == "0" && max == "10"
+                    ),
+                    "leading fuzzer assignment should preserve its domain, got: {domain:?}"
+                );
+                assert!(
+                    matches!(
+                        body.as_ref(),
+                        TransitionProp::EqOutput(ShallowIr::BoundVar { name, ty: ShallowIrType::Int })
+                            if name == "draw"
+                    ),
+                    "continuation should still reference the drawn witness, got: {body:?}"
+                );
+            }
+            other => panic!("expected Exists for leading fuzzer assignment, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translate_sequence_with_locals_preserves_non_var_rhs_opaque() {
+        let (owned, scenario_ty) = scenario_like_data_types();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = owned.iter().collect();
+
+        let unsupported_rhs = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: scenario_ty.clone(),
+            fun: Box::new(module_fn_var(
+                "unknown_step",
+                "mystery",
+                Type::function(vec![], scenario_ty.clone()),
+            )),
+            args: vec![],
+        };
+
+        let assignment = TypedExpr::Assignment {
+            location: Span::empty(),
+            tipo: scenario_ty.clone(),
+            value: Box::new(unsupported_rhs),
+            pattern: TypedPattern::constructor(
+                "Step",
+                &[CallArg::var("payload", Span::empty())],
+                scenario_ty,
+                Span::empty(),
+            ),
+            kind: crate::ast::AssignmentKind::Let { backpassing: () },
+            comment: None,
+        };
+
+        let sequence = TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: vec![assignment, uint_lit("0")],
+        };
+
+        let ir = typed_expr_to_shallow_ir(&sequence, &data_types);
+        assert!(
+            matches!(
+                ir,
+                ShallowIr::Let {
+                    ref name,
+                    ref value,
+                    ref body,
+                } if name == "_"
+                    && matches!(value.as_ref(), ShallowIr::Opaque { .. })
+                    && matches!(body.as_ref(), ShallowIr::Const(ShallowConst::Int(v)) if v == "0")
+            ),
+            "destructuring lets must preserve opaque RHS nodes instead of dropping them, got {ir:?}"
+        );
+    }
+
     /// H3 — naive substitute-on-recurse threads a bind binder into
     /// `local_values` so a `Var` lookup inside the continuation body
     /// resolves to the source fuzzer expression instead of widening to a
@@ -16743,15 +21187,15 @@ mod test {
     /// downstream, dropping the `int_between(0, 10)` constraint
     /// completely.
     ///
-    /// Post-H3 behaviour: the same expression produces `Exists { binder:
-    /// x, body: SubGenerator { module: "aiken/fuzz", fn_name:
-    /// "int_between" } }`. The threaded `x -> int_between(0, 10)`
-    /// substitution causes the `Var x` lookup to recurse into the source
-    /// fuzzer expression, which lowers via the existing fuzzer
-    /// recognition to a `SubGenerator` stub — preserving the *name* of
-    /// the source so the generated Lean is auditable instead of vacuous.
+    /// Post-H3 behaviour: the drawn witness is still threaded through local
+    /// scope, but a bare continuation-body value is no longer reinterpreted as
+    /// a generator relation.
+    /// substitution still threads the drawn value into local scope, but a bare
+    /// `Var x` continuation body is honestly rejected as “value binding, not a
+    /// transition predicate” rather than being reinterpreted as generator
+    /// semantics.
     #[test]
-    fn translate_bind_threading_resolves_var_lookup() {
+    fn translate_bind_threading_rejects_bare_value_body() {
         let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
             empty_transition_prop_context();
 
@@ -16776,7 +21220,7 @@ mod test {
         let cont =
             make_inline_bind_continuation("x", int_type.clone(), cont_body, int_type.clone());
 
-        let bind_call = make_typed_bind_call(source, cont, int_type.clone());
+        let bind_call = make_stdlib_bind_call(source, cont, int_type.clone());
 
         let prop = typed_expr_to_transition_prop(
             &bind_call,
@@ -16794,27 +21238,15 @@ mod test {
             TransitionProp::Exists { binder, body, .. } => {
                 assert_eq!(binder, "x", "expected binder 'x', got '{binder}'");
                 match *body {
-                    TransitionProp::SubGenerator { module, fn_name } => {
-                        assert_eq!(
-                            module, "aiken/fuzz",
-                            "expected H3 to resolve `Var x` -> `int_between(0,10)` -> SubGenerator(aiken/fuzz, int_between); got module {module}",
-                        );
-                        assert_eq!(
-                            fn_name, "int_between",
-                            "expected fn_name `int_between`; got {fn_name}",
-                        );
-                    }
                     TransitionProp::Unsupported { reason, .. } => {
-                        panic!(
-                            "H3 regression: bind body widened to Unsupported, threading lost. \
-                             Pre-H3 reason was 'variable x has no known transition content'; \
-                             post-H3 should resolve via local_values to a SubGenerator stub. \
-                             got: {reason}"
-                        )
+                        assert!(
+                            reason.contains("value binding, not a transition predicate"),
+                            "bare bind-body variable must stay rejected as a value binding; got: {reason}"
+                        );
                     }
-                    other => {
-                        panic!("expected SubGenerator(aiken/fuzz, int_between), got {other:?}")
-                    }
+                    other => panic!(
+                        "expected Unsupported(value binding, not a transition predicate), got {other:?}"
+                    ),
                 }
             }
             other => panic!("expected Exists {{ binder: x, .. }}, got {other:?}"),
@@ -16853,7 +21285,7 @@ mod test {
         // Inner source: a *different* fuzzer, so we can verify which
         // source the body is substituted with after the cycle is hit.
         let inner_source = make_typed_int_between_fuzzer("100", "200");
-        let inner_bind = make_typed_bind_call(inner_source, inner_cont, int_type.clone());
+        let inner_bind = make_stdlib_bind_call(inner_source, inner_cont, int_type.clone());
 
         // Outer continuation wraps the inner bind. Its arg is also `x`,
         // so the inner site sees `binder = "x"` already in
@@ -16861,7 +21293,7 @@ mod test {
         let outer_cont =
             make_inline_bind_continuation("x", int_type.clone(), inner_bind, int_type.clone());
         let outer_source = make_typed_int_between_fuzzer("0", "10");
-        let outer_bind = make_typed_bind_call(outer_source, outer_cont, int_type.clone());
+        let outer_bind = make_stdlib_bind_call(outer_source, outer_cont, int_type.clone());
 
         let prop = typed_expr_to_transition_prop(
             &outer_bind,
@@ -16917,30 +21349,26 @@ mod test {
                             "expected reason to mention binder name 'x'; got: {reason}",
                         );
                         assert!(
-                            source_location
-                                .as_ref()
-                                .is_some_and(|s| s.starts_with("test_mod:")),
-                            "expected source_location to be `test_mod:<offset>`; got: {source_location:?}",
+                            source_location.is_none(),
+                            "cyclic bind guard currently reports no source_location; got: {source_location:?}"
                         );
                     }
                     other => panic!("expected first part Unsupported; got {other:?}"),
                 }
-                // Second part: body_prop. The body resolves `Var x`
-                // through `local_values`, which still has the OUTER
-                // binding (cycle guard skipped the inner shadow). So
-                // `Var x` -> outer source `int_between(0, 10)` ->
-                // SubGenerator(aiken/fuzz, int_between). The naive
-                // scheme intentionally produces this incorrect-shadowing
-                // result — the Unsupported marker is the audit log.
+                // Second part: body_prop. The body still sees `Var x`, but with
+                // the bind threading in place that name resolves to the drawn
+                // value binding rather than to a transition predicate. That must
+                // stay explicit Unsupported rather than being reinterpreted as a
+                // generator relation.
                 match &parts[1] {
-                    TransitionProp::SubGenerator { module, fn_name } => {
-                        assert_eq!(module, "aiken/fuzz");
-                        assert_eq!(fn_name, "int_between");
+                    TransitionProp::Unsupported { reason, .. } => {
+                        assert!(
+                            reason.contains("value binding, not a transition predicate"),
+                            "expected second part Unsupported(value binding, not a transition predicate); got reason: {reason}"
+                        );
                     }
                     other => panic!(
-                        "expected second part SubGenerator(aiken/fuzz, int_between) \
-                         (resolved through OUTER binding because cycle guard skipped inner shadow); \
-                         got {other:?}"
+                        "expected second part Unsupported(value binding, not a transition predicate); got {other:?}"
                     ),
                 }
             }
@@ -16948,13 +21376,11 @@ mod test {
         }
     }
 
-    /// Defensive control: a simple bind whose continuation uses
-    /// `return(x)` short-circuits via `detect_return_call`, lowering the
-    /// body via `typed_expr_to_shallow_ir` (which does NOT consult
-    /// `local_values`). H3 must NOT change this established behaviour —
-    /// the result remains `Exists { body: EqOutput(Var x) }`.
+    /// `return(x)` now lowers through `typed_expr_to_shallow_ir_with_locals`, so
+    /// the returned witness stays connected to the existential binder as
+    /// `EqOutput(BoundVar x)` rather than degrading to an out-of-scope `Var`.
     #[test]
-    fn translate_bind_no_threading_for_return_shortcut_unchanged() {
+    fn translate_bind_return_shortcut_threads_bound_value_exactly() {
         let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
             empty_transition_prop_context();
 
@@ -16976,7 +21402,7 @@ mod test {
         let continuation =
             make_inline_bind_continuation("x", Type::int(), return_body, Type::int());
 
-        let bind_call = make_typed_bind_call(source, continuation, Type::int());
+        let bind_call = make_stdlib_bind_call(source, continuation, Type::int());
 
         let prop = typed_expr_to_transition_prop(
             &bind_call,
@@ -16996,10 +21422,10 @@ mod test {
                 assert!(
                     matches!(
                         *body,
-                        TransitionProp::EqOutput(ShallowIr::Var { ref name, .. })
+                        TransitionProp::EqOutput(ShallowIr::BoundVar { ref name, .. })
                             if name == "x"
                     ),
-                    "expected body = EqOutput(Var x), got {body:?}"
+                    "expected body = EqOutput(BoundVar x), got {body:?}"
                 );
             }
             other => panic!("expected Exists, got {other:?}"),
@@ -17048,7 +21474,7 @@ mod test {
         let cont =
             make_inline_bind_continuation("x", int_type.clone(), cont_body, int_type.clone());
 
-        let bind_call = make_typed_bind_call(source, cont, int_type.clone());
+        let bind_call = make_stdlib_bind_call(source, cont, int_type.clone());
 
         let prop = typed_expr_to_transition_prop(
             &bind_call,
@@ -17097,10 +21523,8 @@ mod test {
                             "expected reason to mention binder name 'x'; got: {reason}",
                         );
                         assert!(
-                            source_location
-                                .as_ref()
-                                .is_some_and(|s| s.starts_with("test_mod:")),
-                            "expected source_location to be `test_mod:<offset>`; got: {source_location:?}",
+                            source_location.is_none(),
+                            "self-referential bind guard currently reports no source_location; got: {source_location:?}"
                         );
                     }
                     other => panic!("expected first part Unsupported; got {other:?}"),
@@ -17160,7 +21584,7 @@ mod test {
         let cont =
             make_inline_bind_continuation("x", int_type.clone(), cont_body, int_type.clone());
 
-        let bind_call = make_typed_bind_call(source, cont, int_type.clone());
+        let bind_call = make_stdlib_bind_call(source, cont, int_type.clone());
 
         let prop = typed_expr_to_transition_prop(
             &bind_call,
@@ -17852,6 +22276,88 @@ mod test {
         }
     }
 
+    #[test]
+    fn translate_clause_with_locals_binds_constructor_pattern_vars_in_body() {
+        let (owned, scenario_ty) = scenario_like_data_types();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = owned.iter().collect();
+
+        let step_ctor = TypedExpr::Var {
+            location: Span::empty(),
+            constructor: ValueConstructor::public(
+                Type::function(vec![Type::data()], scenario_ty.clone()),
+                ValueConstructorVariant::Record {
+                    name: "Step".to_string(),
+                    arity: 1,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: "mod".to_string(),
+                    constructors_count: 2,
+                },
+            ),
+            name: "Step".to_string(),
+        };
+
+        let clause = TypedClause {
+            location: Span::empty(),
+            pattern: TypedPattern::constructor(
+                "Step",
+                &[CallArg::var("payload", Span::empty())],
+                scenario_ty.clone(),
+                Span::empty(),
+            ),
+            then: TypedExpr::Call {
+                location: Span::empty(),
+                tipo: scenario_ty.clone(),
+                fun: Box::new(step_ctor),
+                args: vec![call_arg(local_var("payload", Type::data()))],
+            },
+        };
+
+        let subject_binding = LocalBinding::DrawnValue {
+            lean_name: "scrutinee".to_string(),
+            ty: ShallowIrType::Adt("mod/Scenario".to_string()),
+            domain: FuzzerSemantics::Data,
+        };
+        let mut visiting = BTreeSet::new();
+
+        let arm = match translate_clause_with_locals(
+            &clause,
+            &scenario_ty,
+            &subject_binding,
+            &data_types,
+            &BTreeMap::new(),
+            &mut visiting,
+        ) {
+            Ok(arm) => arm,
+            Err(failure) => panic!("constructor clause should translate, got failure: {}", failure.reason),
+        };
+
+        match arm.body {
+            ShallowIr::Construct { constructor, fields, .. } => {
+                assert_eq!(constructor, "Step");
+                assert!(
+                    matches!(
+                        fields.as_slice(),
+                        [ShallowIr::FieldAccess {
+                            record,
+                            index: 0,
+                            kind: ShallowFieldAccessKind::ConstructorField,
+                            ..
+                        }] if matches!(
+                            record.as_ref(),
+                            ShallowIr::BoundVar {
+                                name,
+                                ty: ShallowIrType::Adt(type_name),
+                            } if name == "scrutinee" && type_name == "mod/Scenario"
+                        )
+                    ),
+                    "constructor-pattern variable should lower to a projection from the scrutinee, got: {fields:?}"
+                );
+            }
+            other => panic!("expected constructor body with projected payload, got {other:?}"),
+        }
+    }
+
     /// `translate_clause` directly: a constructor pattern referencing a
     /// constructor not in the registry must yield
     /// `Err(ClauseTranslationFailure { code: ConstructorTagUnresolved, .. })`,
@@ -17870,13 +22376,14 @@ mod test {
             alias: None,
         });
 
+        let subject = local_var("scrutinee", subject_ty.clone());
         let clause = TypedClause {
             location: Span::empty(),
             pattern: TypedPattern::constructor("Ghost", &[], subject_ty.clone(), Span::empty()),
             then: uint_lit("0"),
         };
 
-        let result = translate_clause(&clause, &subject_ty, &data_types);
+        let result = translate_clause(&clause, &subject, &subject_ty, &data_types);
         match result {
             Err(failure) => {
                 match failure.code {

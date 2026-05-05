@@ -354,3 +354,26 @@ fn json_relative_path_keeps_project_relative_paths_and_redacts_external_absolute
         "public JSON paths must not leak absolute local paths: {public}"
     );
 }
+
+
+#[test]
+fn transition_unsupported_log_includes_helper_widenings() {
+    let widenings = vec![crate::export::TransitionWidening {
+        kind: crate::export::TransitionWideningKind::Relation,
+        message: "primary relation widening".to_string(),
+    }];
+    let helper_widenings = vec![crate::export::TransitionWidening {
+        kind: crate::export::TransitionWideningKind::DataFreshening,
+        message: "helper-side initial-state widening".to_string(),
+    }];
+
+    let log = super::transition_unsupported_log(&widenings, &helper_widenings);
+    assert_eq!(
+        log,
+        vec![
+            "primary relation widening".to_string(),
+            "helper-side initial-state widening".to_string(),
+        ],
+        "legacy unsupported_log mirror must include helper-side widenings as well as theorem widenings"
+    );
+}
