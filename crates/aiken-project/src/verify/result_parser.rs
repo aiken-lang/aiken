@@ -89,6 +89,7 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
             skipped: manifest.skipped.clone(),
             theorems,
             raw_output: raw,
+            artifacts: VerificationArtifacts::default(),
             elapsed_ms: None,
             command_success: proofs_ok,
             // Provenance fields are populated by the CLI layer after parsing
@@ -352,6 +353,7 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
         skipped: manifest.skipped.clone(),
         theorems,
         raw_output: raw,
+        artifacts: VerificationArtifacts::default(),
         elapsed_ms: None,
         command_success: proofs_ok,
         // Provenance fields are populated by the CLI layer after parsing

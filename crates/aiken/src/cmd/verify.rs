@@ -447,7 +447,13 @@ fn no_proofs_summary(
     )
 }
 
-fn normalize_summary_log_paths(
+fn normalize_report_path(path: &Path, project_root: &Path) -> PathBuf {
+    path.strip_prefix(project_root)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn normalize_summary_artifact_paths(
     summary: &mut verify::VerifySummary,
     project_root: &Path,
     artifacts_retained: bool,
@@ -455,6 +461,7 @@ fn normalize_summary_log_paths(
     if !artifacts_retained {
         summary.raw_output.stdout.log_path = None;
         summary.raw_output.stderr.log_path = None;
+        summary.artifacts = verify::VerificationArtifacts::default();
         return;
     }
 
@@ -465,11 +472,24 @@ fn normalize_summary_log_paths(
         let Some(path) = output.log_path.clone() else {
             continue;
         };
-
-        if let Ok(relative) = path.strip_prefix(project_root) {
-            output.log_path = Some(relative.to_path_buf());
-        }
+        output.log_path = Some(normalize_report_path(&path, project_root));
     }
+
+    if let Some(path) = summary.artifacts.manifest.clone() {
+        summary.artifacts.manifest = Some(normalize_report_path(&path, project_root));
+    }
+    if let Some(path) = summary.artifacts.lean_root.clone() {
+        summary.artifacts.lean_root = Some(normalize_report_path(&path, project_root));
+    }
+    if let Some(path) = summary.artifacts.logs.clone() {
+        summary.artifacts.logs = Some(normalize_report_path(&path, project_root));
+    }
+    summary.artifacts.smt2 = summary
+        .artifacts
+        .smt2
+        .iter()
+        .map(|path| normalize_report_path(path, project_root))
+        .collect();
 }
 
 fn failure_artifact_advice(resolved_out_dir: &Path, artifacts_retained: bool) -> Vec<String> {
@@ -1461,7 +1481,8 @@ fn exec_run_with_project(
             None
         };
         let artifacts_retained = !cleanup_needed || cleanup_error.is_some();
-        normalize_summary_log_paths(&mut summary, p.root(), artifacts_retained);
+        summary.artifacts = verify::collect_verification_artifacts(&resolved_out_dir);
+        normalize_summary_artifact_paths(&mut summary, p.root(), artifacts_retained);
 
         if run_options.output_mode.emits_json() {
             let output = serde_json::to_string_pretty(&summary)
@@ -1593,6 +1614,15 @@ fn exec_run_with_project(
                                 FailureCategory::Unknown => "unknown",
                                 _ => "unknown",
                             };
+                            let trailing_block = reason
+                                .trim()
+                                .is_empty()
+                                .then(|| {
+                                    t.explanation
+                                        .as_deref()
+                                        .and_then(render_status_explanation_block)
+                                })
+                                .flatten();
                             (
                                 "FAIL".if_supports_color(Stderr, |s| s.red()).to_string(),
                                 format!(
@@ -1600,24 +1630,30 @@ fn exec_run_with_project(
                                     cat,
                                     certification_label(t.certification)
                                 ),
-                                None,
+                                trailing_block,
                             )
                         }
                     },
                     ProofStatus::TimedOut { .. } => (
                         "TIME".if_supports_color(Stderr, |s| s.yellow()).to_string(),
                         format!("TIMED OUT [{}]", certification_label(t.certification)),
-                        None,
+                        t.explanation
+                            .as_deref()
+                            .and_then(render_status_explanation_block),
                     ),
                     ProofStatus::Unknown => (
                         "????".if_supports_color(Stderr, |s| s.yellow()).to_string(),
                         format!("UNKNOWN [{}]", certification_label(t.certification)),
-                        None,
+                        t.explanation
+                            .as_deref()
+                            .and_then(render_status_explanation_block),
                     ),
                     _ => (
                         "????".if_supports_color(Stderr, |s| s.yellow()).to_string(),
                         format!("UNKNOWN [{}]", certification_label(t.certification)),
-                        None,
+                        t.explanation
+                            .as_deref()
+                            .and_then(render_status_explanation_block),
                     ),
                 };
                 println!(
@@ -1913,6 +1949,21 @@ fn certification_label(certification: verify::Certification) -> &'static str {
         verify::Certification::Unknown => "unknown",
         _ => "unknown",
     }
+}
+
+fn render_status_explanation_block(explanation: &str) -> Option<String> {
+    let trimmed = explanation.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(
+        trimmed
+            .lines()
+            .map(|line| format!("       {line}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 fn should_cleanup_artifacts(policy: ArtifactRetention, command_success: bool) -> bool {
@@ -2750,6 +2801,13 @@ members = [1, 2]
                 0,
             ),
         ];
+        let mut artifacts = verify::VerificationArtifacts::default();
+        artifacts.manifest = Some(PathBuf::from("/workspace/build/verify/manifest.json"));
+        artifacts.lean_root = Some(PathBuf::from("/workspace/build/verify/AikenVerify"));
+        artifacts.logs = Some(PathBuf::from("/workspace/build/verify/logs"));
+        artifacts.smt2 = vec![PathBuf::from(
+            "/workspace/build/verify/Artifacts/query.smt2",
+        )];
         let mut summary = verify::VerifySummary::new(
             6,
             1,
@@ -2785,6 +2843,7 @@ members = [1, 2]
                 Some(1),
                 Some(theorem_results),
             ),
+            artifacts,
             Some(3210),
             false,
             "abc123".to_string(),
@@ -2793,11 +2852,18 @@ members = [1, 2]
             true,
         );
 
-        normalize_summary_log_paths(&mut summary, Path::new("/workspace"), true);
+        normalize_summary_artifact_paths(&mut summary, Path::new("/workspace"), true);
 
         let json = serde_json::to_value(&summary).expect("summary should serialize");
         assert!(json.get("allow_vacuous_subgenerators").is_some());
         assert!(json.get("two_phase_disabled").is_some());
+        assert_eq!(json["artifacts"]["manifest"], "build/verify/manifest.json");
+        assert_eq!(json["artifacts"]["lean_root"], "build/verify/AikenVerify");
+        assert_eq!(json["artifacts"]["logs"], "build/verify/logs");
+        assert_eq!(
+            json["artifacts"]["smt2"],
+            serde_json::json!(["build/verify/Artifacts/query.smt2"])
+        );
         assert_eq!(
             json["raw_output"]["stdout"]["log_path"],
             "build/verify/logs/lake_build.stdout.log"
@@ -2810,7 +2876,14 @@ members = [1, 2]
     }
 
     #[test]
-    fn normalize_summary_log_paths_clears_deleted_artifact_paths() {
+    fn normalize_summary_artifact_paths_clears_deleted_artifact_paths() {
+        let mut artifacts = verify::VerificationArtifacts::default();
+        artifacts.manifest = Some(PathBuf::from("/workspace/build/verify/manifest.json"));
+        artifacts.lean_root = Some(PathBuf::from("/workspace/build/verify/AikenVerify"));
+        artifacts.logs = Some(PathBuf::from("/workspace/build/verify/logs"));
+        artifacts.smt2 = vec![PathBuf::from(
+            "/workspace/build/verify/Artifacts/query.smt2",
+        )];
         let mut summary = verify::VerifySummary::new(
             0,
             0,
@@ -2842,6 +2915,7 @@ members = [1, 2]
                 Some(0),
                 Some(vec![]),
             ),
+            artifacts,
             None,
             true,
             String::new(),
@@ -2850,10 +2924,11 @@ members = [1, 2]
             false,
         );
 
-        normalize_summary_log_paths(&mut summary, Path::new("/workspace"), false);
+        normalize_summary_artifact_paths(&mut summary, Path::new("/workspace"), false);
 
         assert!(summary.raw_output.stdout.log_path.is_none());
         assert!(summary.raw_output.stderr.log_path.is_none());
+        assert!(summary.artifacts.is_empty());
     }
 
     #[test]
@@ -3723,6 +3798,7 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
                 Some(0),
                 None,
             ),
+            verify::VerificationArtifacts::default(),
             None,
             true,
             verify::DEFAULT_BLASTER_REV.to_string(),

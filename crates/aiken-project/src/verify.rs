@@ -524,6 +524,89 @@ impl CapturedOutput {
         fs::write(path, content)
     }
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct VerificationArtifacts {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lean_root: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logs: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub smt2: Vec<PathBuf>,
+}
+
+impl VerificationArtifacts {
+    pub fn is_empty(&self) -> bool {
+        self.manifest.is_none()
+            && self.lean_root.is_none()
+            && self.logs.is_none()
+            && self.smt2.is_empty()
+    }
+}
+
+fn collect_smt2_artifacts(out_dir: &Path) -> Vec<PathBuf> {
+    fn skip_dir(path: &Path) -> bool {
+        matches!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some(".git")
+        ) || (matches!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("packages")
+        ) && path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            == Some(".lake"))
+    }
+
+    let mut pending = vec![out_dir.to_path_buf()];
+    let mut found = BTreeSet::new();
+
+    while let Some(dir) = pending.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
+                if !skip_dir(&path) {
+                    pending.push(path);
+                }
+                continue;
+            }
+
+            if file_type.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("smt2")
+            {
+                found.insert(path);
+            }
+        }
+    }
+
+    found.into_iter().collect()
+}
+
+pub fn collect_verification_artifacts(out_dir: &Path) -> VerificationArtifacts {
+    let manifest = out_dir.join("manifest.json");
+    let lean_root = out_dir.join("AikenVerify");
+    let logs = out_dir.join("logs");
+
+    VerificationArtifacts {
+        manifest: manifest.exists().then_some(manifest),
+        lean_root: lean_root.exists().then_some(lean_root),
+        logs: logs.exists().then_some(logs),
+        smt2: collect_smt2_artifacts(out_dir),
+    }
+}
 /// Schema version for `aiken verify capabilities --json` output.
 pub const VERIFICATION_CAPABILITIES_VERSION: &str = "3";
 pub(crate) const MAX_FINITE_THEOREM_INSTANCES_PER_TEST: usize = 64;
@@ -846,10 +929,58 @@ pub struct TheoremResult {
     pub status: VerificationStatus,
     pub certification: Certification,
     pub proof_status: ProofStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
     /// Number of constraints dropped or widened during TransitionProp lowering.
     /// Non-zero only for two-phase trace theorems.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub over_approximations: usize,
+}
+
+fn theorem_result_explanation(
+    status: VerificationStatus,
+    proof_status: &ProofStatus,
+) -> Option<String> {
+    fn clean_reason(reason: &str) -> Option<String> {
+        let trimmed = reason.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    }
+
+    match proof_status {
+        ProofStatus::Proved => None,
+        ProofStatus::WitnessProved { .. } => None,
+        ProofStatus::Partial { note } => clean_reason(note).or_else(|| {
+            Some("The generated Lean proof still contains open obligations; this result is partial, not production-success.".to_string())
+        }),
+        ProofStatus::TimedOut { reason } => clean_reason(reason).or_else(|| {
+            Some("Lean/Blaster did not finish before the configured timeout expired.".to_string())
+        }),
+        ProofStatus::Failed { category, reason } => match category {
+            FailureCategory::Counterexample => None,
+            FailureCategory::BlasterUnsupported => clean_reason(reason).or_else(|| {
+                Some("Blaster could not translate or validate the generated theorem shape.".to_string())
+            }),
+            FailureCategory::Timeout => clean_reason(reason).or_else(|| {
+                Some("Lean/Blaster did not finish before the configured timeout expired.".to_string())
+            }),
+            FailureCategory::UnsatGoal
+            | FailureCategory::BuildError
+            | FailureCategory::DependencyError
+            | FailureCategory::Unknown => clean_reason(reason).or_else(|| match status {
+                VerificationStatus::Unknown => Some(
+                    "Lean/Blaster completed without a trustworthy proof classification for this theorem.".to_string(),
+                ),
+                VerificationStatus::Unsupported => Some(
+                    "The generated theorem could not be validated by the current integration.".to_string(),
+                ),
+                _ => None,
+            }),
+        },
+        ProofStatus::Unknown => Some(
+            "Lean/Blaster completed without a trustworthy proof classification for this theorem."
+                .to_string(),
+        ),
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for TheoremResult {
@@ -866,6 +997,8 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
             certification: Option<Certification>,
             #[serde(default)]
             proof_status: Option<ProofStatus>,
+            #[serde(default)]
+            explanation: Option<String>,
             #[serde(default)]
             over_approximations: usize,
         }
@@ -887,6 +1020,9 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
         let certification = wire
             .certification
             .unwrap_or_else(|| Certification::from_status(status));
+        let explanation = wire
+            .explanation
+            .or_else(|| theorem_result_explanation(status, &proof_status));
 
         Ok(TheoremResult {
             test_name: wire.test_name,
@@ -894,6 +1030,7 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
             status,
             certification,
             proof_status,
+            explanation,
             over_approximations: wire.over_approximations,
         })
     }
@@ -916,12 +1053,14 @@ impl TheoremResult {
     ) -> Self {
         let status = VerificationStatus::from_proof_status(&proof_status);
         let certification = Certification::from_proof_status(&proof_status);
+        let explanation = theorem_result_explanation(status, &proof_status);
         Self {
             test_name,
             theorem_name,
             status,
             certification,
             proof_status,
+            explanation,
             over_approximations,
         }
     }
@@ -929,6 +1068,7 @@ impl TheoremResult {
     pub fn set_proof_status(&mut self, proof_status: ProofStatus) {
         self.status = VerificationStatus::from_proof_status(&proof_status);
         self.certification = Certification::from_proof_status(&proof_status);
+        self.explanation = theorem_result_explanation(self.status, &proof_status);
         self.proof_status = proof_status;
     }
 }
@@ -956,6 +1096,8 @@ pub struct VerifySummary {
     pub skipped: Vec<SkippedTest>,
     pub theorems: Vec<TheoremResult>,
     pub raw_output: VerifyResult,
+    #[serde(default, skip_serializing_if = "VerificationArtifacts::is_empty")]
+    pub artifacts: VerificationArtifacts,
     /// Wall-clock milliseconds spent running proofs (dependency sync + lake build).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elapsed_ms: Option<u64>,
@@ -1010,6 +1152,7 @@ impl VerifySummary {
                 Some(if skipped_without_allow { 1 } else { 0 }),
                 None,
             ),
+            VerificationArtifacts::default(),
             None,
             !skipped_without_allow,
             blaster_rev.to_string(),
@@ -1031,6 +1174,7 @@ impl VerifySummary {
         skipped: Vec<SkippedTest>,
         theorems: Vec<TheoremResult>,
         raw_output: VerifyResult,
+        artifacts: VerificationArtifacts,
         elapsed_ms: Option<u64>,
         command_success: bool,
         blaster_rev: String,
@@ -1049,6 +1193,7 @@ impl VerifySummary {
             skipped,
             theorems,
             raw_output,
+            artifacts,
             elapsed_ms,
             command_success,
             blaster_rev,
@@ -1476,6 +1621,65 @@ fn manifest_entry_caveat(entry: &ManifestEntry) -> ProofCaveat {
     } else {
         ProofCaveat::None
     }
+}
+
+fn soundness_lint_note_for_success_proof(proof_content: &str) -> Option<String> {
+    let has_placeholder_proof = proof_content.lines().any(|line| {
+        let trimmed = line.trim();
+        !trimmed.starts_with("--")
+            && (trimmed == "sorry"
+                || trimmed.starts_with("sorry ")
+                || trimmed.ends_with(" by sorry")
+                || trimmed == "admit"
+                || trimmed.starts_with("admit ")
+                || trimmed.ends_with(" by admit"))
+    });
+
+    let widening_markers = proof_content
+        .lines()
+        .filter(|line| line.contains("[WIDENED:") || line.contains("widened to True"))
+        .map(|line| line.trim().to_string())
+        .take(3)
+        .collect::<Vec<_>>();
+
+    let mut findings = Vec::new();
+    if has_placeholder_proof {
+        findings.push(
+            "generated Lean contains `sorry`/`admit`; one or more proof obligations remain open"
+                .to_string(),
+        );
+    }
+    if !widening_markers.is_empty() {
+        findings.push(format!(
+            "generated domain/relation contains acknowledged placeholder widening(s): {}",
+            widening_markers.join(" | ")
+        ));
+    }
+
+    (!findings.is_empty()).then(|| findings.join("; "))
+}
+
+fn apply_soundness_lint_to_caveat(caveat: ProofCaveat, proof_content: &str) -> ProofCaveat {
+    match caveat {
+        ProofCaveat::None => soundness_lint_note_for_success_proof(proof_content)
+            .map(ProofCaveat::Partial)
+            .unwrap_or(ProofCaveat::None),
+        other => other,
+    }
+}
+
+fn manifest_entry_caveat_with_soundness_lint(out_dir: &Path, entry: &ManifestEntry) -> ProofCaveat {
+    let caveat = manifest_entry_caveat(entry);
+    if !matches!(caveat, ProofCaveat::None) {
+        return caveat;
+    }
+
+    let proof_path = out_dir.join(&entry.lean_file);
+    let Ok(proof_content) = fs::read_to_string(proof_path) else {
+        return caveat;
+    };
+
+    apply_soundness_lint_to_caveat(caveat, &proof_content)
 }
 
 /// Schema version for `aiken verify run --generate-only` manifest output.
@@ -2599,7 +2803,7 @@ pub fn run_proofs(
         let termination_fallback_to_module_failure = !termination_failed && !equivalence_failed;
         let equivalence_fallback_to_module_failure = !equivalence_failed && !termination_failed;
 
-        let correctness_caveat = manifest_entry_caveat(entry);
+        let correctness_caveat = manifest_entry_caveat_with_soundness_lint(out_dir, entry);
         theorem_results.push(theorem_status_from_module_build(
             test_name.clone(),
             &entry.lean_theorem,
@@ -3213,7 +3417,10 @@ pub fn generate_lean_workspace(
             &config.target,
             config.allow_vacuous_subgenerators,
         ) {
-            Ok(result) => result,
+            Ok((proof_content, proof_caveat)) => (
+                proof_content.clone(),
+                apply_soundness_lint_to_caveat(proof_caveat, &proof_content),
+            ),
             Err(e) if is_skippable_generation_error(&e, skip_policy) => {
                 let reason = if let Some(generation_error) = e.downcast_ref::<GenerationError>() {
                     generation_error.code.map_or_else(

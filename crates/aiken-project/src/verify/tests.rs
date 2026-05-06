@@ -5009,6 +5009,88 @@ fn open_obligation_result_cannot_report_success_status() {
 }
 
 #[test]
+fn placeholder_domain_fixture_cannot_report_solver_validated() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path();
+    let lean_file = "AikenVerify/Proofs/Example/placeholder.lean";
+    let proof_path = out_dir.join(lean_file);
+    fs::create_dir_all(proof_path.parent().expect("proof file should have parent")).unwrap();
+    fs::write(
+        &proof_path,
+        "namespace AikenVerify.Proofs.Example\n\n-- Opaque existential domain widened to True: missing schema\ntheorem placeholder : True := by\n  exact True.intro\n\nend AikenVerify.Proofs.Example\n",
+    )
+    .unwrap();
+
+    let entry = ManifestEntry {
+        id: "example_placeholder".to_string(),
+        aiken_module: "example".to_string(),
+        aiken_name: "placeholder".to_string(),
+        lean_module: "AikenVerify.Proofs.Example.placeholder".to_string(),
+        lean_theorem: "placeholder".to_string(),
+        lean_file: lean_file.to_string(),
+        flat_file: "cbor/example_placeholder.cbor".to_string(),
+        has_termination_theorem: false,
+        has_equivalence_theorem: false,
+        over_approximations: 0,
+        partial_proof_note: None,
+        witness_proof_note: None,
+    };
+
+    let caveat = super::manifest_entry_caveat_with_soundness_lint(out_dir, &entry);
+    let ProofCaveat::Partial(note) = caveat else {
+        panic!("placeholder widening must downgrade the theorem to Partial");
+    };
+    assert!(
+        note.contains("widened to True"),
+        "partial note should explain the placeholder widening, got: {note}",
+    );
+
+    let result = TheoremResult::new(
+        "example.placeholder".to_string(),
+        "placeholder".to_string(),
+        ProofStatus::Partial { note },
+        0,
+    );
+
+    assert_eq!(result.status, VerificationStatus::Partial);
+    assert_eq!(result.certification, Certification::OpenObligations);
+    assert_ne!(result.status, VerificationStatus::LeanCertified);
+    assert_ne!(result.status, VerificationStatus::SolverValidated);
+}
+
+#[test]
+fn collect_verification_artifacts_reports_manifest_logs_and_smt() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path();
+    fs::create_dir_all(out_dir.join("AikenVerify/Proofs/Example")).unwrap();
+    fs::create_dir_all(out_dir.join("logs")).unwrap();
+    fs::create_dir_all(out_dir.join("Artifacts")).unwrap();
+    fs::write(out_dir.join("manifest.json"), "{}").unwrap();
+    fs::write(
+        out_dir.join("AikenVerify/Proofs/Example/test.lean"),
+        "theorem test : True := by exact True.intro",
+    )
+    .unwrap();
+    fs::write(out_dir.join("Artifacts/query.smt2"), "(set-logic ALL)").unwrap();
+
+    let artifacts = collect_verification_artifacts(out_dir);
+
+    assert_eq!(
+        artifacts.manifest.as_deref(),
+        Some(out_dir.join("manifest.json").as_path())
+    );
+    assert_eq!(
+        artifacts.lean_root.as_deref(),
+        Some(out_dir.join("AikenVerify").as_path())
+    );
+    assert_eq!(
+        artifacts.logs.as_deref(),
+        Some(out_dir.join("logs").as_path())
+    );
+    assert_eq!(artifacts.smt2, vec![out_dir.join("Artifacts/query.smt2")]);
+}
+
+#[test]
 fn failure_category_serializes_kebab_case() {
     // FailureCategory uses `#[serde(tag = "kind", rename_all = "kebab-case")]`.
     // BlasterUnsupported must wire-encode as "blaster-unsupported" (kebab),
