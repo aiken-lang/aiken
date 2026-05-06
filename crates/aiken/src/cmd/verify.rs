@@ -1471,18 +1471,20 @@ fn exec_run_with_project(
             println!();
             for t in &summary.theorems {
                 let (icon, label, trailing_block): (String, String, Option<String>) = match &t
-                    .status
+                    .proof_status
                 {
                     ProofStatus::Proved => {
-                        let label = if t.over_approximations > 0 {
-                            format!(
-                                "PROVED ({} over-approximation{})",
+                        let mut label = format!(
+                            "SOLVER VALIDATED [{}]",
+                            certification_label(t.certification)
+                        );
+                        if t.over_approximations > 0 {
+                            label.push_str(&format!(
+                                " ({} over-approximation{})",
                                 t.over_approximations,
                                 if t.over_approximations == 1 { "" } else { "s" }
-                            )
-                        } else {
-                            "PROVED".to_string()
-                        };
+                            ));
+                        }
                         (
                             "PASS".if_supports_color(Stderr, |s| s.green()).to_string(),
                             label,
@@ -1496,7 +1498,10 @@ fn exec_run_with_project(
                         // over-approximation suffix when present (the audit
                         // count is preserved on partial proofs).
                         let code = classify_partial_code(note);
-                        let mut headline = format!("PARTIAL [{code}]");
+                        let mut headline = format!(
+                            "PARTIAL [{code}] [{}]",
+                            certification_label(t.certification)
+                        );
                         if t.over_approximations > 0 {
                             headline.push_str(&format!(
                                 " ({} over-approximation{})",
@@ -1528,7 +1533,8 @@ fn exec_run_with_project(
                         // `--accept-witness` flag opts in to passing CI on
                         // these existential proofs.
                         let mut headline = format!(
-                            "WITNESS-ONLY ({} instance{})",
+                            "WITNESS VALIDATED [{}] ({} instance{})",
+                            certification_label(t.certification),
                             instances,
                             if *instances == 1 { "" } else { "s" }
                         );
@@ -1558,8 +1564,18 @@ fn exec_run_with_project(
                     ProofStatus::Failed { category, reason } => match category {
                         FailureCategory::Counterexample => {
                             let label = extract_counterexample_display(reason)
-                                .map(|value| format!("COUNTEREXAMPLE: {value}"))
-                                .unwrap_or_else(|| "COUNTEREXAMPLE".to_string());
+                                .map(|value| {
+                                    format!(
+                                        "SOLVER FALSIFIED [{}]: {value}",
+                                        certification_label(t.certification)
+                                    )
+                                })
+                                .unwrap_or_else(|| {
+                                    format!(
+                                        "SOLVER FALSIFIED [{}]",
+                                        certification_label(t.certification)
+                                    )
+                                });
                             (
                                 "FAIL".if_supports_color(Stderr, |s| s.red()).to_string(),
                                 label,
@@ -1579,24 +1595,28 @@ fn exec_run_with_project(
                             };
                             (
                                 "FAIL".if_supports_color(Stderr, |s| s.red()).to_string(),
-                                format!("FAILED [{}]", cat),
+                                format!(
+                                    "FAILED [{}] [{}]",
+                                    cat,
+                                    certification_label(t.certification)
+                                ),
                                 None,
                             )
                         }
                     },
                     ProofStatus::TimedOut { .. } => (
                         "TIME".if_supports_color(Stderr, |s| s.yellow()).to_string(),
-                        "TIMED OUT".to_string(),
+                        format!("TIMED OUT [{}]", certification_label(t.certification)),
                         None,
                     ),
                     ProofStatus::Unknown => (
                         "????".if_supports_color(Stderr, |s| s.yellow()).to_string(),
-                        "UNKNOWN".to_string(),
+                        format!("UNKNOWN [{}]", certification_label(t.certification)),
                         None,
                     ),
                     _ => (
                         "????".if_supports_color(Stderr, |s| s.yellow()).to_string(),
-                        "UNKNOWN".to_string(),
+                        format!("UNKNOWN [{}]", certification_label(t.certification)),
                         None,
                     ),
                 };
@@ -1608,7 +1628,7 @@ fn exec_run_with_project(
                     println!("{block}");
                 }
                 // Print inline failure context snippet
-                if let ProofStatus::Failed { category, reason } = &t.status
+                if let ProofStatus::Failed { category, reason } = &t.proof_status
                     && *category != FailureCategory::Counterexample
                     && !reason.is_empty()
                 {
@@ -1629,7 +1649,7 @@ fn exec_run_with_project(
             };
 
             println!(
-                "\nResults: {} proved, {} witness-only, {} partial, {} failed, {} timed out, {} unknown out of {} theorems in {}",
+                "\nResults: {} solver-validated, {} witness-validated, {} partial, {} failed, {} timed out, {} unknown out of {} theorems in {}",
                 summary.proved,
                 summary.witness,
                 summary.partial,
@@ -1880,6 +1900,19 @@ fn proofs_succeeded(
 /// this string-matching helper.
 fn classify_partial_code(_note: &str) -> &'static str {
     "S0004"
+}
+
+fn certification_label(certification: verify::Certification) -> &'static str {
+    match certification {
+        verify::Certification::SmtValidNoProofReconstruction => "smt_valid_no_proof_reconstruction",
+        verify::Certification::LeanKernelChecked => "lean_kernel_checked",
+        verify::Certification::WitnessReplay => "witness_replay",
+        verify::Certification::OpenObligations => "open_obligations",
+        verify::Certification::Unsupported => "unsupported",
+        verify::Certification::Timeout => "timeout",
+        verify::Certification::Unknown => "unknown",
+        _ => "unknown",
+    }
 }
 
 fn should_cleanup_artifacts(policy: ArtifactRetention, command_success: bool) -> bool {

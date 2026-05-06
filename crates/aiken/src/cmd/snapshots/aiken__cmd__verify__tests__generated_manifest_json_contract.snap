@@ -31,7 +31,9 @@ expression: "&manifest"
     {
       "name": "example.test_skip",
       "module": "example",
-      "reason": "unsupported shape"
+      "reason": "unsupported shape",
+      "status": "Unsupported",
+      "certification": "unsupported"
     }
   ]
 }

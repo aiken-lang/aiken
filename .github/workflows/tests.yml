@@ -302,7 +302,7 @@ jobs:
           import sys
 
           report = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          assert report["verify_summary_version"] == "2", report
+          assert report["verify_summary_version"] == "3", report
           assert report["total"] == 0, report
           assert report["theorems"] == [], report
           assert report.get("skipped", []) == [], report

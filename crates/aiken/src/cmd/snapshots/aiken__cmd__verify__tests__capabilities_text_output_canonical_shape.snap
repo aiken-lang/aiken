@@ -26,12 +26,16 @@ Supported fuzzer output types:
   - List<T>
   - Tuple(T, ...)
   - Pair(T, T)
+  - Finite literal String domains (Exact/OneOf)
+  - Bounded top-level List<Bool> domains within finite enumeration cap
+  - Bounded scalar ByteArray length ranges
   - Finite nullary ADT constructor domains (Data.Constr tag [])
 
 Unsupported fuzzer output types:
   - Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)
   - Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded.
   - General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements.
+  - Unbounded String/ByteArray content and finite literal ByteArray domains remain unsupported.
 
 Existential modes:
   - witness
@@ -56,7 +60,11 @@ Error catalogue:
   E0027  empty_constructor_domain                yes
   E0028  unsupported_fuzzer_output_type          yes
   E0029  overlapping_transition_indexes          yes
+  E0034  finite_domain_too_large                 yes
+  E0035  finite_domain_target_mode_unsupported   yes
+  E0036  finite_domain_existential_unsupported   yes
   E0050  validator_target_missing                yes
+  E0044  semantics_output_type_mismatch          no
   S0001  step_fn_sound_axiom_emitted             no
   S0002  constructor_tag_unresolved              no
   S0003  existential_witness_unsound_for_domain  no

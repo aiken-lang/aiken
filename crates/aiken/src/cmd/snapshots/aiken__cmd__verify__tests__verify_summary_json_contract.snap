@@ -14,21 +14,27 @@ expression: "&summary"
     {
       "name": "example.test_skip",
       "module": "example",
-      "reason": "unsupported shape"
+      "reason": "unsupported shape",
+      "status": "Unsupported",
+      "certification": "unsupported"
     }
   ],
   "theorems": [
     {
       "test_name": "example.test_proved",
       "theorem_name": "Example.test_proved",
-      "status": {
+      "status": "SolverValidated",
+      "certification": "smt_valid_no_proof_reconstruction",
+      "proof_status": {
         "kind": "proved"
       }
     },
     {
       "test_name": "example.test_witness",
       "theorem_name": "Example.test_witness",
-      "status": {
+      "status": "WitnessValidated",
+      "certification": "witness_replay",
+      "proof_status": {
         "kind": "witness_proved",
         "instances": 2,
         "witnesses": [
@@ -41,7 +47,9 @@ expression: "&summary"
     {
       "test_name": "example.test_partial",
       "theorem_name": "Example.test_partial",
-      "status": {
+      "status": "Partial",
+      "certification": "open_obligations",
+      "proof_status": {
         "kind": "partial",
         "note": "partial proof"
       },
@@ -50,7 +58,9 @@ expression: "&summary"
     {
       "test_name": "example.test_failed",
       "theorem_name": "Example.test_failed",
-      "status": {
+      "status": "Unknown",
+      "certification": "unknown",
+      "proof_status": {
         "kind": "failed",
         "category": {
           "kind": "build_error"
@@ -61,7 +71,9 @@ expression: "&summary"
     {
       "test_name": "example.test_timed_out",
       "theorem_name": "Example.test_timed_out",
-      "status": {
+      "status": "TimedOut",
+      "certification": "timeout",
+      "proof_status": {
         "kind": "timed_out",
         "reason": "timed out"
       }
@@ -69,7 +81,9 @@ expression: "&summary"
     {
       "test_name": "example.test_unknown",
       "theorem_name": "Example.test_unknown",
-      "status": {
+      "status": "Unknown",
+      "certification": "unknown",
+      "proof_status": {
         "kind": "unknown"
       }
     }
@@ -93,14 +107,18 @@ expression: "&summary"
       {
         "test_name": "example.test_proved",
         "theorem_name": "Example.test_proved",
-        "status": {
+        "status": "SolverValidated",
+        "certification": "smt_valid_no_proof_reconstruction",
+        "proof_status": {
           "kind": "proved"
         }
       },
       {
         "test_name": "example.test_witness",
         "theorem_name": "Example.test_witness",
-        "status": {
+        "status": "WitnessValidated",
+        "certification": "witness_replay",
+        "proof_status": {
           "kind": "witness_proved",
           "instances": 2,
           "witnesses": [
@@ -113,7 +131,9 @@ expression: "&summary"
       {
         "test_name": "example.test_partial",
         "theorem_name": "Example.test_partial",
-        "status": {
+        "status": "Partial",
+        "certification": "open_obligations",
+        "proof_status": {
           "kind": "partial",
           "note": "partial proof"
         },
@@ -122,7 +142,9 @@ expression: "&summary"
       {
         "test_name": "example.test_failed",
         "theorem_name": "Example.test_failed",
-        "status": {
+        "status": "Unknown",
+        "certification": "unknown",
+        "proof_status": {
           "kind": "failed",
           "category": {
             "kind": "build_error"
@@ -133,7 +155,9 @@ expression: "&summary"
       {
         "test_name": "example.test_timed_out",
         "theorem_name": "Example.test_timed_out",
-        "status": {
+        "status": "TimedOut",
+        "certification": "timeout",
+        "proof_status": {
           "kind": "timed_out",
           "reason": "timed out"
         }
@@ -141,7 +165,9 @@ expression: "&summary"
       {
         "test_name": "example.test_unknown",
         "theorem_name": "Example.test_unknown",
-        "status": {
+        "status": "Unknown",
+        "certification": "unknown",
+        "proof_status": {
           "kind": "unknown"
         }
       }
@@ -153,5 +179,5 @@ expression: "&summary"
   "plutus_core_rev": "pc456",
   "allow_vacuous_subgenerators": true,
   "two_phase_disabled": true,
-  "verify_summary_version": "2"
+  "verify_summary_version": "3"
 }

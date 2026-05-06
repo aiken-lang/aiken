@@ -40,7 +40,7 @@ expression: "&report"
   "plutus_core_rev": "pc456",
   "all_ok": true,
   "capabilities": {
-    "version": "2",
+    "version": "3",
     "supported_test_kinds": [
       "property"
     ],
@@ -70,12 +70,16 @@ expression: "&report"
       "List<T>",
       "Tuple(T, ...)",
       "Pair(T, T)",
+      "Finite literal String domains (Exact/OneOf)",
+      "Bounded top-level List<Bool> domains within finite enumeration cap",
+      "Bounded scalar ByteArray length ranges",
       "Finite nullary ADT constructor domains (Data.Constr tag [])"
     ],
     "unsupported_fuzzer_types": [
       "Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)",
       "Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded.",
-      "General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements."
+      "General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements.",
+      "Unbounded String/ByteArray content and finite literal ByteArray domains remain unsupported."
     ],
     "existential_modes": [
       "witness",
@@ -157,9 +161,29 @@ expression: "&report"
         "skippable": true
       },
       {
+        "code": "E0034",
+        "feature": "finite_domain_too_large",
+        "skippable": true
+      },
+      {
+        "code": "E0035",
+        "feature": "finite_domain_target_mode_unsupported",
+        "skippable": true
+      },
+      {
+        "code": "E0036",
+        "feature": "finite_domain_existential_unsupported",
+        "skippable": true
+      },
+      {
         "code": "E0050",
         "feature": "validator_target_missing",
         "skippable": true
+      },
+      {
+        "code": "E0044",
+        "feature": "semantics_output_type_mismatch",
+        "skippable": false
       },
       {
         "code": "S0001",

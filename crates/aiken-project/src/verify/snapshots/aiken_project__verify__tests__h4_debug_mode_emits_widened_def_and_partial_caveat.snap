@@ -3,10 +3,14 @@ source: crates/aiken-project/src/verify/tests.rs
 expression: content
 ---
 import AikenVerify.Utils
+import PlutusCore.Integer
+import PlutusCore.ByteString
 import PlutusCore.UPLC.ScriptEncoding
 import Blaster
 
 namespace AikenVerify.Proofs.Permissions.prop_h4_debug_ok
+open PlutusCore.Integer (Integer)
+open PlutusCore.ByteString (ByteString)
 open PlutusCore.Data (Data)
 open PlutusCore.ByteString (ByteString)
 open PlutusCore.Integer (Integer)
@@ -52,28 +56,10 @@ def prop_h4_debug_ok_s4_isValidScriptContext (x : Data) : Prop :=
   ∃ (trace : List Data),
     prop_h4_debug_ok_s4_isValidTrace trace ∧ x = prop_h4_debug_ok_s4_packTrace trace
 
--- Phase 1: provable by construction — isValidScriptContext is the image of isValidTrace.
-theorem prop_h4_debug_ok_valid_input :
-  ∀ (trace : List Data),
-    prop_h4_debug_ok_s4_isValidTrace trace →
-    prop_h4_debug_ok_s4_isValidScriptContext (prop_h4_debug_ok_s4_packTrace trace) :=
-  fun trace h => ⟨trace, h, rfl⟩
-
--- Phase 2: CEK halting obligation (currently unprovable as stated).
--- This theorem cannot be discharged until packTrace has a concrete definition
--- encoding the validator's ScriptContext schema, enabling isValidScriptContext
--- to be related to the CEK machine execution semantics.  See §S6.
-theorem prop_h4_debug_ok_halts :
-  ∀ (x : Data),
-    prop_h4_debug_ok_s4_isValidScriptContext x →
-    proveTestsHalt prog_permissions_test__prop_h4_debug_ok_97ffe25e (dataArg x) := by
-  sorry -- UNPROVABLE until packTrace is concretely defined; see §S6
-
--- Composition: Phase 1 + Phase 2 → final halting claim.
 theorem prop_h4_debug_ok :
   ∀ (trace : List Data),
     prop_h4_debug_ok_s4_isValidTrace trace →
-    proveTestsHalt prog_permissions_test__prop_h4_debug_ok_97ffe25e (dataArg (prop_h4_debug_ok_s4_packTrace trace)) :=
-  fun trace hv => prop_h4_debug_ok_halts (prop_h4_debug_ok_s4_packTrace trace) (prop_h4_debug_ok_valid_input trace hv)
+    proveTestsHalt prog_permissions_test__prop_h4_debug_ok_97ffe25e (dataArg (prop_h4_debug_ok_s4_packTrace trace)) := by
+  blaster
 
 end AikenVerify.Proofs.Permissions.prop_h4_debug_ok

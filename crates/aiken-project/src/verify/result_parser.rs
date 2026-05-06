@@ -20,9 +20,10 @@ fn manifest_entry_success_status(entry: &ManifestEntry) -> ProofStatus {
 
 /// Schema version for the `aiken verify --json` output.
 ///
-/// Version 2 adds provenance for debug-mode widening and the two-phase proof
-/// opt-out environment flag.
-pub const VERIFY_SUMMARY_VERSION: &str = "2";
+/// Version 3 changes per-theorem JSON from the legacy detailed `status` object
+/// to canonical M0 `status` plus `certification`, retaining the old detail in
+/// `proof_status` for compatibility.
+pub const VERIFY_SUMMARY_VERSION: &str = "3";
 
 /// Parse lake build output into per-theorem results.
 /// Uses the manifest to know which theorems were expected.
@@ -43,27 +44,27 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
     if let Some(mut theorems) = raw.theorem_results.clone() {
         let proved = theorems
             .iter()
-            .filter(|t| matches!(t.status, ProofStatus::Proved))
+            .filter(|t| matches!(t.proof_status, ProofStatus::Proved))
             .count();
         let partial = theorems
             .iter()
-            .filter(|t| matches!(t.status, ProofStatus::Partial { .. }))
+            .filter(|t| matches!(t.proof_status, ProofStatus::Partial { .. }))
             .count();
         let witness = theorems
             .iter()
-            .filter(|t| matches!(t.status, ProofStatus::WitnessProved { .. }))
+            .filter(|t| matches!(t.proof_status, ProofStatus::WitnessProved { .. }))
             .count();
         let failed = theorems
             .iter()
-            .filter(|t| matches!(t.status, ProofStatus::Failed { .. }))
+            .filter(|t| matches!(t.proof_status, ProofStatus::Failed { .. }))
             .count();
         let timed_out = theorems
             .iter()
-            .filter(|t| matches!(t.status, ProofStatus::TimedOut { .. }))
+            .filter(|t| matches!(t.proof_status, ProofStatus::TimedOut { .. }))
             .count();
         let unknown = theorems
             .iter()
-            .filter(|t| matches!(t.status, ProofStatus::Unknown))
+            .filter(|t| matches!(t.proof_status, ProofStatus::Unknown))
             .count();
 
         theorems.sort_by(|a, b| {
@@ -114,27 +115,27 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
             // companion, if present, is independently proved and stays
             // `Proved`.
             let correctness_status = manifest_entry_success_status(entry);
-            theorems.push(TheoremResult {
-                test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                theorem_name: entry.lean_theorem.clone(),
-                status: correctness_status,
-                over_approximations: entry.over_approximations,
-            });
+            theorems.push(TheoremResult::new(
+                format!("{}.{}", entry.aiken_module, entry.aiken_name),
+                entry.lean_theorem.clone(),
+                correctness_status,
+                entry.over_approximations,
+            ));
             if entry.has_termination_theorem {
-                theorems.push(TheoremResult {
-                    test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                    theorem_name: format!("{}_alwaysTerminating", entry.lean_theorem),
-                    status: ProofStatus::Proved,
-                    over_approximations: 0,
-                });
+                theorems.push(TheoremResult::new(
+                    format!("{}.{}", entry.aiken_module, entry.aiken_name),
+                    format!("{}_alwaysTerminating", entry.lean_theorem),
+                    ProofStatus::Proved,
+                    0,
+                ));
             }
             if entry.has_equivalence_theorem {
-                theorems.push(TheoremResult {
-                    test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                    theorem_name: format!("{}_equivalence", entry.lean_theorem),
-                    status: ProofStatus::Proved,
-                    over_approximations: 0,
-                });
+                theorems.push(TheoremResult::new(
+                    format!("{}.{}", entry.aiken_module, entry.aiken_name),
+                    format!("{}_equivalence", entry.lean_theorem),
+                    ProofStatus::Proved,
+                    0,
+                ));
             }
         }
     } else {
@@ -205,12 +206,12 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
                 0
             };
 
-            theorems.push(TheoremResult {
-                test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                theorem_name: entry.lean_theorem.clone(),
-                status: correctness_status,
-                over_approximations: correctness_over_approx,
-            });
+            theorems.push(TheoremResult::new(
+                format!("{}.{}", entry.aiken_module, entry.aiken_name),
+                entry.lean_theorem.clone(),
+                correctness_status,
+                correctness_over_approx,
+            ));
 
             if let Some(term_name) = term_name {
                 let term_status = if timed_out_run {
@@ -238,12 +239,12 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
                     ProofStatus::Unknown
                 };
 
-                theorems.push(TheoremResult {
-                    test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                    theorem_name: term_name,
-                    status: term_status,
-                    over_approximations: 0, // termination theorem is not a two-phase proof
-                });
+                theorems.push(TheoremResult::new(
+                    format!("{}.{}", entry.aiken_module, entry.aiken_name),
+                    term_name,
+                    term_status,
+                    0, // termination theorem is not a two-phase proof
+                ));
             }
 
             if let Some(equivalence_name) = equivalence_name {
@@ -272,12 +273,12 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
                     ProofStatus::Unknown
                 };
 
-                theorems.push(TheoremResult {
-                    test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                    theorem_name: equivalence_name,
-                    status: equivalence_status,
-                    over_approximations: 0,
-                });
+                theorems.push(TheoremResult::new(
+                    format!("{}.{}", entry.aiken_module, entry.aiken_name),
+                    equivalence_name,
+                    equivalence_status,
+                    0,
+                ));
             }
         }
     }
@@ -288,43 +289,43 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
     if !raw.success
         && theorems
             .iter()
-            .all(|t| matches!(t.status, ProofStatus::Unknown))
+            .all(|t| matches!(t.proof_status, ProofStatus::Unknown))
     {
         let category = classify_failure(&combined_output);
         if category != FailureCategory::Unknown {
             let reason = extract_global_failure_reason(&combined_output);
             for theorem in &mut theorems {
-                theorem.status = ProofStatus::Failed {
+                theorem.set_proof_status(ProofStatus::Failed {
                     category: category.clone(),
                     reason: reason.clone(),
-                };
+                });
             }
         }
     }
 
     let proved = theorems
         .iter()
-        .filter(|t| matches!(t.status, ProofStatus::Proved))
+        .filter(|t| matches!(t.proof_status, ProofStatus::Proved))
         .count();
     let partial = theorems
         .iter()
-        .filter(|t| matches!(t.status, ProofStatus::Partial { .. }))
+        .filter(|t| matches!(t.proof_status, ProofStatus::Partial { .. }))
         .count();
     let witness = theorems
         .iter()
-        .filter(|t| matches!(t.status, ProofStatus::WitnessProved { .. }))
+        .filter(|t| matches!(t.proof_status, ProofStatus::WitnessProved { .. }))
         .count();
     let failed = theorems
         .iter()
-        .filter(|t| matches!(t.status, ProofStatus::Failed { .. }))
+        .filter(|t| matches!(t.proof_status, ProofStatus::Failed { .. }))
         .count();
     let timed_out = theorems
         .iter()
-        .filter(|t| matches!(t.status, ProofStatus::TimedOut { .. }))
+        .filter(|t| matches!(t.proof_status, ProofStatus::TimedOut { .. }))
         .count();
     let unknown = theorems
         .iter()
-        .filter(|t| matches!(t.status, ProofStatus::Unknown))
+        .filter(|t| matches!(t.proof_status, ProofStatus::Unknown))
         .count();
 
     // Sort for deterministic output (important for CI diffs).

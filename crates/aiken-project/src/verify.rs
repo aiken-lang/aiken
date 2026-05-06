@@ -91,7 +91,10 @@ fn push_widening(
 
 #[cfg(test)]
 fn widening_messages(widenings: &[TransitionWidening]) -> Vec<String> {
-    widenings.iter().map(|entry| entry.message.clone()).collect()
+    widenings
+        .iter()
+        .map(|entry| entry.message.clone())
+        .collect()
 }
 
 fn render_widening_counts(counts: &BTreeMap<TransitionWideningKind, usize>) -> String {
@@ -136,11 +139,7 @@ fn widening_summary_suffix(
     include_sub_generators: bool,
     opaque_sub_generators: &[(String, String)],
 ) -> Option<String> {
-    let counts = widening_category_counts(
-        widenings,
-        include_sub_generators,
-        opaque_sub_generators,
-    );
+    let counts = widening_category_counts(widenings, include_sub_generators, opaque_sub_generators);
     if counts.is_empty() {
         return None;
     }
@@ -165,7 +164,7 @@ fn combined_widenings(
 
 fn transition_prop_widenings(
     tp: &crate::export::ExportedTransitionProp,
- ) -> Vec<TransitionWidening> {
+) -> Vec<TransitionWidening> {
     let combined = combined_widenings(&tp.widenings, &tp.helper_widenings);
     if !combined.is_empty() || tp.unsupported_log.is_empty() {
         return combined;
@@ -666,12 +665,149 @@ pub enum FailureCategory {
     Unknown,
 }
 
-/// Status of a single theorem proof
+/// Truthful verification status for a single theorem result.
 #[non_exhaustive]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum VerificationStatus {
+    /// Lean's kernel accepted a reconstructed proof with no placeholders or unreconstructed solver gap.
+    LeanCertified,
+    /// Blaster/Z3 reported Valid, but no Lean-kernel proof reconstruction was available or used.
+    SolverValidated,
+    /// The solver found a counterexample for the generated theorem.
+    SolverFalsified,
+    /// A concrete generated input/witness replay was validated for the intended path.
+    WitnessValidated,
+    /// A sound artifact exists, but one or more proof obligations remain open.
+    Partial,
+    /// The verifier could not prove, refute, or classify the theorem precisely.
+    Unknown,
+    /// Verification exceeded the configured time/fuel limit.
+    TimedOut,
+    /// The integration could not generate or run a sound verification problem for this theorem.
+    Unsupported,
+}
+
+impl VerificationStatus {
+    fn from_proof_status(status: &ProofStatus) -> Self {
+        match status {
+            // The current generated universal/equivalence/termination proofs are Blaster-backed.
+            // Until proof reconstruction is wired through, a successful build means solver
+            // validation, not Lean kernel certification.
+            ProofStatus::Proved => VerificationStatus::SolverValidated,
+            ProofStatus::WitnessProved { .. } => VerificationStatus::WitnessValidated,
+            ProofStatus::Partial { .. } => VerificationStatus::Partial,
+            ProofStatus::Failed { category, .. } => match category {
+                FailureCategory::Counterexample => VerificationStatus::SolverFalsified,
+                FailureCategory::BlasterUnsupported => VerificationStatus::Unsupported,
+                FailureCategory::Timeout => VerificationStatus::TimedOut,
+                FailureCategory::UnsatGoal
+                | FailureCategory::BuildError
+                | FailureCategory::DependencyError
+                | FailureCategory::Unknown => VerificationStatus::Unknown,
+            },
+            ProofStatus::TimedOut { .. } => VerificationStatus::TimedOut,
+            ProofStatus::Unknown => VerificationStatus::Unknown,
+        }
+    }
+
+    fn default_proof_status(self) -> ProofStatus {
+        match self {
+            VerificationStatus::LeanCertified | VerificationStatus::SolverValidated => {
+                ProofStatus::Proved
+            }
+            VerificationStatus::SolverFalsified => ProofStatus::Failed {
+                category: FailureCategory::Counterexample,
+                reason: String::new(),
+            },
+            VerificationStatus::WitnessValidated => ProofStatus::WitnessProved {
+                instances: 0,
+                witnesses: Vec::new(),
+                note: String::new(),
+            },
+            VerificationStatus::Partial => ProofStatus::Partial {
+                note: String::new(),
+            },
+            VerificationStatus::Unknown => ProofStatus::Unknown,
+            VerificationStatus::TimedOut => ProofStatus::TimedOut {
+                reason: String::new(),
+            },
+            VerificationStatus::Unsupported => ProofStatus::Failed {
+                category: FailureCategory::BlasterUnsupported,
+                reason: String::new(),
+            },
+        }
+    }
+}
+
+/// Evidence class for the reported verification status.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Certification {
+    /// SMT/Blaster reported Valid, but Lean proof reconstruction was not used.
+    SmtValidNoProofReconstruction,
+    /// Lean's kernel checked a reconstructed proof with no placeholder gap.
+    LeanKernelChecked,
+    /// Concrete witness replay/native evaluation supplied the validation evidence.
+    WitnessReplay,
+    /// One or more proof obligations remain open (e.g. generated `sorry`/placeholder).
+    OpenObligations,
+    /// The theorem shape or integration path is unsupported.
+    Unsupported,
+    /// Verification timed out.
+    Timeout,
+    /// No stronger evidence class is known.
+    Unknown,
+}
+
+impl Certification {
+    fn from_proof_status(status: &ProofStatus) -> Self {
+        match status {
+            ProofStatus::Proved => Certification::SmtValidNoProofReconstruction,
+            ProofStatus::WitnessProved { .. } => Certification::WitnessReplay,
+            ProofStatus::Partial { .. } => Certification::OpenObligations,
+            ProofStatus::Failed { category, .. } => match category {
+                FailureCategory::Counterexample => Certification::SmtValidNoProofReconstruction,
+                FailureCategory::BlasterUnsupported => Certification::Unsupported,
+                FailureCategory::Timeout => Certification::Timeout,
+                FailureCategory::UnsatGoal
+                | FailureCategory::BuildError
+                | FailureCategory::DependencyError
+                | FailureCategory::Unknown => Certification::Unknown,
+            },
+            ProofStatus::TimedOut { .. } => Certification::Timeout,
+            ProofStatus::Unknown => Certification::Unknown,
+        }
+    }
+
+    fn from_status(status: VerificationStatus) -> Self {
+        match status {
+            VerificationStatus::LeanCertified => Certification::LeanKernelChecked,
+            VerificationStatus::SolverValidated | VerificationStatus::SolverFalsified => {
+                Certification::SmtValidNoProofReconstruction
+            }
+            VerificationStatus::WitnessValidated => Certification::WitnessReplay,
+            VerificationStatus::Partial => Certification::OpenObligations,
+            VerificationStatus::Unknown => Certification::Unknown,
+            VerificationStatus::TimedOut => Certification::Timeout,
+            VerificationStatus::Unsupported => Certification::Unsupported,
+        }
+    }
+}
+
+/// Status of a single theorem proof using the legacy detailed vocabulary.
+///
+/// Kept on the wire as `proof_status` so old result values can still be read
+/// and displayed, while the canonical `TheoremResult::status` field uses the
+/// M0 verification vocabulary.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProofStatus {
-    /// Universal theorem, closed by Lean with no `sorry` or witness fallback.
+    /// Universal theorem, closed by Lean with no generated `sorry` or witness fallback.
+    /// In the current Blaster-backed pipeline this normalizes to `SolverValidated`,
+    /// not `LeanCertified`, because proof reconstruction is not available.
     Proved,
     /// Lean build succeeded but proof covers only concrete witness instance(s),
     /// not all inputs. Universal verification is planned for a future release.
@@ -681,7 +817,7 @@ pub enum ProofStatus {
         witnesses: Vec<String>,
         note: String,
     },
-    /// Build succeeded but contains `sorry`. Not a complete proof.
+    /// Build succeeded but contains `sorry` or another open obligation. Not a complete proof.
     Partial { note: String },
     /// Proof failed with a classified reason
     Failed {
@@ -694,32 +830,106 @@ pub enum ProofStatus {
     Unknown,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(untagged)]
+enum TheoremStatusWire {
+    Current(VerificationStatus),
+    Legacy(ProofStatus),
+}
+
 /// Per-theorem result
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[non_exhaustive]
 pub struct TheoremResult {
     pub test_name: String,
     pub theorem_name: String,
-    pub status: ProofStatus,
+    pub status: VerificationStatus,
+    pub certification: Certification,
+    pub proof_status: ProofStatus,
     /// Number of constraints dropped or widened during TransitionProp lowering.
     /// Non-zero only for two-phase trace theorems.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub over_approximations: usize,
 }
 
+impl<'de> serde::Deserialize<'de> for TheoremResult {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            test_name: String,
+            theorem_name: String,
+            status: TheoremStatusWire,
+            #[serde(default)]
+            certification: Option<Certification>,
+            #[serde(default)]
+            proof_status: Option<ProofStatus>,
+            #[serde(default)]
+            over_approximations: usize,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        let (status, proof_status) = match wire.status {
+            TheoremStatusWire::Current(status) => {
+                let proof_status = wire
+                    .proof_status
+                    .unwrap_or_else(|| status.default_proof_status());
+                (status, proof_status)
+            }
+            TheoremStatusWire::Legacy(proof_status) => {
+                let status = VerificationStatus::from_proof_status(&proof_status);
+                let proof_status = wire.proof_status.unwrap_or(proof_status);
+                (status, proof_status)
+            }
+        };
+        let certification = wire
+            .certification
+            .unwrap_or_else(|| Certification::from_status(status));
+
+        Ok(TheoremResult {
+            test_name: wire.test_name,
+            theorem_name: wire.theorem_name,
+            status,
+            certification,
+            proof_status,
+            over_approximations: wire.over_approximations,
+        })
+    }
+}
+
+fn unsupported_status() -> VerificationStatus {
+    VerificationStatus::Unsupported
+}
+
+fn unsupported_certification() -> Certification {
+    Certification::Unsupported
+}
+
 impl TheoremResult {
     pub fn new(
         test_name: String,
         theorem_name: String,
-        status: ProofStatus,
+        proof_status: ProofStatus,
         over_approximations: usize,
     ) -> Self {
+        let status = VerificationStatus::from_proof_status(&proof_status);
+        let certification = Certification::from_proof_status(&proof_status);
         Self {
             test_name,
             theorem_name,
             status,
+            certification,
+            proof_status,
             over_approximations,
         }
+    }
+
+    pub fn set_proof_status(&mut self, proof_status: ProofStatus) {
+        self.status = VerificationStatus::from_proof_status(&proof_status);
+        self.certification = Certification::from_proof_status(&proof_status);
+        self.proof_status = proof_status;
     }
 }
 
@@ -1313,6 +1523,10 @@ pub struct SkippedTest {
     pub name: String,
     pub module: String,
     pub reason: String,
+    #[serde(default = "unsupported_status")]
+    pub status: VerificationStatus,
+    #[serde(default = "unsupported_certification")]
+    pub certification: Certification,
 }
 
 impl SkippedTest {
@@ -1321,6 +1535,8 @@ impl SkippedTest {
             name,
             module,
             reason,
+            status: VerificationStatus::Unsupported,
+            certification: Certification::Unsupported,
         }
     }
 }
@@ -2176,12 +2392,7 @@ pub fn run_proofs(
         } else {
             0
         };
-        TheoremResult {
-            test_name,
-            theorem_name: theorem_name.to_string(),
-            status,
-            over_approximations: over_approx,
-        }
+        TheoremResult::new(test_name, theorem_name.to_string(), status, over_approx)
     }
 
     let logs_dir = out_dir.join("logs");
@@ -2250,13 +2461,15 @@ pub fn run_proofs(
                 }
                 theorem_names
                     .into_iter()
-                    .map(|theorem_name| TheoremResult {
-                        test_name: test_name.clone(),
-                        theorem_name,
-                        status: ProofStatus::TimedOut {
-                            reason: timeout_reason.clone(),
-                        },
-                        over_approximations: 0,
+                    .map(|theorem_name| {
+                        TheoremResult::new(
+                            test_name.clone(),
+                            theorem_name,
+                            ProofStatus::TimedOut {
+                                reason: timeout_reason.clone(),
+                            },
+                            0,
+                        )
                     })
                     .collect::<Vec<_>>()
             })
@@ -3855,7 +4068,12 @@ fn exported_data_schema_for_reference<'a>(
             fallback_schemas.and_then(|schemas| {
                 schemas
                     .get(&key)
-                    .and_then(|schema| schema.definitions.lookup(reference).map(|definition| (schema, definition)))
+                    .and_then(|schema| {
+                        schema
+                            .definitions
+                            .lookup(reference)
+                            .map(|definition| (schema, definition))
+                    })
                     .or_else(|| {
                         schemas.values().find_map(|schema| {
                             schema
@@ -4193,7 +4411,6 @@ fn finalize_lean_data_shape_builder(builder: LeanDataShapeBuilder) -> String {
             .join("\n");
         format!("mutual\n{inner}\nend\n")
     }
-
 }
 
 struct TransitionDomainShapeState<'a> {
@@ -4862,18 +5079,17 @@ fn emit_typed_var_as_lean_data(
     }
 }
 
-
 fn emit_bound_var_as_lean_data(
     name: &str,
     ty: &aiken_lang::test_framework::ShallowIrType,
     ctx: &mut ShallowIrEmitCtx,
- ) -> String {
+) -> String {
     emit_typed_var_as_lean_data(&ctx.resolve_bound_name(name), ty, ctx, 0)
 }
 
 fn shallow_ir_type_hint(
     ir: &aiken_lang::test_framework::ShallowIr,
- ) -> Option<aiken_lang::test_framework::ShallowIrType> {
+) -> Option<aiken_lang::test_framework::ShallowIrType> {
     use aiken_lang::test_framework::{ShallowConst, ShallowIr, ShallowIrType};
 
     match ir {
@@ -4914,7 +5130,9 @@ fn emit_pair_bound_var_component_as_lean_data(
         1 => emit_typed_var_as_lean_data(&snd_var, snd, ctx, 1),
         _ => return None,
     };
-    Some(format!("(let ({fst_var}, {snd_var}) := {resolved}; {component})"))
+    Some(format!(
+        "(let ({fst_var}, {snd_var}) := {resolved}; {component})"
+    ))
 }
 
 fn exact_data_projection_fallback() -> &'static str {
@@ -4947,7 +5165,7 @@ fn try_emit_shallow_ir_as_lean_data_exact(
 fn try_emit_shallow_ir_as_lean_bool_exact(
     ir: &aiken_lang::test_framework::ShallowIr,
     ctx: &mut ShallowIrEmitCtx,
- ) -> Option<String> {
+) -> Option<String> {
     let mut preview_ctx = ctx.clone();
     let baseline_existentials = preview_ctx.existentials.len();
     let mut preview_log = Vec::new();
@@ -4963,7 +5181,7 @@ fn try_emit_shallow_ir_as_lean_bool_exact(
 fn try_emit_shallow_ir_as_lean_integer_exact(
     ir: &aiken_lang::test_framework::ShallowIr,
     ctx: &mut ShallowIrEmitCtx,
- ) -> Option<String> {
+) -> Option<String> {
     use aiken_lang::test_framework::{ShallowBinOp, ShallowConst, ShallowIr, ShallowIrType};
 
     match ir {
@@ -4985,10 +5203,14 @@ fn try_emit_shallow_ir_as_lean_integer_exact(
         } => {
             let mut preview_ctx = ctx.clone();
             let cond_expr = try_emit_shallow_ir_as_lean_bool_exact(cond, &mut preview_ctx)?;
-            let then_expr = try_emit_shallow_ir_as_lean_integer_exact(then_branch, &mut preview_ctx)?;
-            let else_expr = try_emit_shallow_ir_as_lean_integer_exact(else_branch, &mut preview_ctx)?;
+            let then_expr =
+                try_emit_shallow_ir_as_lean_integer_exact(then_branch, &mut preview_ctx)?;
+            let else_expr =
+                try_emit_shallow_ir_as_lean_integer_exact(else_branch, &mut preview_ctx)?;
             *ctx = preview_ctx;
-            Some(format!("(if {cond_expr} then {then_expr} else {else_expr})"))
+            Some(format!(
+                "(if {cond_expr} then {then_expr} else {else_expr})"
+            ))
         }
         ShallowIr::Match { subject, arms } => {
             let mut preview_ctx = ctx.clone();
@@ -4997,7 +5219,8 @@ fn try_emit_shallow_ir_as_lean_integer_exact(
             let mut default_expr = None;
 
             for arm in arms {
-                let body_expr = try_emit_shallow_ir_as_lean_integer_exact(&arm.body, &mut preview_ctx)?;
+                let body_expr =
+                    try_emit_shallow_ir_as_lean_integer_exact(&arm.body, &mut preview_ctx)?;
                 match arm.tag {
                     Some(tag) => tagged.push((tag, body_expr)),
                     None => default_expr = Some(body_expr),
@@ -5034,10 +5257,7 @@ fn try_emit_shallow_ir_as_lean_integer_exact(
     }
 }
 
-fn shallow_ir_mentions_name(
-    ir: &aiken_lang::test_framework::ShallowIr,
-    name: &str,
-) -> bool {
+fn shallow_ir_mentions_name(ir: &aiken_lang::test_framework::ShallowIr, name: &str) -> bool {
     use aiken_lang::test_framework::ShallowIr;
 
     match ir {
@@ -5058,13 +5278,17 @@ fn shallow_ir_mentions_name(
         }
         ShallowIr::Match { subject, arms } => {
             shallow_ir_mentions_name(subject, name)
-                || arms.iter().any(|arm| shallow_ir_mentions_name(&arm.body, name))
+                || arms
+                    .iter()
+                    .any(|arm| shallow_ir_mentions_name(&arm.body, name))
         }
-        ShallowIr::Construct { fields, .. } | ShallowIr::Tuple(fields) => {
-            fields.iter().any(|field| shallow_ir_mentions_name(field, name))
-        }
+        ShallowIr::Construct { fields, .. } | ShallowIr::Tuple(fields) => fields
+            .iter()
+            .any(|field| shallow_ir_mentions_name(field, name)),
         ShallowIr::FieldAccess { record, .. } => shallow_ir_mentions_name(record, name),
-        ShallowIr::RecordUpdate { record, updates, .. } => {
+        ShallowIr::RecordUpdate {
+            record, updates, ..
+        } => {
             shallow_ir_mentions_name(record, name)
                 || updates
                     .iter()
@@ -5074,21 +5298,23 @@ fn shallow_ir_mentions_name(
             shallow_ir_mentions_name(left, name) || shallow_ir_mentions_name(right, name)
         }
         ShallowIr::ListLit { elements, tail, .. } => {
-            elements.iter().any(|element| shallow_ir_mentions_name(element, name))
+            elements
+                .iter()
+                .any(|element| shallow_ir_mentions_name(element, name))
                 || tail
                     .as_ref()
                     .is_some_and(|tail| shallow_ir_mentions_name(tail, name))
         }
         ShallowIr::Const(_) | ShallowIr::FuzzExistential { .. } | ShallowIr::Opaque { .. } => false,
         _ => false,
-}
+    }
 }
 
 fn freshen_unknown_field_projection(
     ctx: &mut ShallowIrEmitCtx,
     unsupported_log: &mut TransitionWideningLog,
     message: String,
- ) -> String {
+) -> String {
     use aiken_lang::test_framework::ShallowIrType;
 
     push_widening(
@@ -5245,7 +5471,6 @@ fn emit_field_projection_as_lean_data(
     }
 }
 
-
 /// Recursively emit a `ShallowIr` node as a Lean expression of type `Data`.
 ///
 /// Any widening site must append a structured record to `unsupported_log`;
@@ -5255,7 +5480,7 @@ fn emit_shallow_ir_as_lean_data(
     ir: &aiken_lang::test_framework::ShallowIr,
     ctx: &mut ShallowIrEmitCtx,
     unsupported_log: &mut TransitionWideningLog,
- ) -> String {
+) -> String {
     use aiken_lang::test_framework::{
         ShallowConst, ShallowFieldAccessKind, ShallowIr, ShallowIrType,
     };
@@ -5290,7 +5515,10 @@ fn emit_shallow_ir_as_lean_data(
             push_widening(
                 unsupported_log,
                 TransitionWideningKind::DataFreshening,
-                format!("Out-of-scope Var freshened while emitting Data: {name} : {:?}", ty),
+                format!(
+                    "Out-of-scope Var freshened while emitting Data: {name} : {:?}",
+                    ty
+                ),
             );
             let fresh = ctx.fresh(ty);
             emit_bound_var_as_lean_data(&fresh, ty, ctx)
@@ -5360,7 +5588,8 @@ fn emit_shallow_ir_as_lean_data(
             }
 
             let mut preview_ctx = ctx.clone();
-            let Some(_value_expr) = try_emit_shallow_ir_as_lean_data_exact(value, &mut preview_ctx) else {
+            let Some(_value_expr) = try_emit_shallow_ir_as_lean_data_exact(value, &mut preview_ctx)
+            else {
                 push_widening(
                     unsupported_log,
                     TransitionWideningKind::DataFreshening,
@@ -5370,7 +5599,8 @@ fn emit_shallow_ir_as_lean_data(
                 );
                 return ctx.fresh(&ShallowIrType::Data);
             };
-            let Some(body_expr) = try_emit_shallow_ir_as_lean_data_exact(body, &mut preview_ctx) else {
+            let Some(body_expr) = try_emit_shallow_ir_as_lean_data_exact(body, &mut preview_ctx)
+            else {
                 push_widening(
                     unsupported_log,
                     TransitionWideningKind::DataFreshening,
@@ -5432,7 +5662,8 @@ fn emit_shallow_ir_as_lean_data(
             else_branch,
         } => {
             let mut preview_ctx = ctx.clone();
-            let Some(cond_expr) = try_emit_shallow_ir_as_lean_bool_exact(cond, &mut preview_ctx) else {
+            let Some(cond_expr) = try_emit_shallow_ir_as_lean_bool_exact(cond, &mut preview_ctx)
+            else {
                 push_widening(
                     unsupported_log,
                     TransitionWideningKind::DataFreshening,
@@ -5529,7 +5760,7 @@ fn emit_shallow_ir_as_lean_bool(
     ir: &aiken_lang::test_framework::ShallowIr,
     ctx: &mut ShallowIrEmitCtx,
     unsupported_log: &mut TransitionWideningLog,
- ) -> String {
+) -> String {
     use aiken_lang::test_framework::{ShallowBinOp, ShallowConst, ShallowIr, ShallowIrType};
 
     match ir {
@@ -5609,7 +5840,10 @@ fn emit_shallow_ir_as_lean_bool(
             push_widening(
                 unsupported_log,
                 TransitionWideningKind::BoolFreshening,
-                format!("Out-of-scope Var freshened while emitting Bool: {name} : {:?}", ty),
+                format!(
+                    "Out-of-scope Var freshened while emitting Bool: {name} : {:?}",
+                    ty
+                ),
             );
             ctx.fresh(&ShallowIrType::Bool)
         }
@@ -5840,7 +6074,10 @@ fn transition_domain_predicate(
     let join_and = |parts: Vec<String>| match parts.len() {
         0 => None,
         1 => parts.into_iter().next(),
-        _ => Some(format!("({})", parts.join(&format!(" {AND} ", AND = lean_sym::AND)))),
+        _ => Some(format!(
+            "({})",
+            parts.join(&format!(" {AND} ", AND = lean_sym::AND))
+        )),
     };
     let is_data_like = matches!(
         binder_ty,
@@ -5986,10 +6223,9 @@ fn transition_domain_predicate(
                 .iter()
                 .filter_map(|value| match value {
                     LangFuzzerExactValue::Bool(b) => Some(match binder_ty {
-                        LangShallowIrType::Bool => format!(
-                            "{binder} = {}",
-                            if *b { "true" } else { "false" }
-                        ),
+                        LangShallowIrType::Bool => {
+                            format!("{binder} = {}", if *b { "true" } else { "false" })
+                        }
                         _ if is_data_like => format!(
                             "{binder} = Data.Constr ({} : Integer) []",
                             if *b { 1 } else { 0 }
@@ -6060,7 +6296,9 @@ fn transition_domain_predicate(
         }
         LangFuzzerSemantics::String => {
             if is_data_like {
-                Some(format!("(match {binder} with | Data.B _ => True | _ => False)"))
+                Some(format!(
+                    "(match {binder} with | Data.B _ => True | _ => False)"
+                ))
             } else {
                 None
             }
@@ -6503,7 +6741,7 @@ type TransitionDefDetailsForExport = (
 pub(crate) fn emit_is_valid_transition_def_for_export(
     fn_name: &str,
     prop: &aiken_lang::test_framework::TransitionProp,
- ) -> TransitionDefForExport {
+) -> TransitionDefForExport {
     let (def, widenings, sub_gens, s0002_marker) =
         emit_is_valid_transition_details_for_export(fn_name, prop);
     (def, widening_messages(&widenings), sub_gens, s0002_marker)
@@ -6518,7 +6756,7 @@ pub(crate) fn emit_is_valid_transition_def_for_export(
 pub(crate) fn emit_is_valid_transition_details_for_export(
     fn_name: &str,
     prop: &aiken_lang::test_framework::TransitionProp,
- ) -> TransitionDefDetailsForExport {
+) -> TransitionDefDetailsForExport {
     emit_is_valid_transition_details_for_export_with_schemas(
         fn_name,
         prop,
@@ -6772,7 +7010,8 @@ fn build_state_machine_trace_reachability_helpers(
         }
         helper_blocks.push(is_valid_transition_def);
         if !tp.is_vacuous {
-            precise_step_relation_parts.push(format!("{is_valid_transition_name} state transition"));
+            precise_step_relation_parts
+                .push(format!("{is_valid_transition_name} state transition"));
         }
     }
 
@@ -7103,7 +7342,6 @@ fn try_generate_state_machine_trace_proof_from_semantics(
             },
         )));
     }
-
 
     // FallbackRequired: if the state-machine output domain transitively
     // contains an opaque fuzzer semantic (e.g. `List<Transaction>` where the
@@ -8994,13 +9232,12 @@ fn try_generate_two_phase_proof(
         return Err(generation_error(
             GenerationErrorCategory::FallbackRequired,
             format!(
-                "Test '{}': two-phase proof would rely on disallowed widenings ({}); refusing universal proof until the transition relation is exact.",
+                "Test '{}': two-phase proof would rely on transition widenings (disallowed non-domain widenings: {}); refusing universal proof until the transition relation is exact.",
                 test.name,
                 render_widening_counts(&disallowed_widenings),
             ),
         ));
     }
-
 
     let helper_prefix = format!("{lean_test_name}_s4");
     let is_valid_transition_name = format!("{helper_prefix}_isValidTransition");
@@ -9369,7 +9606,6 @@ fn generate_proof_file(
         }
     }
 
-
     // Soundness guard: `DataWithSchema` semantics require a `fuzzer_data_schema`
     // to produce a sound theorem. Without it the `Data` domain is unconstrained
     // and the generated theorem collapses to `∀ x : Data, True → P x`, which
@@ -9442,21 +9678,32 @@ fn generate_proof_file(
             allow_vacuous_subgenerators,
         ) {
             Ok(Some(content)) => {
+                let mut note = TWO_PHASE_PARTIAL_NOTE.to_string();
                 if allow_vacuous_subgenerators
                     && test
                         .transition_prop_lean
                         .as_ref()
                         .is_some_and(|tp| !tp.opaque_sub_generators.is_empty())
                 {
-                    return Ok((
-                        content,
-                        ProofCaveat::Partial("opaque sub-generator stubbed to True".to_string()),
-                    ));
+                    note.push_str("; opaque sub-generator stubbed to True");
                 }
-                return Ok((content, ProofCaveat::None));
+                if let Some(tp) = test.transition_prop_lean.as_ref()
+                    && let Some(summary) = widening_summary_suffix(
+                        &transition_prop_widenings(tp),
+                        allow_vacuous_subgenerators,
+                        &tp.opaque_sub_generators,
+                    )
+                {
+                    note.push_str("; ");
+                    note.push_str(&summary);
+                }
+                return Ok((content, ProofCaveat::Partial(note)));
             }
             Ok(None) => {}
-            Err(e) if is_state_machine_trace_halt_test(test) && test.transition_prop_lean.is_some() => {
+            Err(e)
+                if is_state_machine_trace_halt_test(test)
+                    && test.transition_prop_lean.is_some() =>
+            {
                 return Err(e);
             }
             Err(e) => return Err(e),
@@ -9522,9 +9769,7 @@ fn generate_proof_file(
     // remaining reachability theorem would collapse to a structural
     // over-approximation with no extracted step constraint. Reject it rather than
     // silently downgrading to a witness-only result.
-    if is_state_machine_trace_halt_test(test)
-        && has_step_ir
-        && test.transition_prop_lean.is_none()
+    if is_state_machine_trace_halt_test(test) && has_step_ir && test.transition_prop_lean.is_none()
     {
         return Err(generation_error(
             GenerationErrorCategory::FallbackRequired,
@@ -9630,10 +9875,7 @@ fn is_state_machine_trace_error_test(test: &ExportedPropertyTest) -> bool {
 /// `native_decide` proofs hold only for the listed concrete inputs;
 /// universal quantification over the over-approximating `reachable`
 /// predicate is unsound for these tests.
-fn halt_witness_result(
-    test: &ExportedPropertyTest,
-    content: String,
- ) -> (String, ProofCaveat) {
+fn halt_witness_result(test: &ExportedPropertyTest, content: String) -> (String, ProofCaveat) {
     let instances = test.concrete_halt_witnesses.len();
     let witnesses = test.concrete_halt_witnesses.clone();
     let plural = if instances == 1 { "" } else { "es" };
@@ -9649,7 +9891,6 @@ fn halt_witness_result(
         }),
     )
 }
-
 
 fn generate_state_machine_halt_proof_file(
     test: &ExportedPropertyTest,

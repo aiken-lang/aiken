@@ -3226,9 +3226,7 @@ fn bounded_bool_list_existential_validator_target_reports_e0036_before_target_mo
         ExistentialMode::Proof,
         &VerificationTargetKind::ValidatorHandler,
     )
-    .expect_err(
-        "bounded List<Bool> existential proof mode must take precedence over target mode",
-    );
+    .expect_err("bounded List<Bool> existential proof mode must take precedence over target mode");
 
     assert_generation_error_code(
         &err,
@@ -4555,7 +4553,16 @@ fn parse_verify_results_all_proved() {
         summary
             .theorems
             .iter()
-            .all(|t| matches!(t.status, ProofStatus::Proved))
+            .all(|t| matches!(t.proof_status, ProofStatus::Proved))
+    );
+    assert!(
+        summary
+            .theorems
+            .iter()
+            .all(|t| t.status == VerificationStatus::SolverValidated
+                && t.certification == Certification::SmtValidNoProofReconstruction),
+        "Blaster-backed successful builds must normalize to SolverValidated with SMT/no-reconstruction certification: {:?}",
+        summary.theorems
     );
 }
 
@@ -4596,10 +4603,12 @@ fn parse_verify_results_marks_two_phase_entries_as_partial_on_success() {
         .iter()
         .find(|t| t.theorem_name == "halt_test")
         .expect("correctness theorem present");
-    match &correctness.status {
+    match &correctness.proof_status {
         ProofStatus::Partial { note: actual } => assert_eq!(actual, note),
         other => panic!("expected Partial for correctness theorem, got {other:?}"),
     }
+    assert_eq!(correctness.status, VerificationStatus::Partial);
+    assert_eq!(correctness.certification, Certification::OpenObligations);
     assert_eq!(
         correctness.over_approximations, 5,
         "over_approximations must be preserved on Partial results"
@@ -4611,9 +4620,14 @@ fn parse_verify_results_marks_two_phase_entries_as_partial_on_success() {
         .find(|t| t.theorem_name == "halt_test_alwaysTerminating")
         .expect("termination theorem present");
     assert!(
-        matches!(termination.status, ProofStatus::Proved),
+        matches!(termination.proof_status, ProofStatus::Proved),
         "termination companion must remain Proved, got {:?}",
-        termination.status
+        termination.proof_status
+    );
+    assert_eq!(termination.status, VerificationStatus::SolverValidated);
+    assert_eq!(
+        termination.certification,
+        Certification::SmtValidNoProofReconstruction
     );
 
     // Partial does NOT cause command failure.
@@ -4638,14 +4652,14 @@ fn parse_verify_results_partial_does_not_count_as_failed() {
         stdout: CapturedOutput::small(""),
         stderr: CapturedOutput::small(""),
         exit_code: Some(0),
-        theorem_results: Some(vec![TheoremResult {
-            test_name: "sm_module.halt_only".to_string(),
-            theorem_name: "halt_only".to_string(),
-            status: ProofStatus::Partial {
+        theorem_results: Some(vec![TheoremResult::new(
+            "sm_module.halt_only".to_string(),
+            "halt_only".to_string(),
+            ProofStatus::Partial {
                 note: "Phase 2 (CEK halt obligation) is sorry-closed — see §S6".to_string(),
             },
-            over_approximations: 0,
-        }]),
+            0,
+        )]),
     };
 
     let summary = parse_verify_results(raw, &manifest);
@@ -4657,9 +4671,12 @@ fn parse_verify_results_partial_does_not_count_as_failed() {
     assert_eq!(summary.timed_out, 0);
     assert_eq!(summary.unknown, 0);
     assert!(
-        matches!(summary.theorems[0].status, ProofStatus::Partial { .. }),
+        matches!(
+            summary.theorems[0].proof_status,
+            ProofStatus::Partial { .. }
+        ),
         "surviving theorem must be Partial, got {:?}",
-        summary.theorems[0].status
+        summary.theorems[0].proof_status
     );
     assert!(
         summary.command_success,
@@ -4915,6 +4932,83 @@ fn proof_status_serializes_internally_tagged() {
 }
 
 #[test]
+fn theorem_result_serializes_new_status_and_certification() {
+    let result = TheoremResult::new(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+    );
+    let value = serde_json::to_value(&result).expect("TheoremResult should serialize");
+
+    assert_eq!(value["status"], serde_json::json!("SolverValidated"));
+    assert_eq!(
+        value["certification"],
+        serde_json::json!("smt_valid_no_proof_reconstruction")
+    );
+    assert_eq!(value["proof_status"], serde_json::json!({"kind": "proved"}));
+}
+
+#[test]
+fn certification_serializes_all_evidence_classes() {
+    let cases = [
+        (
+            Certification::SmtValidNoProofReconstruction,
+            "smt_valid_no_proof_reconstruction",
+        ),
+        (Certification::LeanKernelChecked, "lean_kernel_checked"),
+        (Certification::WitnessReplay, "witness_replay"),
+        (Certification::OpenObligations, "open_obligations"),
+        (Certification::Unsupported, "unsupported"),
+        (Certification::Timeout, "timeout"),
+        (Certification::Unknown, "unknown"),
+    ];
+
+    for (certification, expected) in cases {
+        assert_eq!(
+            serde_json::to_value(certification).expect("certification should serialize"),
+            serde_json::json!(expected)
+        );
+    }
+}
+
+#[test]
+fn legacy_proved_status_deserializes_as_solver_validated() {
+    let value = serde_json::json!({
+        "test_name": "mod.test",
+        "theorem_name": "test",
+        "status": { "kind": "proved" }
+    });
+
+    let result: TheoremResult =
+        serde_json::from_value(value).expect("legacy theorem result should deserialize");
+
+    assert_eq!(result.proof_status, ProofStatus::Proved);
+    assert_eq!(result.status, VerificationStatus::SolverValidated);
+    assert_eq!(
+        result.certification,
+        Certification::SmtValidNoProofReconstruction
+    );
+}
+
+#[test]
+fn open_obligation_result_cannot_report_success_status() {
+    let result = TheoremResult::new(
+        "mod.placeholder".to_string(),
+        "placeholder".to_string(),
+        ProofStatus::Partial {
+            note: "generated `sorry` placeholder obligation".to_string(),
+        },
+        0,
+    );
+
+    assert_eq!(result.status, VerificationStatus::Partial);
+    assert_eq!(result.certification, Certification::OpenObligations);
+    assert_ne!(result.status, VerificationStatus::LeanCertified);
+    assert_ne!(result.status, VerificationStatus::SolverValidated);
+}
+
+#[test]
 fn failure_category_serializes_kebab_case() {
     // FailureCategory uses `#[serde(tag = "kind", rename_all = "kebab-case")]`.
     // BlasterUnsupported must wire-encode as "blaster-unsupported" (kebab),
@@ -5077,7 +5171,7 @@ fn parse_verify_results_marks_witness_entries_as_witness_proved_on_success() {
         .iter()
         .find(|t| t.theorem_name == "halt_test")
         .expect("correctness theorem present");
-    match &theorem.status {
+    match &theorem.proof_status {
         ProofStatus::WitnessProved {
             instances,
             witnesses,
@@ -5108,16 +5202,16 @@ fn witness_proved_does_not_count_as_proved() {
         stdout: CapturedOutput::small(""),
         stderr: CapturedOutput::small(""),
         exit_code: Some(0),
-        theorem_results: Some(vec![TheoremResult {
-            test_name: "sm_module.halt_only".to_string(),
-            theorem_name: "halt_only".to_string(),
-            status: ProofStatus::WitnessProved {
+        theorem_results: Some(vec![TheoremResult::new(
+            "sm_module.halt_only".to_string(),
+            "halt_only".to_string(),
+            ProofStatus::WitnessProved {
                 instances: 1,
                 witnesses: vec!["80".to_string()],
                 note: "single-witness native_decide proof".to_string(),
             },
-            over_approximations: 0,
-        }]),
+            0,
+        )]),
     };
 
     let summary = parse_verify_results(raw, &manifest);
@@ -5181,7 +5275,10 @@ fn state_machine_halt_proof_with_opaque_output_is_unsupported_even_with_step_ir(
         "prop_halt_transition_widened_ok",
         StateMachineAcceptance::AcceptsSuccess,
     );
-    if let FuzzerSemantics::StateMachineTrace { step_function_ir, .. } = &mut test.semantics {
+    if let FuzzerSemantics::StateMachineTrace {
+        step_function_ir, ..
+    } = &mut test.semantics
+    {
         *step_function_ir = Some(ShallowIr::Construct {
             module: "scenario".to_string(),
             constructor: "Done".to_string(),
@@ -5231,7 +5328,9 @@ fn state_machine_halt_proof_with_opaque_output_is_unsupported_even_with_step_ir(
     );
     assert!(
         err.to_string().contains("top-level fuzzer is opaque")
-            || err.to_string().contains("two-phase proof would rely on transition widenings"),
+            || err
+                .to_string()
+                .contains("two-phase proof would rely on transition widenings"),
         "error should explain why universal halt proof is rejected, got: {err}"
     );
 }
@@ -5244,7 +5343,10 @@ fn state_machine_halt_proof_without_witness_still_rejects_opaque_output() {
         "prop_halt_transition_widened_needs_witness",
         StateMachineAcceptance::AcceptsSuccess,
     );
-    if let FuzzerSemantics::StateMachineTrace { step_function_ir, .. } = &mut test.semantics {
+    if let FuzzerSemantics::StateMachineTrace {
+        step_function_ir, ..
+    } = &mut test.semantics
+    {
         *step_function_ir = Some(ShallowIr::Construct {
             module: "scenario".to_string(),
             constructor: "Done".to_string(),
@@ -5276,8 +5378,7 @@ fn state_machine_halt_proof_without_witness_still_rejects_opaque_output() {
         "prop_halt_transition_widened_needs_witness",
     );
     let lean_name = sanitize_lean_name("prop_halt_transition_widened_needs_witness");
-    let lean_module =
-        "AikenVerify.Proofs.Permissions.prop_halt_transition_widened_needs_witness";
+    let lean_module = "AikenVerify.Proofs.Permissions.prop_halt_transition_widened_needs_witness";
 
     let err = super::generate_proof_file(
         &test,
@@ -5297,7 +5398,9 @@ fn state_machine_halt_proof_without_witness_still_rejects_opaque_output() {
     );
     assert!(
         err.to_string().contains("top-level fuzzer is opaque")
-            || err.to_string().contains("two-phase proof would rely on transition widenings"),
+            || err
+                .to_string()
+                .contains("two-phase proof would rely on transition widenings"),
         "error should explain why universal halt proof is rejected, got: {err}"
     );
 }
@@ -5449,9 +5552,9 @@ fn parse_verify_results_termination_companion_stays_proved_on_witness_entry() {
         .find(|t| t.theorem_name == "halt_test")
         .expect("correctness theorem present");
     assert!(
-        matches!(correctness.status, ProofStatus::WitnessProved { .. }),
+        matches!(correctness.proof_status, ProofStatus::WitnessProved { .. }),
         "correctness must surface WitnessProved, got {:?}",
-        correctness.status
+        correctness.proof_status
     );
 
     let termination = summary
@@ -5460,9 +5563,9 @@ fn parse_verify_results_termination_companion_stays_proved_on_witness_entry() {
         .find(|t| t.theorem_name == "halt_test_alwaysTerminating")
         .expect("termination companion present");
     assert!(
-        matches!(termination.status, ProofStatus::Proved),
+        matches!(termination.proof_status, ProofStatus::Proved),
         "_alwaysTerminating sibling must stay Proved when entry is WitnessProved, got {:?}",
-        termination.status
+        termination.proof_status
     );
 
     assert!(
@@ -5494,22 +5597,22 @@ fn summary_counts_witness_separately_from_proved() {
         stderr: CapturedOutput::small(""),
         exit_code: Some(0),
         theorem_results: Some(vec![
-            TheoremResult {
-                test_name: "mod_a.universal_test".to_string(),
-                theorem_name: "universal_test".to_string(),
-                status: ProofStatus::Proved,
-                over_approximations: 0,
-            },
-            TheoremResult {
-                test_name: "mod_b.halt_witness_test".to_string(),
-                theorem_name: "halt_witness_test".to_string(),
-                status: ProofStatus::WitnessProved {
+            TheoremResult::new(
+                "mod_a.universal_test".to_string(),
+                "universal_test".to_string(),
+                ProofStatus::Proved,
+                0,
+            ),
+            TheoremResult::new(
+                "mod_b.halt_witness_test".to_string(),
+                "halt_witness_test".to_string(),
+                ProofStatus::WitnessProved {
                     instances: 1,
                     witnesses: vec!["80".to_string()],
                     note: "concrete-witness halt proof".to_string(),
                 },
-                over_approximations: 0,
-            },
+                0,
+            ),
         ]),
     };
 
@@ -5542,24 +5645,24 @@ fn parse_verify_results_uses_precomputed_theorem_results() {
         stderr: CapturedOutput::small("error: Lean exited with code 1"),
         exit_code: Some(1),
         theorem_results: Some(vec![
-            TheoremResult {
-                test_name: "my_module.test_add".to_string(),
-                theorem_name: "test_add".to_string(),
-                status: ProofStatus::Failed {
+            TheoremResult::new(
+                "my_module.test_add".to_string(),
+                "test_add".to_string(),
+                ProofStatus::Failed {
                     category: FailureCategory::BuildError,
                     reason: "error: 'test_add' unsolved goals".to_string(),
                 },
-                over_approximations: 0,
-            },
-            TheoremResult {
-                test_name: "my_module.test_add".to_string(),
-                theorem_name: "test_add_alwaysTerminating".to_string(),
-                status: ProofStatus::Failed {
+                0,
+            ),
+            TheoremResult::new(
+                "my_module.test_add".to_string(),
+                "test_add_alwaysTerminating".to_string(),
+                ProofStatus::Failed {
                     category: FailureCategory::BuildError,
                     reason: "error: Lean exited with code 1".to_string(),
                 },
-                over_approximations: 0,
-            },
+                0,
+            ),
         ]),
     };
 
@@ -5575,11 +5678,11 @@ fn parse_verify_results_uses_precomputed_theorem_results() {
 #[test]
 fn parse_verify_results_carries_skipped_metadata() {
     let mut manifest = make_manifest(vec![("my_module", "test_add", "test_add")]);
-    manifest.skipped = vec![SkippedTest {
-        name: "my_module.test_unsupported".to_string(),
-        module: "my_module".to_string(),
-        reason: "unsupported theorem shape".to_string(),
-    }];
+    manifest.skipped = vec![SkippedTest::new(
+        "my_module.test_unsupported".to_string(),
+        "my_module".to_string(),
+        "unsupported theorem shape".to_string(),
+    )];
 
     let raw = VerifyResult {
         success: true,
@@ -5593,31 +5696,33 @@ fn parse_verify_results_carries_skipped_metadata() {
 
     assert_eq!(summary.skipped.len(), 1);
     assert_eq!(summary.skipped[0].name, "my_module.test_unsupported");
+    assert_eq!(summary.skipped[0].status, VerificationStatus::Unsupported);
+    assert_eq!(summary.skipped[0].certification, Certification::Unsupported);
 }
 
 #[test]
 fn parse_verify_results_precomputed_carries_skipped_metadata() {
     let mut manifest = make_manifest(vec![("my_module", "test_add", "test_add")]);
-    manifest.skipped = vec![SkippedTest {
-        name: "my_module.test_unsupported".to_string(),
-        module: "my_module".to_string(),
-        reason: "unsupported theorem shape".to_string(),
-    }];
+    manifest.skipped = vec![SkippedTest::new(
+        "my_module.test_unsupported".to_string(),
+        "my_module".to_string(),
+        "unsupported theorem shape".to_string(),
+    )];
 
     let raw = VerifyResult {
         success: false,
         stdout: CapturedOutput::small(""),
         stderr: CapturedOutput::small("error: Lean exited with code 1"),
         exit_code: Some(1),
-        theorem_results: Some(vec![TheoremResult {
-            test_name: "my_module.test_add".to_string(),
-            theorem_name: "test_add".to_string(),
-            status: ProofStatus::Failed {
+        theorem_results: Some(vec![TheoremResult::new(
+            "my_module.test_add".to_string(),
+            "test_add".to_string(),
+            ProofStatus::Failed {
                 category: FailureCategory::BuildError,
                 reason: "error: Lean exited with code 1".to_string(),
             },
-            over_approximations: 0,
-        }]),
+            0,
+        )]),
     };
 
     let summary = parse_verify_results(raw, &manifest);
@@ -5653,9 +5758,9 @@ fn parse_verify_results_specific_failure() {
         .find(|t| t.theorem_name == "test_add")
         .unwrap();
     assert!(
-        matches!(&test_add.status, ProofStatus::Failed { reason, .. } if reason.contains("test_add")),
+        matches!(&test_add.proof_status, ProofStatus::Failed { reason, .. } if reason.contains("test_add")),
         "test_add should be Failed, got: {:?}",
-        test_add.status
+        test_add.proof_status
     );
 
     let test_sub = summary
@@ -5664,9 +5769,9 @@ fn parse_verify_results_specific_failure() {
         .find(|t| t.theorem_name == "test_sub")
         .unwrap();
     assert!(
-        matches!(test_sub.status, ProofStatus::Unknown),
+        matches!(test_sub.proof_status, ProofStatus::Unknown),
         "test_sub should be Unknown, got: {:?}",
-        test_sub.status
+        test_sub.proof_status
     );
 }
 
@@ -5709,9 +5814,9 @@ fn parse_verify_results_marks_built_modules_as_proved_when_one_module_fails() {
         .find(|t| t.theorem_name == "test_add")
         .unwrap();
     assert!(
-        matches!(test_add.status, ProofStatus::Proved),
+        matches!(test_add.proof_status, ProofStatus::Proved),
         "test_add should be Proved, got: {:?}",
-        test_add.status
+        test_add.proof_status
     );
 
     let test_sub = summary
@@ -5720,9 +5825,9 @@ fn parse_verify_results_marks_built_modules_as_proved_when_one_module_fails() {
         .find(|t| t.theorem_name == "test_sub")
         .unwrap();
     assert!(
-        matches!(test_sub.status, ProofStatus::Proved),
+        matches!(test_sub.proof_status, ProofStatus::Proved),
         "test_sub should be Proved, got: {:?}",
-        test_sub.status
+        test_sub.proof_status
     );
 
     let test_bad = summary
@@ -5731,9 +5836,9 @@ fn parse_verify_results_marks_built_modules_as_proved_when_one_module_fails() {
         .find(|t| t.theorem_name == "test_bad")
         .unwrap();
     assert!(
-        matches!(&test_bad.status, ProofStatus::Failed { .. }),
+        matches!(&test_bad.proof_status, ProofStatus::Failed { .. }),
         "test_bad should be Failed, got: {:?}",
-        test_bad.status
+        test_bad.proof_status
     );
 }
 
@@ -5760,9 +5865,9 @@ fn parse_verify_results_termination_failure() {
         .find(|t| t.theorem_name == "test_add_alwaysTerminating")
         .unwrap();
     assert!(
-        matches!(&term.status, ProofStatus::Failed { .. }),
+        matches!(&term.proof_status, ProofStatus::Failed { .. }),
         "Termination theorem should be Failed, got: {:?}",
-        term.status
+        term.proof_status
     );
 
     let base = summary
@@ -5771,9 +5876,9 @@ fn parse_verify_results_termination_failure() {
         .find(|t| t.theorem_name == "test_add")
         .unwrap();
     assert!(
-        matches!(&base.status, ProofStatus::Unknown),
+        matches!(&base.proof_status, ProofStatus::Unknown),
         "Base theorem should stay non-failed, got: {:?}",
-        base.status
+        base.proof_status
     );
 }
 
@@ -5805,9 +5910,9 @@ fn parse_verify_results_module_failure_does_not_fail_sibling_theorem() {
         .find(|t| t.theorem_name == "test_add_alwaysTerminating")
         .unwrap();
     assert!(
-        matches!(&term.status, ProofStatus::Failed { .. }),
+        matches!(&term.proof_status, ProofStatus::Failed { .. }),
         "Termination theorem should be Failed, got: {:?}",
-        term.status
+        term.proof_status
     );
 
     let base = summary
@@ -5816,9 +5921,9 @@ fn parse_verify_results_module_failure_does_not_fail_sibling_theorem() {
         .find(|t| t.theorem_name == "test_add")
         .unwrap();
     assert!(
-        matches!(&base.status, ProofStatus::Unknown),
+        matches!(&base.proof_status, ProofStatus::Unknown),
         "Base theorem should stay Unknown when only termination theorem fails, got: {:?}",
-        base.status
+        base.proof_status
     );
 }
 
@@ -5918,7 +6023,7 @@ fn parse_verify_results_counterexample_does_not_contaminate_sibling_theorem_cate
         .iter()
         .find(|t| t.theorem_name == "test_add")
         .unwrap();
-    match &base.status {
+    match &base.proof_status {
         ProofStatus::Failed { category, .. } => {
             assert_eq!(
                 *category,
@@ -5934,7 +6039,7 @@ fn parse_verify_results_counterexample_does_not_contaminate_sibling_theorem_cate
         .iter()
         .find(|t| t.theorem_name == "test_add_alwaysTerminating")
         .unwrap();
-    match &term.status {
+    match &term.proof_status {
         ProofStatus::Failed { category, .. } => {
             assert_eq!(
                 *category,
@@ -6025,7 +6130,7 @@ fn parse_verify_results_build_failure_no_specific_errors() {
     assert_eq!(summary.unknown, 0);
     assert_eq!(summary.failed, 2);
     assert!(summary.theorems.iter().all(|t| matches!(
-        t.status,
+        t.proof_status,
         ProofStatus::Failed {
             category: FailureCategory::BuildError,
             ..
@@ -8524,7 +8629,7 @@ fn parse_verify_results_failure_includes_category() {
         .iter()
         .find(|t| t.theorem_name == "test_add")
         .unwrap();
-    match &test_add.status {
+    match &test_add.proof_status {
         ProofStatus::Failed { category, .. } => {
             assert_eq!(
                 *category,
@@ -8575,7 +8680,7 @@ error: Tactic `blaster` failed",
         .find(|t| t.theorem_name == "test_sub")
         .unwrap();
 
-    match &test_add.status {
+    match &test_add.proof_status {
         ProofStatus::Failed { category, .. } => {
             assert_eq!(
                 *category,
@@ -8586,7 +8691,7 @@ error: Tactic `blaster` failed",
         other => panic!("Expected Failed for test_add, got: {:?}", other),
     }
 
-    match &test_sub.status {
+    match &test_sub.proof_status {
         ProofStatus::Failed { category, .. } => {
             assert_eq!(
                 *category,
@@ -9692,15 +9797,15 @@ fn requires_explicit_bounds_generic_tuple_with_int() {
 
 #[test]
 fn failure_category_serializes_to_json() {
-    let result = TheoremResult {
-        test_name: "mod.test".to_string(),
-        theorem_name: "test".to_string(),
-        status: ProofStatus::Failed {
+    let result = TheoremResult::new(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Failed {
             category: FailureCategory::Counterexample,
             reason: "x = 42".to_string(),
         },
-        over_approximations: 0,
-    };
+        0,
+    );
     let json = serde_json::to_string(&result).unwrap();
     // Wire format: ProofStatus is internally-tagged with `kind` (snake_case);
     // FailureCategory is internally-tagged with `kind` (kebab-case).
@@ -12061,7 +12166,9 @@ fn emit_transition_prop_as_lean_golden_fragment() {
 
 #[test]
 fn emit_transition_prop_exists_domain_restricts_bound_output() {
-    use aiken_lang::test_framework::{FuzzerSemantics as LangFuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+    use aiken_lang::test_framework::{
+        FuzzerSemantics as LangFuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp,
+    };
 
     let prop = TransitionProp::Exists {
         binder: "n".to_string(),
@@ -12079,8 +12186,14 @@ fn emit_transition_prop_exists_domain_restricts_bound_output() {
     let (def, log, sub_gens, s0002) =
         crate::verify::emit_is_valid_transition_def_for_export("domain_ivt", &prop);
 
-    assert!(log.is_empty(), "exact bound-output domain should not widen: {log:?}");
-    assert!(sub_gens.is_empty(), "no sub-generators expected: {sub_gens:?}");
+    assert!(
+        log.is_empty(),
+        "exact bound-output domain should not widen: {log:?}"
+    );
+    assert!(
+        sub_gens.is_empty(),
+        "no sub-generators expected: {sub_gens:?}"
+    );
     assert!(s0002.is_none(), "no S0002 marker expected: {s0002:?}");
     assert!(
         def.contains("∃ (n : Int)"),
@@ -12104,14 +12217,16 @@ fn emit_transition_prop_exists_domain_restricts_bound_output() {
 fn emit_transition_prop_string_eq_output_is_exact() {
     use aiken_lang::test_framework::{ShallowConst, ShallowIr, TransitionProp};
 
-    let prop = TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::String(
-        "hello".to_string(),
-    )));
+    let prop =
+        TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::String("hello".to_string())));
 
     let (def, log, _, _) =
         crate::verify::emit_is_valid_transition_def_for_export("string_ivt", &prop);
 
-    assert!(log.is_empty(), "exact string output should not widen: {log:?}");
+    assert!(
+        log.is_empty(),
+        "exact string output should not widen: {log:?}"
+    );
     assert!(
         def.contains("transition = Data.B"),
         "string output should emit a concrete Data.B literal, got:\n{def}"
@@ -12124,7 +12239,9 @@ fn emit_transition_prop_string_eq_output_is_exact() {
 
 #[test]
 fn emit_transition_prop_field_access_freshens_unknown_bound_data_projection() {
-    use aiken_lang::test_framework::{FuzzerSemantics as LangFuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
+    use aiken_lang::test_framework::{
+        FuzzerSemantics as LangFuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp,
+    };
 
     let prop = TransitionProp::Exists {
         binder: "pair_data".to_string(),
@@ -12162,7 +12279,9 @@ fn emit_transition_prop_field_access_freshens_unknown_bound_data_projection() {
 
 #[test]
 fn emit_transition_prop_field_access_preserves_bound_adt_projection() {
-    use aiken_lang::test_framework::{ShallowFieldAccessKind, ShallowIr, ShallowIrType, TransitionProp};
+    use aiken_lang::test_framework::{
+        ShallowFieldAccessKind, ShallowIr, ShallowIrType, TransitionProp,
+    };
 
     let prop = TransitionProp::EqOutput(ShallowIr::FieldAccess {
         record: Box::new(ShallowIr::BoundVar {
@@ -12254,7 +12373,10 @@ fn emit_transition_prop_if_data_is_exact_when_branches_are_exact() {
     let (def, log, _sub_gens, _s0002) =
         crate::verify::emit_is_valid_transition_def_for_export("if_data_ivt", &prop);
 
-    assert!(log.is_empty(), "exact Data If nodes should not widen, got: {log:?}");
+    assert!(
+        log.is_empty(),
+        "exact Data If nodes should not widen, got: {log:?}"
+    );
     assert!(
         def.contains("if true then Data.I (1 : Integer) else Data.I (0 : Integer)"),
         "exact Data If nodes should emit a real Lean `if`, got:\n{def}"
@@ -12313,7 +12435,6 @@ fn emit_transition_prop_untyped_bool_list_domain_emits_data_list_predicate() {
     );
 }
 
-
 #[test]
 fn emit_transition_prop_pair_domain_emits_component_predicates() {
     use aiken_lang::test_framework::{FuzzerSemantics, ShallowIr, ShallowIrType, TransitionProp};
@@ -12338,7 +12459,9 @@ fn emit_transition_prop_pair_domain_emits_component_predicates() {
         super::emit_is_valid_transition_details_for_export("pair_domain_ivt", &prop);
 
     assert!(
-        !widenings.iter().any(|entry| entry.message.contains("product existential domain widened to True")),
+        !widenings.iter().any(|entry| entry
+            .message
+            .contains("product existential domain widened to True")),
         "pair-typed product domains should emit real component predicates, got: {widenings:?}"
     );
     assert!(
@@ -12379,7 +12502,9 @@ fn emit_transition_prop_data_with_schema_domain_accepts_dot_type_name() {
 
     assert!(
         !widenings.iter().any(|entry| {
-            entry.message.contains("DataWithSchema<cardano/transaction.Input> existential domain widened to True")
+            entry.message.contains(
+                "DataWithSchema<cardano/transaction.Input> existential domain widened to True",
+            )
         }),
         "dot-style DataWithSchema names from live transition props must resolve against slash-style schema refs, got: {widenings:?}"
     );
@@ -12417,7 +12542,9 @@ fn emit_transition_prop_data_with_schema_domain_uses_nested_schema_definition() 
 
     assert!(
         !widenings.iter().any(|entry| {
-            entry.message.contains("DataWithSchema<cardano/transaction/Input> existential domain widened to True")
+            entry.message.contains(
+                "DataWithSchema<cardano/transaction/Input> existential domain widened to True",
+            )
         }),
         "nested schema definitions should satisfy DataWithSchema existential domains, got: {widenings:?}"
     );
@@ -12459,7 +12586,9 @@ fn emit_transition_prop_data_with_schema_domain_uses_shape_predicate() {
 
     assert!(
         !widenings.iter().any(|entry| {
-            entry.message.contains("DataWithSchema<cardano/transaction/Input> existential domain widened to True")
+            entry.message.contains(
+                "DataWithSchema<cardano/transaction/Input> existential domain widened to True",
+            )
         }),
         "schema-backed existential domains should emit a real shape predicate, got: {widenings:?}"
     );
@@ -12568,7 +12697,10 @@ fn emit_transition_prop_permissions_style_step_output_stays_exact() {
     let (def, log, _sub_gens, _s0002) =
         crate::verify::emit_is_valid_transition_def_for_export("permissions_style_ivt", &prop);
 
-    assert!(log.is_empty(), "permissions-style step output should stay exact, got: {log:?}");
+    assert!(
+        log.is_empty(),
+        "permissions-style step output should stay exact, got: {log:?}"
+    );
     assert!(
         def.contains("if decide (") || def.contains("if (decide ("),
         "permissions-style step output should emit an exact Lean if, got:\n{def}"
@@ -12614,9 +12746,16 @@ fn emit_transition_prop_alpha_renames_duplicate_binders() {
         ])),
     };
 
-    let (def, log, _, _) = crate::verify::emit_is_valid_transition_def_for_export("alpha_ivt", &prop);
-    assert!(log.is_empty(), "alpha-renaming alone must not widen: {log:?}");
-    assert!(def.contains("∃ (x : Int)"), "outer binder missing, got:\n{def}");
+    let (def, log, _, _) =
+        crate::verify::emit_is_valid_transition_def_for_export("alpha_ivt", &prop);
+    assert!(
+        log.is_empty(),
+        "alpha-renaming alone must not widen: {log:?}"
+    );
+    assert!(
+        def.contains("∃ (x : Int)"),
+        "outer binder missing, got:\n{def}"
+    );
     assert!(
         def.contains("∃ (x_1 : Int)"),
         "inner duplicate binder should be alpha-renamed, got:\n{def}"
@@ -12634,7 +12773,7 @@ fn emit_transition_prop_alpha_renames_duplicate_binders() {
 #[test]
 fn emit_transition_prop_pair_literals_and_projections_use_data_list_shape() {
     use aiken_lang::test_framework::{
-        FuzzerSemantics, ShallowFieldAccessKind, ShallowConst, ShallowIr, ShallowIrType,
+        FuzzerSemantics, ShallowConst, ShallowFieldAccessKind, ShallowIr, ShallowIrType,
         TransitionProp,
     };
 
@@ -12655,8 +12794,14 @@ fn emit_transition_prop_pair_literals_and_projections_use_data_list_shape() {
         })),
     };
     let (projection_def, projection_log, _, _) =
-        crate::verify::emit_is_valid_transition_def_for_export("pair_projection_ivt", &pair_projection);
-    assert!(projection_log.is_empty(), "pair projection should stay structural: {projection_log:?}");
+        crate::verify::emit_is_valid_transition_def_for_export(
+            "pair_projection_ivt",
+            &pair_projection,
+        );
+    assert!(
+        projection_log.is_empty(),
+        "pair projection should stay structural: {projection_log:?}"
+    );
     assert!(
         projection_def.contains("let (_pair_pair_0, _pair_pair_1) := pair"),
         "pair projections must destructure the typed pair witness directly, got:\n{projection_def}"
@@ -12676,7 +12821,10 @@ fn emit_transition_prop_pair_literals_and_projections_use_data_list_shape() {
     ]));
     let (literal_def, literal_log, _, _) =
         crate::verify::emit_is_valid_transition_def_for_export("pair_literal_ivt", &pair_literal);
-    assert!(literal_log.is_empty(), "pair literal should stay structural: {literal_log:?}");
+    assert!(
+        literal_log.is_empty(),
+        "pair literal should stay structural: {literal_log:?}"
+    );
     assert!(
         literal_def.contains("transition = Data.List [Data.I (1 : Integer), Data.I (2 : Integer)]"),
         "pair literals must emit as Data.List, got:\n{literal_def}"
@@ -12703,13 +12851,16 @@ fn emit_transition_prop_logs_structured_domain_widening() {
         })),
     };
 
-    let (def, log, _, _) = crate::verify::emit_is_valid_transition_def_for_export("domain_log_ivt", &prop);
+    let (def, log, _, _) =
+        crate::verify::emit_is_valid_transition_def_for_export("domain_log_ivt", &prop);
     assert!(
         def.contains("1 <= xs.length ∧ xs.length <= 2"),
         "list length bounds should still emit exactly, got:\n{def}"
     );
     assert!(
-        log.iter().any(|entry| entry.contains("DataWithSchema<mod.Input> existential domain widened to True")),
+        log.iter()
+            .any(|entry| entry
+                .contains("DataWithSchema<mod.Input> existential domain widened to True")),
         "structured element-domain widening must be logged, got: {log:?}"
     );
 }
@@ -13822,7 +13973,10 @@ fn eq_output_var_transition_prop_is_skipped_as_vacuous() {
             "foo_eq_var_isValidTransition",
             &prop,
         );
-    let log: Vec<String> = widenings.iter().map(|entry| entry.message.clone()).collect();
+    let log: Vec<String> = widenings
+        .iter()
+        .map(|entry| entry.message.clone())
+        .collect();
     let is_vacuous = transition_prop_is_vacuous(&prop);
     assert!(
         is_vacuous,
@@ -13945,8 +14099,7 @@ fn emit_lean_bool_eq_comparison() {
     let mut log = Vec::new();
     let out = super::emit_shallow_ir_as_lean_bool(&prop, &mut ctx, &mut log);
     assert_eq!(
-        out,
-        "decide (Data.I (42 : Integer) = Data.I (42 : Integer))",
+        out, "decide (Data.I (42 : Integer) = Data.I (42 : Integer))",
         "Eq comparison should emit a precise data equality test, got: {out}"
     );
     assert!(
@@ -13954,7 +14107,10 @@ fn emit_lean_bool_eq_comparison() {
         "precise Eq emission must not allocate fresh existentials, got: {:?}",
         ctx.existentials
     );
-    assert!(log.is_empty(), "precise Eq emission must not log widenings: {log:?}");
+    assert!(
+        log.is_empty(),
+        "precise Eq emission must not log widenings: {log:?}"
+    );
 }
 
 #[test]
@@ -14957,7 +15113,6 @@ fn h4_debug_mode_emits_widened_def_and_partial_caveat() {
         "debug-mode audit header must count opaque sub-generator widenings, got:\n{content}"
     );
 
-
     // Commit 12 follow-up #7 — H4 / E0018 rendering snapshot.  The above
     // `contains()` checks pin the soundness invariants (the absence of the
     // legacy `opaque ... : Prop` form, the presence of the `[WIDENED]`
@@ -15290,7 +15445,8 @@ fn two_phase_domain_only_widening_remains_partial() {
         }
     }
 
-    let (_content, caveat) = result.expect("domain-only widenings should remain eligible for Partial");
+    let (_content, caveat) =
+        result.expect("domain-only widenings should remain eligible for Partial");
     match caveat {
         ProofCaveat::Partial(note) => {
             assert!(note.contains("Phase 2 (CEK halt obligation) is sorry-closed — see §S6"));
@@ -15413,9 +15569,7 @@ fn step_fn_sound_via_reachability_helpers_emits_theorem() {
 
 #[test]
 fn build_state_machine_trace_reachability_helpers_rejects_step_fn_widenings() {
-    use aiken_lang::test_framework::{
-        ShallowFieldAccessKind, ShallowIr, ShallowIrType,
-    };
+    use aiken_lang::test_framework::{ShallowFieldAccessKind, ShallowIr, ShallowIrType};
 
     let transition_semantics = make_non_opaque_transition_semantics();
     let step_ir = ShallowIr::FieldAccess {
@@ -15451,7 +15605,8 @@ fn build_state_machine_trace_reachability_helpers_rejects_step_fn_widenings() {
         .expect("error must downcast to GenerationError");
     assert_eq!(err.category, GenerationErrorCategory::FallbackRequired);
     assert!(
-        err.message.contains("step-function helper emission widened the theorem"),
+        err.message
+            .contains("step-function helper emission widened the theorem"),
         "helper widening reason must be surfaced, got: {}",
         err.message
     );
