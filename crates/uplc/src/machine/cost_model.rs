@@ -17,6 +17,12 @@ macro_rules! hashmap {
     }};
 }
 
+const EXP_MOD_INTEGER_CPU_COEFFICIENT_00: i64 = 607_153;
+const EXP_MOD_INTEGER_CPU_COEFFICIENT_11: i64 = 231_697;
+const EXP_MOD_INTEGER_CPU_COEFFICIENT_12: i64 = 53_144;
+const EXP_MOD_INTEGER_MEMORY_INTERCEPT: i64 = 0;
+const EXP_MOD_INTEGER_MEMORY_SLOPE: i64 = 1;
+
 /// Can be negative
 #[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize)]
 pub struct ExBudget {
@@ -1958,10 +1964,16 @@ impl BuiltinCosts {
                 }),
                 mem: OneArgument::ConstantCost(3),
             },
-            // Not yet properly costed
             exp_mod_int: CostingFun {
-                cpu: ThreeArguments::ConstantCost(30000000000),
-                mem: ThreeArguments::ConstantCost(30000000000),
+                cpu: ThreeArguments::ExpModCost(ExpModCostingFunction {
+                    coefficient00: EXP_MOD_INTEGER_CPU_COEFFICIENT_00,
+                    coefficient11: EXP_MOD_INTEGER_CPU_COEFFICIENT_11,
+                    coefficient12: EXP_MOD_INTEGER_CPU_COEFFICIENT_12,
+                }),
+                mem: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: EXP_MOD_INTEGER_MEMORY_INTERCEPT,
+                    slope: EXP_MOD_INTEGER_MEMORY_SLOPE,
+                }),
             },
         }
     }
@@ -2678,31 +2690,21 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
-            // DefaultFunction::ExpModInteger => {
-            //     let arg3 = args[2].unwrap_integer()?;
-            //     if arg3.lt(&(0.into())) {
-            //         return Err(Error::OutsideNaturalBounds(arg3.clone()));
-            //     }
+            DefaultFunction::ExpModInteger => {
+                let arg3 = args[2].unwrap_integer()?;
+                if arg3 <= &0.into() {
+                    return Err(Error::OutsideNaturalBounds(arg3.clone()));
+                }
 
-            //     let arg3_exmem = if *arg3 == 0.into() {
-            //         1
-            //     } else {
-            //         (integer_log2(arg3.abs()) / 64) + 1
-            //     };
+                let x = args[0].to_ex_mem();
+                let y = args[1].to_ex_mem();
+                let z = args[2].to_ex_mem();
 
-            //     ExBudget {
-            //         mem: self.exp_mod_int.mem.cost(
-            //             args[0].to_ex_mem(),
-            //             args[1].to_ex_mem(),
-            //             arg3_exmem,
-            //         ),
-            //         cpu: self.exp_mod_int.cpu.cost(
-            //             args[0].to_ex_mem(),
-            //             args[1].to_ex_mem(),
-            //             arg3_exmem,
-            //         ),
-            //     }
-            // }
+                ExBudget {
+                    mem: self.exp_mod_int.mem.cost(x, y, z),
+                    cpu: self.exp_mod_int.cpu.cost(x, y, z),
+                }
+            }
         })
     }
 }
@@ -3314,7 +3316,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-mem-arguments-slope" => costs[250],
             };
 
-            if costs.len() == 297 {
+            if costs.len() >= 297 {
                 let test = hashmap! {
                     "andByteString-cpu-arguments-intercept"=> costs[251],
                     "andByteString-cpu-arguments-slope1"=> costs[252],
@@ -3365,6 +3367,26 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            if costs.len() >= 298 {
+                main.insert("expModInteger-cpu-arguments-coefficient00", costs[297]);
+            }
+
+            if costs.len() >= 299 {
+                main.insert("expModInteger-cpu-arguments-coefficient11", costs[298]);
+            }
+
+            if costs.len() >= 300 {
+                main.insert("expModInteger-cpu-arguments-coefficient12", costs[299]);
+            }
+
+            if costs.len() >= 301 {
+                main.insert("expModInteger-memory-arguments-intercept", costs[300]);
+            }
+
+            if costs.len() >= 302 {
+                main.insert("expModInteger-memory-arguments-slope", costs[301]);
             }
 
             main
@@ -5112,18 +5134,55 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     cpu: ThreeArguments::ConstantCost(30000000000),
                     mem: ThreeArguments::ConstantCost(30000000000),
                 },
-                Language::PlutusV3 => CostingFun {
-                    cpu: ThreeArguments::ConstantCost(
-                        *cost_map
-                            .get("expModInteger-cpu-arguments")
-                            .unwrap_or(&30000000000),
-                    ),
-                    mem: ThreeArguments::ConstantCost(
-                        *cost_map
-                            .get("expModInteger-memory-arguments")
-                            .unwrap_or(&30000000000),
-                    ),
-                },
+                Language::PlutusV3 => {
+                    let get = |keys: &[&str], default: i64| {
+                        keys.iter()
+                            .find_map(|key| cost_map.get(*key).copied())
+                            .unwrap_or(default)
+                    };
+
+                    let coefficient00_default = 30_000_000_000;
+                    let coefficient11_default = 30_000_000_000;
+                    let coefficient12_default = 30_000_000_000;
+                    let memory_intercept_default = 30_000_000_000;
+                    let memory_slope_default = 30_000_000_000;
+
+                    CostingFun {
+                        cpu: ThreeArguments::ExpModCost(ExpModCostingFunction {
+                            coefficient00: get(
+                                &[
+                                    "expModInteger-cpu-arguments-coefficient00",
+                                    "expModInteger-cpu-arguments-c00",
+                                ],
+                                coefficient00_default,
+                            ),
+                            coefficient11: get(
+                                &[
+                                    "expModInteger-cpu-arguments-coefficient11",
+                                    "expModInteger-cpu-arguments-c11",
+                                ],
+                                coefficient11_default,
+                            ),
+                            coefficient12: get(
+                                &[
+                                    "expModInteger-cpu-arguments-coefficient12",
+                                    "expModInteger-cpu-arguments-c12",
+                                ],
+                                coefficient12_default,
+                            ),
+                        }),
+                        mem: ThreeArguments::LinearInZ(LinearSize {
+                            intercept: get(
+                                &["expModInteger-memory-arguments-intercept"],
+                                memory_intercept_default,
+                            ),
+                            slope: get(
+                                &["expModInteger-memory-arguments-slope"],
+                                memory_slope_default,
+                            ),
+                        }),
+                    }
+                }
             },
         },
     }
@@ -5234,6 +5293,7 @@ pub enum ThreeArguments {
     LiteralInYorLinearInZ(LinearSize),
     LinearInMaxYZ(LinearSize),
     LinearInYandZ(TwoVariableLinearSize),
+    ExpModCost(ExpModCostingFunction),
 }
 
 impl ThreeArguments {
@@ -5254,6 +5314,12 @@ impl ThreeArguments {
             }
             ThreeArguments::LinearInMaxYZ(l) => y.max(z) * l.slope + l.intercept,
             ThreeArguments::LinearInYandZ(l) => y * l.slope1 + z * l.slope2 + l.intercept,
+            ThreeArguments::ExpModCost(c) => {
+                let cost0 =
+                    c.coefficient00 + (c.coefficient11 * y * z) + (c.coefficient12 * y * z * z);
+
+                if x <= z { cost0 } else { cost0 + (cost0 / 2) }
+            }
         }
     }
 }
@@ -5344,6 +5410,13 @@ pub struct TwoArgumentsQuadraticFunction {
     coeff_20: i64,
     coeff_11: i64,
     coeff_02: i64,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ExpModCostingFunction {
+    coefficient00: i64,
+    coefficient11: i64,
+    coefficient12: i64,
 }
 
 #[repr(u8)]
@@ -5482,6 +5555,87 @@ mod tests {
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);
 
-        assert_eq!(CostModel::v3(), cost_model);
+        let mut expected = CostModel::v3();
+        expected.builtin_costs.exp_mod_int = CostingFun {
+            cpu: ThreeArguments::ExpModCost(ExpModCostingFunction {
+                coefficient00: 30_000_000_000,
+                coefficient11: 30_000_000_000,
+                coefficient12: 30_000_000_000,
+            }),
+            mem: ThreeArguments::LinearInZ(LinearSize {
+                intercept: 30_000_000_000,
+                slope: 30_000_000_000,
+            }),
+        };
+
+        assert_eq!(expected, cost_model);
+    }
+
+    #[test]
+    fn initialize_cost_model_reads_exp_mod_integer_params_when_present() {
+        let mut costs = vec![0; 302];
+        costs[297] = 12_345;
+        costs[298] = 67;
+        costs[299] = 89;
+        costs[300] = 11;
+        costs[301] = 5;
+
+        let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);
+
+        assert_eq!(
+            cost_model.builtin_costs.exp_mod_int.cpu,
+            ThreeArguments::ExpModCost(ExpModCostingFunction {
+                coefficient00: 12_345,
+                coefficient11: 67,
+                coefficient12: 89,
+            })
+        );
+        assert_eq!(
+            cost_model.builtin_costs.exp_mod_int.mem,
+            ThreeArguments::LinearInZ(LinearSize {
+                intercept: 11,
+                slope: 5,
+            })
+        );
+    }
+
+    #[test]
+    fn initialize_cost_model_interprets_short_exp_mod_lists_like_v3_param_order() {
+        let mut costs = vec![0; 299];
+        costs[297] = 12_345;
+        costs[298] = 67;
+
+        let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);
+
+        assert_eq!(
+            cost_model.builtin_costs.exp_mod_int.cpu,
+            ThreeArguments::ExpModCost(ExpModCostingFunction {
+                coefficient00: 12_345,
+                coefficient11: 67,
+                coefficient12: 30_000_000_000,
+            })
+        );
+        assert_eq!(
+            cost_model.builtin_costs.exp_mod_int.mem,
+            ThreeArguments::LinearInZ(LinearSize {
+                intercept: 30_000_000_000,
+                slope: 30_000_000_000,
+            })
+        );
+    }
+
+    #[test]
+    fn exp_mod_integer_costing_rejects_zero_modulus() {
+        let costs = BuiltinCosts::v3();
+        let args = vec![
+            Value::integer(1.into()),
+            Value::integer(1.into()),
+            Value::integer(0.into()),
+        ];
+
+        assert_eq!(
+            costs.to_ex_budget(DefaultFunction::ExpModInteger, &args),
+            Err(Error::OutsideNaturalBounds(0.into()))
+        );
     }
 }

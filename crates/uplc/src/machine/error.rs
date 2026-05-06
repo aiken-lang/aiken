@@ -116,6 +116,8 @@ pub enum Error {
     ByteStringConsNotAByte(BigInt),
     #[error("divide By Zero: {0} / {1}")]
     DivideByZero(BigInt, BigInt),
+    #[error("expModInteger has no modular inverse for base {0} modulo {1}")]
+    ExpModIntegerNoInverse(BigInt, BigInt),
     #[error("Ed25519S PublicKey should be 32 bytes but it was {0}")]
     UnexpectedEd25519PublicKeyLength(usize),
     #[error("Ed25519S Signature should be 64 bytes but it was {0}")]
