@@ -447,6 +447,91 @@ fn no_proofs_summary(
     )
 }
 
+fn render_manifest_return_mode(
+    mode: Option<&aiken_project::export::TestReturnMode>,
+) -> &'static str {
+    match mode {
+        Some(aiken_project::export::TestReturnMode::Bool) => "bool",
+        Some(aiken_project::export::TestReturnMode::Void) => "void",
+        Some(_) => "unknown",
+        None => "legacy-unknown",
+    }
+}
+
+fn render_manifest_test_mode(mode: Option<&verify::ManifestTestMode>) -> &'static str {
+    match mode {
+        Some(verify::ManifestTestMode::Normal) => "normal",
+        Some(verify::ManifestTestMode::Fail) => "fail",
+        Some(verify::ManifestTestMode::FailOnce) => "fail_once",
+        Some(_) => "unknown",
+        None => "legacy-unknown",
+    }
+}
+
+fn render_manifest_on_test_failure(
+    on_test_failure: Option<&verify::ManifestOnTestFailure>,
+) -> &'static str {
+    match on_test_failure {
+        Some(verify::ManifestOnTestFailure::FailImmediately) => "fail_immediately",
+        Some(verify::ManifestOnTestFailure::SucceedImmediately) => "succeed_immediately",
+        Some(verify::ManifestOnTestFailure::SucceedEventually) => "succeed_eventually",
+        Some(_) => "unknown",
+        None => "legacy-unknown",
+    }
+}
+
+fn render_manifest_plutus_version(
+    plutus_version: Option<aiken_project::config::PlutusVersion>,
+) -> &'static str {
+    match plutus_version {
+        Some(aiken_project::config::PlutusVersion::V1) => "v1",
+        Some(aiken_project::config::PlutusVersion::V2) => "v2",
+        Some(aiken_project::config::PlutusVersion::V3) => "v3",
+        None => "legacy-unknown",
+    }
+}
+
+fn render_manifest_decode_policy(
+    decode_policy: Option<&verify::ManifestDecodePolicy>,
+) -> &'static str {
+    match decode_policy {
+        Some(verify::ManifestDecodePolicy::DecodeErrorIsTestFailure) => {
+            "decode_error_is_test_failure"
+        }
+        Some(verify::ManifestDecodePolicy::DecodeErrorIsExportError) => {
+            "decode_error_is_export_error"
+        }
+        Some(_) => "unknown",
+        None => "legacy-unknown",
+    }
+}
+
+fn render_manifest_entry_debug(entry: &verify::ManifestEntry) -> String {
+    format!(
+        "{} -> {} [return_mode={}, test_mode={}, on_test_failure={}]",
+        entry.aiken_module,
+        entry.lean_module,
+        render_manifest_return_mode(entry.return_mode.as_ref()),
+        render_manifest_test_mode(entry.test_mode.as_ref()),
+        render_manifest_on_test_failure(entry.on_test_failure.as_ref()),
+    )
+}
+
+fn render_manifest_debug_header(manifest: &verify::GeneratedManifest) -> String {
+    format!(
+        "Manifest schema v{}; plutus_version={}; cek_fuel={}; decode_policy={}",
+        manifest.schema_version,
+        render_manifest_plutus_version(manifest.execution.plutus_version),
+        manifest
+            .execution
+            .cek_budget
+            .fuel
+            .map(|fuel| fuel.to_string())
+            .unwrap_or_else(|| "legacy-unknown".to_string()),
+        render_manifest_decode_policy(manifest.execution.decode_policy.as_ref()),
+    )
+}
+
 fn normalize_report_path(path: &Path, project_root: &Path) -> PathBuf {
     path.strip_prefix(project_root)
         .map(Path::to_path_buf)
@@ -1283,6 +1368,8 @@ fn exec_run_with_project(
         run_options.plutus_core_rev.clone(),
         run_options.existential_mode,
         run_options.target.clone(),
+        exported.plutus_version,
+        Some(p.root().to_path_buf()),
         run_options.plutus_core_dir.clone(),
         run_options.raw_output_bytes,
         run_options.allow_vacuous_subgenerators,
@@ -1338,8 +1425,19 @@ fn exec_run_with_project(
                 resolved_out_dir.display(),
                 manifest.tests.len(),
             );
+            println!("  {}", render_manifest_debug_header(&manifest));
             for entry in &manifest.tests {
-                println!("  - {} -> {}", entry.aiken_module, entry.lean_module);
+                println!("  - {}", render_manifest_entry_debug(entry));
+                for limitation in &entry.compatibility_limitations {
+                    println!("      limitation: {limitation}");
+                }
+            }
+            if !manifest.compatibility_limitations.is_empty() {
+                println!();
+                println!("Manifest limitations:");
+                for limitation in &manifest.compatibility_limitations {
+                    println!("  - {limitation}");
+                }
             }
             println!();
             if run_options.output_mode.shows_advisories() {
@@ -2240,7 +2338,24 @@ test unit_smoke() {
 
     fn sample_generated_manifest() -> verify::GeneratedManifest {
         serde_json::from_value(serde_json::json!({
+            "schema_version": verify::GENERATED_MANIFEST_SCHEMA_VERSION,
             "version": verify::GENERATE_ONLY_VERSION,
+            "aiken": {
+                "version": "vtest",
+                "commit": "deadbeef",
+                "prelude_hash": "11".repeat(32),
+                "fuzz_package_hash": "22".repeat(32)
+            },
+            "execution": {
+                "plutus_version": "v3",
+                "cek_budget": {
+                    "fuel": 200000
+                },
+                "decode_policy": "decode_error_is_test_failure"
+            },
+            "compatibility_limitations": [
+                "execution.cek_budget records only the unified CEK fuel bound; CPU and memory sub-budgets are not currently exported."
+            ],
             "tests": [
                 {
                     "id": "example_test_ok",
@@ -2250,6 +2365,14 @@ test unit_smoke() {
                     "lean_theorem": "example_test_ok",
                     "lean_file": "Example/TestOk.lean",
                     "flat_file": "example_test_ok.flat",
+                    "return_mode": "bool",
+                    "test_mode": "normal",
+                    "on_test_failure": "fail_immediately",
+                    "property_uplc_hash": "33".repeat(32),
+                    "property_harness_hash": "44".repeat(28),
+                    "fuzzer_uplc_hash": "55".repeat(32),
+                    "fuzzer_harness_hash": "66".repeat(28),
+                    "fuzzer_model_hash": "77".repeat(32),
                     "has_termination_theorem": true,
                     "has_equivalence_theorem": true,
                     "over_approximations": 2,
@@ -2274,7 +2397,22 @@ test unit_smoke() {
 
     fn skipped_only_manifest() -> verify::GeneratedManifest {
         serde_json::from_value(serde_json::json!({
+            "schema_version": verify::GENERATED_MANIFEST_SCHEMA_VERSION,
             "version": verify::GENERATE_ONLY_VERSION,
+            "aiken": {
+                "version": "vtest",
+                "commit": "deadbeef"
+            },
+            "execution": {
+                "plutus_version": "v3",
+                "cek_budget": {
+                    "fuel": 200000
+                },
+                "decode_policy": "decode_error_is_test_failure"
+            },
+            "compatibility_limitations": [
+                "execution.cek_budget records only the unified CEK fuel bound; CPU and memory sub-budgets are not currently exported."
+            ],
             "tests": [],
             "skipped": [
                 {
@@ -2300,7 +2438,22 @@ test unit_smoke() {
             serde_json::json!([])
         };
         serde_json::from_value(serde_json::json!({
+            "schema_version": verify::GENERATED_MANIFEST_SCHEMA_VERSION,
             "version": verify::GENERATE_ONLY_VERSION,
+            "aiken": {
+                "version": "vtest",
+                "commit": "deadbeef"
+            },
+            "execution": {
+                "plutus_version": "v3",
+                "cek_budget": {
+                    "fuel": 200000
+                },
+                "decode_policy": "decode_error_is_test_failure"
+            },
+            "compatibility_limitations": [
+                "execution.cek_budget records only the unified CEK fuel bound; CPU and memory sub-budgets are not currently exported."
+            ],
             "tests": [
                 {
                     "id": "example_test_ok",
@@ -2310,6 +2463,14 @@ test unit_smoke() {
                     "lean_theorem": "example_test_ok",
                     "lean_file": "Example/TestOk.lean",
                     "flat_file": "example_test_ok.flat",
+                    "return_mode": "bool",
+                    "test_mode": "normal",
+                    "on_test_failure": "fail_immediately",
+                    "property_uplc_hash": "33".repeat(32),
+                    "property_harness_hash": "44".repeat(28),
+                    "fuzzer_uplc_hash": "55".repeat(32),
+                    "fuzzer_harness_hash": "66".repeat(28),
+                    "fuzzer_model_hash": "77".repeat(32),
                     "has_termination_theorem": false,
                     "has_equivalence_theorem": false,
                     "over_approximations": 0
@@ -2960,6 +3121,19 @@ members = [1, 2]
     fn generated_manifest_json_contract_snapshot() {
         let manifest = sample_generated_manifest();
         insta::assert_json_snapshot!("generated_manifest_json_contract", &manifest);
+    }
+
+    #[test]
+    fn generated_manifest_debug_renderers_surface_mode_and_execution_metadata() {
+        let manifest = sample_generated_manifest();
+        assert_eq!(
+            render_manifest_debug_header(&manifest),
+            "Manifest schema v2; plutus_version=v3; cek_fuel=200000; decode_policy=decode_error_is_test_failure"
+        );
+        assert_eq!(
+            render_manifest_entry_debug(&manifest.tests[0]),
+            "example -> Example.TestOk [return_mode=bool, test_mode=normal, on_test_failure=fail_immediately]"
+        );
     }
 
     #[test]

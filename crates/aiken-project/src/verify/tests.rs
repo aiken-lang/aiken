@@ -907,6 +907,8 @@ fn generate_workspace_creates_files() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -1001,6 +1003,8 @@ fn generate_workspace_dotted_module_creates_matching_path() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -1069,6 +1073,8 @@ fn opaque_semantics_routes_through_skip_path_on_workspace_generation() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -1184,6 +1190,8 @@ fn scenario_like_void_property_with_opaque_semantics_produces_error() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -1247,6 +1255,8 @@ fn generate_workspace_scenario_like_void_property_with_opaque_output_returns_fal
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -1332,6 +1342,8 @@ fn generate_workspace_scenario_like_fail_property_uses_schema_backed_direct_theo
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -1404,6 +1416,8 @@ fn generate_workspace_clears_stale_generated_files_but_keeps_static_cache() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -1452,6 +1466,8 @@ fn generate_workspace_empty_tests() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -4435,7 +4451,24 @@ fn make_manifest_with_termination(
     has_termination_theorem: bool,
 ) -> GeneratedManifest {
     GeneratedManifest {
+        schema_version: GENERATED_MANIFEST_SCHEMA_VERSION,
         version: GENERATE_ONLY_VERSION.to_string(),
+        aiken: ManifestAikenMetadata {
+            version: "vtest".to_string(),
+            commit: Some("deadbeef".to_string()),
+            prelude_hash: Some("11".repeat(32)),
+            fuzz_package_hash: Some("22".repeat(32)),
+        },
+        execution: ManifestExecutionMetadata {
+            plutus_version: Some(aiken_lang::plutus_version::PlutusVersion::V3),
+            cek_budget: ManifestCekBudget {
+                cpu: None,
+                mem: None,
+                fuel: Some(20_000),
+            },
+            decode_policy: Some(ManifestDecodePolicy::DecodeErrorIsTestFailure),
+        },
+        compatibility_limitations: Vec::new(),
         tests: entries
             .into_iter()
             .map(|(module, name, lean_theorem)| ManifestEntry {
@@ -4454,6 +4487,15 @@ fn make_manifest_with_termination(
                     sanitize_lean_name(name)
                 ),
                 flat_file: format!("cbor/{}.cbor", test_id(module, name)),
+                return_mode: Some(TestReturnMode::Bool),
+                test_mode: Some(ManifestTestMode::Normal),
+                on_test_failure: Some(ManifestOnTestFailure::FailImmediately),
+                property_uplc_hash: Some("33".repeat(32)),
+                property_harness_hash: Some("44".repeat(28)),
+                fuzzer_uplc_hash: Some("55".repeat(32)),
+                fuzzer_harness_hash: Some("66".repeat(28)),
+                fuzzer_model_hash: Some("77".repeat(32)),
+                compatibility_limitations: Vec::new(),
                 has_termination_theorem,
                 has_equivalence_theorem: false,
                 over_approximations: 0,
@@ -4462,6 +4504,253 @@ fn make_manifest_with_termination(
             })
             .collect(),
         skipped: Vec::new(),
+    }
+}
+
+fn write_manifest_hash_fixture_packages(root: &Path) {
+    fs::create_dir_all(root.join("build/packages/aiken-lang-stdlib/lib/aiken")).unwrap();
+    fs::write(
+        root.join("build/packages/aiken-lang-stdlib/lib/aiken/prelude.ak"),
+        "pub fn identity(x) { x }\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("build/packages/aiken-lang-fuzz/lib/aiken")).unwrap();
+    fs::write(
+        root.join("build/packages/aiken-lang-fuzz/lib/aiken/fuzz.ak"),
+        "pub fn int() -> Fuzzer<Int> { todo }\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn generate_workspace_manifest_v2_records_mode_execution_and_hash_metadata() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project_root = tmp.path().to_path_buf();
+    let out_dir = project_root.join("build/verify");
+    write_manifest_hash_fixture_packages(&project_root);
+
+    let mut tests = vec![
+        make_test_with_failure("example", "bool_normal", OnTestFailure::FailImmediately),
+        make_test_with_failure("example", "bool_fail", OnTestFailure::SucceedEventually),
+        make_test_with_failure(
+            "example",
+            "bool_fail_once",
+            OnTestFailure::SucceedImmediately,
+        ),
+    ];
+    let mut void_normal =
+        make_test_with_failure("example", "void_normal", OnTestFailure::FailImmediately);
+    void_normal.return_mode = TestReturnMode::Void;
+    tests.push(void_normal);
+    let mut void_fail =
+        make_test_with_failure("example", "void_fail", OnTestFailure::SucceedEventually);
+    void_fail.return_mode = TestReturnMode::Void;
+    tests.push(void_fail);
+    let mut void_fail_once = make_test_with_failure(
+        "example",
+        "void_fail_once",
+        OnTestFailure::SucceedImmediately,
+    );
+    void_fail_once.return_mode = TestReturnMode::Void;
+    tests.push(void_fail_once);
+
+    let config = VerifyConfig {
+        out_dir: out_dir.clone(),
+        cek_budget: 20_000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
+        existential_mode: ExistentialMode::default(),
+        target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: Some(project_root.clone()),
+        plutus_core_dir: None,
+        raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
+        allow_vacuous_subgenerators: false,
+    };
+
+    let manifest = generate_lean_workspace(&tests, &config, &SkipPolicy::None).unwrap();
+    assert_eq!(manifest.schema_version, GENERATED_MANIFEST_SCHEMA_VERSION);
+    assert_eq!(
+        manifest.execution.plutus_version,
+        Some(aiken_lang::plutus_version::PlutusVersion::V3)
+    );
+    assert_eq!(manifest.execution.cek_budget.fuel, Some(20_000));
+    assert_eq!(
+        manifest.execution.decode_policy,
+        Some(ManifestDecodePolicy::DecodeErrorIsTestFailure)
+    );
+    assert_eq!(manifest.tests.len(), 6);
+    assert!(manifest.aiken.version.starts_with('v'));
+    assert!(
+        manifest.aiken.prelude_hash.is_some(),
+        "prelude hash should be populated when stdlib sources are available"
+    );
+    assert!(
+        manifest.aiken.fuzz_package_hash.is_some(),
+        "fuzz package hash should be populated when fuzz package sources are available"
+    );
+    assert!(
+        manifest
+            .compatibility_limitations
+            .iter()
+            .any(|note| note
+                .contains("execution.cek_budget records only the unified CEK fuel bound"))
+    );
+
+    let by_name = manifest
+        .tests
+        .iter()
+        .map(|entry| {
+            (
+                entry.aiken_name.clone(),
+                (
+                    entry.return_mode.clone(),
+                    entry.test_mode,
+                    entry.on_test_failure,
+                ),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    assert_eq!(
+        by_name["bool_normal"],
+        (
+            Some(TestReturnMode::Bool),
+            Some(ManifestTestMode::Normal),
+            Some(ManifestOnTestFailure::FailImmediately),
+        )
+    );
+    assert_eq!(
+        by_name["bool_fail"],
+        (
+            Some(TestReturnMode::Bool),
+            Some(ManifestTestMode::Fail),
+            Some(ManifestOnTestFailure::SucceedEventually),
+        )
+    );
+    assert_eq!(
+        by_name["bool_fail_once"],
+        (
+            Some(TestReturnMode::Bool),
+            Some(ManifestTestMode::FailOnce),
+            Some(ManifestOnTestFailure::SucceedImmediately),
+        )
+    );
+    assert_eq!(
+        by_name["void_normal"],
+        (
+            Some(TestReturnMode::Void),
+            Some(ManifestTestMode::Normal),
+            Some(ManifestOnTestFailure::FailImmediately),
+        )
+    );
+    assert_eq!(
+        by_name["void_fail"],
+        (
+            Some(TestReturnMode::Void),
+            Some(ManifestTestMode::Fail),
+            Some(ManifestOnTestFailure::SucceedEventually),
+        )
+    );
+    assert_eq!(
+        by_name["void_fail_once"],
+        (
+            Some(TestReturnMode::Void),
+            Some(ManifestTestMode::FailOnce),
+            Some(ManifestOnTestFailure::SucceedImmediately),
+        )
+    );
+
+    for entry in &manifest.tests {
+        assert!(entry.property_uplc_hash.is_some());
+        assert!(entry.property_harness_hash.is_some());
+        assert!(entry.fuzzer_uplc_hash.is_some());
+        assert!(entry.fuzzer_harness_hash.is_some());
+        assert!(entry.fuzzer_model_hash.is_some());
+    }
+}
+
+#[test]
+fn generate_workspace_manifest_records_hash_limitations_when_sources_are_unavailable() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path().join("build/verify");
+    let tests = vec![make_test("example", "bool_normal")];
+    let config = VerifyConfig {
+        out_dir: out_dir.clone(),
+        cek_budget: 20_000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
+        existential_mode: ExistentialMode::default(),
+        target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
+        plutus_core_dir: None,
+        raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
+        allow_vacuous_subgenerators: false,
+    };
+
+    let manifest = generate_lean_workspace(&tests, &config, &SkipPolicy::None).unwrap();
+    assert!(manifest.aiken.prelude_hash.is_none());
+    assert!(manifest.aiken.fuzz_package_hash.is_none());
+    assert!(
+        manifest
+            .compatibility_limitations
+            .iter()
+            .any(|note| note.contains("prelude_hash unavailable"))
+    );
+    assert!(
+        manifest
+            .compatibility_limitations
+            .iter()
+            .any(|note| note.contains("fuzz_package_hash unavailable"))
+    );
+}
+
+#[test]
+fn legacy_manifest_without_v2_mode_execution_fields_downgrades_to_partial() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path();
+    fs::create_dir_all(out_dir.join("AikenVerify/Proofs/Example")).unwrap();
+    fs::write(
+        out_dir.join("AikenVerify/Proofs/Example/TestOk.lean"),
+        "theorem example_test_ok : True := by exact True.intro\n",
+    )
+    .unwrap();
+
+    let legacy_manifest: GeneratedManifest = serde_json::from_value(serde_json::json!({
+        "version": "1.0.0",
+        "tests": [
+            {
+                "id": "example_test_ok",
+                "aiken_module": "example",
+                "aiken_name": "test_ok",
+                "lean_module": "AikenVerify.Proofs.Example.TestOk",
+                "lean_theorem": "example_test_ok",
+                "lean_file": "AikenVerify/Proofs/Example/TestOk.lean",
+                "flat_file": "cbor/example_test_ok.cbor",
+                "has_termination_theorem": false,
+                "has_equivalence_theorem": false,
+                "over_approximations": 0
+            }
+        ],
+        "skipped": []
+    }))
+    .expect("legacy manifest should deserialize");
+
+    assert_eq!(legacy_manifest.schema_version, 1);
+    let entry = &legacy_manifest.tests[0];
+    let note = legacy_manifest
+        .compatibility_downgrade_note_for_entry(entry)
+        .expect("legacy manifest should require a compatibility downgrade");
+    assert!(note.contains("return_mode"));
+    assert!(note.contains("execution.decode_policy"));
+
+    match manifest_entry_caveat_with_soundness_lint(out_dir, &legacy_manifest, entry) {
+        ProofCaveat::Partial(note) => {
+            assert!(note.contains("Manifest schema v1 lacks explicit"));
+            assert!(note.contains("test_mode"));
+        }
+        other => panic!("legacy manifest should downgrade to Partial, got {other:?}"),
     }
 }
 
@@ -4478,6 +4767,15 @@ fn equivalence_theorem_name_for_entry_detects_marker_in_proof_file() {
         lean_theorem: "test_eq".to_string(),
         lean_file: lean_file.clone(),
         flat_file: "cbor/my_module__test_eq_deadbeef.cbor".to_string(),
+        return_mode: None,
+        test_mode: None,
+        on_test_failure: None,
+        property_uplc_hash: None,
+        property_harness_hash: None,
+        fuzzer_uplc_hash: None,
+        fuzzer_harness_hash: None,
+        fuzzer_model_hash: None,
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: true,
         over_approximations: 0,
@@ -4511,6 +4809,15 @@ fn equivalence_theorem_name_for_entry_returns_none_without_marker() {
         lean_theorem: "test_eq".to_string(),
         lean_file: lean_file.clone(),
         flat_file: "cbor/my_module__test_eq_deadbeef.cbor".to_string(),
+        return_mode: None,
+        test_mode: None,
+        on_test_failure: None,
+        property_uplc_hash: None,
+        property_harness_hash: None,
+        fuzzer_uplc_hash: None,
+        fuzzer_harness_hash: None,
+        fuzzer_model_hash: None,
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
         over_approximations: 0,
@@ -4698,6 +5005,15 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         lean_theorem: "halt_test".to_string(),
         lean_file: "AikenVerify/Proofs/Sm_module/halt_test.lean".to_string(),
         flat_file: "cbor/sm_module__halt_test_deadbeef.cbor".to_string(),
+        return_mode: None,
+        test_mode: None,
+        on_test_failure: None,
+        property_uplc_hash: None,
+        property_harness_hash: None,
+        fuzzer_uplc_hash: None,
+        fuzzer_harness_hash: None,
+        fuzzer_model_hash: None,
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: true,
         has_equivalence_theorem: false,
         over_approximations: 0,
@@ -4731,6 +5047,15 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         lean_theorem: "t".to_string(),
         lean_file: "AikenVerify/Proofs/Mod/t.lean".to_string(),
         flat_file: "cbor/mod__t_id.cbor".to_string(),
+        return_mode: None,
+        test_mode: None,
+        on_test_failure: None,
+        property_uplc_hash: None,
+        property_harness_hash: None,
+        fuzzer_uplc_hash: None,
+        fuzzer_harness_hash: None,
+        fuzzer_model_hash: None,
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
         over_approximations: 0,
@@ -4881,6 +5206,8 @@ fn lean_version_constant_matches_pinned_version() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -5029,14 +5356,45 @@ fn placeholder_domain_fixture_cannot_report_solver_validated() {
         lean_theorem: "placeholder".to_string(),
         lean_file: lean_file.to_string(),
         flat_file: "cbor/example_placeholder.cbor".to_string(),
+        return_mode: Some(TestReturnMode::Bool),
+        test_mode: Some(ManifestTestMode::Normal),
+        on_test_failure: Some(ManifestOnTestFailure::FailImmediately),
+        property_uplc_hash: Some("33".repeat(32)),
+        property_harness_hash: Some("44".repeat(28)),
+        fuzzer_uplc_hash: Some("55".repeat(32)),
+        fuzzer_harness_hash: Some("66".repeat(28)),
+        fuzzer_model_hash: Some("77".repeat(32)),
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
         over_approximations: 0,
         partial_proof_note: None,
         witness_proof_note: None,
     };
+    let manifest = GeneratedManifest {
+        schema_version: GENERATED_MANIFEST_SCHEMA_VERSION,
+        version: GENERATE_ONLY_VERSION.to_string(),
+        aiken: ManifestAikenMetadata {
+            version: "vtest".to_string(),
+            commit: Some("deadbeef".to_string()),
+            prelude_hash: Some("11".repeat(32)),
+            fuzz_package_hash: Some("22".repeat(32)),
+        },
+        execution: ManifestExecutionMetadata {
+            plutus_version: Some(aiken_lang::plutus_version::PlutusVersion::V3),
+            cek_budget: ManifestCekBudget {
+                cpu: None,
+                mem: None,
+                fuel: Some(20_000),
+            },
+            decode_policy: Some(ManifestDecodePolicy::DecodeErrorIsTestFailure),
+        },
+        compatibility_limitations: Vec::new(),
+        tests: Vec::new(),
+        skipped: Vec::new(),
+    };
 
-    let caveat = super::manifest_entry_caveat_with_soundness_lint(out_dir, &entry);
+    let caveat = super::manifest_entry_caveat_with_soundness_lint(out_dir, &manifest, &entry);
     let ProofCaveat::Partial(note) = caveat else {
         panic!("placeholder widening must downgrade the theorem to Partial");
     };
@@ -5124,6 +5482,15 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         lean_theorem: "halt_test".to_string(),
         lean_file: "AikenVerify/Proofs/Sm_module/halt_test.lean".to_string(),
         flat_file: "cbor/sm_module__halt_test_witness.cbor".to_string(),
+        return_mode: None,
+        test_mode: None,
+        on_test_failure: None,
+        property_uplc_hash: None,
+        property_harness_hash: None,
+        fuzzer_uplc_hash: None,
+        fuzzer_harness_hash: None,
+        fuzzer_model_hash: None,
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
         over_approximations: 0,
@@ -5174,6 +5541,15 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         lean_theorem: "t".to_string(),
         lean_file: "AikenVerify/Proofs/Mod/t.lean".to_string(),
         flat_file: "cbor/mod__t_id.cbor".to_string(),
+        return_mode: None,
+        test_mode: None,
+        on_test_failure: None,
+        property_uplc_hash: None,
+        property_harness_hash: None,
+        fuzzer_uplc_hash: None,
+        fuzzer_harness_hash: None,
+        fuzzer_model_hash: None,
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
         over_approximations: 0,
@@ -5571,6 +5947,15 @@ fn manifest_entry_caveat_round_trips_witness_proof_note() {
         lean_theorem: "halt_test".to_string(),
         lean_file: "AikenVerify/Proofs/Sm_module/halt_test.lean".to_string(),
         flat_file: "cbor/sm_module__halt_test.cbor".to_string(),
+        return_mode: None,
+        test_mode: None,
+        on_test_failure: None,
+        property_uplc_hash: None,
+        property_harness_hash: None,
+        fuzzer_uplc_hash: None,
+        fuzzer_harness_hash: None,
+        fuzzer_model_hash: None,
+        compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
         over_approximations: 0,
@@ -8172,6 +8557,8 @@ fn export_tests_output_generates_validator_and_equivalence_workspaces() {
             plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
             target: target.clone(),
+            plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+            project_root: None,
             plutus_core_dir: None,
             raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
             allow_vacuous_subgenerators: false,
@@ -8936,6 +9323,8 @@ fn skip_unsupported_collects_skipped_tests() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -8968,6 +9357,8 @@ fn skip_unsupported_ignores_collisions_from_skipped_tests() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::ValidatorHandler,
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -9016,6 +9407,8 @@ fn skip_unsupported_skips_missing_validator_metadata_for_target_modes() {
             plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
             target: target.clone(),
+            plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+            project_root: None,
             plutus_core_dir: None,
             raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
             allow_vacuous_subgenerators: false,
@@ -9050,6 +9443,8 @@ fn skip_unsupported_false_errors_on_unsupported() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -9087,6 +9482,8 @@ fn skip_unsupported_does_not_swallow_non_skippable_generation_error() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -9125,6 +9522,8 @@ fn skip_unsupported_mixed_generates_supported_and_skips_rest() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -10213,6 +10612,8 @@ fn compat_all_supported_scalar_types_generate_workspace() {
             plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::Witness,
             target: VerificationTargetKind::PropertyWrapper,
+            plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+            project_root: None,
             plutus_core_dir: None,
             raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
             allow_vacuous_subgenerators: false,
@@ -10282,6 +10683,8 @@ fn compat_tuple_and_list_types_generate_workspace() {
             plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::Witness,
             target: VerificationTargetKind::PropertyWrapper,
+            plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+            project_root: None,
             plutus_core_dir: None,
             raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
             allow_vacuous_subgenerators: false,
@@ -10320,6 +10723,8 @@ fn compat_unsupported_type_returns_fallback_required_without_skip() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Witness,
         target: VerificationTargetKind::PropertyWrapper,
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -10360,6 +10765,8 @@ fn compat_unsupported_type_still_returns_fallback_required_with_flag() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Witness,
         target: VerificationTargetKind::PropertyWrapper,
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -10402,6 +10809,8 @@ fn compat_fail_once_proof_mode_generates_existential() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Proof,
         target: VerificationTargetKind::PropertyWrapper,
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -10436,6 +10845,8 @@ fn compat_void_return_mode_generates_halt_theorem() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Witness,
         target: VerificationTargetKind::PropertyWrapper,
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false,
@@ -15071,6 +15482,8 @@ fn h4_default_mode_with_skip_unsupported_records_skipped_test() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: false, // default
@@ -15246,6 +15659,8 @@ fn h4_debug_mode_workspace_records_over_approximations_and_partial_note() {
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
         plutus_core_dir: None,
         raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
         allow_vacuous_subgenerators: true, // debug

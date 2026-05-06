@@ -52,12 +52,16 @@ use crate::blueprint::{
     definitions::Reference,
     schema::{Data as SchemaData, Declaration as SchemaDeclaration, Items as SchemaItems, Schema},
 };
+use crate::config::compiler_version;
 use crate::export::{
     ExportedDataSchema, ExportedPropertyTest, FuzzerConstraint, FuzzerExactValue, FuzzerOutputType,
     FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode,
     TransitionWidening, TransitionWideningKind, VerificationTargetKind,
 };
+use aiken_lang::{ast::OnTestFailure, plutus_version::PlutusVersion};
 use num_bigint::BigInt;
+use pallas_crypto::hash::Hasher;
+use pallas_traverse::ComputeHash;
 use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -71,6 +75,7 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant};
 use uplc::{PlutusData, machine::runtime::convert_tag_to_constr};
+use walkdir::WalkDir;
 
 fn is_zero(n: &usize) -> bool {
     *n == 0
@@ -1530,6 +1535,11 @@ pub struct VerifyConfig {
     pub existential_mode: ExistentialMode,
     /// Verification target mode (default: PropertyWrapper).
     pub target: VerificationTargetKind,
+    /// Plutus language version used by the exported property tests.
+    pub plutus_version: PlutusVersion,
+    /// Project root used to compute manifest provenance hashes when package
+    /// sources are available locally.
+    pub project_root: Option<PathBuf>,
     /// Explicit path to the PlutusCore Lean library. When `None` and no
     /// `PLUTUS_CORE_DIR` env var is set, PlutusCore is pulled from git.
     pub plutus_core_dir: Option<PathBuf>,
@@ -1560,6 +1570,8 @@ impl VerifyConfig {
         plutus_core_rev: String,
         existential_mode: ExistentialMode,
         target: VerificationTargetKind,
+        plutus_version: PlutusVersion,
+        project_root: Option<PathBuf>,
         plutus_core_dir: Option<PathBuf>,
         raw_output_bytes: usize,
         allow_vacuous_subgenerators: bool,
@@ -1571,6 +1583,8 @@ impl VerifyConfig {
             plutus_core_rev,
             existential_mode,
             target,
+            plutus_version,
+            project_root,
             plutus_core_dir,
             raw_output_bytes,
             allow_vacuous_subgenerators,
@@ -1668,10 +1682,18 @@ fn apply_soundness_lint_to_caveat(caveat: ProofCaveat, proof_content: &str) -> P
     }
 }
 
-fn manifest_entry_caveat_with_soundness_lint(out_dir: &Path, entry: &ManifestEntry) -> ProofCaveat {
+fn manifest_entry_caveat_with_soundness_lint(
+    out_dir: &Path,
+    manifest: &GeneratedManifest,
+    entry: &ManifestEntry,
+) -> ProofCaveat {
     let caveat = manifest_entry_caveat(entry);
     if !matches!(caveat, ProofCaveat::None) {
         return caveat;
+    }
+
+    if let Some(note) = manifest.compatibility_downgrade_note_for_entry(entry) {
+        return ProofCaveat::Partial(note);
     }
 
     let proof_path = out_dir.join(&entry.lean_file);
@@ -1683,7 +1705,139 @@ fn manifest_entry_caveat_with_soundness_lint(out_dir: &Path, entry: &ManifestEnt
 }
 
 /// Schema version for `aiken verify run --generate-only` manifest output.
-pub const GENERATE_ONLY_VERSION: &str = "1.0.0";
+pub const GENERATED_MANIFEST_SCHEMA_VERSION: u32 = 2;
+pub const GENERATE_ONLY_VERSION: &str = "2.0.0";
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestTestMode {
+    Normal,
+    Fail,
+    FailOnce,
+}
+
+impl ManifestTestMode {
+    fn from_on_test_failure(on_test_failure: &OnTestFailure) -> Self {
+        match on_test_failure {
+            OnTestFailure::FailImmediately => Self::Normal,
+            OnTestFailure::SucceedEventually => Self::Fail,
+            OnTestFailure::SucceedImmediately => Self::FailOnce,
+        }
+    }
+}
+
+impl std::fmt::Display for ManifestTestMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ManifestTestMode::Normal => "normal",
+            ManifestTestMode::Fail => "fail",
+            ManifestTestMode::FailOnce => "fail_once",
+        })
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestOnTestFailure {
+    FailImmediately,
+    SucceedImmediately,
+    SucceedEventually,
+}
+
+impl From<&OnTestFailure> for ManifestOnTestFailure {
+    fn from(on_test_failure: &OnTestFailure) -> Self {
+        match on_test_failure {
+            OnTestFailure::FailImmediately => Self::FailImmediately,
+            OnTestFailure::SucceedImmediately => Self::SucceedImmediately,
+            OnTestFailure::SucceedEventually => Self::SucceedEventually,
+        }
+    }
+}
+
+impl std::fmt::Display for ManifestOnTestFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ManifestOnTestFailure::FailImmediately => "fail_immediately",
+            ManifestOnTestFailure::SucceedImmediately => "succeed_immediately",
+            ManifestOnTestFailure::SucceedEventually => "succeed_eventually",
+        })
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestDecodePolicy {
+    DecodeErrorIsTestFailure,
+    DecodeErrorIsExportError,
+}
+
+impl std::fmt::Display for ManifestDecodePolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ManifestDecodePolicy::DecodeErrorIsTestFailure => "decode_error_is_test_failure",
+            ManifestDecodePolicy::DecodeErrorIsExportError => "decode_error_is_export_error",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[non_exhaustive]
+pub struct ManifestAikenMetadata {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prelude_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuzz_package_hash: Option<String>,
+}
+
+impl ManifestAikenMetadata {
+    fn is_empty(&self) -> bool {
+        self.version.is_empty()
+            && self.commit.is_none()
+            && self.prelude_hash.is_none()
+            && self.fuzz_package_hash.is_none()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[non_exhaustive]
+pub struct ManifestCekBudget {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mem: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuel: Option<u64>,
+}
+
+impl ManifestCekBudget {
+    fn is_empty(&self) -> bool {
+        self.cpu.is_none() && self.mem.is_none() && self.fuel.is_none()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
+#[non_exhaustive]
+pub struct ManifestExecutionMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plutus_version: Option<PlutusVersion>,
+    #[serde(default, skip_serializing_if = "ManifestCekBudget::is_empty")]
+    pub cek_budget: ManifestCekBudget,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decode_policy: Option<ManifestDecodePolicy>,
+}
+
+impl ManifestExecutionMetadata {
+    fn is_empty(&self) -> bool {
+        self.plutus_version.is_none() && self.cek_budget.is_empty() && self.decode_policy.is_none()
+    }
+}
 
 /// Entry in the generated manifest
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -1696,6 +1850,33 @@ pub struct ManifestEntry {
     pub lean_theorem: String,
     pub lean_file: String,
     pub flat_file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub return_mode: Option<TestReturnMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_mode: Option<ManifestTestMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_test_failure: Option<ManifestOnTestFailure>,
+    /// Blake2b-256 of the exported flat UPLC bytes for the property wrapper or
+    /// handler currently being verified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_uplc_hash: Option<String>,
+    /// Hash of the exact property harness imported into Lean. Today this is the
+    /// script hash of the same exported UPLC bytes used for `property_uplc_hash`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_harness_hash: Option<String>,
+    /// Blake2b-256 of the exported flat UPLC bytes for the fuzzer sampler.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuzzer_uplc_hash: Option<String>,
+    /// Hash of the exact fuzzer harness imported into Lean. Today this is the
+    /// script hash of the same exported UPLC bytes used for `fuzzer_uplc_hash`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuzzer_harness_hash: Option<String>,
+    /// Blake2b-256 of the serialized fuzzer-domain lowering inputs carried by
+    /// this manifest entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuzzer_model_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_limitations: Vec<String>,
     /// Whether this test generates a separate `_alwaysTerminating` theorem.
     /// Void-mode and existential forms omit the termination theorem.
     #[serde(default)]
@@ -1745,11 +1926,23 @@ impl SkippedTest {
     }
 }
 
+fn legacy_generated_manifest_schema_version() -> u32 {
+    1
+}
+
 /// Result of workspace generation
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct GeneratedManifest {
+    #[serde(default = "legacy_generated_manifest_schema_version")]
+    pub schema_version: u32,
     pub version: String,
+    #[serde(default, skip_serializing_if = "ManifestAikenMetadata::is_empty")]
+    pub aiken: ManifestAikenMetadata,
+    #[serde(default, skip_serializing_if = "ManifestExecutionMetadata::is_empty")]
+    pub execution: ManifestExecutionMetadata,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_limitations: Vec<String>,
     pub tests: Vec<ManifestEntry>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub skipped: Vec<SkippedTest>,
@@ -1762,7 +1955,11 @@ impl GeneratedManifest {
         skipped: Vec<SkippedTest>,
     ) -> Self {
         Self {
+            schema_version: GENERATED_MANIFEST_SCHEMA_VERSION,
             version: version.into(),
+            aiken: ManifestAikenMetadata::default(),
+            execution: ManifestExecutionMetadata::default(),
+            compatibility_limitations: Vec::new(),
             tests,
             skipped,
         }
@@ -1771,6 +1968,202 @@ impl GeneratedManifest {
     pub fn empty(version: impl Into<String>) -> Self {
         Self::new(version, Vec::new(), Vec::new())
     }
+
+    pub fn compatibility_downgrade_note_for_entry(&self, entry: &ManifestEntry) -> Option<String> {
+        let mut missing = Vec::new();
+
+        if entry.return_mode.is_none() {
+            missing.push("return_mode");
+        }
+        if entry.test_mode.is_none() {
+            missing.push("test_mode");
+        }
+        if entry.on_test_failure.is_none() {
+            missing.push("on_test_failure");
+        }
+        if self.execution.plutus_version.is_none() {
+            missing.push("execution.plutus_version");
+        }
+        if self.execution.cek_budget.fuel.is_none() {
+            missing.push("execution.cek_budget.fuel");
+        }
+        if self.execution.decode_policy.is_none() {
+            missing.push("execution.decode_policy");
+        }
+
+        if missing.is_empty() {
+            None
+        } else {
+            Some(format!(
+                "Manifest schema v{} lacks explicit {}; downgraded to Partial instead of assuming proof-grade mode/execution semantics.",
+                self.schema_version,
+                missing.join(", ")
+            ))
+        }
+    }
+}
+
+fn blake2b_256_hex(bytes: &[u8]) -> String {
+    Hasher::<256>::hash(bytes).to_string()
+}
+
+fn uplc_script_hash_hex(bytes: &[u8], plutus_version: PlutusVersion) -> String {
+    match plutus_version {
+        PlutusVersion::V1 => pallas_primitives::conway::PlutusScript::<1>(bytes.to_vec().into())
+            .compute_hash()
+            .to_string(),
+        PlutusVersion::V2 => pallas_primitives::conway::PlutusScript::<2>(bytes.to_vec().into())
+            .compute_hash()
+            .to_string(),
+        PlutusVersion::V3 => pallas_primitives::conway::PlutusScript::<3>(bytes.to_vec().into())
+            .compute_hash()
+            .to_string(),
+    }
+}
+
+fn hash_directory_tree(root: &Path) -> miette::Result<Option<String>> {
+    if !root.exists() {
+        return Ok(None);
+    }
+
+    let mut files = WalkDir::new(root)
+        .into_iter()
+        .map(|entry| {
+            entry.map_err(|err| miette::miette!("Failed to walk {}: {err}", root.display()))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|entry| entry.file_type().is_file())
+        .map(|entry| entry.into_path())
+        .collect::<Vec<_>>();
+
+    files.sort();
+
+    let mut hasher = Hasher::<256>::new();
+    for file in files {
+        let relative = file.strip_prefix(root).map_err(|err| {
+            miette::miette!(
+                "Failed to strip hash root {} from {}: {err}",
+                root.display(),
+                file.display()
+            )
+        })?;
+        let relative = relative.to_string_lossy().replace('\\', "/");
+        hasher.input(relative.as_bytes());
+        hasher.input(&[0]);
+        hasher.input(&fs::read(&file).map_err(|err| {
+            miette::miette!("Failed to read {} for hashing: {err}", file.display())
+        })?);
+        hasher.input(&[0xff]);
+    }
+
+    Ok(Some(hasher.finalize().to_string()))
+}
+
+fn manifest_aiken_metadata(
+    config: &VerifyConfig,
+) -> miette::Result<(ManifestAikenMetadata, Vec<String>)> {
+    let version = compiler_version(false);
+    let commit = compiler_version(true)
+        .split_once('+')
+        .and_then(|(_, commit)| {
+            (!commit.is_empty() && commit != "unknown").then_some(commit.to_string())
+        });
+
+    let prelude_hash = match config.project_root.as_deref() {
+        Some(project_root) => {
+            hash_directory_tree(&project_root.join("build/packages/aiken-lang-stdlib/lib/aiken"))?
+        }
+        None => None,
+    };
+
+    let fuzz_package_hash = match config.project_root.as_deref() {
+        Some(project_root) => {
+            let installed = project_root.join("build/packages/aiken-lang-fuzz/lib/aiken");
+            if installed.exists() {
+                hash_directory_tree(&installed)?
+            } else {
+                hash_directory_tree(&project_root.join("lib/aiken/fuzz"))?
+            }
+        }
+        None => None,
+    };
+
+    let mut limitations = Vec::new();
+    if commit.is_none() {
+        limitations.push(
+            "aiken.commit unavailable: build metadata did not include a git commit hash."
+                .to_string(),
+        );
+    }
+    if prelude_hash.is_none() {
+        limitations.push(
+            "prelude_hash unavailable: stdlib package sources were not found under build/packages/aiken-lang-stdlib/lib/aiken.".to_string(),
+        );
+    }
+    if fuzz_package_hash.is_none() {
+        limitations.push(
+            "fuzz_package_hash unavailable: fuzz package sources were not found under build/packages/aiken-lang-fuzz/lib/aiken or lib/aiken/fuzz.".to_string(),
+        );
+    }
+
+    Ok((
+        ManifestAikenMetadata {
+            version,
+            commit,
+            prelude_hash,
+            fuzz_package_hash,
+        },
+        limitations,
+    ))
+}
+
+fn manifest_execution_metadata(config: &VerifyConfig) -> (ManifestExecutionMetadata, Vec<String>) {
+    (
+        ManifestExecutionMetadata {
+            plutus_version: Some(config.plutus_version),
+            cek_budget: ManifestCekBudget {
+                cpu: None,
+                mem: None,
+                fuel: Some(config.cek_budget),
+            },
+            decode_policy: Some(ManifestDecodePolicy::DecodeErrorIsTestFailure),
+        },
+        vec![
+            "execution.cek_budget records only the unified CEK fuel bound; CPU and memory sub-budgets are not currently exported.".to_string(),
+        ],
+    )
+}
+
+fn flat_hex_bytes(label: &str, flat_hex: &str) -> miette::Result<Vec<u8>> {
+    hex::decode(flat_hex).map_err(|err| {
+        miette::miette!("Failed to decode {label} flat hex for manifest hashing: {err}")
+    })
+}
+
+fn manifest_program_hashes(
+    label: &str,
+    flat_hex: &str,
+    plutus_version: PlutusVersion,
+) -> miette::Result<(String, String)> {
+    let bytes = flat_hex_bytes(label, flat_hex)?;
+    Ok((
+        blake2b_256_hex(&bytes),
+        uplc_script_hash_hex(&bytes, plutus_version),
+    ))
+}
+
+fn fuzzer_model_hash_for_test(test: &ExportedPropertyTest) -> miette::Result<String> {
+    let bytes = serde_json::to_vec(&serde_json::json!({
+        "fuzzer_type": &test.fuzzer_type,
+        "fuzzer_output_type": &test.fuzzer_output_type,
+        "constraint": &test.constraint,
+        "semantics": &test.semantics,
+        "fuzzer_data_schema": &test.fuzzer_data_schema,
+        "inner_data_schemas": &test.inner_data_schemas,
+    }))
+    .map_err(|err| miette::miette!("Failed to serialize fuzzer model metadata: {err}"))?;
+    Ok(blake2b_256_hex(&bytes))
 }
 
 /// Sanitize an Aiken identifier to a valid Lean identifier.
@@ -2803,7 +3196,8 @@ pub fn run_proofs(
         let termination_fallback_to_module_failure = !termination_failed && !equivalence_failed;
         let equivalence_fallback_to_module_failure = !equivalence_failed && !termination_failed;
 
-        let correctness_caveat = manifest_entry_caveat_with_soundness_lint(out_dir, entry);
+        let correctness_caveat =
+            manifest_entry_caveat_with_soundness_lint(out_dir, manifest, entry);
         theorem_results.push(theorem_status_from_module_build(
             test_name.clone(),
             &entry.lean_theorem,
@@ -3330,6 +3724,15 @@ pub fn generate_lean_workspace(
         proof_content: String,
         flat_content: String,
         handler_flat_content: Option<String>,
+        return_mode: TestReturnMode,
+        test_mode: ManifestTestMode,
+        on_test_failure: ManifestOnTestFailure,
+        property_uplc_hash: String,
+        property_harness_hash: String,
+        fuzzer_uplc_hash: String,
+        fuzzer_harness_hash: String,
+        fuzzer_model_hash: String,
+        compatibility_limitations: Vec<String>,
         has_termination_theorem: bool,
         has_equivalence_theorem: bool,
         over_approximations: usize,
@@ -3371,6 +3774,12 @@ pub fn generate_lean_workspace(
         &out.join("AikenVerify/Utils.lean"),
         &generate_utils(config.cek_budget),
     )?;
+
+    let (aiken_metadata, mut compatibility_limitations) = manifest_aiken_metadata(config)?;
+    let (execution_metadata, execution_limitations) = manifest_execution_metadata(config);
+    compatibility_limitations.extend(execution_limitations);
+    compatibility_limitations.sort();
+    compatibility_limitations.dedup();
 
     let mut prepared_entries = Vec::new();
     let mut skipped_tests = Vec::new();
@@ -3483,6 +3892,20 @@ pub fn generate_lean_workspace(
             None
         };
 
+        let property_label = format!("property test {full_name}");
+        let (property_uplc_hash, property_harness_hash) = manifest_program_hashes(
+            &property_label,
+            &test.test_program.hex,
+            config.plutus_version,
+        )?;
+        let fuzzer_label = format!("fuzzer for {full_name}");
+        let (fuzzer_uplc_hash, fuzzer_harness_hash) = manifest_program_hashes(
+            &fuzzer_label,
+            &test.fuzzer_program.hex,
+            config.plutus_version,
+        )?;
+        let fuzzer_model_hash = fuzzer_model_hash_for_test(test)?;
+
         // Count transition-theorem over-approximations for halt tests whenever
         // the emitted proof actually uses the transition relation. Witness-only
         // native_decide fallbacks do not emit that theorem and therefore carry
@@ -3518,6 +3941,15 @@ pub fn generate_lean_workspace(
             proof_content,
             flat_content: test.test_program.hex.clone(),
             handler_flat_content,
+            return_mode: test.return_mode.clone(),
+            test_mode: ManifestTestMode::from_on_test_failure(&test.on_test_failure),
+            on_test_failure: ManifestOnTestFailure::from(&test.on_test_failure),
+            property_uplc_hash,
+            property_harness_hash,
+            fuzzer_uplc_hash,
+            fuzzer_harness_hash,
+            fuzzer_model_hash,
+            compatibility_limitations: Vec::new(),
             has_termination_theorem,
             has_equivalence_theorem,
             over_approximations,
@@ -3568,6 +4000,15 @@ pub fn generate_lean_workspace(
             lean_theorem: entry.lean_test_name,
             lean_file: entry.lean_file,
             flat_file: cbor_file_rel,
+            return_mode: Some(entry.return_mode),
+            test_mode: Some(entry.test_mode),
+            on_test_failure: Some(entry.on_test_failure),
+            property_uplc_hash: Some(entry.property_uplc_hash),
+            property_harness_hash: Some(entry.property_harness_hash),
+            fuzzer_uplc_hash: Some(entry.fuzzer_uplc_hash),
+            fuzzer_harness_hash: Some(entry.fuzzer_harness_hash),
+            fuzzer_model_hash: Some(entry.fuzzer_model_hash),
+            compatibility_limitations: entry.compatibility_limitations,
             has_termination_theorem: entry.has_termination_theorem,
             has_equivalence_theorem: entry.has_equivalence_theorem,
             over_approximations: entry.over_approximations,
@@ -3584,7 +4025,11 @@ pub fn generate_lean_workspace(
 
     // Write manifest.json
     let manifest = GeneratedManifest {
+        schema_version: GENERATED_MANIFEST_SCHEMA_VERSION,
         version: GENERATE_ONLY_VERSION.to_string(),
+        aiken: aiken_metadata,
+        execution: execution_metadata,
+        compatibility_limitations,
         tests: manifest_entries,
         skipped: skipped_tests,
     };
