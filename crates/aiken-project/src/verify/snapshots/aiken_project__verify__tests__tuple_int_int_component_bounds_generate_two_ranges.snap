@@ -1,0 +1,36 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: proof
+---
+import AikenVerify.Utils
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.My_module.test_pair_components
+open PlutusCore.Data (Data)
+open PlutusCore.Integer (Integer)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_my_module__test_pair_components_b515ad40 PlutusV3 single_cbor_hex "./cbor/my_module__test_pair_components_b515ad40.cbor"
+
+theorem test_pair_components :
+  ∀ (a : Integer) (b : Integer),
+  (0 <= a ∧ a <= 10)
+  →
+  (20 <= b ∧ b <= 30)
+  →
+  (proveTests prog_my_module__test_pair_components_b515ad40 ([Term.Const (Const.Data (Data.List [Data.I a, Data.I b]))])) = true :=
+  by blaster
+
+theorem test_pair_components_alwaysTerminating :
+  ∀ (a : Integer) (b : Integer),
+  (0 <= a ∧ a <= 10)
+  →
+  (20 <= b ∧ b <= 30)
+  →
+  Option.isSome (proveTests prog_my_module__test_pair_components_b515ad40 ([Term.Const (Const.Data (Data.List [Data.I a, Data.I b]))])) :=
+  by blaster
+
+end AikenVerify.Proofs.My_module.test_pair_components

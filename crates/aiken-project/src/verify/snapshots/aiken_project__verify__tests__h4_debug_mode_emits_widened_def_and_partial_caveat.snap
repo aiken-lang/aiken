@@ -1,0 +1,79 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: content
+---
+import AikenVerify.Utils
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.Permissions.prop_h4_debug_ok
+open PlutusCore.Data (Data)
+open PlutusCore.ByteString (ByteString)
+open PlutusCore.Integer (Integer)
+open PlutusCore.UPLC.CekMachine (State cekExecuteProgram)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_permissions_test__prop_h4_debug_ok_97ffe25e PlutusV3 single_cbor_hex "./cbor/permissions_test__prop_h4_debug_ok_97ffe25e.cbor"
+
+set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
+
+-- S4 AUDIT: 1 constraints dropped or widened during transition/helper lowering (sound over-approximation).
+-- Each dropped constraint widens the generated theorem's preconditions.
+
+-- S5: packTrace encodes a trace as a Plutus `Data.List` value,
+-- matching the runtime `apply_data` call that wraps the trace argument.
+-- isValidScriptContext is defined as the image of isValidTrace under packTrace;
+-- with this definition Phase 1 is provable by construction (no `sorry` needed).
+-- Phase 2 (the CEK halting obligation) remains sorry-closed:
+-- universally discharging it requires a step-function CEK reduction lemma
+-- relating proveTestsHalt to isValidTrace (see §S6; not yet implemented).
+def prop_h4_debug_ok_s4_packTrace (trace : List Data) : Data := Data.List trace
+
+-- S6 / H4 [DEBUG]: --allow-vacuous-subgenerators is on; sub-generator predicates
+-- are widened to `fun _ _ => True`.  Each widening makes every constraint over the
+-- sub-generator domain trivially provable, so the verdict is forced to `Partial`.
+-- From Aiken module: permissions/test
+def prop_h4_debug_ok_s4_scenario_inputs_baseline_prop : Data → Data → Prop := fun _ _ => True -- [WIDENED: sub-generator stubbed]
+
+def prop_h4_debug_ok_s4_isValidTransition (state : Data) (transition : Data) : Prop :=
+  (prop_h4_debug_ok_s4_scenario_inputs_baseline_prop state transition)
+
+def prop_h4_debug_ok_s4_isValidTrace (trace : List Data) : Prop :=
+  ∃ (_initState : Data),
+  ∀ (i : Fin trace.length),
+    prop_h4_debug_ok_s4_isValidTransition _initState (trace.get i)
+
+-- S5: image definition — prop_h4_debug_ok_s4_isValidScriptContext x holds iff x = packTrace(trace)
+-- for some isValidTrace-satisfying trace.
+def prop_h4_debug_ok_s4_isValidScriptContext (x : Data) : Prop :=
+  ∃ (trace : List Data),
+    prop_h4_debug_ok_s4_isValidTrace trace ∧ x = prop_h4_debug_ok_s4_packTrace trace
+
+-- Phase 1: provable by construction — isValidScriptContext is the image of isValidTrace.
+theorem prop_h4_debug_ok_valid_input :
+  ∀ (trace : List Data),
+    prop_h4_debug_ok_s4_isValidTrace trace →
+    prop_h4_debug_ok_s4_isValidScriptContext (prop_h4_debug_ok_s4_packTrace trace) :=
+  fun trace h => ⟨trace, h, rfl⟩
+
+-- Phase 2: CEK halting obligation (currently unprovable as stated).
+-- This theorem cannot be discharged until packTrace has a concrete definition
+-- encoding the validator's ScriptContext schema, enabling isValidScriptContext
+-- to be related to the CEK machine execution semantics.  See §S6.
+theorem prop_h4_debug_ok_halts :
+  ∀ (x : Data),
+    prop_h4_debug_ok_s4_isValidScriptContext x →
+    proveTestsHalt prog_permissions_test__prop_h4_debug_ok_97ffe25e (dataArg x) := by
+  sorry -- UNPROVABLE until packTrace is concretely defined; see §S6
+
+-- Composition: Phase 1 + Phase 2 → final halting claim.
+theorem prop_h4_debug_ok :
+  ∀ (trace : List Data),
+    prop_h4_debug_ok_s4_isValidTrace trace →
+    proveTestsHalt prog_permissions_test__prop_h4_debug_ok_97ffe25e (dataArg (prop_h4_debug_ok_s4_packTrace trace)) :=
+  fun trace hv => prop_h4_debug_ok_halts (prop_h4_debug_ok_s4_packTrace trace) (prop_h4_debug_ok_valid_input trace hv)
+
+end AikenVerify.Proofs.Permissions.prop_h4_debug_ok

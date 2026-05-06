@@ -1,0 +1,62 @@
+---
+source: crates/aiken/src/cmd/verify.rs
+expression: text_output
+---
+Verification Capabilities
+=========================
+
+Supported test kinds:
+  - property
+
+Unsupported test kinds:
+  - unit [intentional]: Unit tests have no fuzzer input domain; formal verification requires universally quantified properties.
+  - benchmark [intentional]: Benchmarks measure performance, not correctness; they have no boolean property to verify.
+
+Target modes:
+  - property
+  - validator (requires validator metadata)
+  - equivalence (requires validator metadata)
+
+Supported fuzzer output types:
+  - Int
+  - Bool
+  - ByteArray
+  - String
+  - Data
+  - List<T>
+  - Tuple(T, ...)
+  - Pair(T, T)
+  - Finite nullary ADT constructor domains (Data.Constr tag [])
+
+Unsupported fuzzer output types:
+  - Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)
+  - Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded.
+  - General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements.
+
+Existential modes:
+  - witness
+  - proof
+
+Max test arity: 1
+
+Error catalogue:
+  CODE   FEATURE                                 SKIPPABLE
+  -----  --------------------------------------  ---------
+  E0011  unbounded_bytearray                     yes
+  E0013  list_of_bool                            yes
+  E0015  qualified_adt_no_schema                 yes
+  E0016  opaque_top_level_fuzzer                 yes
+  E0017  opaque_list_element_semantics           yes
+  E0018  opaque_subgenerator_stub                yes
+  E0020  nested_state_machine                    yes
+  E0023  existential_state_machine_trace         yes
+  E0024  state_machine_no_witness_synthesizable  yes
+  E0025  missing_fuzzer_schema                   yes
+  E0026  non_data_fuzzer_schema                  yes
+  E0027  empty_constructor_domain                yes
+  E0028  unsupported_fuzzer_output_type          yes
+  E0029  overlapping_transition_indexes          yes
+  E0050  validator_target_missing                yes
+  S0001  step_fn_sound_axiom_emitted             no
+  S0002  constructor_tag_unresolved              no
+  S0003  existential_witness_unsound_for_domain  no

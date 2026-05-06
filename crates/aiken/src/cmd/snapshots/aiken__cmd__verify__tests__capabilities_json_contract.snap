@@ -1,0 +1,143 @@
+---
+source: crates/aiken/src/cmd/verify.rs
+expression: "&caps"
+---
+{
+  "version": "2",
+  "supported_test_kinds": [
+    "property"
+  ],
+  "unsupported_test_kinds": [
+    {
+      "kind": "unit",
+      "status": "intentional",
+      "reason": "Unit tests have no fuzzer input domain; formal verification requires universally quantified properties."
+    },
+    {
+      "kind": "benchmark",
+      "status": "intentional",
+      "reason": "Benchmarks measure performance, not correctness; they have no boolean property to verify."
+    }
+  ],
+  "target_modes": [
+    "property",
+    "validator (requires validator metadata)",
+    "equivalence (requires validator metadata)"
+  ],
+  "supported_fuzzer_types": [
+    "Int",
+    "Bool",
+    "ByteArray",
+    "String",
+    "Data",
+    "List<T>",
+    "Tuple(T, ...)",
+    "Pair(T, T)",
+    "Finite nullary ADT constructor domains (Data.Constr tag [])"
+  ],
+  "unsupported_fuzzer_types": [
+    "Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)",
+    "Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded.",
+    "General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements."
+  ],
+  "existential_modes": [
+    "witness",
+    "proof"
+  ],
+  "max_test_arity": 1,
+  "supported": [
+    "property"
+  ],
+  "unsupported": [
+    {
+      "code": "E0011",
+      "feature": "unbounded_bytearray",
+      "skippable": true
+    },
+    {
+      "code": "E0013",
+      "feature": "list_of_bool",
+      "skippable": true
+    },
+    {
+      "code": "E0015",
+      "feature": "qualified_adt_no_schema",
+      "skippable": true
+    },
+    {
+      "code": "E0016",
+      "feature": "opaque_top_level_fuzzer",
+      "skippable": true
+    },
+    {
+      "code": "E0017",
+      "feature": "opaque_list_element_semantics",
+      "skippable": true
+    },
+    {
+      "code": "E0018",
+      "feature": "opaque_subgenerator_stub",
+      "skippable": true
+    },
+    {
+      "code": "E0020",
+      "feature": "nested_state_machine",
+      "skippable": true
+    },
+    {
+      "code": "E0023",
+      "feature": "existential_state_machine_trace",
+      "skippable": true
+    },
+    {
+      "code": "E0024",
+      "feature": "state_machine_no_witness_synthesizable",
+      "skippable": true
+    },
+    {
+      "code": "E0025",
+      "feature": "missing_fuzzer_schema",
+      "skippable": true
+    },
+    {
+      "code": "E0026",
+      "feature": "non_data_fuzzer_schema",
+      "skippable": true
+    },
+    {
+      "code": "E0027",
+      "feature": "empty_constructor_domain",
+      "skippable": true
+    },
+    {
+      "code": "E0028",
+      "feature": "unsupported_fuzzer_output_type",
+      "skippable": true
+    },
+    {
+      "code": "E0029",
+      "feature": "overlapping_transition_indexes",
+      "skippable": true
+    },
+    {
+      "code": "E0050",
+      "feature": "validator_target_missing",
+      "skippable": true
+    },
+    {
+      "code": "S0001",
+      "feature": "step_fn_sound_axiom_emitted",
+      "skippable": false
+    },
+    {
+      "code": "S0002",
+      "feature": "constructor_tag_unresolved",
+      "skippable": false
+    },
+    {
+      "code": "S0003",
+      "feature": "existential_witness_unsound_for_domain",
+      "skippable": false
+    }
+  ]
+}

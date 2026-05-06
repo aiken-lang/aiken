@@ -1,0 +1,21 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: proof
+---
+import AikenVerify.Utils
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.My_module.test_bool_witness
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_my_module__test_bool_witness_7eebb2e3 PlutusV3 single_cbor_hex "./cbor/my_module__test_bool_witness_7eebb2e3.cbor"
+
+-- Mode: witness (deterministic witness search)
+theorem test_bool_witness :
+  ∃ (x : Bool), witnessTests prog_my_module__test_bool_witness_7eebb2e3 (boolArg x) false :=
+  ⟨true, by decide⟩
+
+end AikenVerify.Proofs.My_module.test_bool_witness

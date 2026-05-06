@@ -29,6 +29,14 @@
 
 Wanna get started right-away? Complete the [_Hello, World!_ tutorial](https://aiken-lang.org/example--hello-world/basics)!
 
+## Verification Preview
+
+Aiken ships an experimental verification pipeline for property tests via `aiken verify`, plus `aiken export-tests` JSON for external tooling.
+
+Treat the verify CLI and JSON as preview-grade automation surfaces: usable for CI experiments, but still subject to shape and coverage changes as the prover matures.
+
+Start with `aiken verify doctor` to confirm the Lean/Z3/PlutusCore prerequisites on the current machine. Then use `aiken verify capabilities`, `aiken verify capabilities --json`, and `aiken verify run --help` to discover the supported proof shapes, surfaced `unsupported` catalogue codes, and operational flags before wiring proofs into CI.
+
 ## Contributing
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.
