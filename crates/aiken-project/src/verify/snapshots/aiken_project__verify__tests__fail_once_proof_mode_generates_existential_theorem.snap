@@ -17,6 +17,7 @@ open PlutusCore.UPLC.Term (Term Const Program)
 open AikenVerify.Utils
 
 #import_uplc prog_my_module__test_ev_f11494ac PlutusV3 single_cbor_hex "./cbor/my_module__test_ev_f11494ac.cbor"
+#import_uplc fuzzer_prog_my_module__test_ev_f11494ac PlutusV3 single_cbor_hex "./cbor/my_module__test_ev_f11494ac_fuzzer.cbor"
 
 set_option maxRecDepth 16384
 

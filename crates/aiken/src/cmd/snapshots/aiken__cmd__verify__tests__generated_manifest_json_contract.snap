@@ -30,6 +30,7 @@ expression: "&manifest"
       "lean_theorem": "example_test_ok",
       "lean_file": "Example/TestOk.lean",
       "flat_file": "example_test_ok.flat",
+      "fuzzer_flat_file": "example_test_ok_fuzzer.flat",
       "return_mode": "bool",
       "test_mode": "normal",
       "on_test_failure": "fail_immediately",
@@ -80,6 +81,12 @@ expression: "&manifest"
         "widenings": [],
         "production_allowed": true,
         "diagnostics": []
+      },
+      "sampler": {
+        "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+        "run_kind": "seeded_generation",
+        "prng_mode": "seeded",
+        "decode_policy": "decode_error_is_test_failure"
       },
       "has_termination_theorem": true,
       "has_equivalence_theorem": true,

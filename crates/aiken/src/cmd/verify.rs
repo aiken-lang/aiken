@@ -506,15 +506,46 @@ fn render_manifest_decode_policy(
     }
 }
 
+fn render_sampler_run_kind(kind: verify::SamplerRunKind) -> &'static str {
+    match kind {
+        verify::SamplerRunKind::SeededGeneration => "seeded_generation",
+        verify::SamplerRunKind::ReplayOnly => "replay_only",
+        verify::SamplerRunKind::WitnessReplay => "witness_replay",
+        _ => "unknown",
+    }
+}
+
+fn render_sampler_prng_mode(mode: verify::SamplerPrngMode) -> &'static str {
+    match mode {
+        verify::SamplerPrngMode::Seeded => "seeded",
+        verify::SamplerPrngMode::Replayed => "replayed",
+        _ => "unknown",
+    }
+}
+
+fn render_manifest_sampler(sampler: Option<&verify::SamplerMetadata>) -> Option<String> {
+    sampler.map(|sampler| {
+        format!(
+            "sampler={}/{}",
+            render_sampler_run_kind(sampler.run_kind),
+            render_sampler_prng_mode(sampler.prng_mode)
+        )
+    })
+}
+
 fn render_manifest_entry_debug(entry: &verify::ManifestEntry) -> String {
-    format!(
+    let mut parts = vec![format!(
         "{} -> {} [return_mode={}, test_mode={}, on_test_failure={}]",
         entry.aiken_module,
         entry.lean_module,
         render_manifest_return_mode(entry.return_mode.as_ref()),
         render_manifest_test_mode(entry.test_mode.as_ref()),
         render_manifest_on_test_failure(entry.on_test_failure.as_ref()),
-    )
+    )];
+    if let Some(sampler) = render_manifest_sampler(entry.sampler.as_ref()) {
+        parts.push(sampler);
+    }
+    parts.join(" ")
 }
 
 fn render_manifest_debug_header(manifest: &verify::GeneratedManifest) -> String {
@@ -2509,6 +2540,7 @@ test unit_smoke() {
                     "lean_theorem": "example_test_ok",
                     "lean_file": "Example/TestOk.lean",
                     "flat_file": "example_test_ok.flat",
+                    "fuzzer_flat_file": "example_test_ok_fuzzer.flat",
                     "return_mode": "bool",
                     "test_mode": "normal",
                     "on_test_failure": "fail_immediately",
@@ -2517,6 +2549,12 @@ test unit_smoke() {
                     "fuzzer_uplc_hash": "55".repeat(32),
                     "fuzzer_harness_hash": "66".repeat(28),
                     "fuzzer_model_hash": "77".repeat(32),
+                    "sampler": {
+                        "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+                        "run_kind": "seeded_generation",
+                        "prng_mode": "seeded",
+                        "decode_policy": "decode_error_is_test_failure"
+                    },
                     "domain": trusted_domain_json(),
                     "has_termination_theorem": true,
                     "has_equivalence_theorem": true,
@@ -3314,7 +3352,7 @@ members = [1, 2]
         );
         assert_eq!(
             render_manifest_entry_debug(&manifest.tests[0]),
-            "example -> Example.TestOk [return_mode=bool, test_mode=normal, on_test_failure=fail_immediately]"
+            "example -> Example.TestOk [return_mode=bool, test_mode=normal, on_test_failure=fail_immediately] sampler=seeded_generation/seeded"
         );
     }
 

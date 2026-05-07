@@ -81,6 +81,79 @@ inductive TestEvalOutcome where
   | decodeError
 deriving DecidableEq
 
+inductive PrngMode where
+  | seeded
+  | replayed
+deriving DecidableEq
+
+structure FuzzerRunConfig where
+  fuel : Nat
+  prngMode : PrngMode
+  size : Option Integer
+  decodePolicy : DecodePolicy
+deriving DecidableEq
+
+inductive FuzzerRunResult where
+  | success : Data → Data → FuzzerRunResult
+  | failure : FuzzerRunResult
+  | error : FuzzerRunResult
+  | timeout : FuzzerRunResult
+deriving DecidableEq
+
+abbrev defaultFuzzerFuel : Nat := 20000
+
+abbrev defaultFuzzerRunConfig
+    (prngMode : PrngMode)
+    (decodePolicy : DecodePolicy) : FuzzerRunConfig :=
+  { fuel := defaultFuzzerFuel, prngMode := prngMode, size := none, decodePolicy := decodePolicy }
+
+def validSeededPrng : Data → Prop
+  | Data.Constr 0 [Data.B _, Data.B _] => True
+  | _ => False
+
+def validReplayedPrng : Data → Prop
+  | Data.Constr 1 [Data.I n, Data.B _] => 0 ≤ n
+  | _ => False
+
+def runFuzzerHarness (cfg : FuzzerRunConfig) (harness : PlutusScript) (prng : Data) : FuzzerRunResult :=
+  match cekExecuteProgram harness.script [Term.Const (Const.Data prng)] cfg.fuel with
+  | .Halt (.VCon (Const.Data (Data.Constr 0 [Data.List [nextPrng, rawValue]]))) =>
+      .success nextPrng rawValue
+  | .Halt (.VCon (Const.Data (Data.Constr 1 []))) => .failure
+  | .Halt _ => .error
+  | .Error => .error
+  | _ => .timeout
+
+def SeededFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  ∃ prng0 nextPrng rawValue,
+    validSeededPrng prng0 ∧
+    runFuzzerHarness cfg harness prng0 = .success nextPrng rawValue ∧
+    rawValue = x
+
+def ReplayedFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  ∃ prng0 nextPrng rawValue,
+    validReplayedPrng prng0 ∧
+    runFuzzerHarness cfg harness prng0 = .success nextPrng rawValue ∧
+    rawValue = x
+
+def WitnessReplays
+    (cfg : FuzzerRunConfig)
+    (harness : PlutusScript)
+    (replayPrng : Data)
+    (x : Data) : Prop :=
+  validReplayedPrng replayPrng ∧
+  ∃ nextPrng rawValue,
+    runFuzzerHarness cfg harness replayPrng = .success nextPrng rawValue ∧
+    rawValue = x
+
+def FuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  match cfg.prngMode with
+  | .seeded => SeededFuzzerReturns cfg harness x
+  | .replayed => ReplayedFuzzerReturns cfg harness x
+
+def SizedFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  FuzzerReturns cfg harness x
+
 abbrev RunProperty (returnMode : ReturnMode) (p : PlutusScript) (args : List Term) : TestEvalOutcome :=
   match returnMode, cekExecuteProgram p.script args 20000 with
   | .bool, .Halt (.VCon (Const.Bool true)) => .returnsTrue
@@ -88,7 +161,6 @@ abbrev RunProperty (returnMode : ReturnMode) (p : PlutusScript) (args : List Ter
   | .bool, _ => .evalError
   | .void, .Halt _ => .returnsVoid
   | .void, _ => .evalError
-
 abbrev PropertySucceeds (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
   match returnMode, out with
   | .bool, .returnsTrue => True

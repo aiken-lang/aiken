@@ -1251,6 +1251,37 @@ pub struct InputValueBridge {
     pub diagnostics: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum SamplerRunKind {
+    SeededGeneration,
+    ReplayOnly,
+    WitnessReplay,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum SamplerPrngMode {
+    Seeded,
+    Replayed,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct SamplerMetadata {
+    pub harness_abi: String,
+    pub run_kind: SamplerRunKind,
+    pub prng_mode: SamplerPrngMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_seed: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_choices_hex: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decode_policy: Option<ManifestDecodePolicy>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct Widening {
@@ -1386,6 +1417,8 @@ pub struct LoweredDomain {
     pub widenings: Vec<Widening>,
     #[serde(default)]
     pub production_allowed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampler: Option<SamplerMetadata>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compatibility_diagnostics: Vec<DomainDiagnostic>,
     #[serde(default)]
@@ -1412,6 +1445,7 @@ impl LoweredDomain {
             lowering_path: vec!["legacy_result".to_string()],
             widenings: Vec::new(),
             production_allowed: false,
+            sampler: None,
             compatibility_diagnostics: Vec::new(),
             diagnostics: vec![reason],
         }
@@ -1430,6 +1464,7 @@ impl LoweredDomain {
             lowering_path: vec!["unsupported_generation".to_string()],
             widenings: Vec::new(),
             production_allowed: false,
+            sampler: None,
             compatibility_diagnostics: Vec::new(),
             diagnostics: vec![reason],
         }
@@ -1453,6 +1488,7 @@ fn witness_replay_domain_from_values(witnesses: Vec<String>) -> LoweredDomain {
         lowering_path: vec!["witness_replay".to_string()],
         widenings: Vec::new(),
         production_allowed: true,
+        sampler: Some(default_witness_sampler_metadata()),
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -1942,6 +1978,32 @@ fn blocked_success_note(
     note
 }
 
+fn normalize_sampler_proof_status(
+    domain: &LoweredDomain,
+    proof_status: ProofStatus,
+) -> ProofStatus {
+    match proof_status {
+        ProofStatus::Failed {
+            category: FailureCategory::BlasterUnsupported,
+            reason,
+        } if matches!(domain.relation, DomainRel::SamplerReturns { .. }) => {
+            let reason = reason.trim();
+            let reason = if reason.is_empty() {
+                "Sampler relation generated successfully, but Blaster could not solve or translate the resulting theorem.".to_string()
+            } else {
+                format!(
+                    "Sampler relation generated successfully, but Blaster could not solve or translate the resulting theorem: {reason}"
+                )
+            };
+            ProofStatus::Failed {
+                category: FailureCategory::Unknown,
+                reason,
+            }
+        }
+        other => other,
+    }
+}
+
 /// Per-theorem result
 #[derive(Debug, Clone, serde::Serialize)]
 #[non_exhaustive]
@@ -2142,6 +2204,7 @@ impl TheoremResult {
         test_mode: Option<ManifestTestMode>,
         return_mode: Option<TestReturnMode>,
     ) -> Self {
+        let proof_status = normalize_sampler_proof_status(&domain, proof_status);
         let assessment = domain_success_assessment(
             trust_profile,
             &domain,
@@ -2891,6 +2954,8 @@ pub struct ManifestEntry {
     pub lean_file: String,
     pub flat_file: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuzzer_flat_file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub return_mode: Option<TestReturnMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test_mode: Option<ManifestTestMode>,
@@ -2919,6 +2984,8 @@ pub struct ManifestEntry {
     pub domain: Option<LoweredDomain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_type: Option<InputValueBridge>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampler: Option<SamplerMetadata>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compatibility_limitations: Vec<String>,
     /// Whether this test generates a separate `_alwaysTerminating` theorem.
@@ -3047,12 +3114,15 @@ impl GeneratedManifest {
         if entry.input_type.is_none() {
             missing.push("input_type");
         }
+        if entry_requires_sampler_metadata(entry) && entry.sampler.is_none() {
+            missing.push("sampler");
+        }
 
         if missing.is_empty() {
             None
         } else {
             Some(format!(
-                "Manifest schema v{} lacks explicit {}; downgraded to Partial instead of assuming proof-grade mode/execution/domain/value-bridge semantics.",
+                "Manifest schema v{} lacks explicit {}; downgraded to Partial instead of assuming proof-grade mode/execution/domain/value-bridge/sampler semantics.",
                 self.schema_version,
                 missing.join(", "),
             ))
@@ -3062,6 +3132,78 @@ impl GeneratedManifest {
 
 fn blake2b_256_hex(bytes: &[u8]) -> String {
     Hasher::<256>::hash(bytes).to_string()
+}
+
+const SAMPLER_HARNESS_ABI: &str = "aiken_fuzzer_prng_to_option_pair_prng_data_v1";
+
+fn entry_requires_sampler_metadata(entry: &ManifestEntry) -> bool {
+    entry
+        .domain
+        .as_ref()
+        .is_some_and(|domain| matches!(domain.relation, DomainRel::SamplerReturns { .. }))
+        || entry.witness_proof_note.is_some()
+}
+
+fn sampler_metadata(
+    run_kind: SamplerRunKind,
+    prng_mode: SamplerPrngMode,
+    generation_seed: Option<u32>,
+    replay_choices_hex: Option<String>,
+) -> SamplerMetadata {
+    SamplerMetadata {
+        harness_abi: SAMPLER_HARNESS_ABI.to_string(),
+        run_kind,
+        prng_mode,
+        generation_seed,
+        replay_choices_hex,
+        decode_policy: Some(generated_decode_policy()),
+    }
+}
+
+fn default_sampler_relation_metadata() -> SamplerMetadata {
+    sampler_metadata(
+        SamplerRunKind::SeededGeneration,
+        SamplerPrngMode::Seeded,
+        None,
+        None,
+    )
+}
+
+fn default_witness_sampler_metadata() -> SamplerMetadata {
+    sampler_metadata(
+        SamplerRunKind::SeededGeneration,
+        SamplerPrngMode::Seeded,
+        Some(CONCRETE_WITNESS_BASE_SEED),
+        None,
+    )
+}
+
+fn sampler_relation_summary(metadata: &SamplerMetadata) -> String {
+    match metadata.run_kind {
+        SamplerRunKind::SeededGeneration => {
+            "Exact seeded-generation support via the exported Aiken fuzzer harness ABI.".to_string()
+        }
+        SamplerRunKind::ReplayOnly => {
+            "Replay-only support via the exported Aiken fuzzer harness ABI.".to_string()
+        }
+        SamplerRunKind::WitnessReplay => {
+            "Concrete witness replay through the exported Aiken fuzzer harness ABI.".to_string()
+        }
+    }
+}
+
+fn sampler_relation_supported(
+    test: &ExportedPropertyTest,
+    target: &VerificationTargetKind,
+    existential_mode: ExistentialMode,
+) -> bool {
+    matches!(test.semantics, FuzzerSemantics::Opaque { .. })
+        && matches!(
+            test.fuzzer_output_type,
+            FuzzerOutputType::Data | FuzzerOutputType::Unsupported(_)
+        )
+        && !matches!(target, VerificationTargetKind::Equivalence)
+        && !matches!(existential_mode, ExistentialMode::Witness)
 }
 
 fn uplc_script_hash_hex(bytes: &[u8], plutus_version: PlutusVersion) -> String {
@@ -3333,11 +3475,30 @@ fn witness_values_for_mode(
     test.concrete_halt_witnesses.clone()
 }
 
+fn sampler_metadata_for_domain(
+    test: &ExportedPropertyTest,
+    mode: CompatibilityMode,
+    proof_caveat: Option<&ProofCaveat>,
+    target: &VerificationTargetKind,
+    existential_mode: ExistentialMode,
+) -> Option<SamplerMetadata> {
+    if matches!(mode, CompatibilityMode::WitnessCheck)
+        && !witness_values_for_mode(test, proof_caveat).is_empty()
+    {
+        return Some(default_witness_sampler_metadata());
+    }
+
+    sampler_relation_supported(test, target, existential_mode)
+        .then(default_sampler_relation_metadata)
+}
+
 fn relation_from_current_bridge(
     test: &ExportedPropertyTest,
     mode: CompatibilityMode,
     proof_caveat: Option<&ProofCaveat>,
     placeholder_widenings: &[Widening],
+    target: &VerificationTargetKind,
+    existential_mode: ExistentialMode,
 ) -> DomainRel {
     if matches!(mode, CompatibilityMode::WitnessCheck) {
         return DomainRel::Witness {
@@ -3349,6 +3510,13 @@ fn relation_from_current_bridge(
         return DomainRel::TrueWithExplicitWidening {
             reason: widening.message.clone(),
             allowed_only_under: TrustProfile::UnsafeDev,
+        };
+    }
+
+    if sampler_relation_supported(test, target, existential_mode) {
+        let sampler = default_sampler_relation_metadata();
+        return DomainRel::SamplerReturns {
+            summary: sampler_relation_summary(&sampler),
         };
     }
 
@@ -3386,6 +3554,8 @@ fn lowered_domain_for_test(
     mode: CompatibilityMode,
     proof_content: Option<&str>,
     proof_caveat: Option<&ProofCaveat>,
+    target: &VerificationTargetKind,
+    existential_mode: ExistentialMode,
 ) -> LoweredDomain {
     let mut lowering_path = Vec::new();
     if !matches!(test.constraint, FuzzerConstraint::Any) {
@@ -3409,6 +3579,16 @@ fn lowered_domain_for_test(
     if matches!(mode, CompatibilityMode::WitnessCheck) {
         push_lowering_step(&mut lowering_path, "witness_replay");
     }
+    let sampler = sampler_metadata_for_domain(test, mode, proof_caveat, target, existential_mode);
+    let sampler_relation_active = sampler.as_ref().is_some_and(|metadata| {
+        matches!(
+            metadata.run_kind,
+            SamplerRunKind::SeededGeneration | SamplerRunKind::ReplayOnly
+        )
+    }) && matches!(test.semantics, FuzzerSemantics::Opaque { .. });
+    if sampler_relation_active {
+        push_lowering_step(&mut lowering_path, "sampler_relation");
+    }
     let input_bridge = input_value_bridge_for_test(test);
     if input_bridge.input_type.schema_hash.is_some() || !input_bridge.diagnostics.is_empty() {
         push_lowering_step(&mut lowering_path, "value_bridge");
@@ -3421,7 +3601,7 @@ fn lowered_domain_for_test(
     if !placeholder_widenings.is_empty() {
         push_lowering_step(&mut lowering_path, "placeholder_scan");
     }
-    if constraint_is_unsupported(&test.constraint) {
+    if constraint_is_unsupported(&test.constraint) && !sampler_relation_active {
         push_lowering_step(&mut lowering_path, "constraint_gap");
         widenings.push(Widening {
             kind: "constraint".to_string(),
@@ -3436,11 +3616,19 @@ fn lowered_domain_for_test(
     if let Some(ProofCaveat::Partial(note)) = proof_caveat {
         diagnostics.push(note.clone());
     }
-    if semantics_is_opaque(&test.semantics) && !matches!(mode, CompatibilityMode::WitnessCheck) {
+    if semantics_is_opaque(&test.semantics)
+        && !matches!(mode, CompatibilityMode::WitnessCheck)
+        && !sampler_relation_active
+    {
         diagnostics
             .push("Current bridge cannot yet certify opaque/custom fuzzer semantics.".to_string());
     }
-    if constraint_is_unsupported(&test.constraint) {
+    if sampler_relation_active {
+        diagnostics.push(
+            "Opaque/custom fuzzer semantics routed through the exact sampler relation over the exported harness ABI.".to_string(),
+        );
+    }
+    if constraint_is_unsupported(&test.constraint) && !sampler_relation_active {
         diagnostics.push(
             "Current bridge dropped unsupported fuzzer constraint lowering and used a semantics-only over-approximation.".to_string(),
         );
@@ -3452,13 +3640,20 @@ fn lowered_domain_for_test(
         );
     }
     diagnostics.extend(input_bridge.diagnostics.iter().cloned());
-    if matches!(mode, CompatibilityMode::SemanticExistential) {
+    if matches!(mode, CompatibilityMode::SemanticExistential) && !sampler_relation_active {
         diagnostics.push(
             "Current bridge does not yet prove DomainImpliesFuzzerReturns for fail_once theorems; production success is downgraded to Partial.".to_string(),
         );
     }
 
-    let relation = relation_from_current_bridge(test, mode, proof_caveat, &placeholder_widenings);
+    let relation = relation_from_current_bridge(
+        test,
+        mode,
+        proof_caveat,
+        &placeholder_widenings,
+        target,
+        existential_mode,
+    );
     let mut obligations_discharged = vec![
         DomainObligation::FuzzerModelHashMatches,
         DomainObligation::PropertyHarnessMatchesExportedUPLC,
@@ -3471,6 +3666,14 @@ fn lowered_domain_for_test(
             (
                 DomainPrecision::WitnessOnly,
                 DomainCertificate::WitnessReplay,
+                Vec::new(),
+            )
+        } else if sampler_relation_active {
+            obligations_discharged.push(DomainObligation::FuzzerReturnsImpliesDomain);
+            obligations_discharged.push(DomainObligation::DomainIffFuzzerReturns);
+            (
+                DomainPrecision::Exact,
+                DomainCertificate::SamplerSemanticModel,
                 Vec::new(),
             )
         } else if !placeholder_widenings.is_empty() || semantics_is_opaque(&test.semantics) {
@@ -3524,6 +3727,7 @@ fn lowered_domain_for_test(
         lowering_path,
         widenings,
         production_allowed: false,
+        sampler,
         compatibility_diagnostics: Vec::new(),
         diagnostics,
     };
@@ -5113,6 +5317,7 @@ pub fn generate_lean_workspace(
         lean_file: String,
         proof_content: String,
         flat_content: String,
+        fuzzer_flat_content: String,
         handler_flat_content: Option<String>,
         return_mode: TestReturnMode,
         test_mode: ManifestTestMode,
@@ -5124,6 +5329,7 @@ pub fn generate_lean_workspace(
         fuzzer_model_hash: String,
         domain: LoweredDomain,
         input_type: InputValueBridge,
+        sampler: Option<SamplerMetadata>,
         compatibility_limitations: Vec<String>,
         has_termination_theorem: bool,
         has_equivalence_theorem: bool,
@@ -5210,7 +5416,14 @@ pub fn generate_lean_workspace(
         //   - `ProofCaveat::Witness(_)` — witness-only proof (commit 5 wires
         //     this in). Surfaces as `WitnessProved`.
         let preflight_mode = compatibility_mode_for_generation(test, config.existential_mode, None);
-        let preflight_domain = lowered_domain_for_test(test, preflight_mode, None, None);
+        let preflight_domain = lowered_domain_for_test(
+            test,
+            preflight_mode,
+            None,
+            None,
+            &config.target,
+            config.existential_mode,
+        );
         let preflight_block_note = assess_domain_compatibility(
             preflight_mode,
             Some(test.return_mode.clone()),
@@ -5343,9 +5556,16 @@ pub fn generate_lean_workspace(
 
         let final_mode =
             compatibility_mode_for_generation(test, config.existential_mode, Some(&proof_caveat));
-        let domain =
-            lowered_domain_for_test(test, final_mode, Some(&proof_content), Some(&proof_caveat));
+        let domain = lowered_domain_for_test(
+            test,
+            final_mode,
+            Some(&proof_content),
+            Some(&proof_caveat),
+            &config.target,
+            config.existential_mode,
+        );
         let input_type = input_value_bridge_for_test(test).input_type;
+        let sampler = domain.sampler.clone();
 
         prepared_entries.push(PreparedManifestEntry {
             id,
@@ -5357,6 +5577,7 @@ pub fn generate_lean_workspace(
             lean_file: lean_file_rel,
             proof_content,
             flat_content: test.test_program.hex.clone(),
+            fuzzer_flat_content: test.fuzzer_program.hex.clone(),
             handler_flat_content,
             return_mode: test.return_mode.clone(),
             test_mode: ManifestTestMode::from_on_test_failure(&test.on_test_failure),
@@ -5368,6 +5589,7 @@ pub fn generate_lean_workspace(
             fuzzer_model_hash,
             domain,
             input_type,
+            sampler,
             compatibility_limitations: Vec::new(),
             has_termination_theorem,
             has_equivalence_theorem,
@@ -5393,6 +5615,8 @@ pub fn generate_lean_workspace(
 
         let cbor_file_rel = format!("cbor/{}.cbor", entry.id);
         write_file(&out.join(&cbor_file_rel), &entry.flat_content)?;
+        let fuzzer_cbor_rel = format!("cbor/{}_fuzzer.cbor", entry.id);
+        write_file(&out.join(&fuzzer_cbor_rel), &entry.fuzzer_flat_content)?;
         if let Some(handler_flat_content) = entry.handler_flat_content.as_deref() {
             let handler_cbor_rel = format!("cbor/{}_handler.cbor", entry.id);
             write_file(&out.join(&handler_cbor_rel), handler_flat_content)?;
@@ -5419,6 +5643,7 @@ pub fn generate_lean_workspace(
             lean_theorem: entry.lean_test_name,
             lean_file: entry.lean_file,
             flat_file: cbor_file_rel,
+            fuzzer_flat_file: Some(fuzzer_cbor_rel),
             return_mode: Some(entry.return_mode),
             test_mode: Some(entry.test_mode),
             on_test_failure: Some(entry.on_test_failure),
@@ -5429,6 +5654,7 @@ pub fn generate_lean_workspace(
             fuzzer_model_hash: Some(entry.fuzzer_model_hash),
             domain: Some(entry.domain),
             input_type: Some(entry.input_type),
+            sampler: entry.sampler,
             compatibility_limitations: entry.compatibility_limitations,
             has_termination_theorem: entry.has_termination_theorem,
             has_equivalence_theorem: entry.has_equivalence_theorem,
@@ -5603,6 +5829,79 @@ inductive TestEvalOutcome where
   | decodeError
 deriving DecidableEq
 
+inductive PrngMode where
+  | seeded
+  | replayed
+deriving DecidableEq
+
+structure FuzzerRunConfig where
+  fuel : Nat
+  prngMode : PrngMode
+  size : Option Integer
+  decodePolicy : DecodePolicy
+deriving DecidableEq
+
+inductive FuzzerRunResult where
+  | success : Data → Data → FuzzerRunResult
+  | failure : FuzzerRunResult
+  | error : FuzzerRunResult
+  | timeout : FuzzerRunResult
+deriving DecidableEq
+
+abbrev defaultFuzzerFuel : Nat := {cek_budget}
+
+abbrev defaultFuzzerRunConfig
+    (prngMode : PrngMode)
+    (decodePolicy : DecodePolicy) : FuzzerRunConfig :=
+  {{ fuel := defaultFuzzerFuel, prngMode := prngMode, size := none, decodePolicy := decodePolicy }}
+
+def validSeededPrng : Data → Prop
+  | Data.Constr 0 [Data.B _, Data.B _] => True
+  | _ => False
+
+def validReplayedPrng : Data → Prop
+  | Data.Constr 1 [Data.I n, Data.B _] => 0 ≤ n
+  | _ => False
+
+def runFuzzerHarness (cfg : FuzzerRunConfig) (harness : PlutusScript) (prng : Data) : FuzzerRunResult :=
+  match cekExecuteProgram harness.script [Term.Const (Const.Data prng)] cfg.fuel with
+  | .Halt (.VCon (Const.Data (Data.Constr 0 [Data.List [nextPrng, rawValue]]))) =>
+      .success nextPrng rawValue
+  | .Halt (.VCon (Const.Data (Data.Constr 1 []))) => .failure
+  | .Halt _ => .error
+  | .Error => .error
+  | _ => .timeout
+
+def SeededFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  ∃ prng0 nextPrng rawValue,
+    validSeededPrng prng0 ∧
+    runFuzzerHarness cfg harness prng0 = .success nextPrng rawValue ∧
+    rawValue = x
+
+def ReplayedFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  ∃ prng0 nextPrng rawValue,
+    validReplayedPrng prng0 ∧
+    runFuzzerHarness cfg harness prng0 = .success nextPrng rawValue ∧
+    rawValue = x
+
+def WitnessReplays
+    (cfg : FuzzerRunConfig)
+    (harness : PlutusScript)
+    (replayPrng : Data)
+    (x : Data) : Prop :=
+  validReplayedPrng replayPrng ∧
+  ∃ nextPrng rawValue,
+    runFuzzerHarness cfg harness replayPrng = .success nextPrng rawValue ∧
+    rawValue = x
+
+def FuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  match cfg.prngMode with
+  | .seeded => SeededFuzzerReturns cfg harness x
+  | .replayed => ReplayedFuzzerReturns cfg harness x
+
+def SizedFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  FuzzerReturns cfg harness x
+
 abbrev RunProperty (returnMode : ReturnMode) (p : PlutusScript) (args : List Term) : TestEvalOutcome :=
   match returnMode, cekExecuteProgram p.script args {cek_budget} with
   | .bool, .Halt (.VCon (Const.Bool true)) => .returnsTrue
@@ -5610,7 +5909,6 @@ abbrev RunProperty (returnMode : ReturnMode) (p : PlutusScript) (args : List Ter
   | .bool, _ => .evalError
   | .void, .Halt _ => .returnsVoid
   | .void, _ => .evalError
-
 abbrev PropertySucceeds (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
   match returnMode, out with
   | .bool, .returnsTrue => True
@@ -5757,6 +6055,10 @@ fn validate_bytestring_len_bounds(
 /// Convert a test_id to a valid Lean identifier for the UPLC program binding.
 fn prog_name(test_id: &str) -> String {
     format!("prog_{test_id}")
+}
+
+fn fuzzer_prog_name(test_id: &str) -> String {
+    format!("fuzzer_{}", prog_name(test_id))
 }
 
 fn tuple_var_name(mut index: usize) -> String {
@@ -11480,6 +11782,20 @@ RunProperty testReturnMode {prog} args\n\n",
     )
 }
 
+fn format_sampler_context(test_id: &str) -> String {
+    let fuzzer_prog = fuzzer_prog_name(test_id);
+    format!(
+        "-- Generic sampler fallback over the exported Aiken fuzzer harness ABI.\n\
+         -- sampler_run_kind=seeded_generation; generation_seed=none; replay_choices=none.\n\
+         private abbrev samplerPrngMode : PrngMode := .seeded\n\
+         private abbrev samplerConfig : FuzzerRunConfig :=\n\
+           defaultFuzzerRunConfig samplerPrngMode testDecodePolicy\n\
+         private abbrev samplerHarness : PlutusScript := {fuzzer_prog}\n\
+         private abbrev samplerDomain (x : Data) : Prop :=\n\
+           SeededFuzzerReturns samplerConfig samplerHarness x\n\n"
+    )
+}
+
 /// Format the correctness + termination theorems given a form, name, and variable/arg details.
 ///
 /// `quantifier_vars`: the variable bindings, e.g. `"(x : Integer)"` or `"(x : T1) (y : T2)"`.
@@ -12100,6 +12416,7 @@ fn build_direct_header(
     extra_opens: &str,
 ) -> String {
     let prog = prog_name(test_id);
+    let fuzzer_prog = fuzzer_prog_name(test_id);
     let handler_prog = format!("handler_{}", prog);
     let mut s = format!(
         "import AikenVerify.Utils\nimport PlutusCore.Integer\nimport PlutusCore.ByteString\nimport PlutusCore.UPLC.ScriptEncoding\nimport Blaster\n\n\
@@ -12121,6 +12438,9 @@ fn build_direct_header(
     // so the language argument is always `PlutusV3`.
     s.push_str(&format!(
         "\n#import_uplc {prog} PlutusV3 single_cbor_hex \"./cbor/{test_id}.cbor\"\n"
+    ));
+    s.push_str(&format!(
+        "#import_uplc {fuzzer_prog} PlutusV3 single_cbor_hex \"./cbor/{test_id}_fuzzer.cbor\"\n"
     ));
     // For validator/equivalence modes, also import the handler program
     match target {
@@ -12598,7 +12918,8 @@ fn generate_proof_file(
     //
     // Skip the remaining cases with `FallbackRequired` so `--skip-unsupported`
     // treats them as skipped rather than as generation failures.
-    if bytestring_skip_required(&test.semantics, &test.fuzzer_output_type) {
+    let sampler_fallback = sampler_relation_supported(test, target, existential_mode);
+    if !sampler_fallback && bytestring_skip_required(&test.semantics, &test.fuzzer_output_type) {
         return Err(unsupported_error(
             "E0011",
             UnsupportedReason::UnboundedBytearray {
@@ -12610,25 +12931,27 @@ fn generate_proof_file(
     // Bool-list preflight is centralized here: supported bounded top-level
     // `List<Bool>` shapes pass through to the finite enumerator, unsupported
     // bool-list shapes return E0013, and over-cap bounded shapes return E0034.
-    match supported_top_level_bool_list_cardinality(&test.fuzzer_output_type, &test.semantics) {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            if fuzzer_output_type_has_bool_list_element(&test.fuzzer_output_type) {
-                return Err(unsupported_error(
-                    "E0013",
-                    UnsupportedReason::ListOfBool {
-                        test_name: test.name.clone(),
-                    },
+    if !sampler_fallback {
+        match supported_top_level_bool_list_cardinality(&test.fuzzer_output_type, &test.semantics) {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                if fuzzer_output_type_has_bool_list_element(&test.fuzzer_output_type) {
+                    return Err(unsupported_error(
+                        "E0013",
+                        UnsupportedReason::ListOfBool {
+                            test_name: test.name.clone(),
+                        },
+                    ));
+                }
+            }
+            Err(cases) => {
+                return Err(finite_domain_too_large_error(
+                    &test.name,
+                    cases,
+                    MAX_FINITE_THEOREM_INSTANCES_PER_TEST,
+                    "MAX_FINITE_THEOREM_INSTANCES_PER_TEST",
                 ));
             }
-        }
-        Err(cases) => {
-            return Err(finite_domain_too_large_error(
-                &test.name,
-                cases,
-                MAX_FINITE_THEOREM_INSTANCES_PER_TEST,
-                "MAX_FINITE_THEOREM_INSTANCES_PER_TEST",
-            ));
         }
     }
 
@@ -12833,6 +13156,7 @@ fn generate_proof_file(
 
     match try_generate_direct_proof_from_semantics(
         test,
+        test_id,
         &form,
         lean_test_name,
         &verify_prog,
@@ -13336,9 +13660,48 @@ fn generate_tuple_proof_from_semantics(
     Ok(content)
 }
 
+fn try_generate_sampler_relation_proof(
+    test: &ExportedPropertyTest,
+    test_id: &str,
+    form: &TheoremForm,
+    lean_test_name: &str,
+    verify_prog: &str,
+    direct_header: &dyn Fn(&str) -> String,
+    footer: &str,
+    target: &VerificationTargetKind,
+) -> miette::Result<Option<String>> {
+    if !sampler_relation_supported(
+        test,
+        target,
+        form.existential_mode.unwrap_or(ExistentialMode::Proof),
+    ) {
+        return Ok(None);
+    }
+
+    let theorems = format_theorems(
+        form,
+        lean_test_name,
+        verify_prog,
+        "dataArg x",
+        "(x : Data)",
+        &["samplerDomain x".to_string()],
+        None,
+    );
+    let mut content = format!(
+        "{}{}{}{}",
+        direct_header(""),
+        format_mode_context(form, verify_prog),
+        format_sampler_context(test_id),
+        theorems
+    );
+    content.push_str(footer);
+    Ok(Some(content))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn try_generate_direct_proof_from_semantics(
     test: &ExportedPropertyTest,
+    test_id: &str,
     form: &TheoremForm,
     lean_test_name: &str,
     verify_prog: &str,
@@ -13362,25 +13725,28 @@ fn try_generate_direct_proof_from_semantics(
         return Ok(Some(content));
     }
 
+    if let Some(content) = try_generate_sampler_relation_proof(
+        test,
+        test_id,
+        form,
+        lean_test_name,
+        verify_prog,
+        direct_header,
+        footer,
+        target,
+    )? {
+        return Ok(Some(content));
+    }
+
     // Top-level opaque fallback: if the test's TOP-LEVEL fuzzer semantics is
-    // `Opaque` (e.g. the fuzzer returns a custom enum like
-    // `aiken/fuzz/scenario.Outcome` whose semantic export has not yet been
-    // implemented), we cannot build a structural domain predicate for the
-    // input. Surface this as a FallbackRequired error so the caller routes
-    // the test through the non-proof path; we never emit a vacuous theorem
-    // that could be reported as PROVED.
-    //
-    // Note: this path only intercepts Opaque AT THE TOP LEVEL. Nested
-    // opacity inside state-machine traces is handled earlier by the
-    // state-machine path's own FallbackRequired check (and is still gated
-    // against existential forms, which remain unsound for the separate
-    // reachability reason documented there).
+    // `Opaque` but the sampler fallback is unavailable for the selected
+    // target/mode, we cannot build a sound theorem for the input domain.
     if let FuzzerSemantics::Opaque { reason } = &test.semantics {
         return Err(generation_error(
             GenerationErrorCategory::FallbackRequired,
             format!(
                 "Test '{}' has opaque top-level fuzzer semantics ({}). \
-                 Cannot build a structural domain predicate. Skipping.",
+                 Cannot build a structural domain predicate or sampler fallback for the selected verification mode.",
                 test.name, reason
             ),
         ));

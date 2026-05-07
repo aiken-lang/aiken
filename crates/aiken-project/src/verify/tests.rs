@@ -581,6 +581,22 @@ fn make_small_record_schema() -> ExportedDataSchema {
     ExportedDataSchema { root, definitions }
 }
 
+fn make_sampler_custom_test(
+    module: &str,
+    name: &str,
+    on_test_failure: OnTestFailure,
+) -> ExportedPropertyTest {
+    let mut test = make_test_with_failure(module, name, on_test_failure);
+    test.fuzzer_output_type = FuzzerOutputType::Unsupported("fixtures/MyDatum".to_string());
+    test.fuzzer_type = "Fuzzer<fixtures/MyDatum>".to_string();
+    test.constraint = FuzzerConstraint::Any;
+    test.semantics = FuzzerSemantics::Opaque {
+        reason: "custom fixture fuzzer semantics require sampler fallback".to_string(),
+    };
+    test.fuzzer_data_schema = Some(make_small_record_schema());
+    test
+}
+
 fn make_state_machine_transition_semantics() -> StateMachineTransitionSemantics {
     StateMachineTransitionSemantics {
         terminal_tag: 0,
@@ -1190,6 +1206,113 @@ fn opaque_semantics_returns_fallback_required_on_proof_generation() {
         "Opaque Bool semantics at proof-gen layer",
         "opaque",
     );
+}
+
+#[test]
+fn opaque_custom_fuzzer_preflight_uses_sampler_relation() {
+    let test = make_sampler_custom_test(
+        "my_module",
+        "test_preflight_sampler_fixture",
+        OnTestFailure::FailImmediately,
+    );
+
+    preflight_validate_test(
+        &test,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+    )
+    .expect("schema-backed custom opaque fuzzer should use sampler fallback");
+}
+
+#[test]
+fn opaque_custom_fuzzer_proof_generation_uses_sampler_relation() {
+    let test = make_sampler_custom_test(
+        "my_module",
+        "test_proof_sampler_fixture",
+        OnTestFailure::FailImmediately,
+    );
+    let id = test_id("my_module", "test_proof_sampler_fixture");
+    let lean_name = sanitize_lean_name("test_proof_sampler_fixture");
+    let lean_module = "AikenVerify.Proofs.My_module.test_proof_sampler_fixture";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+    )
+    .expect("schema-backed custom opaque fuzzer should emit sampler theorem");
+
+    assert!(
+        proof.contains("SeededFuzzerReturns samplerConfig samplerHarness x"),
+        "sampler theorem should quantify over seeded generation, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("private abbrev samplerDomain (x : Data) : Prop :="),
+        "sampler theorem should define a sampler domain, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("#import_uplc fuzzer_prog_"),
+        "sampler theorem should import the fuzzer harness UPLC, got:\n{proof}"
+    );
+}
+
+#[test]
+fn opaque_custom_fuzzer_workspace_manifest_records_sampler_metadata() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path().to_path_buf();
+    let test = make_sampler_custom_test(
+        "my_module",
+        "test_manifest_sampler_fixture",
+        OnTestFailure::FailImmediately,
+    );
+
+    let config = VerifyConfig {
+        out_dir: out_dir.clone(),
+        cek_budget: 20_000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
+        existential_mode: ExistentialMode::Proof,
+        target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
+        plutus_core_dir: None,
+        raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
+        allow_vacuous_subgenerators: false,
+    };
+
+    let manifest = generate_lean_workspace(&[test], &config, &SkipPolicy::None)
+        .expect("schema-backed custom opaque fuzzer should generate a workspace");
+    let entry = manifest
+        .tests
+        .first()
+        .expect("sampler fixture should produce one manifest entry");
+    let sampler = entry
+        .sampler
+        .as_ref()
+        .expect("sampler fixture should record sampler metadata");
+    assert_eq!(
+        sampler.harness_abi,
+        "aiken_fuzzer_prng_to_option_pair_prng_data_v1"
+    );
+    assert_eq!(sampler.run_kind, SamplerRunKind::SeededGeneration);
+    assert_eq!(sampler.prng_mode, SamplerPrngMode::Seeded);
+    let expected_id = test_id("my_module", "test_manifest_sampler_fixture");
+    assert_eq!(
+        entry.fuzzer_flat_file.as_deref(),
+        Some(format!("cbor/{}_fuzzer.cbor", expected_id).as_str())
+    );
+
+    let domain = entry
+        .domain
+        .as_ref()
+        .expect("sampler fixture should record domain metadata");
+    assert!(matches!(domain.relation, DomainRel::SamplerReturns { .. }));
+    assert_eq!(domain.precision, DomainPrecision::Exact);
+    assert_eq!(domain.certificate, DomainCertificate::SamplerSemanticModel);
+    assert_eq!(domain.sampler.as_ref(), Some(sampler));
 }
 
 #[test]
@@ -1912,7 +2035,7 @@ fn fail_once_tuple_proof_mode_uses_conjunction_between_bounds() {
 /// the opaque-Data fallback path on the existential branch, drive it under
 /// `--existential-mode proof` (which is sound for `Data`).
 #[test]
-fn fail_once_data_proof_mode_returns_fallback_required_without_constructor_domain() {
+fn fail_once_data_proof_mode_uses_sampler_relation() {
     let mut test = make_test_with_type(
         "my_module",
         "test_data_exist",
@@ -1924,19 +2047,17 @@ fn fail_once_data_proof_mode_returns_fallback_required_without_constructor_domai
     let lean_name = sanitize_lean_name("test_data_exist");
     let lean_module = "AikenVerify.Proofs.My_module.test_data_exist";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::Proof,
         &VerificationTargetKind::default(),
-    );
-    assert_proof_generation_skipped_as_fallback(
-        &result,
-        "Opaque Data proof mode (fail-once) without constructor domain",
-        "opaque",
-    );
+    )
+    .expect("opaque Data fail_once proof mode should use sampler fallback");
+    assert!(proof.contains("samplerDomain x"));
+    assert!(proof.contains("SeededFuzzerReturns samplerConfig samplerHarness x"));
 }
 
 /// Pin the S0003 short-circuit for the `Data` domain: the user-visible
@@ -1976,7 +2097,7 @@ fn witness_mode_rejected_for_data_domain() {
 /// soundness-only-stub fallback under witness mode; route it through proof
 /// mode now that S0003 short-circuits witness mode for unsupported domains.
 #[test]
-fn fail_once_unsupported_proof_mode_returns_fallback_required_without_shape_domain() {
+fn fail_once_unsupported_proof_mode_uses_sampler_relation() {
     let mut test = make_test_with_type(
         "my_module",
         "test_adt_exist",
@@ -1988,19 +2109,17 @@ fn fail_once_unsupported_proof_mode_returns_fallback_required_without_shape_doma
     let lean_name = sanitize_lean_name("test_adt_exist");
     let lean_module = "AikenVerify.Proofs.My_module.test_adt_exist";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::Proof,
         &VerificationTargetKind::default(),
-    );
-    assert_proof_generation_skipped_as_fallback(
-        &result,
-        "Unsupported ADT proof mode (fail-once) without constructor domain",
-        "opaque",
-    );
+    )
+    .expect("opaque unsupported fail_once proof mode should use sampler fallback");
+    assert!(proof.contains("samplerDomain x"));
+    assert!(proof.contains("SeededFuzzerReturns samplerConfig samplerHarness x"));
 }
 
 /// Pin the S0003 short-circuit for the `Unsupported` carrier (custom user
@@ -4055,7 +4174,7 @@ fn list_data_fallback_supports_existential_proof_mode() {
 }
 
 #[test]
-fn data_without_domain_predicate_returns_fallback_required() {
+fn data_without_domain_predicate_uses_sampler_relation() {
     let test = make_test_with_type(
         "my_module",
         "test_data",
@@ -4066,19 +4185,17 @@ fn data_without_domain_predicate_returns_fallback_required() {
     let lean_name = sanitize_lean_name("test_data");
     let lean_module = "AikenVerify.Proofs.My_module.test_data";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
-    );
-    assert_proof_generation_skipped_as_fallback(
-        &result,
-        "Plain Data without domain predicate",
-        "opaque",
-    );
+    )
+    .expect("plain Data without a structural domain should use sampler fallback");
+    assert!(proof.contains("samplerDomain x"));
+    assert!(proof.contains("SeededFuzzerReturns samplerConfig samplerHarness x"));
 }
 
 #[test]
@@ -4525,6 +4642,7 @@ fn trusted_overapprox_domain() -> LoweredDomain {
         lowering_path: vec!["constraint_ir".to_string(), "known_combinator".to_string()],
         widenings: Vec::new(),
         production_allowed: true,
+        sampler: None,
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -4550,6 +4668,7 @@ fn witness_only_domain(witnesses: &[&str]) -> LoweredDomain {
         lowering_path: vec!["witness_replay".to_string()],
         widenings: Vec::new(),
         production_allowed: true,
+        sampler: Some(default_witness_sampler_metadata()),
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -4580,6 +4699,7 @@ fn placeholder_domain(reason: &str) -> LoweredDomain {
             allowed_only_under: Some(TrustProfile::UnsafeDev),
         }],
         production_allowed: false,
+        sampler: None,
         compatibility_diagnostics: Vec::new(),
         diagnostics: vec![reason.to_string()],
     }
@@ -4634,6 +4754,8 @@ fn domain_fixture(
         lowering_path: vec!["test_fixture".to_string()],
         widenings: Vec::new(),
         production_allowed: false,
+        sampler: matches!(precision, DomainPrecision::WitnessOnly)
+            .then(default_witness_sampler_metadata),
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -4736,6 +4858,7 @@ fn make_manifest_with_termination(
                     sanitize_lean_name(name)
                 ),
                 flat_file: format!("cbor/{}.cbor", test_id(module, name)),
+                fuzzer_flat_file: Some(format!("cbor/{}_fuzzer.cbor", test_id(module, name))),
                 return_mode: Some(TestReturnMode::Bool),
                 test_mode: Some(ManifestTestMode::Normal),
                 on_test_failure: Some(ManifestOnTestFailure::FailImmediately),
@@ -4746,6 +4869,7 @@ fn make_manifest_with_termination(
                 fuzzer_model_hash: Some("77".repeat(32)),
                 domain: Some(trusted_overapprox_domain()),
                 input_type: Some(default_input_bridge()),
+                sampler: None,
                 compatibility_limitations: Vec::new(),
                 has_termination_theorem,
                 has_equivalence_theorem: false,
@@ -5093,6 +5217,7 @@ fn equivalence_theorem_name_for_entry_detects_marker_in_proof_file() {
         lean_theorem: "test_eq".to_string(),
         lean_file: lean_file.clone(),
         flat_file: "cbor/my_module__test_eq_deadbeef.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: None,
         test_mode: None,
         on_test_failure: None,
@@ -5103,6 +5228,7 @@ fn equivalence_theorem_name_for_entry_detects_marker_in_proof_file() {
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
         input_type: Some(default_input_bridge()),
+        sampler: None,
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: true,
@@ -5137,6 +5263,7 @@ fn equivalence_theorem_name_for_entry_returns_none_without_marker() {
         lean_theorem: "test_eq".to_string(),
         lean_file: lean_file.clone(),
         flat_file: "cbor/my_module__test_eq_deadbeef.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: None,
         test_mode: None,
         on_test_failure: None,
@@ -5147,6 +5274,7 @@ fn equivalence_theorem_name_for_entry_returns_none_without_marker() {
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
         input_type: Some(default_input_bridge()),
+        sampler: None,
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5335,6 +5463,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         lean_theorem: "halt_test".to_string(),
         lean_file: "AikenVerify/Proofs/Sm_module/halt_test.lean".to_string(),
         flat_file: "cbor/sm_module__halt_test_deadbeef.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: None,
         test_mode: None,
         on_test_failure: None,
@@ -5345,6 +5474,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
         input_type: Some(default_input_bridge()),
+        sampler: None,
         compatibility_limitations: Vec::new(),
         has_termination_theorem: true,
         has_equivalence_theorem: false,
@@ -5379,6 +5509,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         lean_theorem: "t".to_string(),
         lean_file: "AikenVerify/Proofs/Mod/t.lean".to_string(),
         flat_file: "cbor/mod__t_id.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: None,
         test_mode: None,
         on_test_failure: None,
@@ -5389,6 +5520,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
         input_type: Some(default_input_bridge()),
+        sampler: None,
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5628,6 +5760,56 @@ fn theorem_result_serializes_new_status_and_certification() {
 }
 
 #[test]
+fn sampler_relation_blaster_unsupported_normalizes_to_unknown() {
+    let test =
+        make_sampler_custom_test("example", "sampler_unknown", OnTestFailure::FailImmediately);
+    let domain = super::lowered_domain_for_test(
+        &test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::default(),
+        ExistentialMode::Proof,
+    );
+    let input_type = input_bridge_for_test(&test);
+
+    let result = TheoremResult::new_with_domain(
+        "example.sampler_unknown".to_string(),
+        "sampler_unknown".to_string(),
+        ProofStatus::Failed {
+            category: FailureCategory::BlasterUnsupported,
+            reason: "translateApp: Inductive predicate not yet supported".to_string(),
+        },
+        0,
+        TrustProfile::Production,
+        domain,
+        Some(input_type),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
+    );
+
+    assert_eq!(result.status, VerificationStatus::Unknown);
+    assert_eq!(result.certification, Certification::Unknown);
+    assert!(
+        matches!(
+            result.proof_status,
+            ProofStatus::Failed {
+                category: FailureCategory::Unknown,
+                ..
+            }
+        ),
+        "sampler translation failures must downgrade to Unknown, got {:?}",
+        result.proof_status
+    );
+    assert!(
+        result
+            .explanation
+            .as_deref()
+            .is_some_and(|message| message.contains("Sampler relation generated successfully"))
+    );
+}
+
+#[test]
 fn input_bridge_round_trips_core_primitive_values() {
     let bool_bridge = input_bridge_for_test(&make_bridge_test(
         "bool_bridge",
@@ -5835,8 +6017,14 @@ fn schema_less_raw_data_fallback_opens_decoder_obligations_and_blocks_success() 
         ]
     );
 
-    let domain =
-        super::lowered_domain_for_test(&test, CompatibilityMode::UniversalSuccess, None, None);
+    let domain = super::lowered_domain_for_test(
+        &test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::default(),
+        ExistentialMode::default(),
+    );
     assert!(
         domain
             .widenings
@@ -5860,6 +6048,22 @@ fn schema_less_raw_data_fallback_opens_decoder_obligations_and_blocks_success() 
 }
 
 #[test]
+fn sampler_utils_represent_fuzzer_failure_explicitly() {
+    let utils = super::generate_utils(20_000);
+    assert!(
+        utils.contains("| failure : FuzzerRunResult"),
+        "sampler utilities must model fuzzer failure explicitly, got:\n{utils}"
+    );
+    assert!(
+        utils.contains("Data.Constr 1 []))) => .failure"),
+        "sampler utilities must map None-like fuzzer results to explicit failure, got:\n{utils}"
+    );
+    assert!(
+        utils.contains("runFuzzerHarness cfg harness prng0 = .success nextPrng rawValue"),
+        "sampler relations must require explicit success rather than vacuous truth, got:\n{utils}"
+    );
+}
+#[test]
 fn domain_precision_serializes_and_displays_all_values() {
     let cases = [
         (DomainPrecision::Exact, "Exact"),
@@ -5876,6 +6080,41 @@ fn domain_precision_serializes_and_displays_all_values() {
             serde_json::json!(expected)
         );
     }
+}
+
+#[test]
+fn sampler_metadata_serializes_seeded_and_replay_modes_distinctly() {
+    let seeded = sampler_metadata(
+        SamplerRunKind::SeededGeneration,
+        SamplerPrngMode::Seeded,
+        None,
+        None,
+    );
+    let replay = sampler_metadata(
+        SamplerRunKind::ReplayOnly,
+        SamplerPrngMode::Replayed,
+        None,
+        Some("aabbcc".to_string()),
+    );
+
+    let seeded_json =
+        serde_json::to_value(&seeded).expect("seeded sampler metadata should serialize");
+    let replay_json =
+        serde_json::to_value(&replay).expect("replay sampler metadata should serialize");
+
+    assert_eq!(
+        seeded_json["run_kind"],
+        serde_json::json!("seeded_generation")
+    );
+    assert_eq!(seeded_json["prng_mode"], serde_json::json!("seeded"));
+    assert!(seeded_json.get("replay_choices_hex").is_none());
+
+    assert_eq!(replay_json["run_kind"], serde_json::json!("replay_only"));
+    assert_eq!(replay_json["prng_mode"], serde_json::json!("replayed"));
+    assert_eq!(
+        replay_json["replay_choices_hex"],
+        serde_json::json!("aabbcc")
+    );
 }
 
 #[test]
@@ -6228,6 +6467,7 @@ fn placeholder_domain_fixture_cannot_report_solver_validated() {
         lean_theorem: "placeholder".to_string(),
         lean_file: lean_file.to_string(),
         flat_file: "cbor/example_placeholder.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: Some(TestReturnMode::Bool),
         test_mode: Some(ManifestTestMode::Normal),
         on_test_failure: Some(ManifestOnTestFailure::FailImmediately),
@@ -6240,6 +6480,7 @@ fn placeholder_domain_fixture_cannot_report_solver_validated() {
             "Opaque existential domain widened to True: missing schema",
         )),
         input_type: Some(default_input_bridge()),
+        sampler: None,
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -6358,6 +6599,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         lean_theorem: "halt_test".to_string(),
         lean_file: "AikenVerify/Proofs/Sm_module/halt_test.lean".to_string(),
         flat_file: "cbor/sm_module__halt_test_witness.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: None,
         test_mode: None,
         on_test_failure: None,
@@ -6368,6 +6610,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         fuzzer_model_hash: None,
         domain: Some(witness_only_domain(&["00", "01", "02"])),
         input_type: Some(default_input_bridge()),
+        sampler: Some(default_witness_sampler_metadata()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -6419,6 +6662,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         lean_theorem: "t".to_string(),
         lean_file: "AikenVerify/Proofs/Mod/t.lean".to_string(),
         flat_file: "cbor/mod__t_id.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: None,
         test_mode: None,
         on_test_failure: None,
@@ -6429,6 +6673,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
         input_type: Some(default_input_bridge()),
+        sampler: None,
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -6827,6 +7072,7 @@ fn manifest_entry_caveat_round_trips_witness_proof_note() {
         lean_theorem: "halt_test".to_string(),
         lean_file: "AikenVerify/Proofs/Sm_module/halt_test.lean".to_string(),
         flat_file: "cbor/sm_module__halt_test.cbor".to_string(),
+        fuzzer_flat_file: None,
         return_mode: None,
         test_mode: None,
         on_test_failure: None,
@@ -6837,6 +7083,7 @@ fn manifest_entry_caveat_round_trips_witness_proof_note() {
         fuzzer_model_hash: None,
         domain: Some(witness_only_domain(&["aa", "bb", "cc"])),
         input_type: Some(default_input_bridge()),
+        sampler: Some(default_witness_sampler_metadata()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -10979,12 +11226,7 @@ fn list_missing_max_len_generates_one_sided_length_precondition() {
 // --- Step 3.4 tests: ADT fallback via Data encoding ---
 
 #[test]
-fn unsupported_type_returns_fallback_required() {
-    // An unsupported top-level ADT type with opaque semantics now routes
-    // through the `FallbackRequired` skip instead of erroring out.
-    // This is exactly the `prop_permissions_scenarii_distribution` case
-    // that motivated the soundness-only contract (Fuzzer<Outcome> where
-    // Outcome is a custom enum without a Lean lowering yet).
+fn unsupported_type_uses_sampler_relation() {
     let test = make_test_with_type(
         "my_module",
         "test_adt",
@@ -10995,19 +11237,17 @@ fn unsupported_type_returns_fallback_required() {
     let lean_name = sanitize_lean_name("test_adt");
     let lean_module = "AikenVerify.Proofs.My_module.test_adt";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
-    );
-    assert_proof_generation_skipped_as_fallback(
-        &result,
-        "Unsupported top-level ADT with opaque semantics",
-        "opaque",
-    );
+    )
+    .expect("opaque unsupported domains should use sampler fallback");
+    assert!(proof.contains("samplerDomain x"));
+    assert!(proof.contains("SeededFuzzerReturns samplerConfig samplerHarness x"));
 }
 
 #[test]

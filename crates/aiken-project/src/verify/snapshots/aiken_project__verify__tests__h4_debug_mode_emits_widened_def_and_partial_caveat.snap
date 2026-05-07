@@ -20,6 +20,7 @@ open PlutusCore.UPLC.Term (Term Const Program)
 open AikenVerify.Utils
 
 #import_uplc prog_permissions_test__prop_h4_debug_ok_97ffe25e PlutusV3 single_cbor_hex "./cbor/permissions_test__prop_h4_debug_ok_97ffe25e.cbor"
+#import_uplc fuzzer_prog_permissions_test__prop_h4_debug_ok_97ffe25e PlutusV3 single_cbor_hex "./cbor/permissions_test__prop_h4_debug_ok_97ffe25e_fuzzer.cbor"
 
 set_option maxRecDepth 16384
 set_option maxHeartbeats 2000000
