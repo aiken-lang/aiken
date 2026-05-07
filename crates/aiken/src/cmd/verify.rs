@@ -2336,6 +2336,108 @@ test unit_smoke() {
         )
     }
 
+    fn trusted_domain_json() -> serde_json::Value {
+        serde_json::json!({
+            "relation": {
+                "kind": "and",
+                "items": [
+                    {
+                        "kind": "constraint",
+                        "constraint": { "int_range": { "min": "0", "max": "255" } }
+                    },
+                    {
+                        "kind": "semantics",
+                        "semantics": { "int_range": { "min": "0", "max": "255" } }
+                    }
+                ]
+            },
+            "precision": "OverApprox",
+            "certificate": "TrustedVersionedModel",
+            "obligations_open": [],
+            "obligations_discharged": [
+                "FuzzerReturnsImpliesDomain",
+                "FuzzerModelHashMatches",
+                "PropertyHarnessMatchesExportedUPLC"
+            ],
+            "lowering_path": ["constraint_ir", "known_combinator"],
+            "widenings": [],
+            "production_allowed": true,
+            "diagnostics": []
+        })
+    }
+
+    fn skipped_domain_json(reason: &str) -> serde_json::Value {
+        serde_json::json!({
+            "relation": {
+                "kind": "unknown",
+                "reason": reason
+            },
+            "precision": "Unknown",
+            "certificate": "Unchecked",
+            "obligations_open": [],
+            "obligations_discharged": [],
+            "lowering_path": ["unsupported_generation"],
+            "widenings": [],
+            "production_allowed": false,
+            "diagnostics": [reason]
+        })
+    }
+
+    fn trusted_domain() -> verify::LoweredDomain {
+        serde_json::from_value(trusted_domain_json())
+            .expect("trusted domain JSON should deserialize")
+    }
+
+    fn witness_domain(values: &[&str]) -> verify::LoweredDomain {
+        serde_json::from_value(serde_json::json!({
+            "relation": {
+                "kind": "witness",
+                "encoded_values": values.iter().map(|v| (*v).to_string()).collect::<Vec<_>>()
+            },
+            "precision": "WitnessOnly",
+            "certificate": "WitnessReplay",
+            "obligations_open": [],
+            "obligations_discharged": [
+                "WitnessReplaysThroughFuzzer",
+                "WitnessSatisfiesDomain",
+                "FuzzerModelHashMatches",
+                "PropertyHarnessMatchesExportedUPLC"
+            ],
+            "lowering_path": ["witness_replay"],
+            "widenings": [],
+            "production_allowed": true,
+            "diagnostics": []
+        }))
+        .expect("witness domain JSON should deserialize")
+    }
+
+    fn partial_domain(reason: &str) -> verify::LoweredDomain {
+        serde_json::from_value(serde_json::json!({
+            "relation": {
+                "kind": "true_with_explicit_widening",
+                "reason": reason,
+                "allowed_only_under": "unsafe-dev"
+            },
+            "precision": "Unknown",
+            "certificate": "Unchecked",
+            "obligations_open": ["FuzzerReturnsImpliesDomain"],
+            "obligations_discharged": [
+                "FuzzerModelHashMatches",
+                "PropertyHarnessMatchesExportedUPLC"
+            ],
+            "lowering_path": ["placeholder_scan"],
+            "widenings": [
+                {
+                    "kind": "placeholder",
+                    "message": reason,
+                    "allowed_only_under": "unsafe-dev"
+                }
+            ],
+            "production_allowed": false,
+            "diagnostics": [reason]
+        }))
+        .expect("partial domain JSON should deserialize")
+    }
     fn sample_generated_manifest() -> verify::GeneratedManifest {
         serde_json::from_value(serde_json::json!({
             "schema_version": verify::GENERATED_MANIFEST_SCHEMA_VERSION,
@@ -2373,6 +2475,7 @@ test unit_smoke() {
                     "fuzzer_uplc_hash": "55".repeat(32),
                     "fuzzer_harness_hash": "66".repeat(28),
                     "fuzzer_model_hash": "77".repeat(32),
+                    "domain": trusted_domain_json(),
                     "has_termination_theorem": true,
                     "has_equivalence_theorem": true,
                     "over_approximations": 2,
@@ -2388,7 +2491,9 @@ test unit_smoke() {
                 {
                     "name": "example.test_skip",
                     "module": "example",
-                    "reason": "unsupported shape"
+                    "reason": "unsupported shape",
+                    "trust_profile": "production",
+                    "domain": skipped_domain_json("unsupported shape")
                 }
             ]
         }))
@@ -2418,7 +2523,9 @@ test unit_smoke() {
                 {
                     "name": "example.test_unsupported",
                     "module": "example",
-                    "reason": "unsupported shape"
+                    "reason": "unsupported shape",
+                    "trust_profile": "production",
+                    "domain": skipped_domain_json("unsupported shape")
                 }
             ]
         }))
@@ -2431,7 +2538,9 @@ test unit_smoke() {
                 {
                     "name": "example.test_unsupported",
                     "module": "example",
-                    "reason": "unsupported shape"
+                    "reason": "unsupported shape",
+                    "trust_profile": "production",
+                    "domain": skipped_domain_json("unsupported shape")
                 }
             ])
         } else {
@@ -2471,6 +2580,7 @@ test unit_smoke() {
                     "fuzzer_uplc_hash": "55".repeat(32),
                     "fuzzer_harness_hash": "66".repeat(28),
                     "fuzzer_model_hash": "77".repeat(32),
+                    "domain": trusted_domain_json(),
                     "has_termination_theorem": false,
                     "has_equivalence_theorem": false,
                     "over_approximations": 0
@@ -2914,13 +3024,16 @@ members = [1, 2]
     #[test]
     fn verify_summary_json_contract_snapshot() {
         let theorem_results = vec![
-            verify::TheoremResult::new(
+            verify::TheoremResult::new_with_domain(
                 "example.test_proved".to_string(),
                 "Example.test_proved".to_string(),
                 verify::ProofStatus::Proved,
                 0,
+                verify::TrustProfile::Production,
+                trusted_domain(),
+                Some(verify::ManifestTestMode::Normal),
             ),
-            verify::TheoremResult::new(
+            verify::TheoremResult::new_with_domain(
                 "example.test_witness".to_string(),
                 "Example.test_witness".to_string(),
                 verify::ProofStatus::WitnessProved {
@@ -2929,16 +3042,22 @@ members = [1, 2]
                     note: "witness-only proof".to_string(),
                 },
                 0,
+                verify::TrustProfile::Production,
+                witness_domain(&["00", "01"]),
+                Some(verify::ManifestTestMode::FailOnce),
             ),
-            verify::TheoremResult::new(
+            verify::TheoremResult::new_with_domain(
                 "example.test_partial".to_string(),
                 "Example.test_partial".to_string(),
                 verify::ProofStatus::Partial {
                     note: "partial proof".to_string(),
                 },
                 2,
+                verify::TrustProfile::Production,
+                partial_domain("partial proof"),
+                Some(verify::ManifestTestMode::Normal),
             ),
-            verify::TheoremResult::new(
+            verify::TheoremResult::new_with_domain(
                 "example.test_failed".to_string(),
                 "Example.test_failed".to_string(),
                 verify::ProofStatus::Failed {
@@ -2946,20 +3065,29 @@ members = [1, 2]
                     reason: "build failed".to_string(),
                 },
                 0,
+                verify::TrustProfile::Production,
+                trusted_domain(),
+                Some(verify::ManifestTestMode::Normal),
             ),
-            verify::TheoremResult::new(
+            verify::TheoremResult::new_with_domain(
                 "example.test_timed_out".to_string(),
                 "Example.test_timed_out".to_string(),
                 verify::ProofStatus::TimedOut {
                     reason: "timed out".to_string(),
                 },
                 0,
+                verify::TrustProfile::Production,
+                trusted_domain(),
+                Some(verify::ManifestTestMode::Normal),
             ),
-            verify::TheoremResult::new(
+            verify::TheoremResult::new_with_domain(
                 "example.test_unknown".to_string(),
                 "Example.test_unknown".to_string(),
                 verify::ProofStatus::Unknown,
                 0,
+                verify::TrustProfile::Production,
+                trusted_domain(),
+                Some(verify::ManifestTestMode::Normal),
             ),
         ];
         let mut artifacts = verify::VerificationArtifacts::default();

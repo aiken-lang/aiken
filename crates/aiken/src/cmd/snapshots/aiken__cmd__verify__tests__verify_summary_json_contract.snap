@@ -16,7 +16,26 @@ expression: "&summary"
       "module": "example",
       "reason": "unsupported shape",
       "status": "Unsupported",
-      "certification": "unsupported"
+      "certification": "unsupported",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "unknown",
+          "reason": "unsupported shape"
+        },
+        "precision": "Unknown",
+        "certificate": "Unchecked",
+        "obligations_open": [],
+        "obligations_discharged": [],
+        "lowering_path": [
+          "unsupported_generation"
+        ],
+        "widenings": [],
+        "production_allowed": false,
+        "diagnostics": [
+          "unsupported shape"
+        ]
+      }
     }
   ],
   "theorems": [
@@ -25,6 +44,47 @@ expression: "&summary"
       "theorem_name": "Example.test_proved",
       "status": "SolverValidated",
       "certification": "smt_valid_no_proof_reconstruction",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
       "proof_status": {
         "kind": "proved"
       }
@@ -34,6 +94,31 @@ expression: "&summary"
       "theorem_name": "Example.test_witness",
       "status": "WitnessValidated",
       "certification": "witness_replay",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "witness",
+          "encoded_values": [
+            "00",
+            "01"
+          ]
+        },
+        "precision": "WitnessOnly",
+        "certificate": "WitnessReplay",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "WitnessReplaysThroughFuzzer",
+          "WitnessSatisfiesDomain",
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "witness_replay"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
       "proof_status": {
         "kind": "witness_proved",
         "instances": 2,
@@ -49,6 +134,37 @@ expression: "&summary"
       "theorem_name": "Example.test_partial",
       "status": "Partial",
       "certification": "open_obligations",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "true_with_explicit_widening",
+          "reason": "partial proof",
+          "allowed_only_under": "unsafe-dev"
+        },
+        "precision": "Unknown",
+        "certificate": "Unchecked",
+        "obligations_open": [
+          "FuzzerReturnsImpliesDomain"
+        ],
+        "obligations_discharged": [
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "placeholder_scan"
+        ],
+        "widenings": [
+          {
+            "kind": "placeholder",
+            "message": "partial proof",
+            "allowed_only_under": "unsafe-dev"
+          }
+        ],
+        "production_allowed": false,
+        "diagnostics": [
+          "partial proof"
+        ]
+      },
       "proof_status": {
         "kind": "partial",
         "note": "partial proof"
@@ -61,6 +177,47 @@ expression: "&summary"
       "theorem_name": "Example.test_failed",
       "status": "Unknown",
       "certification": "unknown",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
       "proof_status": {
         "kind": "failed",
         "category": {
@@ -75,6 +232,47 @@ expression: "&summary"
       "theorem_name": "Example.test_timed_out",
       "status": "TimedOut",
       "certification": "timeout",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
       "proof_status": {
         "kind": "timed_out",
         "reason": "timed out"
@@ -86,6 +284,47 @@ expression: "&summary"
       "theorem_name": "Example.test_unknown",
       "status": "Unknown",
       "certification": "unknown",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
       "proof_status": {
         "kind": "unknown"
       },
@@ -113,6 +352,47 @@ expression: "&summary"
         "theorem_name": "Example.test_proved",
         "status": "SolverValidated",
         "certification": "smt_valid_no_proof_reconstruction",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
         "proof_status": {
           "kind": "proved"
         }
@@ -122,6 +402,31 @@ expression: "&summary"
         "theorem_name": "Example.test_witness",
         "status": "WitnessValidated",
         "certification": "witness_replay",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "witness",
+            "encoded_values": [
+              "00",
+              "01"
+            ]
+          },
+          "precision": "WitnessOnly",
+          "certificate": "WitnessReplay",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "WitnessReplaysThroughFuzzer",
+            "WitnessSatisfiesDomain",
+            "FuzzerModelHashMatches",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "witness_replay"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
         "proof_status": {
           "kind": "witness_proved",
           "instances": 2,
@@ -137,6 +442,37 @@ expression: "&summary"
         "theorem_name": "Example.test_partial",
         "status": "Partial",
         "certification": "open_obligations",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "true_with_explicit_widening",
+            "reason": "partial proof",
+            "allowed_only_under": "unsafe-dev"
+          },
+          "precision": "Unknown",
+          "certificate": "Unchecked",
+          "obligations_open": [
+            "FuzzerReturnsImpliesDomain"
+          ],
+          "obligations_discharged": [
+            "FuzzerModelHashMatches",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "placeholder_scan"
+          ],
+          "widenings": [
+            {
+              "kind": "placeholder",
+              "message": "partial proof",
+              "allowed_only_under": "unsafe-dev"
+            }
+          ],
+          "production_allowed": false,
+          "diagnostics": [
+            "partial proof"
+          ]
+        },
         "proof_status": {
           "kind": "partial",
           "note": "partial proof"
@@ -149,6 +485,47 @@ expression: "&summary"
         "theorem_name": "Example.test_failed",
         "status": "Unknown",
         "certification": "unknown",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
         "proof_status": {
           "kind": "failed",
           "category": {
@@ -163,6 +540,47 @@ expression: "&summary"
         "theorem_name": "Example.test_timed_out",
         "status": "TimedOut",
         "certification": "timeout",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
         "proof_status": {
           "kind": "timed_out",
           "reason": "timed out"
@@ -174,6 +592,47 @@ expression: "&summary"
         "theorem_name": "Example.test_unknown",
         "status": "Unknown",
         "certification": "unknown",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
         "proof_status": {
           "kind": "unknown"
         },

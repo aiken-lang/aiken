@@ -884,200 +884,163 @@ impl Certification {
     }
 }
 
-/// Status of a single theorem proof using the legacy detailed vocabulary.
-///
-/// Kept on the wire as `proof_status` so old result values can still be read
-/// and displayed, while the canonical `TheoremResult::status` field uses the
-/// M0 verification vocabulary.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ProofStatus {
-    /// Universal theorem, closed by Lean with no generated `sorry` or witness fallback.
-    /// In the current Blaster-backed pipeline this normalizes to `SolverValidated`,
-    /// not `LeanCertified`, because proof reconstruction is not available.
-    Proved,
-    /// Lean build succeeded but proof covers only concrete witness instance(s),
-    /// not all inputs. Universal verification is planned for a future release.
-    WitnessProved {
-        instances: usize,
-        /// CBOR-hex encoded Plutus Data witnesses.
-        witnesses: Vec<String>,
-        note: String,
-    },
-    /// Build succeeded but contains `sorry` or another open obligation. Not a complete proof.
-    Partial { note: String },
-    /// Proof failed with a classified reason
-    Failed {
-        category: FailureCategory,
-        reason: String,
-    },
-    /// Proof execution timed out
-    TimedOut { reason: String },
-    /// Could not determine proof status
-    Unknown,
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TrustProfile {
+    Strict,
+    #[default]
+    Production,
+    Experimental,
+    UnsafeDev,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(untagged)]
-enum TheoremStatusWire {
-    Current(VerificationStatus),
-    Legacy(ProofStatus),
-}
-
-/// Per-theorem result
-#[derive(Debug, Clone, serde::Serialize)]
-#[non_exhaustive]
-pub struct TheoremResult {
-    pub test_name: String,
-    pub theorem_name: String,
-    pub status: VerificationStatus,
-    pub certification: Certification,
-    pub proof_status: ProofStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub explanation: Option<String>,
-    /// Number of constraints dropped or widened during TransitionProp lowering.
-    /// Non-zero only for two-phase trace theorems.
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub over_approximations: usize,
-}
-
-fn theorem_result_explanation(
-    status: VerificationStatus,
-    proof_status: &ProofStatus,
-) -> Option<String> {
-    fn clean_reason(reason: &str) -> Option<String> {
-        let trimmed = reason.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    }
-
-    match proof_status {
-        ProofStatus::Proved => None,
-        ProofStatus::WitnessProved { .. } => None,
-        ProofStatus::Partial { note } => clean_reason(note).or_else(|| {
-            Some("The generated Lean proof still contains open obligations; this result is partial, not production-success.".to_string())
-        }),
-        ProofStatus::TimedOut { reason } => clean_reason(reason).or_else(|| {
-            Some("Lean/Blaster did not finish before the configured timeout expired.".to_string())
-        }),
-        ProofStatus::Failed { category, reason } => match category {
-            FailureCategory::Counterexample => None,
-            FailureCategory::BlasterUnsupported => clean_reason(reason).or_else(|| {
-                Some("Blaster could not translate or validate the generated theorem shape.".to_string())
-            }),
-            FailureCategory::Timeout => clean_reason(reason).or_else(|| {
-                Some("Lean/Blaster did not finish before the configured timeout expired.".to_string())
-            }),
-            FailureCategory::UnsatGoal
-            | FailureCategory::BuildError
-            | FailureCategory::DependencyError
-            | FailureCategory::Unknown => clean_reason(reason).or_else(|| match status {
-                VerificationStatus::Unknown => Some(
-                    "Lean/Blaster completed without a trustworthy proof classification for this theorem.".to_string(),
-                ),
-                VerificationStatus::Unsupported => Some(
-                    "The generated theorem could not be validated by the current integration.".to_string(),
-                ),
-                _ => None,
-            }),
-        },
-        ProofStatus::Unknown => Some(
-            "Lean/Blaster completed without a trustworthy proof classification for this theorem."
-                .to_string(),
-        ),
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for TheoremResult {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(serde::Deserialize)]
-        struct Wire {
-            test_name: String,
-            theorem_name: String,
-            status: TheoremStatusWire,
-            #[serde(default)]
-            certification: Option<Certification>,
-            #[serde(default)]
-            proof_status: Option<ProofStatus>,
-            #[serde(default)]
-            explanation: Option<String>,
-            #[serde(default)]
-            over_approximations: usize,
-        }
-
-        let wire = Wire::deserialize(deserializer)?;
-        let (status, proof_status) = match wire.status {
-            TheoremStatusWire::Current(status) => {
-                let proof_status = wire
-                    .proof_status
-                    .unwrap_or_else(|| status.default_proof_status());
-                (status, proof_status)
-            }
-            TheoremStatusWire::Legacy(proof_status) => {
-                let status = VerificationStatus::from_proof_status(&proof_status);
-                let proof_status = wire.proof_status.unwrap_or(proof_status);
-                (status, proof_status)
-            }
-        };
-        let certification = wire
-            .certification
-            .unwrap_or_else(|| Certification::from_status(status));
-        let explanation = wire
-            .explanation
-            .or_else(|| theorem_result_explanation(status, &proof_status));
-
-        Ok(TheoremResult {
-            test_name: wire.test_name,
-            theorem_name: wire.theorem_name,
-            status,
-            certification,
-            proof_status,
-            explanation,
-            over_approximations: wire.over_approximations,
+impl std::fmt::Display for TrustProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            TrustProfile::Strict => "strict",
+            TrustProfile::Production => "production",
+            TrustProfile::Experimental => "experimental",
+            TrustProfile::UnsafeDev => "unsafe-dev",
         })
     }
 }
 
-fn unsupported_status() -> VerificationStatus {
-    VerificationStatus::Unsupported
-}
-
-fn unsupported_certification() -> Certification {
-    Certification::Unsupported
-}
-
-impl TheoremResult {
-    pub fn new(
-        test_name: String,
-        theorem_name: String,
-        proof_status: ProofStatus,
-        over_approximations: usize,
-    ) -> Self {
-        let status = VerificationStatus::from_proof_status(&proof_status);
-        let certification = Certification::from_proof_status(&proof_status);
-        let explanation = theorem_result_explanation(status, &proof_status);
-        Self {
-            test_name,
-            theorem_name,
-            status,
-            certification,
-            proof_status,
-            explanation,
-            over_approximations,
+impl TrustProfile {
+    fn rank(self) -> u8 {
+        match self {
+            TrustProfile::Strict => 0,
+            TrustProfile::Production => 1,
+            TrustProfile::Experimental => 2,
+            TrustProfile::UnsafeDev => 3,
         }
     }
 
-    pub fn set_proof_status(&mut self, proof_status: ProofStatus) {
-        self.status = VerificationStatus::from_proof_status(&proof_status);
-        self.certification = Certification::from_proof_status(&proof_status);
-        self.explanation = theorem_result_explanation(self.status, &proof_status);
-        self.proof_status = proof_status;
+    fn allows_only_under(self, minimum: TrustProfile) -> bool {
+        self.rank() >= minimum.rank()
+    }
+
+    fn universal_success_blocker(
+        self,
+        domain: &LoweredDomain,
+        test_mode: Option<ManifestTestMode>,
+    ) -> Option<String> {
+        if matches!(self, TrustProfile::UnsafeDev) {
+            return Some(
+                "unsafe-dev runs may inspect unchecked placeholders, but they can never report a verified universal result.".to_string(),
+            );
+        }
+
+        if let Some(reason) = domain.trust_limited_reason(self) {
+            return Some(reason);
+        }
+
+        if !domain.obligations_open.is_empty() {
+            return Some(format!(
+                "open domain obligations remain: {}",
+                render_domain_obligations(&domain.obligations_open),
+            ));
+        }
+
+        match self {
+            TrustProfile::Strict => {
+                if domain.precision != DomainPrecision::Exact
+                    || domain.certificate != DomainCertificate::LeanProved
+                {
+                    return Some(
+                        "strict trust requires Exact precision and LeanProved domain certificates."
+                            .to_string(),
+                    );
+                }
+            }
+            TrustProfile::Production => {
+                if !domain.production_allowed {
+                    return Some(domain.diagnostics.first().cloned().unwrap_or_else(|| {
+                        "domain metadata is not accepted under the production trust profile."
+                            .to_string()
+                    }));
+                }
+
+                if matches!(
+                    domain.precision,
+                    DomainPrecision::WitnessOnly | DomainPrecision::Unknown
+                ) {
+                    return Some(
+                        "production trust does not accept witness-only or unknown universal domains."
+                            .to_string(),
+                    );
+                }
+                if matches!(
+                    domain.certificate,
+                    DomainCertificate::WitnessReplay
+                        | DomainCertificate::DifferentialTestedOnly
+                        | DomainCertificate::Unchecked
+                ) {
+                    return Some(
+                        "production trust does not accept witness-only, differential-only, or unchecked universal domain certificates.".to_string(),
+                    );
+                }
+                if matches!(domain.precision, DomainPrecision::OverApprox)
+                    && !matches!(
+                        test_mode,
+                        Some(ManifestTestMode::Normal | ManifestTestMode::Fail)
+                    )
+                {
+                    return Some(
+                        "OverApprox domains are only production-safe for normal/fail universal theorems.".to_string(),
+                    );
+                }
+                if matches!(domain.precision, DomainPrecision::UnderApprox)
+                    && !matches!(test_mode, Some(ManifestTestMode::FailOnce))
+                {
+                    return Some(
+                        "UnderApprox domains are only production-safe for fail_once theorems."
+                            .to_string(),
+                    );
+                }
+            }
+            TrustProfile::Experimental => {
+                if domain.precision == DomainPrecision::Unknown {
+                    return Some("experimental trust still rejects unknown domains.".to_string());
+                }
+                if domain.certificate == DomainCertificate::Unchecked {
+                    return Some("experimental trust still rejects unchecked domains.".to_string());
+                }
+            }
+            TrustProfile::UnsafeDev => unreachable!(),
+        }
+
+        None
+    }
+
+    fn witness_success_blocker(self, domain: &LoweredDomain) -> Option<String> {
+        if matches!(self, TrustProfile::UnsafeDev) {
+            return Some(
+                "unsafe-dev runs may inspect unchecked placeholders, but they can never report a verified witness result.".to_string(),
+            );
+        }
+
+        if let Some(reason) = domain.trust_limited_reason(self) {
+            return Some(reason);
+        }
+
+        if !domain.obligations_open.is_empty() {
+            return Some("open domain obligations remain on the witness path.".to_string());
+        }
+        if domain.precision == DomainPrecision::Unknown {
+            return Some(
+                "witness results still require a non-unknown domain relation under the selected trust profile.".to_string(),
+            );
+        }
+        if domain.certificate == DomainCertificate::Unchecked {
+            return Some(
+                "witness results still reject unchecked domain metadata under the selected trust profile.".to_string(),
+            );
+        }
+
+        None
     }
 }
-
 /// Structured verification summary
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
@@ -1207,6 +1170,558 @@ impl VerifySummary {
             two_phase_disabled,
             verify_summary_version: VERIFY_SUMMARY_VERSION,
         }
+    }
+}
+
+fn default_trust_profile() -> TrustProfile {
+    TrustProfile::default()
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum DomainPrecision {
+    Exact,
+    OverApprox,
+    UnderApprox,
+    WitnessOnly,
+    Unknown,
+}
+
+impl std::fmt::Display for DomainPrecision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DomainPrecision::Exact => "Exact",
+            DomainPrecision::OverApprox => "OverApprox",
+            DomainPrecision::UnderApprox => "UnderApprox",
+            DomainPrecision::WitnessOnly => "WitnessOnly",
+            DomainPrecision::Unknown => "Unknown",
+        })
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum DomainCertificate {
+    LeanProved,
+    TrustedVersionedModel,
+    SamplerSemanticModel,
+    WitnessReplay,
+    DifferentialTestedOnly,
+    Unchecked,
+}
+
+impl std::fmt::Display for DomainCertificate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DomainCertificate::LeanProved => "LeanProved",
+            DomainCertificate::TrustedVersionedModel => "TrustedVersionedModel",
+            DomainCertificate::SamplerSemanticModel => "SamplerSemanticModel",
+            DomainCertificate::WitnessReplay => "WitnessReplay",
+            DomainCertificate::DifferentialTestedOnly => "DifferentialTestedOnly",
+            DomainCertificate::Unchecked => "Unchecked",
+        })
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum DomainObligation {
+    FuzzerReturnsImpliesDomain,
+    DomainImpliesFuzzerReturns,
+    DomainIffFuzzerReturns,
+    WitnessReplaysThroughFuzzer,
+    WitnessSatisfiesDomain,
+    FuzzerModelHashMatches,
+    ValueDecoderRoundTrip,
+    PropertyHarnessMatchesExportedUPLC,
+}
+
+impl std::fmt::Display for DomainObligation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DomainObligation::FuzzerReturnsImpliesDomain => "FuzzerReturnsImpliesDomain",
+            DomainObligation::DomainImpliesFuzzerReturns => "DomainImpliesFuzzerReturns",
+            DomainObligation::DomainIffFuzzerReturns => "DomainIffFuzzerReturns",
+            DomainObligation::WitnessReplaysThroughFuzzer => "WitnessReplaysThroughFuzzer",
+            DomainObligation::WitnessSatisfiesDomain => "WitnessSatisfiesDomain",
+            DomainObligation::FuzzerModelHashMatches => "FuzzerModelHashMatches",
+            DomainObligation::ValueDecoderRoundTrip => "ValueDecoderRoundTrip",
+            DomainObligation::PropertyHarnessMatchesExportedUPLC => {
+                "PropertyHarnessMatchesExportedUPLC"
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct Widening {
+    pub kind: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_only_under: Option<TrustProfile>,
+}
+
+fn render_domain_obligations(obligations: &[DomainObligation]) -> String {
+    obligations
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn legacy_domain_placeholder_reason() -> String {
+    "Domain metadata unavailable; synthesized conservative placeholder.".to_string()
+}
+
+fn default_domain_relation() -> DomainRel {
+    DomainRel::Unknown {
+        reason: legacy_domain_placeholder_reason(),
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DomainRel {
+    Constraint {
+        constraint: FuzzerConstraint,
+    },
+    Semantics {
+        semantics: FuzzerSemantics,
+    },
+    Exists {
+        var: String,
+        body: Box<DomainRel>,
+    },
+    And {
+        items: Vec<DomainRel>,
+    },
+    Or {
+        items: Vec<DomainRel>,
+    },
+    Not {
+        body: Box<DomainRel>,
+    },
+    Witness {
+        encoded_values: Vec<String>,
+    },
+    SamplerReturns {
+        summary: String,
+    },
+    TrueWithExplicitWidening {
+        reason: String,
+        allowed_only_under: TrustProfile,
+    },
+    Unknown {
+        reason: String,
+    },
+}
+
+impl DomainRel {
+    fn allowed_only_under(&self) -> Option<TrustProfile> {
+        match self {
+            DomainRel::TrueWithExplicitWidening {
+                allowed_only_under, ..
+            } => Some(*allowed_only_under),
+            DomainRel::Exists { body, .. } | DomainRel::Not { body } => body.allowed_only_under(),
+            DomainRel::And { items } | DomainRel::Or { items } => items
+                .iter()
+                .filter_map(|item| item.allowed_only_under())
+                .max_by_key(|profile| profile.rank()),
+            DomainRel::Constraint { .. }
+            | DomainRel::Semantics { .. }
+            | DomainRel::Witness { .. }
+            | DomainRel::SamplerReturns { .. }
+            | DomainRel::Unknown { .. } => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct LoweredDomain {
+    #[serde(default = "default_domain_relation")]
+    pub relation: DomainRel,
+    pub precision: DomainPrecision,
+    pub certificate: DomainCertificate,
+    #[serde(default)]
+    pub obligations_open: Vec<DomainObligation>,
+    #[serde(default)]
+    pub obligations_discharged: Vec<DomainObligation>,
+    #[serde(default)]
+    pub lowering_path: Vec<String>,
+    #[serde(default)]
+    pub widenings: Vec<Widening>,
+    #[serde(default)]
+    pub production_allowed: bool,
+    #[serde(default)]
+    pub diagnostics: Vec<String>,
+}
+
+impl Default for LoweredDomain {
+    fn default() -> Self {
+        Self::legacy_placeholder()
+    }
+}
+
+impl LoweredDomain {
+    fn legacy_placeholder() -> Self {
+        let reason = legacy_domain_placeholder_reason();
+        Self {
+            relation: DomainRel::Unknown {
+                reason: reason.clone(),
+            },
+            precision: DomainPrecision::Unknown,
+            certificate: DomainCertificate::Unchecked,
+            obligations_open: Vec::new(),
+            obligations_discharged: Vec::new(),
+            lowering_path: vec!["legacy_result".to_string()],
+            widenings: Vec::new(),
+            production_allowed: false,
+            diagnostics: vec![reason],
+        }
+    }
+
+    fn skipped(reason: impl Into<String>) -> Self {
+        let reason = reason.into();
+        Self {
+            relation: DomainRel::Unknown {
+                reason: reason.clone(),
+            },
+            precision: DomainPrecision::Unknown,
+            certificate: DomainCertificate::Unchecked,
+            obligations_open: Vec::new(),
+            obligations_discharged: Vec::new(),
+            lowering_path: vec!["unsupported_generation".to_string()],
+            widenings: Vec::new(),
+            production_allowed: false,
+            diagnostics: vec![reason],
+        }
+    }
+
+    fn trust_limited_reason(&self, trust_profile: TrustProfile) -> Option<String> {
+        if let Some(minimum) = self.relation.allowed_only_under()
+            && !trust_profile.allows_only_under(minimum)
+        {
+            return Some(
+                "domain relation contains an acknowledged widening that is not accepted under the selected trust profile.".to_string(),
+            );
+        }
+
+        if self.widenings.iter().any(|widening| {
+            widening
+                .allowed_only_under
+                .is_some_and(|minimum| !trust_profile.allows_only_under(minimum))
+        }) {
+            return Some(
+                "domain lowering contains widenings that are not accepted under the selected trust profile.".to_string(),
+            );
+        }
+
+        None
+    }
+}
+/// Status of a single theorem proof using the legacy detailed vocabulary.
+///
+/// Kept on the wire as `proof_status` so old result values can still be read
+/// and displayed, while the canonical `TheoremResult::status` field uses the
+/// M0 verification vocabulary.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ProofStatus {
+    /// Universal theorem, closed by Lean with no generated `sorry` or witness fallback.
+    /// In the current Blaster-backed pipeline this normalizes to `SolverValidated`,
+    /// not `LeanCertified`, because proof reconstruction is not available.
+    Proved,
+    /// Lean build succeeded but proof covers only concrete witness instance(s),
+    /// not all inputs. Universal verification is planned for a future release.
+    WitnessProved {
+        instances: usize,
+        /// CBOR-hex encoded Plutus Data witnesses.
+        witnesses: Vec<String>,
+        note: String,
+    },
+    /// Build succeeded but contains `sorry` or another open obligation. Not a complete proof.
+    Partial { note: String },
+    /// Proof failed with a classified reason
+    Failed {
+        category: FailureCategory,
+        reason: String,
+    },
+    /// Proof execution timed out
+    TimedOut { reason: String },
+    /// Could not determine proof status
+    Unknown,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(untagged)]
+enum TheoremStatusWire {
+    Current(VerificationStatus),
+    Legacy(ProofStatus),
+}
+
+fn domain_success_blocker_note(
+    trust_profile: TrustProfile,
+    domain: &LoweredDomain,
+    proof_status: &ProofStatus,
+    test_mode: Option<ManifestTestMode>,
+) -> Option<String> {
+    let detail = match proof_status {
+        ProofStatus::Proved => trust_profile.universal_success_blocker(domain, test_mode),
+        ProofStatus::WitnessProved { .. } => trust_profile.witness_success_blocker(domain),
+        ProofStatus::Partial { .. }
+        | ProofStatus::Failed { .. }
+        | ProofStatus::TimedOut { .. }
+        | ProofStatus::Unknown => None,
+    }?;
+
+    let mut note = format!("Domain metadata blocks {trust_profile} success: {detail}");
+    if !domain.diagnostics.is_empty() {
+        note.push_str(&format!(" Diagnostics: {}", domain.diagnostics.join(" | ")));
+    }
+    if let Some(widening) = domain.widenings.first() {
+        note.push_str(&format!(" First widening: {}", widening.message));
+    }
+    Some(note)
+}
+
+/// Per-theorem result
+#[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
+pub struct TheoremResult {
+    pub test_name: String,
+    pub theorem_name: String,
+    pub status: VerificationStatus,
+    pub certification: Certification,
+    pub trust_profile: TrustProfile,
+    pub domain: LoweredDomain,
+    pub proof_status: ProofStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
+    /// Number of constraints dropped or widened during TransitionProp lowering.
+    /// Non-zero only for two-phase trace theorems.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub over_approximations: usize,
+}
+
+fn theorem_result_explanation(
+    status: VerificationStatus,
+    proof_status: &ProofStatus,
+) -> Option<String> {
+    fn clean_reason(reason: &str) -> Option<String> {
+        let trimmed = reason.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    }
+
+    match proof_status {
+        ProofStatus::Proved => None,
+        ProofStatus::WitnessProved { .. } => None,
+        ProofStatus::Partial { note } => clean_reason(note).or_else(|| {
+            Some("The generated Lean proof still contains open obligations; this result is partial, not production-success.".to_string())
+        }),
+        ProofStatus::TimedOut { reason } => clean_reason(reason).or_else(|| {
+            Some("Lean/Blaster did not finish before the configured timeout expired.".to_string())
+        }),
+        ProofStatus::Failed { category, reason } => match category {
+            FailureCategory::Counterexample => None,
+            FailureCategory::BlasterUnsupported => clean_reason(reason).or_else(|| {
+                Some("Blaster could not translate or validate the generated theorem shape.".to_string())
+            }),
+            FailureCategory::Timeout => clean_reason(reason).or_else(|| {
+                Some("Lean/Blaster did not finish before the configured timeout expired.".to_string())
+            }),
+            FailureCategory::UnsatGoal
+            | FailureCategory::BuildError
+            | FailureCategory::DependencyError
+            | FailureCategory::Unknown => clean_reason(reason).or_else(|| match status {
+                VerificationStatus::Unknown => Some(
+                    "Lean/Blaster completed without a trustworthy proof classification for this theorem.".to_string(),
+                ),
+                VerificationStatus::Unsupported => Some(
+                    "The generated theorem could not be validated by the current integration.".to_string(),
+                ),
+                _ => None,
+            }),
+        },
+        ProofStatus::Unknown => Some(
+            "Lean/Blaster completed without a trustworthy proof classification for this theorem."
+                .to_string(),
+        ),
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for TheoremResult {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            test_name: String,
+            theorem_name: String,
+            status: TheoremStatusWire,
+            #[serde(default)]
+            certification: Option<Certification>,
+            #[serde(default)]
+            trust_profile: Option<TrustProfile>,
+            #[serde(default)]
+            domain: Option<LoweredDomain>,
+            #[serde(default)]
+            proof_status: Option<ProofStatus>,
+            #[serde(default)]
+            explanation: Option<String>,
+            #[serde(default)]
+            over_approximations: usize,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        let (status, proof_status) = match wire.status {
+            TheoremStatusWire::Current(status) => {
+                let proof_status = wire
+                    .proof_status
+                    .unwrap_or_else(|| status.default_proof_status());
+                (status, proof_status)
+            }
+            TheoremStatusWire::Legacy(proof_status) => {
+                let status = VerificationStatus::from_proof_status(&proof_status);
+                let proof_status = wire.proof_status.unwrap_or(proof_status);
+                (status, proof_status)
+            }
+        };
+        let certification = wire
+            .certification
+            .unwrap_or_else(|| Certification::from_status(status));
+        let trust_profile = wire.trust_profile.unwrap_or_default();
+        let domain = wire
+            .domain
+            .unwrap_or_else(LoweredDomain::legacy_placeholder);
+        let explanation = wire
+            .explanation
+            .or_else(|| theorem_result_explanation(status, &proof_status));
+
+        Ok(TheoremResult {
+            test_name: wire.test_name,
+            theorem_name: wire.theorem_name,
+            status,
+            certification,
+            trust_profile,
+            domain,
+            proof_status,
+            explanation,
+            over_approximations: wire.over_approximations,
+        })
+    }
+}
+
+fn unsupported_status() -> VerificationStatus {
+    VerificationStatus::Unsupported
+}
+
+fn unsupported_certification() -> Certification {
+    Certification::Unsupported
+}
+
+fn default_result_domain() -> LoweredDomain {
+    LoweredDomain::legacy_placeholder()
+}
+
+impl TheoremResult {
+    fn from_parts(
+        test_name: String,
+        theorem_name: String,
+        proof_status: ProofStatus,
+        over_approximations: usize,
+        trust_profile: TrustProfile,
+        domain: LoweredDomain,
+    ) -> Self {
+        let status = VerificationStatus::from_proof_status(&proof_status);
+        let certification = Certification::from_proof_status(&proof_status);
+        let explanation = theorem_result_explanation(status, &proof_status);
+        Self {
+            test_name,
+            theorem_name,
+            status,
+            certification,
+            trust_profile,
+            domain,
+            proof_status,
+            explanation,
+            over_approximations,
+        }
+    }
+
+    pub fn new(
+        test_name: String,
+        theorem_name: String,
+        proof_status: ProofStatus,
+        over_approximations: usize,
+    ) -> Self {
+        Self::from_parts(
+            test_name,
+            theorem_name,
+            proof_status,
+            over_approximations,
+            default_trust_profile(),
+            default_result_domain(),
+        )
+    }
+
+    pub fn new_with_domain(
+        test_name: String,
+        theorem_name: String,
+        proof_status: ProofStatus,
+        over_approximations: usize,
+        trust_profile: TrustProfile,
+        domain: LoweredDomain,
+        test_mode: Option<ManifestTestMode>,
+    ) -> Self {
+        let proof_status =
+            domain_success_blocker_note(trust_profile, &domain, &proof_status, test_mode)
+                .map(|note| ProofStatus::Partial { note })
+                .unwrap_or(proof_status);
+
+        Self::from_parts(
+            test_name,
+            theorem_name,
+            proof_status,
+            over_approximations,
+            trust_profile,
+            domain,
+        )
+    }
+
+    pub fn from_manifest_entry(
+        test_name: String,
+        theorem_name: String,
+        entry: &ManifestEntry,
+        proof_status: ProofStatus,
+        over_approximations: usize,
+    ) -> Self {
+        Self::new_with_domain(
+            test_name,
+            theorem_name,
+            proof_status,
+            over_approximations,
+            default_trust_profile(),
+            entry
+                .domain
+                .clone()
+                .unwrap_or_else(LoweredDomain::legacy_placeholder),
+            entry.test_mode,
+        )
+    }
+
+    pub fn set_proof_status(&mut self, proof_status: ProofStatus) {
+        self.status = VerificationStatus::from_proof_status(&proof_status);
+        self.certification = Certification::from_proof_status(&proof_status);
+        self.explanation = theorem_result_explanation(self.status, &proof_status);
+        self.proof_status = proof_status;
     }
 }
 
@@ -1875,6 +2390,8 @@ pub struct ManifestEntry {
     /// this manifest entry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fuzzer_model_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain: Option<LoweredDomain>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compatibility_limitations: Vec<String>,
     /// Whether this test generates a separate `_alwaysTerminating` theorem.
@@ -1912,16 +2429,23 @@ pub struct SkippedTest {
     pub status: VerificationStatus,
     #[serde(default = "unsupported_certification")]
     pub certification: Certification,
+    #[serde(default = "default_trust_profile")]
+    pub trust_profile: TrustProfile,
+    #[serde(default = "default_result_domain")]
+    pub domain: LoweredDomain,
 }
 
 impl SkippedTest {
     pub fn new(name: String, module: String, reason: String) -> Self {
+        let domain = LoweredDomain::skipped(reason.clone());
         Self {
             name,
             module,
             reason,
             status: VerificationStatus::Unsupported,
             certification: Certification::Unsupported,
+            trust_profile: default_trust_profile(),
+            domain,
         }
     }
 }
@@ -1990,14 +2514,17 @@ impl GeneratedManifest {
         if self.execution.decode_policy.is_none() {
             missing.push("execution.decode_policy");
         }
+        if entry.domain.is_none() {
+            missing.push("domain");
+        }
 
         if missing.is_empty() {
             None
         } else {
             Some(format!(
-                "Manifest schema v{} lacks explicit {}; downgraded to Partial instead of assuming proof-grade mode/execution semantics.",
+                "Manifest schema v{} lacks explicit {}; downgraded to Partial instead of assuming proof-grade mode/execution/domain semantics.",
                 self.schema_version,
-                missing.join(", ")
+                missing.join(", "),
             ))
         }
     }
@@ -2166,6 +2693,268 @@ fn fuzzer_model_hash_for_test(test: &ExportedPropertyTest) -> miette::Result<Str
     Ok(blake2b_256_hex(&bytes))
 }
 
+fn push_lowering_step(path: &mut Vec<String>, step: &str) {
+    if !path.iter().any(|existing| existing == step) {
+        path.push(step.to_string());
+    }
+}
+
+fn widening_kind_label(kind: TransitionWideningKind) -> &'static str {
+    match kind {
+        TransitionWideningKind::Relation => "relation",
+        TransitionWideningKind::DataFreshening => "data_freshening",
+        TransitionWideningKind::BoolFreshening => "bool_freshening",
+        TransitionWideningKind::Domain => "domain",
+        TransitionWideningKind::OpaqueSubGenerator => "opaque_sub_generator",
+    }
+}
+
+fn transition_prop_domain_widenings(test: &ExportedPropertyTest) -> Vec<Widening> {
+    test.transition_prop_lean
+        .as_ref()
+        .map(transition_prop_widenings)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|widening| Widening {
+            kind: widening_kind_label(widening.kind).to_string(),
+            message: widening.message,
+            allowed_only_under: None,
+        })
+        .collect()
+}
+
+fn placeholder_domain_widenings(proof_content: &str) -> Vec<Widening> {
+    proof_content
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            (trimmed.contains("[WIDENED:") || trimmed.contains("widened to True")).then(|| {
+                Widening {
+                    kind: "placeholder".to_string(),
+                    message: trimmed.to_string(),
+                    allowed_only_under: Some(TrustProfile::UnsafeDev),
+                }
+            })
+        })
+        .collect()
+}
+
+fn semantics_is_opaque(semantics: &FuzzerSemantics) -> bool {
+    match semantics {
+        FuzzerSemantics::Bool
+        | FuzzerSemantics::IntRange { .. }
+        | FuzzerSemantics::ByteArrayRange { .. }
+        | FuzzerSemantics::String
+        | FuzzerSemantics::Data
+        | FuzzerSemantics::DataWithSchema { .. }
+        | FuzzerSemantics::Exact(_)
+        | FuzzerSemantics::OneOf(_)
+        | FuzzerSemantics::Constructors { .. } => false,
+        FuzzerSemantics::Product(items) => items.iter().any(semantics_is_opaque),
+        FuzzerSemantics::List { element, .. } => semantics_is_opaque(element),
+        FuzzerSemantics::StateMachineTrace {
+            transition_semantics,
+            output_semantics,
+            ..
+        } => {
+            semantics_is_opaque(&transition_semantics.state_semantics)
+                || transition_semantics
+                    .step_input_semantics
+                    .iter()
+                    .any(semantics_is_opaque)
+                || semantics_is_opaque(&transition_semantics.label_semantics)
+                || semantics_is_opaque(&transition_semantics.event_semantics)
+                || semantics_is_opaque(output_semantics)
+        }
+        FuzzerSemantics::Opaque { .. } => true,
+    }
+}
+
+fn constraint_is_unsupported(constraint: &FuzzerConstraint) -> bool {
+    match constraint {
+        FuzzerConstraint::Any
+        | FuzzerConstraint::IntRange { .. }
+        | FuzzerConstraint::ByteStringLenRange { .. }
+        | FuzzerConstraint::Exact(_)
+        | FuzzerConstraint::OneOf(_)
+        | FuzzerConstraint::DataConstructorTags { .. } => false,
+        FuzzerConstraint::Tuple(items) | FuzzerConstraint::And(items) => {
+            items.iter().any(constraint_is_unsupported)
+        }
+        FuzzerConstraint::List { elem, .. } | FuzzerConstraint::Map(elem) => {
+            constraint_is_unsupported(elem)
+        }
+        FuzzerConstraint::Unsupported { .. } => true,
+    }
+}
+
+fn relation_from_current_bridge(
+    test: &ExportedPropertyTest,
+    proof_caveat: &ProofCaveat,
+    placeholder_widenings: &[Widening],
+) -> DomainRel {
+    if let ProofCaveat::Witness(note) = proof_caveat {
+        return DomainRel::Witness {
+            encoded_values: note.witnesses.clone(),
+        };
+    }
+
+    if let Some(widening) = placeholder_widenings.first() {
+        return DomainRel::TrueWithExplicitWidening {
+            reason: widening.message.clone(),
+            allowed_only_under: TrustProfile::UnsafeDev,
+        };
+    }
+
+    if semantics_is_opaque(&test.semantics) {
+        return DomainRel::Unknown {
+            reason: "Current bridge cannot yet certify opaque/custom fuzzer semantics.".to_string(),
+        };
+    }
+
+    if constraint_is_unsupported(&test.constraint) {
+        return DomainRel::Semantics {
+            semantics: test.semantics.clone(),
+        };
+    }
+
+    let mut items = Vec::new();
+    if !matches!(test.constraint, FuzzerConstraint::Any) {
+        items.push(DomainRel::Constraint {
+            constraint: test.constraint.clone(),
+        });
+    }
+    items.push(DomainRel::Semantics {
+        semantics: test.semantics.clone(),
+    });
+
+    if items.len() == 1 {
+        items.pop().expect("domain relation must contain semantics")
+    } else {
+        DomainRel::And { items }
+    }
+}
+
+fn lowered_domain_for_test(
+    test: &ExportedPropertyTest,
+    proof_content: &str,
+    proof_caveat: &ProofCaveat,
+) -> LoweredDomain {
+    let mut lowering_path = Vec::new();
+    if !matches!(test.constraint, FuzzerConstraint::Any) {
+        push_lowering_step(&mut lowering_path, "constraint_ir");
+    }
+    match &test.semantics {
+        FuzzerSemantics::Opaque { .. } => {
+            push_lowering_step(&mut lowering_path, "opaque_semantics")
+        }
+        FuzzerSemantics::StateMachineTrace { .. } => {
+            push_lowering_step(&mut lowering_path, "state_machine_trace");
+        }
+        _ => push_lowering_step(&mut lowering_path, "known_combinator"),
+    }
+    if test.fuzzer_data_schema.is_some() || !test.inner_data_schemas.is_empty() {
+        push_lowering_step(&mut lowering_path, "data_schema");
+    }
+    if test.transition_prop_lean.is_some() {
+        push_lowering_step(&mut lowering_path, "transition_relation");
+    }
+    if matches!(proof_caveat, ProofCaveat::Witness(_)) {
+        push_lowering_step(&mut lowering_path, "witness_replay");
+    }
+
+    let mut widenings = transition_prop_domain_widenings(test);
+    let placeholder_widenings = placeholder_domain_widenings(proof_content);
+    if !placeholder_widenings.is_empty() {
+        push_lowering_step(&mut lowering_path, "placeholder_scan");
+    }
+    if constraint_is_unsupported(&test.constraint) {
+        push_lowering_step(&mut lowering_path, "constraint_gap");
+        widenings.push(Widening {
+            kind: "constraint".to_string(),
+            message: "Current bridge dropped unsupported fuzzer constraint lowering and used a semantics-only over-approximation.".to_string(),
+            allowed_only_under: None,
+        });
+    }
+    widenings.extend(placeholder_widenings.iter().cloned());
+
+    let mut diagnostics = Vec::new();
+    if let ProofCaveat::Partial(note) = proof_caveat {
+        diagnostics.push(note.clone());
+    }
+    if semantics_is_opaque(&test.semantics) {
+        diagnostics
+            .push("Current bridge cannot yet certify opaque/custom fuzzer semantics.".to_string());
+    }
+    if constraint_is_unsupported(&test.constraint) {
+        diagnostics.push(
+            "Current bridge dropped unsupported fuzzer constraint lowering and used a semantics-only over-approximation.".to_string(),
+        );
+    }
+    if !placeholder_widenings.is_empty() {
+        diagnostics.push(
+            "Generated domain contains explicit placeholder widenings and is not production-safe."
+                .to_string(),
+        );
+    }
+
+    let relation = relation_from_current_bridge(test, proof_caveat, &placeholder_widenings);
+    let mut obligations_discharged = vec![
+        DomainObligation::FuzzerModelHashMatches,
+        DomainObligation::PropertyHarnessMatchesExportedUPLC,
+    ];
+
+    let (precision, certificate, obligations_open, production_allowed) = match proof_caveat {
+        ProofCaveat::Witness(_) => {
+            obligations_discharged.push(DomainObligation::WitnessReplaysThroughFuzzer);
+            obligations_discharged.push(DomainObligation::WitnessSatisfiesDomain);
+            (
+                DomainPrecision::WitnessOnly,
+                DomainCertificate::WitnessReplay,
+                Vec::new(),
+                true,
+            )
+        }
+        _ if !placeholder_widenings.is_empty() || semantics_is_opaque(&test.semantics) => (
+            DomainPrecision::Unknown,
+            DomainCertificate::Unchecked,
+            vec![DomainObligation::FuzzerReturnsImpliesDomain],
+            false,
+        ),
+        _ if matches!(test.on_test_failure, OnTestFailure::SucceedImmediately) => {
+            diagnostics.push(
+                "Current bridge does not yet prove DomainImpliesFuzzerReturns for fail_once theorems; production success is downgraded to Partial.".to_string(),
+            );
+            (
+                DomainPrecision::Unknown,
+                DomainCertificate::TrustedVersionedModel,
+                vec![DomainObligation::DomainImpliesFuzzerReturns],
+                false,
+            )
+        }
+        _ => {
+            obligations_discharged.push(DomainObligation::FuzzerReturnsImpliesDomain);
+            (
+                DomainPrecision::OverApprox,
+                DomainCertificate::TrustedVersionedModel,
+                Vec::new(),
+                true,
+            )
+        }
+    };
+
+    LoweredDomain {
+        relation,
+        precision,
+        certificate,
+        obligations_open,
+        obligations_discharged,
+        lowering_path,
+        widenings,
+        production_allowed,
+        diagnostics,
+    }
+}
 /// Sanitize an Aiken identifier to a valid Lean identifier.
 ///
 /// - Replaces `-` with `_`
@@ -2907,6 +3696,7 @@ pub fn run_proofs(
     fn theorem_status_from_module_build(
         test_name: String,
         theorem_name: &str,
+        entry: &ManifestEntry,
         build_output: &str,
         timed_out: bool,
         build_exit_code: Option<i32>,
@@ -2989,7 +3779,13 @@ pub fn run_proofs(
         } else {
             0
         };
-        TheoremResult::new(test_name, theorem_name.to_string(), status, over_approx)
+        TheoremResult::from_manifest_entry(
+            test_name,
+            theorem_name.to_string(),
+            entry,
+            status,
+            over_approx,
+        )
     }
 
     let logs_dir = out_dir.join("logs");
@@ -3059,9 +3855,10 @@ pub fn run_proofs(
                 theorem_names
                     .into_iter()
                     .map(|theorem_name| {
-                        TheoremResult::new(
+                        TheoremResult::from_manifest_entry(
                             test_name.clone(),
                             theorem_name,
+                            entry,
                             ProofStatus::TimedOut {
                                 reason: timeout_reason.clone(),
                             },
@@ -3201,6 +3998,7 @@ pub fn run_proofs(
         theorem_results.push(theorem_status_from_module_build(
             test_name.clone(),
             &entry.lean_theorem,
+            entry,
             &module_output,
             module_timed_out,
             module_exit_code,
@@ -3215,6 +4013,7 @@ pub fn run_proofs(
             theorem_results.push(theorem_status_from_module_build(
                 test_name.clone(),
                 &term_theorem_name,
+                entry,
                 &module_output,
                 module_timed_out,
                 module_exit_code,
@@ -3230,6 +4029,7 @@ pub fn run_proofs(
             theorem_results.push(theorem_status_from_module_build(
                 test_name,
                 &equivalence_theorem_name,
+                entry,
                 &module_output,
                 module_timed_out,
                 module_exit_code,
@@ -3732,6 +4532,7 @@ pub fn generate_lean_workspace(
         fuzzer_uplc_hash: String,
         fuzzer_harness_hash: String,
         fuzzer_model_hash: String,
+        domain: LoweredDomain,
         compatibility_limitations: Vec<String>,
         has_termination_theorem: bool,
         has_equivalence_theorem: bool,
@@ -3930,6 +4731,8 @@ pub fn generate_lean_workspace(
             0
         };
 
+        let domain = lowered_domain_for_test(test, &proof_content, &proof_caveat);
+
         prepared_entries.push(PreparedManifestEntry {
             id,
             aiken_module: module.clone(),
@@ -3949,6 +4752,7 @@ pub fn generate_lean_workspace(
             fuzzer_uplc_hash,
             fuzzer_harness_hash,
             fuzzer_model_hash,
+            domain,
             compatibility_limitations: Vec::new(),
             has_termination_theorem,
             has_equivalence_theorem,
@@ -4008,6 +4812,7 @@ pub fn generate_lean_workspace(
             fuzzer_uplc_hash: Some(entry.fuzzer_uplc_hash),
             fuzzer_harness_hash: Some(entry.fuzzer_harness_hash),
             fuzzer_model_hash: Some(entry.fuzzer_model_hash),
+            domain: Some(entry.domain),
             compatibility_limitations: entry.compatibility_limitations,
             has_termination_theorem: entry.has_termination_theorem,
             has_equivalence_theorem: entry.has_equivalence_theorem,

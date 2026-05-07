@@ -116,24 +116,27 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
             // companion, if present, is independently proved and stays
             // `Proved`.
             let correctness_status = manifest_entry_success_status(entry);
-            theorems.push(TheoremResult::new(
+            theorems.push(TheoremResult::from_manifest_entry(
                 format!("{}.{}", entry.aiken_module, entry.aiken_name),
                 entry.lean_theorem.clone(),
+                entry,
                 correctness_status,
                 entry.over_approximations,
             ));
             if entry.has_termination_theorem {
-                theorems.push(TheoremResult::new(
+                theorems.push(TheoremResult::from_manifest_entry(
                     format!("{}.{}", entry.aiken_module, entry.aiken_name),
                     format!("{}_alwaysTerminating", entry.lean_theorem),
+                    entry,
                     ProofStatus::Proved,
                     0,
                 ));
             }
             if entry.has_equivalence_theorem {
-                theorems.push(TheoremResult::new(
+                theorems.push(TheoremResult::from_manifest_entry(
                     format!("{}.{}", entry.aiken_module, entry.aiken_name),
                     format!("{}_equivalence", entry.lean_theorem),
+                    entry,
                     ProofStatus::Proved,
                     0,
                 ));
@@ -207,9 +210,10 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
                 0
             };
 
-            theorems.push(TheoremResult::new(
+            theorems.push(TheoremResult::from_manifest_entry(
                 format!("{}.{}", entry.aiken_module, entry.aiken_name),
                 entry.lean_theorem.clone(),
+                entry,
                 correctness_status,
                 correctness_over_approx,
             ));
@@ -240,11 +244,12 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
                     ProofStatus::Unknown
                 };
 
-                theorems.push(TheoremResult::new(
+                theorems.push(TheoremResult::from_manifest_entry(
                     format!("{}.{}", entry.aiken_module, entry.aiken_name),
                     term_name,
+                    entry,
                     term_status,
-                    0, // termination theorem is not a two-phase proof
+                    0,
                 ));
             }
 
@@ -274,9 +279,10 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
                     ProofStatus::Unknown
                 };
 
-                theorems.push(TheoremResult::new(
+                theorems.push(TheoremResult::from_manifest_entry(
                     format!("{}.{}", entry.aiken_module, entry.aiken_name),
                     equivalence_name,
+                    entry,
                     equivalence_status,
                     0,
                 ));

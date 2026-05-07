@@ -38,6 +38,46 @@ expression: "&manifest"
       "fuzzer_uplc_hash": "5555555555555555555555555555555555555555555555555555555555555555",
       "fuzzer_harness_hash": "66666666666666666666666666666666666666666666666666666666",
       "fuzzer_model_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
       "has_termination_theorem": true,
       "has_equivalence_theorem": true,
       "over_approximations": 2,
@@ -58,7 +98,26 @@ expression: "&manifest"
       "module": "example",
       "reason": "unsupported shape",
       "status": "Unsupported",
-      "certification": "unsupported"
+      "certification": "unsupported",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "unknown",
+          "reason": "unsupported shape"
+        },
+        "precision": "Unknown",
+        "certificate": "Unchecked",
+        "obligations_open": [],
+        "obligations_discharged": [],
+        "lowering_path": [
+          "unsupported_generation"
+        ],
+        "widenings": [],
+        "production_allowed": false,
+        "diagnostics": [
+          "unsupported shape"
+        ]
+      }
     }
   ]
 }

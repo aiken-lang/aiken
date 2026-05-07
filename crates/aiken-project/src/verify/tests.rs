@@ -4442,6 +4442,84 @@ fn requires_explicit_bounds_is_constraint_driven() {
     ));
 }
 
+fn trusted_overapprox_domain() -> LoweredDomain {
+    LoweredDomain {
+        relation: DomainRel::And {
+            items: vec![
+                DomainRel::Constraint {
+                    constraint: FuzzerConstraint::IntRange {
+                        min: "0".to_string(),
+                        max: "255".to_string(),
+                    },
+                },
+                DomainRel::Semantics {
+                    semantics: FuzzerSemantics::IntRange {
+                        min: Some("0".to_string()),
+                        max: Some("255".to_string()),
+                    },
+                },
+            ],
+        },
+        precision: DomainPrecision::OverApprox,
+        certificate: DomainCertificate::TrustedVersionedModel,
+        obligations_open: Vec::new(),
+        obligations_discharged: vec![
+            DomainObligation::FuzzerReturnsImpliesDomain,
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+        lowering_path: vec!["constraint_ir".to_string(), "known_combinator".to_string()],
+        widenings: Vec::new(),
+        production_allowed: true,
+        diagnostics: Vec::new(),
+    }
+}
+
+fn witness_only_domain(witnesses: &[&str]) -> LoweredDomain {
+    LoweredDomain {
+        relation: DomainRel::Witness {
+            encoded_values: witnesses.iter().map(|w| (*w).to_string()).collect(),
+        },
+        precision: DomainPrecision::WitnessOnly,
+        certificate: DomainCertificate::WitnessReplay,
+        obligations_open: Vec::new(),
+        obligations_discharged: vec![
+            DomainObligation::WitnessReplaysThroughFuzzer,
+            DomainObligation::WitnessSatisfiesDomain,
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+        lowering_path: vec!["witness_replay".to_string()],
+        widenings: Vec::new(),
+        production_allowed: true,
+        diagnostics: Vec::new(),
+    }
+}
+
+fn placeholder_domain(reason: &str) -> LoweredDomain {
+    LoweredDomain {
+        relation: DomainRel::TrueWithExplicitWidening {
+            reason: reason.to_string(),
+            allowed_only_under: TrustProfile::UnsafeDev,
+        },
+        precision: DomainPrecision::Unknown,
+        certificate: DomainCertificate::Unchecked,
+        obligations_open: vec![DomainObligation::FuzzerReturnsImpliesDomain],
+        obligations_discharged: vec![
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+        lowering_path: vec!["placeholder_scan".to_string()],
+        widenings: vec![Widening {
+            kind: "placeholder".to_string(),
+            message: reason.to_string(),
+            allowed_only_under: Some(TrustProfile::UnsafeDev),
+        }],
+        production_allowed: false,
+        diagnostics: vec![reason.to_string()],
+    }
+}
+
 fn make_manifest(entries: Vec<(&str, &str, &str)>) -> GeneratedManifest {
     make_manifest_with_termination(entries, true)
 }
@@ -4495,6 +4573,7 @@ fn make_manifest_with_termination(
                 fuzzer_uplc_hash: Some("55".repeat(32)),
                 fuzzer_harness_hash: Some("66".repeat(28)),
                 fuzzer_model_hash: Some("77".repeat(32)),
+                domain: Some(trusted_overapprox_domain()),
                 compatibility_limitations: Vec::new(),
                 has_termination_theorem,
                 has_equivalence_theorem: false,
@@ -4775,6 +4854,7 @@ fn equivalence_theorem_name_for_entry_detects_marker_in_proof_file() {
         fuzzer_uplc_hash: None,
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
+        domain: Some(trusted_overapprox_domain()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: true,
@@ -4817,6 +4897,7 @@ fn equivalence_theorem_name_for_entry_returns_none_without_marker() {
         fuzzer_uplc_hash: None,
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
+        domain: Some(trusted_overapprox_domain()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5013,6 +5094,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         fuzzer_uplc_hash: None,
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
+        domain: Some(trusted_overapprox_domain()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: true,
         has_equivalence_theorem: false,
@@ -5055,6 +5137,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         fuzzer_uplc_hash: None,
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
+        domain: Some(trusted_overapprox_domain()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5260,11 +5343,14 @@ fn proof_status_serializes_internally_tagged() {
 
 #[test]
 fn theorem_result_serializes_new_status_and_certification() {
-    let result = TheoremResult::new(
+    let result = TheoremResult::new_with_domain(
         "mod.test".to_string(),
         "test".to_string(),
         ProofStatus::Proved,
         0,
+        TrustProfile::Production,
+        trusted_overapprox_domain(),
+        Some(ManifestTestMode::Normal),
     );
     let value = serde_json::to_value(&result).expect("TheoremResult should serialize");
 
@@ -5273,7 +5359,65 @@ fn theorem_result_serializes_new_status_and_certification() {
         value["certification"],
         serde_json::json!("smt_valid_no_proof_reconstruction")
     );
+    assert_eq!(value["trust_profile"], serde_json::json!("production"));
+    assert_eq!(
+        value["domain"]["precision"],
+        serde_json::json!("OverApprox")
+    );
+    assert_eq!(
+        value["domain"]["certificate"],
+        serde_json::json!("TrustedVersionedModel")
+    );
+    assert_eq!(value["domain"]["obligations_open"], serde_json::json!([]));
     assert_eq!(value["proof_status"], serde_json::json!({"kind": "proved"}));
+}
+
+#[test]
+fn domain_precision_serializes_and_displays_all_values() {
+    let cases = [
+        (DomainPrecision::Exact, "Exact"),
+        (DomainPrecision::OverApprox, "OverApprox"),
+        (DomainPrecision::UnderApprox, "UnderApprox"),
+        (DomainPrecision::WitnessOnly, "WitnessOnly"),
+        (DomainPrecision::Unknown, "Unknown"),
+    ];
+
+    for (precision, expected) in cases {
+        assert_eq!(precision.to_string(), expected);
+        assert_eq!(
+            serde_json::to_value(precision).expect("precision should serialize"),
+            serde_json::json!(expected)
+        );
+    }
+}
+
+#[test]
+fn domain_certificate_serializes_and_displays_all_values() {
+    let cases = [
+        (DomainCertificate::LeanProved, "LeanProved"),
+        (
+            DomainCertificate::TrustedVersionedModel,
+            "TrustedVersionedModel",
+        ),
+        (
+            DomainCertificate::SamplerSemanticModel,
+            "SamplerSemanticModel",
+        ),
+        (DomainCertificate::WitnessReplay, "WitnessReplay"),
+        (
+            DomainCertificate::DifferentialTestedOnly,
+            "DifferentialTestedOnly",
+        ),
+        (DomainCertificate::Unchecked, "Unchecked"),
+    ];
+
+    for (certificate, expected) in cases {
+        assert_eq!(certificate.to_string(), expected);
+        assert_eq!(
+            serde_json::to_value(certificate).expect("certificate should serialize"),
+            serde_json::json!(expected)
+        );
+    }
 }
 
 #[test]
@@ -5316,6 +5460,24 @@ fn legacy_proved_status_deserializes_as_solver_validated() {
         result.certification,
         Certification::SmtValidNoProofReconstruction
     );
+}
+
+#[test]
+fn unknown_or_unchecked_domain_cannot_report_solver_validated_under_production() {
+    let result = TheoremResult::new_with_domain(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        placeholder_domain("placeholder widened to True"),
+        Some(ManifestTestMode::Normal),
+    );
+
+    assert_eq!(result.status, VerificationStatus::Partial);
+    assert_eq!(result.certification, Certification::OpenObligations);
+    assert_ne!(result.status, VerificationStatus::SolverValidated);
+    assert!(matches!(result.proof_status, ProofStatus::Partial { .. }));
 }
 
 #[test]
@@ -5364,6 +5526,9 @@ fn placeholder_domain_fixture_cannot_report_solver_validated() {
         fuzzer_uplc_hash: Some("55".repeat(32)),
         fuzzer_harness_hash: Some("66".repeat(28)),
         fuzzer_model_hash: Some("77".repeat(32)),
+        domain: Some(placeholder_domain(
+            "Opaque existential domain widened to True: missing schema",
+        )),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5490,6 +5655,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         fuzzer_uplc_hash: None,
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
+        domain: Some(witness_only_domain(&["00", "01", "02"])),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5549,6 +5715,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         fuzzer_uplc_hash: None,
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
+        domain: Some(trusted_overapprox_domain()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5955,6 +6122,7 @@ fn manifest_entry_caveat_round_trips_witness_proof_note() {
         fuzzer_uplc_hash: None,
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
+        domain: Some(witness_only_domain(&["aa", "bb", "cc"])),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
