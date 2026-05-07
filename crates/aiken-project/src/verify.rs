@@ -2071,6 +2071,25 @@ fn theorem_result_explanation(
     }
 }
 
+fn domain_result_explanation(domain: &LoweredDomain) -> Option<String> {
+    let mut lines = vec![format!(
+        "input domain: {} ({})",
+        domain.precision, domain.certificate
+    )];
+
+    if !domain.lowering_path.is_empty() {
+        lines.push(format!("lowering: {}", domain.lowering_path.join(" -> ")));
+    }
+
+    if let Some(widening) = domain.widenings.first() {
+        lines.push(format!("widening: {}", widening.message));
+    } else if let Some(message) = first_domain_diagnostic_message(domain) {
+        lines.push(format!("domain note: {message}"));
+    }
+
+    Some(lines.join("\n"))
+}
+
 impl<'de> serde::Deserialize<'de> for TheoremResult {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -2235,6 +2254,12 @@ impl TheoremResult {
             ProofStatus::Proved | ProofStatus::WitnessProved { .. }
         ) && let Some(note) = assessment.and_then(|assessment| assessment.success_note)
         {
+            result.explanation = Some(match result.explanation.take() {
+                Some(existing) => format!("{existing}\n{note}"),
+                None => note,
+            });
+        }
+        if let Some(note) = domain_result_explanation(&result.domain) {
             result.explanation = Some(match result.explanation.take() {
                 Some(existing) => format!("{existing}\n{note}"),
                 None => note,
@@ -3111,6 +3136,14 @@ impl GeneratedManifest {
         if entry.domain.is_none() {
             missing.push("domain");
         }
+        if entry
+            .domain
+            .as_ref()
+            .is_some_and(|domain| domain.certificate == DomainCertificate::TrustedVersionedModel)
+            && entry.fuzzer_model_hash.is_none()
+        {
+            missing.push("fuzzer_model_hash");
+        }
         if entry.input_type.is_none() {
             missing.push("input_type");
         }
@@ -3460,6 +3493,170 @@ fn constraint_is_unsupported(constraint: &FuzzerConstraint) -> bool {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompactDomainCoverage {
+    ExactSupport,
+    UniversalOverApprox,
+}
+
+#[derive(Debug, Clone)]
+struct CompactDomainProfile {
+    precision: DomainPrecision,
+    coverage: CompactDomainCoverage,
+    widenings: Vec<Widening>,
+    diagnostics: Vec<String>,
+}
+
+fn exact_compact_profile(message: impl Into<String>) -> CompactDomainProfile {
+    CompactDomainProfile {
+        precision: DomainPrecision::Exact,
+        coverage: CompactDomainCoverage::ExactSupport,
+        widenings: Vec::new(),
+        diagnostics: vec![message.into()],
+    }
+}
+
+fn overapprox_compact_profile(
+    message: impl Into<String>,
+    widenings: Vec<Widening>,
+) -> CompactDomainProfile {
+    CompactDomainProfile {
+        precision: DomainPrecision::OverApprox,
+        coverage: CompactDomainCoverage::UniversalOverApprox,
+        widenings,
+        diagnostics: vec![message.into()],
+    }
+}
+
+fn combine_compact_profiles(
+    kind: &str,
+    profiles: Vec<CompactDomainProfile>,
+) -> Option<CompactDomainProfile> {
+    if profiles.is_empty() {
+        return None;
+    }
+
+    let is_exact = profiles.iter().all(|profile| {
+        profile.precision == DomainPrecision::Exact
+            && matches!(profile.coverage, CompactDomainCoverage::ExactSupport)
+            && profile.widenings.is_empty()
+    });
+
+    let mut widenings = Vec::new();
+    let mut diagnostics = Vec::new();
+    for profile in profiles {
+        widenings.extend(profile.widenings);
+        diagnostics.extend(profile.diagnostics);
+    }
+
+    if is_exact {
+        diagnostics.insert(
+            0,
+            format!(
+                "Compact lowering models the {kind} domain exactly through certified child domains."
+            ),
+        );
+        Some(CompactDomainProfile {
+            precision: DomainPrecision::Exact,
+            coverage: CompactDomainCoverage::ExactSupport,
+            widenings,
+            diagnostics,
+        })
+    } else {
+        diagnostics.insert(
+            0,
+            format!(
+                "Compact lowering models the {kind} domain conservatively because one or more child domains are over-approximated or widened.",
+            ),
+        );
+        Some(CompactDomainProfile {
+            precision: DomainPrecision::OverApprox,
+            coverage: CompactDomainCoverage::UniversalOverApprox,
+            widenings,
+            diagnostics,
+        })
+    }
+}
+
+fn compact_domain_profile(
+    output_type: &FuzzerOutputType,
+    semantics: &FuzzerSemantics,
+) -> Option<CompactDomainProfile> {
+    match (output_type, semantics) {
+        (
+            FuzzerOutputType::Int,
+            FuzzerSemantics::IntRange {
+                min: Some(min),
+                max: Some(max),
+            },
+        ) => Some(exact_compact_profile(format!(
+            "Compact lowering models the integer generator as the exact bounded support [{min}, {max}].",
+        ))),
+        (_, FuzzerSemantics::Exact(value)) => Some(exact_compact_profile(format!(
+            "Compact lowering models the generator as the exact singleton value {value}.",
+        ))),
+        (_, FuzzerSemantics::OneOf(values)) if !values.is_empty() => {
+            Some(exact_compact_profile(format!(
+                "Compact lowering models the generator as an exact finite scalar domain of {} case(s).",
+                values.len()
+            )))
+        }
+        (_, FuzzerSemantics::Constructors { tags }) if !tags.is_empty() => {
+            Some(exact_compact_profile(format!(
+                "Compact lowering models the generator as the exact constructor-tag domain {:?}.",
+                tags
+            )))
+        }
+        (
+            FuzzerOutputType::ByteArray | FuzzerOutputType::String,
+            FuzzerSemantics::ByteArrayRange { min_len, max_len },
+        ) if min_len.is_some() || max_len.is_some() => {
+            let description = match (min_len, max_len) {
+                (Some(min), Some(max)) => format!("lengths [{min}, {max}]"),
+                (Some(min), None) => format!("lengths >= {min}"),
+                (None, Some(max)) => format!("lengths <= {max}"),
+                (None, None) => unreachable!("guarded above"),
+            };
+            Some(overapprox_compact_profile(
+                format!(
+                    "Compact lowering models byte-array support by exact {description}, but content remains a conservative over-approximation until the sampler/hash semantics are proved.",
+                ),
+                vec![Widening {
+                    kind: "bytearray_content".to_string(),
+                    message: "ByteArray length bounds are trusted, but arbitrary content is still over-approximated; exact content support requires sampler semantics or a proved hash/content model.".to_string(),
+                    allowed_only_under: None,
+                }],
+            ))
+        }
+        (FuzzerOutputType::Pair(first, second), FuzzerSemantics::Product(items))
+            if items.len() == 2 =>
+        {
+            combine_compact_profiles(
+                "pair",
+                [
+                    compact_domain_profile(first.as_ref(), &items[0]),
+                    compact_domain_profile(second.as_ref(), &items[1]),
+                ]
+                .into_iter()
+                .collect::<Option<Vec<_>>>()?,
+            )
+        }
+        (FuzzerOutputType::Tuple(types), FuzzerSemantics::Product(items))
+            if !types.is_empty() && types.len() == items.len() =>
+        {
+            combine_compact_profiles(
+                "tuple",
+                types
+                    .iter()
+                    .zip(items.iter())
+                    .map(|(output_type, semantics)| compact_domain_profile(output_type, semantics))
+                    .collect::<Option<Vec<_>>>()?,
+            )
+        }
+        _ => None,
+    }
+}
+
 fn witness_values_for_mode(
     test: &ExportedPropertyTest,
     proof_caveat: Option<&ProofCaveat>,
@@ -3593,6 +3790,10 @@ fn lowered_domain_for_test(
     if input_bridge.input_type.schema_hash.is_some() || !input_bridge.diagnostics.is_empty() {
         push_lowering_step(&mut lowering_path, "value_bridge");
     }
+    let compact_profile = compact_domain_profile(&test.fuzzer_output_type, &test.semantics);
+    if compact_profile.is_some() {
+        push_lowering_step(&mut lowering_path, "compact_domain");
+    }
 
     let mut widenings = transition_prop_domain_widenings(test);
     let placeholder_widenings = proof_content
@@ -3601,13 +3802,18 @@ fn lowered_domain_for_test(
     if !placeholder_widenings.is_empty() {
         push_lowering_step(&mut lowering_path, "placeholder_scan");
     }
-    if constraint_is_unsupported(&test.constraint) && !sampler_relation_active {
+    let constraint_gap_active =
+        constraint_is_unsupported(&test.constraint) && !sampler_relation_active;
+    if constraint_gap_active {
         push_lowering_step(&mut lowering_path, "constraint_gap");
         widenings.push(Widening {
             kind: "constraint".to_string(),
             message: "Current bridge dropped unsupported fuzzer constraint lowering and used a semantics-only over-approximation.".to_string(),
             allowed_only_under: None,
         });
+    }
+    if let Some(profile) = &compact_profile {
+        widenings.extend(profile.widenings.iter().cloned());
     }
     widenings.extend(placeholder_widenings.iter().cloned());
     widenings.extend(input_bridge.widenings.iter().cloned());
@@ -3628,7 +3834,10 @@ fn lowered_domain_for_test(
             "Opaque/custom fuzzer semantics routed through the exact sampler relation over the exported harness ABI.".to_string(),
         );
     }
-    if constraint_is_unsupported(&test.constraint) && !sampler_relation_active {
+    if let Some(profile) = &compact_profile {
+        diagnostics.extend(profile.diagnostics.iter().cloned());
+    }
+    if constraint_gap_active {
         diagnostics.push(
             "Current bridge dropped unsupported fuzzer constraint lowering and used a semantics-only over-approximation.".to_string(),
         );
@@ -3692,6 +3901,40 @@ fn lowered_domain_for_test(
                     }
                 }],
             )
+        } else if let Some(profile) = &compact_profile {
+            let precision = if constraint_gap_active && profile.precision == DomainPrecision::Exact
+            {
+                DomainPrecision::OverApprox
+            } else {
+                profile.precision
+            };
+            match mode {
+                CompatibilityMode::SemanticExistential
+                    if !constraint_gap_active
+                        && matches!(profile.coverage, CompactDomainCoverage::ExactSupport) =>
+                {
+                    obligations_discharged.push(DomainObligation::DomainIffFuzzerReturns);
+                    (
+                        precision,
+                        DomainCertificate::TrustedVersionedModel,
+                        Vec::new(),
+                    )
+                }
+                CompatibilityMode::SemanticExistential => (
+                    precision,
+                    DomainCertificate::TrustedVersionedModel,
+                    vec![DomainObligation::DomainImpliesFuzzerReturns],
+                ),
+                CompatibilityMode::UniversalSuccess | CompatibilityMode::UniversalFailure => {
+                    obligations_discharged.push(DomainObligation::FuzzerReturnsImpliesDomain);
+                    (
+                        precision,
+                        DomainCertificate::TrustedVersionedModel,
+                        Vec::new(),
+                    )
+                }
+                CompatibilityMode::WitnessCheck => unreachable!("witness mode handled above"),
+            }
         } else if matches!(mode, CompatibilityMode::SemanticExistential) {
             (
                 DomainPrecision::Unknown,

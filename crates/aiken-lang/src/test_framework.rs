@@ -477,7 +477,7 @@ pub fn typed_expr_to_shallow_ir(
                     }
                 }
             }
-        },
+        }
 
         // Everything else: opaque
         _ => ShallowIr::Opaque {
@@ -503,7 +503,7 @@ fn projected_binding(
     label: impl Into<String>,
     ty: ShallowIrType,
     kind: ShallowFieldAccessKind,
- ) -> Option<LocalBinding> {
+) -> Option<LocalBinding> {
     let label = label.into();
     let item = match kind {
         ShallowFieldAccessKind::ConstructorField => ProjectionPathItem::ConstructorField {
@@ -518,7 +518,11 @@ fn projected_binding(
         },
     };
     match binding {
-        LocalBinding::DrawnValue { lean_name, ty: source_ty, .. } => Some(LocalBinding::Projection {
+        LocalBinding::DrawnValue {
+            lean_name,
+            ty: source_ty,
+            ..
+        } => Some(LocalBinding::Projection {
             source_lean_name: lean_name.clone(),
             source_ty: source_ty.clone(),
             path: vec![item],
@@ -541,7 +545,10 @@ fn projected_binding(
         }
         LocalBinding::ExactIr { ir, .. } => {
             let projected_ir = exact_field_ir_from_shallow_ir(ir, index, kind)?;
-            Some(LocalBinding::ExactIr { ty, ir: projected_ir })
+            Some(LocalBinding::ExactIr {
+                ty,
+                ir: projected_ir,
+            })
         }
         LocalBinding::PureExpr(_) => None,
     }
@@ -618,7 +625,6 @@ fn bool_constructor_literal(ctor_name: &str, tipo: &Rc<Type>) -> Option<bool> {
     }
 }
 
-
 fn bind_pattern_to_locals(
     pattern: &TypedPattern,
     binding: &LocalBinding,
@@ -636,7 +642,12 @@ fn bind_pattern_to_locals(
         TypedPattern::Discard { .. } => {}
         TypedPattern::Pair { fst, snd, .. } => {
             if let LocalBinding::PureExpr(expr) = binding {
-                if let TypedExpr::Pair { fst: expr_fst, snd: expr_snd, .. } = terminal_expression(expr) {
+                if let TypedExpr::Pair {
+                    fst: expr_fst,
+                    snd: expr_snd,
+                    ..
+                } = terminal_expression(expr)
+                {
                     bind_pattern_to_locals(
                         fst,
                         &LocalBinding::PureExpr(expr_fst.as_ref().clone()),
@@ -657,28 +668,23 @@ fn bind_pattern_to_locals(
                 ShallowIrType::Pair(fst_ty, snd_ty) => ((*fst_ty).clone(), (*snd_ty).clone()),
                 _ => (ShallowIrType::Data, ShallowIrType::Data),
             };
-            if let Some(fst_binding) = projected_binding(
-                binding,
-                0,
-                "0",
-                fst_ty,
-                ShallowFieldAccessKind::ListElement,
-            ) {
+            if let Some(fst_binding) =
+                projected_binding(binding, 0, "0", fst_ty, ShallowFieldAccessKind::ListElement)
+            {
                 bind_pattern_to_locals(fst, &fst_binding, data_types, locals);
             }
-            if let Some(snd_binding) = projected_binding(
-                binding,
-                1,
-                "1",
-                snd_ty,
-                ShallowFieldAccessKind::ListElement,
-            ) {
+            if let Some(snd_binding) =
+                projected_binding(binding, 1, "1", snd_ty, ShallowFieldAccessKind::ListElement)
+            {
                 bind_pattern_to_locals(snd, &snd_binding, data_types, locals);
             }
         }
         TypedPattern::Tuple { elems, .. } => {
             if let LocalBinding::PureExpr(expr) = binding {
-                if let TypedExpr::Tuple { elems: expr_elems, .. } = terminal_expression(expr) {
+                if let TypedExpr::Tuple {
+                    elems: expr_elems, ..
+                } = terminal_expression(expr)
+                {
                     for (pat, expr) in elems.iter().zip(expr_elems.iter()) {
                         bind_pattern_to_locals(
                             pat,
@@ -764,15 +770,13 @@ fn unsupported_assignment_pattern_reason(pattern: &TypedPattern) -> Option<&'sta
         TypedPattern::Assign { pattern, .. } => unsupported_assignment_pattern_reason(pattern),
         TypedPattern::Pair { fst, snd, .. } => unsupported_assignment_pattern_reason(fst)
             .or_else(|| unsupported_assignment_pattern_reason(snd)),
-        TypedPattern::Tuple { elems, .. } => elems
-            .iter()
-            .find_map(unsupported_assignment_pattern_reason),
+        TypedPattern::Tuple { elems, .. } => {
+            elems.iter().find_map(unsupported_assignment_pattern_reason)
+        }
         TypedPattern::Constructor { arguments, .. } => arguments
             .iter()
             .find_map(|arg| unsupported_assignment_pattern_reason(&arg.value)),
-        TypedPattern::List { .. } => {
-            Some("list-pattern bindings are not lowered faithfully yet")
-        }
+        TypedPattern::List { .. } => Some("list-pattern bindings are not lowered faithfully yet"),
     }
 }
 
@@ -785,15 +789,13 @@ fn unsupported_pattern_binding_reason(pattern: &TypedPattern) -> Option<&'static
         TypedPattern::Assign { pattern, .. } => unsupported_pattern_binding_reason(pattern),
         TypedPattern::Pair { fst, snd, .. } => unsupported_pattern_binding_reason(fst)
             .or_else(|| unsupported_pattern_binding_reason(snd)),
-        TypedPattern::Tuple { elems, .. } => elems
-            .iter()
-            .find_map(unsupported_pattern_binding_reason),
+        TypedPattern::Tuple { elems, .. } => {
+            elems.iter().find_map(unsupported_pattern_binding_reason)
+        }
         TypedPattern::Constructor { arguments, .. } => arguments
             .iter()
             .find_map(|arg| unsupported_pattern_binding_reason(&arg.value)),
-        TypedPattern::List { .. } => {
-            Some("list-pattern bindings are not lowered faithfully yet")
-        }
+        TypedPattern::List { .. } => Some("list-pattern bindings are not lowered faithfully yet"),
     }
 }
 
@@ -832,20 +834,24 @@ fn local_binding_to_shallow_ir(
             };
             for item in path {
                 ir = match item {
-                    ProjectionPathItem::ConstructorField { index, label, ty } => ShallowIr::FieldAccess {
-                        record: Box::new(ir),
-                        index: *index,
-                        label: label.clone(),
-                        ty: ty.clone(),
-                        kind: ShallowFieldAccessKind::ConstructorField,
-                    },
-                    ProjectionPathItem::ListElement { index, label, ty } => ShallowIr::FieldAccess {
-                        record: Box::new(ir),
-                        index: *index,
-                        label: label.clone(),
-                        ty: ty.clone(),
-                        kind: ShallowFieldAccessKind::ListElement,
-                    },
+                    ProjectionPathItem::ConstructorField { index, label, ty } => {
+                        ShallowIr::FieldAccess {
+                            record: Box::new(ir),
+                            index: *index,
+                            label: label.clone(),
+                            ty: ty.clone(),
+                            kind: ShallowFieldAccessKind::ConstructorField,
+                        }
+                    }
+                    ProjectionPathItem::ListElement { index, label, ty } => {
+                        ShallowIr::FieldAccess {
+                            record: Box::new(ir),
+                            index: *index,
+                            label: label.clone(),
+                            ty: ty.clone(),
+                            kind: ShallowFieldAccessKind::ListElement,
+                        }
+                    }
                 };
             }
             ir
@@ -863,7 +869,12 @@ fn record_constructor_shape(
     }
     let ctor = dt.constructors.first()?;
     let tag = resolve_constructor_tag(tipo, &ctor.name, data_types)?;
-    Some((dt.name.clone(), ctor.name.clone(), tag, ctor.arguments.len()))
+    Some((
+        dt.name.clone(),
+        ctor.name.clone(),
+        tag,
+        ctor.arguments.len(),
+    ))
 }
 
 fn typed_expr_to_shallow_ir_with_locals(
@@ -873,7 +884,9 @@ fn typed_expr_to_shallow_ir_with_locals(
     visiting: &mut BTreeSet<String>,
 ) -> ShallowIr {
     match expr {
-        TypedExpr::Var { name, constructor, .. } if locals.contains_key(name) => {
+        TypedExpr::Var {
+            name, constructor, ..
+        } if locals.contains_key(name) => {
             if let Some(binding) = locals.get(name) {
                 if !visiting.insert(name.clone()) {
                     return ShallowIr::Opaque {
@@ -896,7 +909,9 @@ fn typed_expr_to_shallow_ir_with_locals(
         TypedExpr::ByteArray { bytes, .. } => {
             ShallowIr::Const(ShallowConst::ByteArray(hex::encode(bytes)))
         }
-        TypedExpr::Var { constructor, name, .. } => {
+        TypedExpr::Var {
+            constructor, name, ..
+        } => {
             if let ValueConstructorVariant::Record {
                 arity,
                 module,
@@ -937,13 +952,13 @@ fn typed_expr_to_shallow_ir_with_locals(
         TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
             translate_sequence_with_locals(expressions, data_types, locals, visiting)
         }
-        TypedExpr::If { branches, final_else, .. } => {
-            let mut result = typed_expr_to_shallow_ir_with_locals(
-                final_else,
-                data_types,
-                locals,
-                visiting,
-            );
+        TypedExpr::If {
+            branches,
+            final_else,
+            ..
+        } => {
+            let mut result =
+                typed_expr_to_shallow_ir_with_locals(final_else, data_types, locals, visiting);
             for branch in branches.iter().rev() {
                 result = ShallowIr::If {
                     cond: Box::new(typed_expr_to_shallow_ir_with_locals(
@@ -963,11 +978,16 @@ fn typed_expr_to_shallow_ir_with_locals(
             }
             result
         }
-        TypedExpr::When { subject, clauses, .. } => {
+        TypedExpr::When {
+            subject, clauses, ..
+        } => {
             let subject_tipo = subject.tipo();
             let mut visiting_subject_binding = BTreeSet::new();
-            let subject_binding =
-                binding_from_expr_with_locals(subject.as_ref(), locals, &mut visiting_subject_binding);
+            let subject_binding = binding_from_expr_with_locals(
+                subject.as_ref(),
+                locals,
+                &mut visiting_subject_binding,
+            );
             let arms: Result<Vec<_>, _> = clauses
                 .iter()
                 .map(|clause| {
@@ -984,10 +1004,7 @@ fn typed_expr_to_shallow_ir_with_locals(
             match arms {
                 Ok(arms) => ShallowIr::Match {
                     subject: Box::new(typed_expr_to_shallow_ir_with_locals(
-                        subject,
-                        data_types,
-                        locals,
-                        visiting,
+                        subject, data_types, locals, visiting,
                     )),
                     arms,
                 },
@@ -998,28 +1015,29 @@ fn typed_expr_to_shallow_ir_with_locals(
                 },
             }
         }
-        TypedExpr::RecordAccess { record, index, label, .. } => ShallowIr::FieldAccess {
+        TypedExpr::RecordAccess {
+            record,
+            index,
+            label,
+            ..
+        } => ShallowIr::FieldAccess {
             record: Box::new(typed_expr_to_shallow_ir_with_locals(
-                record,
-                data_types,
-                locals,
-                visiting,
+                record, data_types, locals, visiting,
             )),
             index: *index,
             label: label.clone(),
             ty: shallow_ir_type(&expr.tipo()),
             kind: ShallowFieldAccessKind::ConstructorField,
         },
-        TypedExpr::RecordUpdate { spread, args, tipo, .. } => {
+        TypedExpr::RecordUpdate {
+            spread, args, tipo, ..
+        } => {
             if let Some((_type_name, _ctor_name, tag, field_count)) =
                 record_constructor_shape(tipo, data_types)
             {
                 ShallowIr::RecordUpdate {
                     record: Box::new(typed_expr_to_shallow_ir_with_locals(
-                        spread,
-                        data_types,
-                        locals,
-                        visiting,
+                        spread, data_types, locals, visiting,
                     )),
                     tag,
                     field_count,
@@ -1029,10 +1047,7 @@ fn typed_expr_to_shallow_ir_with_locals(
                             label: arg.label.clone(),
                             index: arg.index,
                             value: typed_expr_to_shallow_ir_with_locals(
-                                &arg.value,
-                                data_types,
-                                locals,
-                                visiting,
+                                &arg.value, data_types, locals, visiting,
                             ),
                         })
                         .collect(),
@@ -1045,21 +1060,17 @@ fn typed_expr_to_shallow_ir_with_locals(
                 }
             }
         }
-        TypedExpr::BinOp { name, left, right, .. } => {
+        TypedExpr::BinOp {
+            name, left, right, ..
+        } => {
             if let Some(op) = translate_binop(name) {
                 ShallowIr::BinOp {
                     op,
                     left: Box::new(typed_expr_to_shallow_ir_with_locals(
-                        left,
-                        data_types,
-                        locals,
-                        visiting,
+                        left, data_types, locals, visiting,
                     )),
                     right: Box::new(typed_expr_to_shallow_ir_with_locals(
-                        right,
-                        data_types,
-                        locals,
-                        visiting,
+                        right, data_types, locals, visiting,
                     )),
                 }
             } else {
@@ -1086,7 +1097,8 @@ fn typed_expr_to_shallow_ir_with_locals(
             ty: shallow_ir_type(&expr.tipo()),
         },
         TypedExpr::Tuple { elems, .. } => ShallowIr::Tuple(
-            elems.iter()
+            elems
+                .iter()
                 .map(|e| typed_expr_to_shallow_ir_with_locals(e, data_types, locals, visiting))
                 .collect(),
         ),
@@ -1094,9 +1106,9 @@ fn typed_expr_to_shallow_ir_with_locals(
             typed_expr_to_shallow_ir_with_locals(fst, data_types, locals, visiting),
             typed_expr_to_shallow_ir_with_locals(snd, data_types, locals, visiting),
         ]),
-        TypedExpr::Call { fun, args, tipo, .. } => {
-            translate_call_with_locals(fun, args, tipo, data_types, locals, visiting)
-        }
+        TypedExpr::Call {
+            fun, args, tipo, ..
+        } => translate_call_with_locals(fun, args, tipo, data_types, locals, visiting),
         TypedExpr::Fn { body, .. } => {
             typed_expr_to_shallow_ir_with_locals(body, data_types, locals, visiting)
         }
@@ -1155,10 +1167,7 @@ fn translate_sequence_with_locals(
     match expressions {
         [] => ShallowIr::Const(ShallowConst::Unit),
         [single] => typed_expr_to_shallow_ir_with_locals(single, data_types, locals, visiting),
-        [
-            TypedExpr::Assignment { value, pattern, .. },
-            rest @ ..,
-        ] => {
+        [TypedExpr::Assignment { value, pattern, .. }, rest @ ..] => {
             let mut scoped = locals.clone();
             if let Some(reason) = unsupported_assignment_pattern_reason(pattern) {
                 let ty = rest
@@ -1213,7 +1222,9 @@ fn translate_sequence_with_locals(
             value: Box::new(typed_expr_to_shallow_ir_with_locals(
                 head, data_types, locals, visiting,
             )),
-            body: Box::new(translate_sequence_with_locals(rest, data_types, locals, visiting)),
+            body: Box::new(translate_sequence_with_locals(
+                rest, data_types, locals, visiting,
+            )),
         },
     }
 }
@@ -1232,16 +1243,17 @@ fn translate_clause_with_locals(
             arguments,
             ..
         } => {
-            let tag = resolve_constructor_tag(subject_tipo, ctor_name, data_types).ok_or_else(|| {
-                let type_name = describe_tipo(subject_tipo);
-                ClauseTranslationFailure {
-                    reason: s0002_reason_message(ctor_name, &type_name),
-                    code: OpaqueCode::ConstructorTagUnresolved {
-                        ctor: ctor_name.clone(),
-                        type_name,
-                    },
-                }
-            })?;
+            let tag =
+                resolve_constructor_tag(subject_tipo, ctor_name, data_types).ok_or_else(|| {
+                    let type_name = describe_tipo(subject_tipo);
+                    ClauseTranslationFailure {
+                        reason: s0002_reason_message(ctor_name, &type_name),
+                        code: OpaqueCode::ConstructorTagUnresolved {
+                            ctor: ctor_name.clone(),
+                            type_name,
+                        },
+                    }
+                })?;
             let bindings = arguments
                 .iter()
                 .map(|arg| match &arg.value {
@@ -1256,7 +1268,12 @@ fn translate_clause_with_locals(
         _ => (None, vec![]),
     };
     let mut clause_locals = locals.clone();
-    bind_pattern_to_locals(&clause.pattern, subject_binding, data_types, &mut clause_locals);
+    bind_pattern_to_locals(
+        &clause.pattern,
+        subject_binding,
+        data_types,
+        &mut clause_locals,
+    );
     Ok(ShallowIrArm {
         tag,
         bindings,
@@ -1280,15 +1297,11 @@ fn translate_call_with_locals(
     if let Some(fuzz_ir) = try_fuzz_existential(fun, args, tipo) {
         return fuzz_ir;
     }
-    if extract_module_fn_identity(fun).is_some_and(|(module, name)| module.is_empty() && name == "as_data")
+    if extract_module_fn_identity(fun)
+        .is_some_and(|(module, name)| module.is_empty() && name == "as_data")
         && let [value] = args
     {
-        return typed_expr_to_shallow_ir_with_locals(
-            &value.value,
-            data_types,
-            locals,
-            visiting,
-        );
+        return typed_expr_to_shallow_ir_with_locals(&value.value, data_types, locals, visiting);
     }
     if extract_module_fn_identity(fun)
         .is_some_and(|(module, name)| module == "aiken/collection/list" && name == "concat")
@@ -1328,10 +1341,7 @@ fn translate_call_with_locals(
                             .iter()
                             .map(|a| {
                                 typed_expr_to_shallow_ir_with_locals(
-                                    &a.value,
-                                    data_types,
-                                    locals,
-                                    visiting,
+                                    &a.value, data_types, locals, visiting,
                                 )
                             })
                             .collect(),
@@ -1373,10 +1383,7 @@ fn translate_call_with_locals(
                         .iter()
                         .map(|a| {
                             typed_expr_to_shallow_ir_with_locals(
-                                &a.value,
-                                data_types,
-                                locals,
-                                visiting,
+                                &a.value, data_types, locals, visiting,
                             )
                         })
                         .collect(),
@@ -1677,11 +1684,15 @@ fn shallow_ir_type_from_semantics(semantics: &FuzzerSemantics) -> ShallowIrType 
         FuzzerSemantics::Exact(FuzzerExactValue::Bool(_)) => ShallowIrType::Bool,
         FuzzerSemantics::Exact(FuzzerExactValue::ByteArray(_)) => ShallowIrType::ByteArray,
         FuzzerSemantics::Exact(FuzzerExactValue::String(_)) => ShallowIrType::String,
-        FuzzerSemantics::OneOf(values) => values.first().map_or(ShallowIrType::Data, |value| match value {
-            FuzzerExactValue::Bool(_) => ShallowIrType::Bool,
-            FuzzerExactValue::ByteArray(_) => ShallowIrType::ByteArray,
-            FuzzerExactValue::String(_) => ShallowIrType::String,
-        }),
+        FuzzerSemantics::OneOf(values) => {
+            values
+                .first()
+                .map_or(ShallowIrType::Data, |value| match value {
+                    FuzzerExactValue::Bool(_) => ShallowIrType::Bool,
+                    FuzzerExactValue::ByteArray(_) => ShallowIrType::ByteArray,
+                    FuzzerExactValue::String(_) => ShallowIrType::String,
+                })
+        }
         FuzzerSemantics::Product(items) if items.len() == 2 => ShallowIrType::Pair(
             Box::new(shallow_ir_type_from_semantics(&items[0])),
             Box::new(shallow_ir_type_from_semantics(&items[1])),
@@ -1707,7 +1718,9 @@ fn shallow_ir_type_from_semantics(semantics: &FuzzerSemantics) -> ShallowIrType 
 fn shallow_ir_has_known_constructor_layout(ir: &ShallowIr) -> bool {
     match ir {
         ShallowIr::Construct { .. } => true,
-        ShallowIr::RecordUpdate { record, updates, .. } => {
+        ShallowIr::RecordUpdate {
+            record, updates, ..
+        } => {
             shallow_ir_has_known_constructor_layout(record)
                 && updates
                     .iter()
@@ -1877,7 +1890,9 @@ fn shallow_ir_is_exact_data_expr(ir: &ShallowIr) -> bool {
             kind,
             ..
         } => shallow_ir_field_access_is_exact(record, *index, *kind),
-        ShallowIr::RecordUpdate { record, updates, .. } => {
+        ShallowIr::RecordUpdate {
+            record, updates, ..
+        } => {
             shallow_ir_has_known_constructor_layout(record)
                 && updates
                     .iter()
@@ -1914,9 +1929,9 @@ fn shallow_ir_is_exact_data_expr(ir: &ShallowIr) -> bool {
                     .iter()
                     .all(|arm| shallow_ir_is_exact_data_expr(&arm.body))
         }
-        ShallowIr::Var { .. }
-        | ShallowIr::FuzzExistential { .. }
-        | ShallowIr::Opaque { .. } => false,
+        ShallowIr::Var { .. } | ShallowIr::FuzzExistential { .. } | ShallowIr::Opaque { .. } => {
+            false
+        }
     }
 }
 
@@ -2082,7 +2097,8 @@ fn translate_call(
     if let Some(fuzz_ir) = try_fuzz_existential(fun, args, tipo) {
         return fuzz_ir;
     }
-    if extract_module_fn_identity(fun).is_some_and(|(module, name)| module.is_empty() && name == "as_data")
+    if extract_module_fn_identity(fun)
+        .is_some_and(|(module, name)| module.is_empty() && name == "as_data")
         && let [value] = args
     {
         return typed_expr_to_shallow_ir(&value.value, data_types);
@@ -3444,6 +3460,35 @@ fn normalize_fuzzer_from_call(
         }
     }
 
+    // STDLIB FILTER SHORTCUT: `fuzz.such_that(source, predicate)` keeps the
+    // source generator's support but adds a semantic filter and bounded retry
+    // behavior that the current compact domain IR does not represent exactly.
+    // Preserve the source domain while carrying an explicit unsupported gap so
+    // downstream verification treats the result as conservative rather than
+    // exact. This avoids silently promoting filtered generators (for example
+    // `such_that(bool(), keep_true)`) to proof-grade full-support domains.
+    if let Some((module, fn_name)) = extract_module_fn_identity(fun)
+        && module == STDLIB_FUZZ_MODULE
+        && fn_name == "such_that"
+        && let [source_arg, _predicate_arg] = args
+        && expression_has_fuzzer_type(&source_arg.value)
+    {
+        return NormalizedFuzzer::Bind {
+            source: Box::new(normalize_fuzzer_from_expr(
+                &source_arg.value,
+                current_module,
+                function_index,
+                constant_index,
+                local_values,
+                visiting_functions,
+            )),
+            result: Box::new(opaque_normalized_fuzzer(
+                expr,
+                "such_that predicate/refinement is not yet reflected in compact domain extraction",
+            )),
+        };
+    }
+
     // Descend into helper bodies when possible so that user-defined wrappers,
     // stdlib re-exports, and renames still expose their structural shape
     // (e.g., `negate_fuzzer() = fuzz.map(fuzz.int_between(1, 50), negate)`).
@@ -3549,6 +3594,58 @@ fn helper_body_is_control_flow_shaped(
     )
 }
 
+fn trusted_stdlib_int_range_constraint() -> FuzzerConstraint {
+    FuzzerConstraint::IntRange {
+        min: (-255).to_string(),
+        max: 16_383.to_string(),
+    }
+}
+
+fn trusted_stdlib_byte_range_constraint() -> FuzzerConstraint {
+    FuzzerConstraint::IntRange {
+        min: 0.to_string(),
+        max: 255.to_string(),
+    }
+}
+
+fn trusted_stdlib_int_at_least_constraint(min: BigInt) -> FuzzerConstraint {
+    let max_rand = BigInt::from(255);
+    let abs = if min < BigInt::from(0) {
+        -min.clone()
+    } else {
+        min.clone()
+    };
+    let max = if abs <= max_rand {
+        max_rand
+    } else {
+        &min + BigInt::from(5) * abs
+    };
+
+    FuzzerConstraint::IntRange {
+        min: min.to_string(),
+        max: max.to_string(),
+    }
+}
+
+fn trusted_stdlib_int_at_most_constraint(max: BigInt) -> FuzzerConstraint {
+    let max_rand = BigInt::from(255);
+    let abs = if max < BigInt::from(0) {
+        -max.clone()
+    } else {
+        max.clone()
+    };
+    let min = if abs <= max_rand {
+        -max_rand
+    } else {
+        &max - BigInt::from(5) * abs
+    };
+
+    FuzzerConstraint::IntRange {
+        min: min.to_string(),
+        max: max.to_string(),
+    }
+}
+
 /// Extract a constraint from a primitive-leaf fuzzer call *structurally*,
 /// without matching on function names.
 ///
@@ -3588,6 +3685,12 @@ fn try_extract_primitive_constraint_structurally(
     }
 
     match (fn_name.as_str(), args) {
+        ("bool", []) => Some(FuzzerConstraint::OneOf(vec![
+            FuzzerExactValue::Bool(false),
+            FuzzerExactValue::Bool(true),
+        ])),
+        ("byte", []) => Some(trusted_stdlib_byte_range_constraint()),
+        ("int", []) => Some(trusted_stdlib_int_range_constraint()),
         ("int_between", [lo_arg, hi_arg]) => {
             let lo = try_extract_int_literal(&lo_arg.value, constant_index, local_values)?;
             let hi = try_extract_int_literal(&hi_arg.value, constant_index, local_values)?;
@@ -3601,27 +3704,26 @@ fn try_extract_primitive_constraint_structurally(
         }
         ("int_at_least", [min_arg]) => {
             let min = try_extract_int_literal(&min_arg.value, constant_index, local_values)?;
-            // `i128::MAX.to_string()` is used as a sentinel for "no upper bound".
-            // `unbounded_int_sentinel_to_none` strips it back to `None` downstream.
-            Some(FuzzerConstraint::IntRange {
-                min: min.to_string(),
-                max: i128::MAX.to_string(),
-            })
+            Some(trusted_stdlib_int_at_least_constraint(min))
         }
         ("int_at_most", [max_arg]) => {
             let max = try_extract_int_literal(&max_arg.value, constant_index, local_values)?;
-            // `i128::MIN.to_string()` is used as a sentinel for "no lower bound".
-            Some(FuzzerConstraint::IntRange {
-                min: i128::MIN.to_string(),
-                max: max.to_string(),
-            })
+            Some(trusted_stdlib_int_at_most_constraint(max))
         }
-        ("constant", [value_arg]) if value_arg.value.tipo().is_int() => {
-            let v = try_extract_int_literal(&value_arg.value, constant_index, local_values)?;
-            Some(FuzzerConstraint::IntRange {
-                min: v.to_string(),
-                max: v.to_string(),
-            })
+        ("constant", [value_arg]) => {
+            if let Some(value) = try_extract_exact_scalar(&value_arg.value) {
+                return Some(FuzzerConstraint::Exact(value));
+            }
+
+            if value_arg.value.tipo().is_int() {
+                let v = try_extract_int_literal(&value_arg.value, constant_index, local_values)?;
+                return Some(FuzzerConstraint::IntRange {
+                    min: v.to_string(),
+                    max: v.to_string(),
+                });
+            }
+
+            None
         }
         ("bytearray_between", [lo_arg, hi_arg]) => {
             let lo = extract_bytearray_len(&lo_arg.value, constant_index, local_values)?;
@@ -3631,6 +3733,13 @@ fn try_extract_primitive_constraint_structurally(
             Some(FuzzerConstraint::ByteStringLenRange {
                 min_len: lo,
                 max_len: hi,
+            })
+        }
+        ("bytearray_fixed", [len_arg]) => {
+            let len = extract_bytearray_len(&len_arg.value, constant_index, local_values)?;
+            Some(FuzzerConstraint::ByteStringLenRange {
+                min_len: len,
+                max_len: len,
             })
         }
         ("bytearray_at_most", [max_arg]) => {
@@ -3772,7 +3881,6 @@ fn try_extract_int_literal_inner(
 }
 
 /// Try to extract an exact non-Int scalar value (Bool, String, ByteArray) from a TypedExpr.
-#[cfg(test)]
 fn try_extract_exact_scalar(expr: &TypedExpr) -> Option<FuzzerExactValue> {
     let expr = terminal_expression(expr);
     match expr {
@@ -4013,12 +4121,15 @@ fn normalize_structural_fuzzer_call(
 
                 if is_such_that_filter
                     && mapper_returns_bool
-                    && types_semantically_equal(
-                        source_output_type.as_ref(),
-                        output_type.as_ref(),
-                    )
+                    && types_semantically_equal(source_output_type.as_ref(), output_type.as_ref())
                 {
-                    return Some(source);
+                    return Some(NormalizedFuzzer::Bind {
+                        source: Box::new(source),
+                        result: Box::new(opaque_normalized_fuzzer(
+                            expr,
+                            "such_that predicate/refinement is not yet reflected in compact domain extraction",
+                        )),
+                    });
                 }
 
                 if mapper_shape == UnaryMapperShape::Identity {
@@ -5833,9 +5944,9 @@ fn normalized_fuzzer_semantics(
 ) -> FuzzerSemantics {
     match normalized {
         NormalizedFuzzer::Opaque { expr, reason } => {
-            recover_constructor_choice_semantics(expr.as_ref(), data_types)
+            { recover_constructor_choice_semantics(expr.as_ref(), data_types) }
+                .unwrap_or_else(|| opaque_semantics(reason.clone()))
         }
-        .unwrap_or_else(|| opaque_semantics(reason.clone())),
         NormalizedFuzzer::Primitive {
             known_constraint, ..
         } => {
@@ -5963,11 +6074,13 @@ fn normalized_fuzzer_semantics(
             );
 
             FuzzerSemantics::List {
-                element: Box::new(if matches!(element_semantics, FuzzerSemantics::Opaque { .. }) {
-                    default_semantics_for_type(inner_types[0].as_ref(), data_types)
-                } else {
-                    element_semantics
-                }),
+                element: Box::new(
+                    if matches!(element_semantics, FuzzerSemantics::Opaque { .. }) {
+                        default_semantics_for_type(inner_types[0].as_ref(), data_types)
+                    } else {
+                        element_semantics
+                    },
+                ),
                 min_len: *min_len,
                 max_len: *max_len,
             }
@@ -6102,8 +6215,15 @@ fn intersect_constraints(source: FuzzerConstraint, result: FuzzerConstraint) -> 
                 max: max.unwrap_or_else(|| r_max.clone()),
             }
         }
-        (FuzzerConstraint::Any, _) | (FuzzerConstraint::Unsupported { .. }, _) => result,
-        (_, FuzzerConstraint::Any) | (_, FuzzerConstraint::Unsupported { .. }) => source,
+        (FuzzerConstraint::Any, _) => result,
+        (_, FuzzerConstraint::Any) => source,
+        (FuzzerConstraint::Unsupported { .. }, FuzzerConstraint::Unsupported { .. }) => result,
+        (FuzzerConstraint::Unsupported { .. }, _) => {
+            FuzzerConstraint::And(vec![result.clone(), source.clone()])
+        }
+        (_, FuzzerConstraint::Unsupported { .. }) => {
+            FuzzerConstraint::And(vec![source.clone(), result.clone()])
+        }
         _ => result,
     }
 }
@@ -6757,7 +6877,11 @@ fn extract_state_machine_trace_semantics_from_call(
                 (None, None)
             }
         }
-        TypedExpr::Fn { args: step_args, body, .. } => {
+        TypedExpr::Fn {
+            args: step_args,
+            body,
+            ..
+        } => {
             if step_args.len() > 1 {
                 (
                     None,
@@ -6890,24 +7014,30 @@ fn transition_prop_from_step_function(
     // Resolve `step` to its body when it's a module-level function reference,
     // mirroring the `step_function_ir` path above. For inline `TypedExpr::Fn`
     // step functions we descend into the body directly.
-    let (body_expr, current_module, step_arguments): (&TypedExpr, String, &[TypedArg]) = match step_function {
-        TypedExpr::Var { constructor, .. } => {
-            if let ValueConstructorVariant::ModuleFn { module, name, .. } = &constructor.variant {
-                let key = (module.clone(), name.clone());
-                if visiting_functions.contains(&key) {
+    let (body_expr, current_module, step_arguments): (&TypedExpr, String, &[TypedArg]) =
+        match step_function {
+            TypedExpr::Var { constructor, .. } => {
+                if let ValueConstructorVariant::ModuleFn { module, name, .. } = &constructor.variant
+                {
+                    let key = (module.clone(), name.clone());
+                    if visiting_functions.contains(&key) {
+                        return None;
+                    }
+                    match find_function(function_index, module, name) {
+                        Some(function) => (
+                            &function.body,
+                            module.clone(),
+                            function.arguments.as_slice(),
+                        ),
+                        None => return None,
+                    }
+                } else {
                     return None;
                 }
-                match find_function(function_index, module, name) {
-                    Some(function) => (&function.body, module.clone(), function.arguments.as_slice()),
-                    None => return None,
-                }
-            } else {
-                return None;
             }
-        }
-        TypedExpr::Fn { args, body, .. } => (body.as_ref(), String::new(), args.as_slice()),
-        _ => return None,
-    };
+            TypedExpr::Fn { args, body, .. } => (body.as_ref(), String::new(), args.as_slice()),
+            _ => return None,
+        };
 
     if step_arguments.len() > 1 {
         return None;
@@ -7293,9 +7423,9 @@ fn transition_prop_is_trivially_unsupported(prop: &TransitionProp) -> bool {
 fn transition_prop_contains_unsupported(prop: &TransitionProp) -> bool {
     match prop {
         TransitionProp::Unsupported { .. } => true,
-        TransitionProp::SubGenerator { .. } | TransitionProp::EqOutput(_) | TransitionProp::Pure(_) => {
-            false
-        }
+        TransitionProp::SubGenerator { .. }
+        | TransitionProp::EqOutput(_)
+        | TransitionProp::Pure(_) => false,
         TransitionProp::Exists { body, .. } => transition_prop_contains_unsupported(body),
         TransitionProp::And(children) | TransitionProp::Or(children) => {
             children.iter().any(transition_prop_contains_unsupported)
@@ -7397,7 +7527,9 @@ pub fn find_first_typed_opaque_in_shallow_ir(ir: &ShallowIr) -> Option<&OpaqueCo
                 None
             }
             ShallowIr::FieldAccess { record, .. } => visit(record),
-            ShallowIr::RecordUpdate { record, updates, .. } => visit(record).or_else(|| {
+            ShallowIr::RecordUpdate {
+                record, updates, ..
+            } => visit(record).or_else(|| {
                 for update in updates {
                     if let Some(found) = visit(&update.value) {
                         return Some(found);
@@ -7415,7 +7547,10 @@ pub fn find_first_typed_opaque_in_shallow_ir(ir: &ShallowIr) -> Option<&OpaqueCo
                         return Some(found);
                     }
                 }
-                if let ShallowIr::ListLit { tail: Some(tail), .. } = ir {
+                if let ShallowIr::ListLit {
+                    tail: Some(tail), ..
+                } = ir
+                {
                     return visit(tail);
                 }
                 None
@@ -7570,7 +7705,6 @@ fn inject_module_constants(
     }
 }
 
-
 fn with_scoped_locals<R>(
     ctx: &mut TransitionLoweringContext<'_>,
     locals: BTreeMap<String, LocalBinding>,
@@ -7645,7 +7779,10 @@ fn extend_locals_with_leading_assignments(
     let mut scoped = ctx.locals.clone();
     for e in expressions.iter().take(expressions.len().saturating_sub(1)) {
         if let TypedExpr::Assignment {
-            pattern, value, kind, ..
+            pattern,
+            value,
+            kind,
+            ..
         } = e
         {
             if !kind.is_let() {
@@ -7769,7 +7906,11 @@ fn pattern_source_location(
     pattern: &TypedPattern,
     ctx: &TransitionLoweringContext<'_>,
 ) -> Option<String> {
-    Some(format!("{}:{}", ctx.current_module, pattern.location().start))
+    Some(format!(
+        "{}:{}",
+        ctx.current_module,
+        pattern.location().start
+    ))
 }
 
 fn unsupported_when_pattern(
@@ -7797,34 +7938,26 @@ fn pattern_value_from_binding(
         )),
         TypedPattern::Assign { pattern, .. } => pattern_value_from_binding(pattern, binding, ctx),
         TypedPattern::Int { value, .. } => Ok(ShallowIr::Const(ShallowConst::Int(value.clone()))),
-        TypedPattern::ByteArray { value, .. } => {
-            Ok(ShallowIr::Const(ShallowConst::ByteArray(hex::encode(value))))
-        }
+        TypedPattern::ByteArray { value, .. } => Ok(ShallowIr::Const(ShallowConst::ByteArray(
+            hex::encode(value),
+        ))),
         TypedPattern::Pair { fst, snd, .. } => {
             let (fst_ty, snd_ty) = match binding_shallow_ir_type(binding) {
                 ShallowIrType::Pair(fst_ty, snd_ty) => ((*fst_ty).clone(), (*snd_ty).clone()),
                 _ => (ShallowIrType::Data, ShallowIrType::Data),
             };
-            let Some(fst_binding) = projected_binding(
-                binding,
-                0,
-                "0",
-                fst_ty,
-                ShallowFieldAccessKind::ListElement,
-            ) else {
+            let Some(fst_binding) =
+                projected_binding(binding, 0, "0", fst_ty, ShallowFieldAccessKind::ListElement)
+            else {
                 return Err(unsupported_when_pattern(
                     pattern,
                     ctx,
                     "pair-pattern subject cannot be projected faithfully",
                 ));
             };
-            let Some(snd_binding) = projected_binding(
-                binding,
-                1,
-                "1",
-                snd_ty,
-                ShallowFieldAccessKind::ListElement,
-            ) else {
+            let Some(snd_binding) =
+                projected_binding(binding, 1, "1", snd_ty, ShallowFieldAccessKind::ListElement)
+            else {
                 return Err(unsupported_when_pattern(
                     pattern,
                     ctx,
@@ -7951,7 +8084,9 @@ fn when_clause_condition(
 ) -> Result<Option<ShallowIr>, TransitionProp> {
     match pattern {
         TypedPattern::Var { .. } | TypedPattern::Discard { .. } => Ok(None),
-        TypedPattern::Assign { pattern, .. } => when_clause_condition(pattern, subject_binding, ctx),
+        TypedPattern::Assign { pattern, .. } => {
+            when_clause_condition(pattern, subject_binding, ctx)
+        }
         _ => {
             let mut visiting = BTreeSet::new();
             let subject_ir = local_binding_to_shallow_ir(
@@ -7974,7 +8109,7 @@ fn lower_when_clause_body(
     clause: &TypedClause,
     subject_binding: &LocalBinding,
     ctx: &mut TransitionLoweringContext<'_>,
- ) -> TransitionProp {
+) -> TransitionProp {
     if let Some(reason) = unsupported_pattern_binding_reason(&clause.pattern) {
         return unsupported_when_pattern(&clause.pattern, ctx, reason);
     }
@@ -8021,7 +8156,12 @@ fn exact_field_ir_from_shallow_ir(
                 None
             }
         }
-        (ShallowIr::RecordUpdate { record, updates, .. }, ShallowFieldAccessKind::ConstructorField) => {
+        (
+            ShallowIr::RecordUpdate {
+                record, updates, ..
+            },
+            ShallowFieldAccessKind::ConstructorField,
+        ) => {
             if let Some(update) = updates.iter().find(|update| update.index == index as usize) {
                 Some(update.value.clone())
             } else {
@@ -8139,7 +8279,8 @@ fn binding_possible_constructor_tags(
             .constructors
             .iter()
             .filter_map(|constructor| {
-                get_constr_index_variant(data_type, &constructor.name).map(|(index, _)| index as u64)
+                get_constr_index_variant(data_type, &constructor.name)
+                    .map(|(index, _)| index as u64)
             })
             .collect(),
     )
@@ -8171,7 +8312,8 @@ fn filter_reachable_when_clauses<'a>(
     subject_binding: &LocalBinding,
     ctx: &TransitionLoweringContext<'_>,
 ) -> Vec<&'a TypedClause> {
-    let Some(possible_tags) = binding_possible_constructor_tags(subject_binding, ctx.data_types) else {
+    let Some(possible_tags) = binding_possible_constructor_tags(subject_binding, ctx.data_types)
+    else {
         return clauses.iter().collect();
     };
     clauses
@@ -8189,10 +8331,14 @@ fn when_clauses_are_exhaustive(
     subject_binding: &LocalBinding,
     ctx: &TransitionLoweringContext<'_>,
 ) -> bool {
-    if clauses.iter().any(|clause| clause_pattern_is_catchall(&clause.pattern)) {
+    if clauses
+        .iter()
+        .any(|clause| clause_pattern_is_catchall(&clause.pattern))
+    {
         return true;
     }
-    let Some(possible_tags) = binding_possible_constructor_tags(subject_binding, ctx.data_types) else {
+    let Some(possible_tags) = binding_possible_constructor_tags(subject_binding, ctx.data_types)
+    else {
         return false;
     };
     let covered: BTreeSet<u64> = clauses
@@ -8224,12 +8370,12 @@ fn lower_when_clause_relation(
     })
 }
 
-
 fn typed_expr_to_transition_prop_ctx(
     expr: &TypedExpr,
     ctx: &mut TransitionLoweringContext<'_>,
 ) -> TransitionProp {
-    if let TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } = expr {
+    if let TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } = expr
+    {
         for expression in expressions.iter().take(expressions.len().saturating_sub(1)) {
             if let TypedExpr::Assignment { pattern, kind, .. } = expression {
                 if !kind.is_let() {
@@ -8249,11 +8395,13 @@ fn typed_expr_to_transition_prop_ctx(
         if expressions
             .iter()
             .take(expressions.len().saturating_sub(1))
-            .any(|expression| matches!(
-                expression,
-                TypedExpr::Assignment { value, .. }
-                    if extract_fuzzer_payload_type(value.tipo().as_ref()).is_some()
-            ))
+            .any(|expression| {
+                matches!(
+                    expression,
+                    TypedExpr::Assignment { value, .. }
+                        if extract_fuzzer_payload_type(value.tipo().as_ref()).is_some()
+                )
+            })
         {
             return lower_sequence_relation_with_locals(
                 expressions,
@@ -8294,7 +8442,9 @@ fn typed_expr_to_transition_prop_ctx(
             result
         }
 
-        TypedExpr::Call { fun, args, tipo, .. } => {
+        TypedExpr::Call {
+            fun, args, tipo, ..
+        } => {
             if is_known_bind_call(fun, ctx) {
                 if let Some((source, binder, cont_body)) = detect_bind_call(args) {
                     return translate_bind_ctx(source, binder, cont_body, ctx);
@@ -8316,11 +8466,7 @@ fn typed_expr_to_transition_prop_ctx(
             }
 
             if extract_fuzzer_payload_type(tipo.as_ref()).is_some() {
-                return lower_fuzzer_relation_with_locals(
-                    expr,
-                    &transition_output_binding(),
-                    ctx,
-                );
+                return lower_fuzzer_relation_with_locals(expr, &transition_output_binding(), ctx);
             }
 
             TransitionProp::Unsupported {
@@ -8332,8 +8478,12 @@ fn typed_expr_to_transition_prop_ctx(
             }
         }
 
-        TypedExpr::Var { name, constructor, .. }
-            if matches!(constructor.variant, ValueConstructorVariant::LocalVariable { .. }) =>
+        TypedExpr::Var {
+            name, constructor, ..
+        } if matches!(
+            constructor.variant,
+            ValueConstructorVariant::LocalVariable { .. }
+        ) =>
         {
             if !ctx.visiting_value_aliases.insert(name.clone()) {
                 return TransitionProp::Unsupported {
@@ -8345,14 +8495,12 @@ fn typed_expr_to_transition_prop_ctx(
                 Some(LocalBinding::PureExpr(expr)) => typed_expr_to_transition_prop_ctx(&expr, ctx),
                 Some(LocalBinding::ExactIr { .. })
                 | Some(LocalBinding::DrawnValue { .. })
-                | Some(LocalBinding::Projection { .. }) => {
-                    TransitionProp::Unsupported {
-                        reason: format!(
-                            "step-function variable '{name}' is a value binding, not a transition predicate"
-                        ),
-                        source_location: None,
-                    }
-                }
+                | Some(LocalBinding::Projection { .. }) => TransitionProp::Unsupported {
+                    reason: format!(
+                        "step-function variable '{name}' is a value binding, not a transition predicate"
+                    ),
+                    source_location: None,
+                },
                 None => TransitionProp::Unsupported {
                     reason: format!(
                         "step-function variable '{name}' has no known transition content",
@@ -8367,7 +8515,9 @@ fn typed_expr_to_transition_prop_ctx(
         TypedExpr::Fn { body, .. } => typed_expr_to_transition_prop_ctx(body.as_ref(), ctx),
         TypedExpr::Trace { then, .. } => typed_expr_to_transition_prop_ctx(then.as_ref(), ctx),
 
-        TypedExpr::When { subject, clauses, .. } => {
+        TypedExpr::When {
+            subject, clauses, ..
+        } => {
             if clauses.is_empty() {
                 return TransitionProp::Unsupported {
                     reason: "When expression with no clauses".to_string(),
@@ -8450,15 +8600,11 @@ fn is_known_bind_call(fun: &TypedExpr, ctx: &TransitionLoweringContext<'_>) -> b
     )
     .is_some_and(|resolved| {
         resolved.module_name == STDLIB_FUZZ_MODULE && resolved.function_name == "and_then"
-    }) || extract_module_fn_identity(fun).is_some_and(|(module, name)| {
-        module == STDLIB_FUZZ_MODULE && name == "and_then"
-    })
+    }) || extract_module_fn_identity(fun)
+        .is_some_and(|(module, name)| module == STDLIB_FUZZ_MODULE && name == "and_then")
 }
 
-fn known_fork_call_name(
-    fun: &TypedExpr,
-    ctx: &TransitionLoweringContext<'_>,
-) -> Option<String> {
+fn known_fork_call_name(fun: &TypedExpr, ctx: &TransitionLoweringContext<'_>) -> Option<String> {
     let mut local_aliases = BTreeSet::new();
     resolve_function_from_expr(
         fun,
@@ -8478,12 +8624,14 @@ fn known_fork_call_name(
     .or_else(|| {
         extract_module_fn_identity(fun).and_then(|(module, name)| {
             (module == STDLIB_FUZZ_SCENARIO_MODULE
-                && matches!(name.as_str(), "fork_and_then" | "fork2_and_then" | "fork_if_and_then"))
+                && matches!(
+                    name.as_str(),
+                    "fork_and_then" | "fork2_and_then" | "fork_if_and_then"
+                ))
             .then_some(name)
         })
     })
 }
-
 
 fn is_known_relation_lookalike_name(name: &str) -> bool {
     matches!(
@@ -8499,11 +8647,7 @@ fn is_known_relation_lookalike_name(name: &str) -> bool {
     )
 }
 
-fn is_known_fuzz_call(
-    fun: &TypedExpr,
-    ctx: &TransitionLoweringContext<'_>,
-    fn_name: &str,
-) -> bool {
+fn is_known_fuzz_call(fun: &TypedExpr, ctx: &TransitionLoweringContext<'_>, fn_name: &str) -> bool {
     let mut local_aliases = BTreeSet::new();
     resolve_function_from_expr(
         fun,
@@ -8514,9 +8658,8 @@ fn is_known_fuzz_call(
     )
     .is_some_and(|resolved| {
         resolved.module_name == STDLIB_FUZZ_MODULE && resolved.function_name == fn_name
-    }) || extract_module_fn_identity(fun).is_some_and(|(module, name)| {
-        module == STDLIB_FUZZ_MODULE && name == fn_name
-    })
+    }) || extract_module_fn_identity(fun)
+        .is_some_and(|(module, name)| module == STDLIB_FUZZ_MODULE && name == fn_name)
 }
 
 fn resolve_relation_function_identity(
@@ -8551,7 +8694,10 @@ fn classify_sub_generator_blocker(
         return SubGeneratorBlocker::UserDefinedLookalikeCombinator;
     }
 
-    if ctx.visiting_functions.contains(&(module.clone(), name.clone())) {
+    if ctx
+        .visiting_functions
+        .contains(&(module.clone(), name.clone()))
+    {
         SubGeneratorBlocker::RecursiveHelper
     } else {
         SubGeneratorBlocker::UnsupportedButInspectableShape
@@ -8592,7 +8738,10 @@ fn lower_known_fork_call_with_locals(
 ) -> Option<TransitionProp> {
     let fork_name = known_fork_call_name(fun, ctx)?;
     let thunk_bodies = detect_fork_call(args)?;
-    let continuation = match args.iter().find(|arg| expression_is_bind_continuation(&arg.value)) {
+    let continuation = match args
+        .iter()
+        .find(|arg| expression_is_bind_continuation(&arg.value))
+    {
         Some(arg) => match resolve_relation_continuation(&arg.value, ctx) {
             Some(continuation) => Some(continuation),
             None => {
@@ -8658,91 +8807,94 @@ fn lower_known_fork_call_with_locals(
         }
     };
 
-    Some(if let Some(ResolvedRelationContinuation {
-        binder,
-        binder_ty,
-        body: cont_body,
-        module,
-        locals: cont_locals,
-    }) = continuation
-    {
-        let exact_branch_bindings = thunk_bodies
-            .iter()
-            .map(|body| exact_output_binding_from_fuzzer_expr(body, ctx))
-            .collect::<Option<Vec<_>>>();
+    Some(
+        if let Some(ResolvedRelationContinuation {
+            binder,
+            binder_ty,
+            body: cont_body,
+            module,
+            locals: cont_locals,
+        }) = continuation
+        {
+            let exact_branch_bindings = thunk_bodies
+                .iter()
+                .map(|body| exact_output_binding_from_fuzzer_expr(body, ctx))
+                .collect::<Option<Vec<_>>>();
 
-        if let Some(exact_branch_bindings) = exact_branch_bindings {
-            let lower_exact_branch = |ctx: &mut TransitionLoweringContext<'_>,
-                                      body: &TypedExpr,
-                                      binding: LocalBinding| {
-                let source_relation = lower_relation_with_bound_domain(body, &binding, ctx);
-                let mut scoped = cont_locals.clone();
+            if let Some(exact_branch_bindings) = exact_branch_bindings {
+                let lower_exact_branch =
+                    |ctx: &mut TransitionLoweringContext<'_>,
+                     body: &TypedExpr,
+                     binding: LocalBinding| {
+                        let source_relation = lower_relation_with_bound_domain(body, &binding, ctx);
+                        let mut scoped = cont_locals.clone();
+                        scoped.insert(binder.clone(), binding);
+                        let continuation = with_current_module(ctx, module.clone(), |ctx| {
+                            with_scoped_locals(ctx, scoped, |ctx| {
+                                lower_fuzzer_relation_with_locals(&cont_body, output_binding, ctx)
+                            })
+                        });
+                        transition_prop_from_parts(vec![source_relation, continuation])
+                    };
+
+                if let Some(cond_ir) = cond_ir {
+                    if thunk_bodies.len() != 2 || exact_branch_bindings.len() != 2 {
+                        TransitionProp::Unsupported {
+                            reason: format!(
+                                "fork_if_and_then expects exactly 2 branch thunks, found {}",
+                                thunk_bodies.len()
+                            ),
+                            source_location: None,
+                        }
+                    } else {
+                        TransitionProp::IfThenElse {
+                            cond: cond_ir,
+                            t: Box::new(lower_exact_branch(
+                                ctx,
+                                thunk_bodies[0],
+                                exact_branch_bindings[0].clone(),
+                            )),
+                            e: Box::new(lower_exact_branch(
+                                ctx,
+                                thunk_bodies[1],
+                                exact_branch_bindings[1].clone(),
+                            )),
+                        }
+                    }
+                } else {
+                    TransitionProp::Or(
+                        thunk_bodies
+                            .iter()
+                            .zip(exact_branch_bindings.into_iter())
+                            .map(|(body, binding)| lower_exact_branch(ctx, body, binding))
+                            .collect(),
+                    )
+                }
+            } else {
+                let binding = LocalBinding::DrawnValue {
+                    lean_name: binder.clone(),
+                    ty: binder_ty.clone(),
+                    domain: FuzzerSemantics::Data,
+                };
+                let branches = branch_relation(ctx, &binding, cond_ir);
+                let mut scoped = cont_locals;
                 scoped.insert(binder.clone(), binding);
-                let continuation = with_current_module(ctx, module.clone(), |ctx| {
+                let continuation = with_current_module(ctx, module, |ctx| {
                     with_scoped_locals(ctx, scoped, |ctx| {
                         lower_fuzzer_relation_with_locals(&cont_body, output_binding, ctx)
                     })
                 });
-                transition_prop_from_parts(vec![source_relation, continuation])
-            };
-
-            if let Some(cond_ir) = cond_ir {
-                if thunk_bodies.len() != 2 || exact_branch_bindings.len() != 2 {
-                    TransitionProp::Unsupported {
-                        reason: format!(
-                            "fork_if_and_then expects exactly 2 branch thunks, found {}",
-                            thunk_bodies.len()
-                        ),
-                        source_location: None,
-                    }
-                } else {
-                    TransitionProp::IfThenElse {
-                        cond: cond_ir,
-                        t: Box::new(lower_exact_branch(
-                            ctx,
-                            thunk_bodies[0],
-                            exact_branch_bindings[0].clone(),
-                        )),
-                        e: Box::new(lower_exact_branch(
-                            ctx,
-                            thunk_bodies[1],
-                            exact_branch_bindings[1].clone(),
-                        )),
-                    }
+                TransitionProp::Exists {
+                    binder,
+                    ty: binder_ty,
+                    domain: Box::new(FuzzerSemantics::Data),
+                    body: Box::new(TransitionProp::And(vec![branches, continuation])),
                 }
-            } else {
-                TransitionProp::Or(
-                    thunk_bodies
-                        .iter()
-                        .zip(exact_branch_bindings.into_iter())
-                        .map(|(body, binding)| lower_exact_branch(ctx, body, binding))
-                        .collect(),
-                )
             }
         } else {
-            let binding = LocalBinding::DrawnValue {
-                lean_name: binder.clone(),
-                ty: binder_ty.clone(),
-                domain: FuzzerSemantics::Data,
-            };
-            let branches = branch_relation(ctx, &binding, cond_ir);
-            let mut scoped = cont_locals;
-            scoped.insert(binder.clone(), binding);
-            let continuation = with_current_module(ctx, module, |ctx| {
-                with_scoped_locals(ctx, scoped, |ctx| {
-                    lower_fuzzer_relation_with_locals(&cont_body, output_binding, ctx)
-                })
-            });
-            TransitionProp::Exists {
-                binder,
-                ty: binder_ty,
-                domain: Box::new(FuzzerSemantics::Data),
-                body: Box::new(TransitionProp::And(vec![branches, continuation])),
-            }
-        }
-    } else {
-        branch_relation(ctx, output_binding, cond_ir)
-    })
+            branch_relation(ctx, output_binding, cond_ir)
+        },
+    )
 }
 struct ResolvedUnaryCallbackBody {
     binder: String,
@@ -8888,8 +9040,8 @@ fn exact_output_binding_from_fuzzer_expr(
     source: &TypedExpr,
     ctx: &TransitionLoweringContext<'_>,
 ) -> Option<LocalBinding> {
-    let payload_ty = extract_fuzzer_payload_type(source.tipo().as_ref())
-        .map(|ty| shallow_ir_type(&ty))?;
+    let payload_ty =
+        extract_fuzzer_payload_type(source.tipo().as_ref()).map(|ty| shallow_ir_type(&ty))?;
 
     if let Some((resolved_head, applied_args)) =
         flatten_call_head_and_args(source, &[], &ctx.expr_locals())
@@ -8930,16 +9082,9 @@ fn exact_output_binding_from_fuzzer_expr(
     }
 
     let mut visiting = BTreeSet::new();
-    let ir = typed_expr_to_shallow_ir_with_locals(
-        source,
-        ctx.data_types,
-        &ctx.locals,
-        &mut visiting,
-    );
-    (!shallow_ir_is_vacuous(&ir)).then_some(LocalBinding::ExactIr {
-        ty: payload_ty,
-        ir,
-    })
+    let ir =
+        typed_expr_to_shallow_ir_with_locals(source, ctx.data_types, &ctx.locals, &mut visiting);
+    (!shallow_ir_is_vacuous(&ir)).then_some(LocalBinding::ExactIr { ty: payload_ty, ir })
 }
 
 fn output_binding_ir(
@@ -8978,8 +9123,10 @@ fn constructor_choice_domain_from_expr(
     Some(FuzzerSemantics::Constructors { tags })
 }
 
-
-fn normalize_source_domain(source: &TypedExpr, ctx: &mut TransitionLoweringContext<'_>) -> FuzzerSemantics {
+fn normalize_source_domain(
+    source: &TypedExpr,
+    ctx: &mut TransitionLoweringContext<'_>,
+) -> FuzzerSemantics {
     if let Some(domain) = constructor_choice_domain_from_expr(source, ctx.data_types) {
         return domain;
     }
@@ -9037,7 +9184,10 @@ fn lower_sequence_relation_with_locals(
     };
     match first {
         TypedExpr::Assignment {
-            pattern, value, kind, ..
+            pattern,
+            value,
+            kind,
+            ..
         } => {
             if !kind.is_let() {
                 return TransitionProp::Unsupported {
@@ -9068,9 +9218,10 @@ fn lower_sequence_relation_with_locals(
                     ty: binder_ty.clone(),
                     domain: domain.clone(),
                 };
-                let relation_binding =
-                    exact_output_binding_from_fuzzer_expr(value, ctx).unwrap_or_else(|| binding.clone());
-                let source_relation = lower_relation_with_bound_domain(value, &relation_binding, ctx);
+                let relation_binding = exact_output_binding_from_fuzzer_expr(value, ctx)
+                    .unwrap_or_else(|| binding.clone());
+                let source_relation =
+                    lower_relation_with_bound_domain(value, &relation_binding, ctx);
                 let mut scoped = ctx.locals.clone();
                 bind_pattern_to_locals(pattern, &relation_binding, ctx.data_types, &mut scoped);
                 let continuation = with_scoped_locals(ctx, scoped, |ctx| {
@@ -9080,7 +9231,10 @@ fn lower_sequence_relation_with_locals(
                     binder,
                     ty: binder_ty,
                     domain: Box::new(domain),
-                    body: Box::new(transition_prop_from_parts(vec![source_relation, continuation])),
+                    body: Box::new(transition_prop_from_parts(vec![
+                        source_relation,
+                        continuation,
+                    ])),
                 }
             } else {
                 let binding = binding_from_expr(value, ctx);
@@ -9103,9 +9257,11 @@ fn lower_fuzzer_relation_with_locals(
     source: &TypedExpr,
     output_binding: &LocalBinding,
     ctx: &mut TransitionLoweringContext<'_>,
- ) -> TransitionProp {
+) -> TransitionProp {
     match terminal_expression(source) {
-        TypedExpr::Trace { then, .. } => lower_fuzzer_relation_with_locals(then, output_binding, ctx),
+        TypedExpr::Trace { then, .. } => {
+            lower_fuzzer_relation_with_locals(then, output_binding, ctx)
+        }
         TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
             lower_sequence_relation_with_locals(expressions, output_binding, ctx)
         }
@@ -9114,7 +9270,8 @@ fn lower_fuzzer_relation_with_locals(
             final_else,
             ..
         } => {
-            let mut result = lower_fuzzer_relation_with_locals(final_else.as_ref(), output_binding, ctx);
+            let mut result =
+                lower_fuzzer_relation_with_locals(final_else.as_ref(), output_binding, ctx);
             for branch in branches.iter().rev() {
                 let mut visiting = BTreeSet::new();
                 let cond_ir = typed_expr_to_shallow_ir_with_locals(
@@ -9123,7 +9280,8 @@ fn lower_fuzzer_relation_with_locals(
                     &ctx.locals,
                     &mut visiting,
                 );
-                let then_prop = lower_fuzzer_relation_with_locals(&branch.body, output_binding, ctx);
+                let then_prop =
+                    lower_fuzzer_relation_with_locals(&branch.body, output_binding, ctx);
                 result = TransitionProp::IfThenElse {
                     cond: cond_ir,
                     t: Box::new(then_prop),
@@ -9132,7 +9290,9 @@ fn lower_fuzzer_relation_with_locals(
             }
             result
         }
-        TypedExpr::When { subject, clauses, .. } => {
+        TypedExpr::When {
+            subject, clauses, ..
+        } => {
             if clauses.is_empty() {
                 return TransitionProp::Unsupported {
                     reason: "When expression with no clauses".to_string(),
@@ -9158,7 +9318,8 @@ fn lower_fuzzer_relation_with_locals(
                     source_location: None,
                 };
             };
-            let mut result = lower_when_clause_relation(last_clause, &subject_binding, output_binding, ctx);
+            let mut result =
+                lower_when_clause_relation(last_clause, &subject_binding, output_binding, ctx);
             if !exhaustive {
                 let fallback = TransitionProp::Unsupported {
                     reason: "when-expression fell through all clauses".to_string(),
@@ -9195,7 +9356,8 @@ fn lower_fuzzer_relation_with_locals(
             }
 
             for clause in clauses_rev {
-                let body = lower_when_clause_relation(clause, &subject_binding, output_binding, ctx);
+                let body =
+                    lower_when_clause_relation(clause, &subject_binding, output_binding, ctx);
                 result = match when_clause_condition(&clause.pattern, &subject_binding, ctx) {
                     Ok(None) => body,
                     Ok(Some(cond_ir)) => TransitionProp::IfThenElse {
@@ -9209,7 +9371,9 @@ fn lower_fuzzer_relation_with_locals(
 
             result
         }
-        TypedExpr::Call { fun, args, tipo, .. } => {
+        TypedExpr::Call {
+            fun, args, tipo, ..
+        } => {
             if let Some(inner) = detect_return_call(fun, args, tipo.as_ref()) {
                 let mut visiting = BTreeSet::new();
                 return output_match_prop(
@@ -9230,7 +9394,9 @@ fn lower_fuzzer_relation_with_locals(
                     "relation-bearing and_then call is missing a recognized continuation",
                 );
             }
-            if let Some(fork_relation) = lower_known_fork_call_with_locals(fun, args, output_binding, ctx) {
+            if let Some(fork_relation) =
+                lower_known_fork_call_with_locals(fun, args, output_binding, ctx)
+            {
                 return fork_relation;
             }
             if is_known_fuzz_call(fun, ctx, "one_of") {
@@ -9242,7 +9408,9 @@ fn lower_fuzzer_relation_with_locals(
                                 source_location: None,
                             }
                         }
-                        TypedExpr::List { elements, .. } if elements.len() <= MAX_FINITE_DOMAIN_CASES => {
+                        TypedExpr::List { elements, .. }
+                            if elements.len() <= MAX_FINITE_DOMAIN_CASES =>
+                        {
                             let mut branches = Vec::with_capacity(elements.len());
                             for elem in elements {
                                 let mut visiting = BTreeSet::new();
@@ -9287,8 +9455,10 @@ fn lower_fuzzer_relation_with_locals(
             }
             if is_known_fuzz_call(fun, ctx, "either") {
                 if let [left, right] = args.as_slice() {
-                    let left_prop = lower_fuzzer_relation_with_locals(&left.value, output_binding, ctx);
-                    let right_prop = lower_fuzzer_relation_with_locals(&right.value, output_binding, ctx);
+                    let left_prop =
+                        lower_fuzzer_relation_with_locals(&left.value, output_binding, ctx);
+                    let right_prop =
+                        lower_fuzzer_relation_with_locals(&right.value, output_binding, ctx);
                     if transition_prop_contains_unsupported(&left_prop)
                         || transition_prop_contains_unsupported(&right_prop)
                     {
@@ -9322,9 +9492,10 @@ fn lower_fuzzer_relation_with_locals(
                     [source_arg, mapper_arg] => {
                         let source_binder = "_map_source".to_string();
                         let source_domain = normalize_source_domain(&source_arg.value, ctx);
-                        let mut source_ty = extract_fuzzer_payload_type(source_arg.value.tipo().as_ref())
-                            .map(|ty| shallow_ir_type(&ty))
-                            .unwrap_or(ShallowIrType::Unknown);
+                        let mut source_ty =
+                            extract_fuzzer_payload_type(source_arg.value.tipo().as_ref())
+                                .map(|ty| shallow_ir_type(&ty))
+                                .unwrap_or(ShallowIrType::Unknown);
                         if matches!(source_ty, ShallowIrType::Unknown | ShallowIrType::Data) {
                             source_ty = shallow_ir_type_from_semantics(&source_domain);
                         }
@@ -9333,8 +9504,11 @@ fn lower_fuzzer_relation_with_locals(
                             ty: source_ty.clone(),
                             domain: source_domain.clone(),
                         };
-                        let source_relation =
-                            lower_relation_with_bound_domain(&source_arg.value, &source_binding, ctx);
+                        let source_relation = lower_relation_with_bound_domain(
+                            &source_arg.value,
+                            &source_binding,
+                            ctx,
+                        );
                         if let Some(ResolvedUnaryCallbackBody {
                             binder,
                             body,
@@ -9360,7 +9534,10 @@ fn lower_fuzzer_relation_with_locals(
                                 binder: source_binder,
                                 ty: source_ty,
                                 domain: Box::new(source_domain),
-                                body: Box::new(transition_prop_from_parts(vec![source_relation, eq])),
+                                body: Box::new(transition_prop_from_parts(vec![
+                                    source_relation,
+                                    eq,
+                                ])),
                             };
                         }
                     }
@@ -9392,11 +9569,15 @@ fn lower_fuzzer_relation_with_locals(
                         binder,
                         ty: source_ty,
                         domain: Box::new(source_domain),
-                        body: Box::new(transition_prop_from_parts(vec![source_relation, continuation])),
+                        body: Box::new(transition_prop_from_parts(vec![
+                            source_relation,
+                            continuation,
+                        ])),
                     };
                 }
             }
-            if let Some(inlined) = inline_resolved_fuzzer_relation_call(source, output_binding, ctx) {
+            if let Some(inlined) = inline_resolved_fuzzer_relation_call(source, output_binding, ctx)
+            {
                 return inlined;
             }
             relation_fallback_for_call(
@@ -9525,7 +9706,6 @@ fn inline_resolved_fuzzer_relation_call(
     Some(inlined)
 }
 
-
 #[derive(Debug, Clone)]
 struct ResolvedRelationContinuation {
     binder: String,
@@ -9629,7 +9809,6 @@ fn resolve_relation_continuation(
     })
 }
 
-
 /// Detect `fork*_and_then`-style calls by *shape*:
 ///   - at least two arguments that are zero-arg `fn() -> Fuzzer<T>` thunks
 ///     (the branches).
@@ -9645,7 +9824,6 @@ fn detect_fork_call(args: &[CallArg<TypedExpr>]) -> Option<ForkCall<'_>> {
         .collect();
     (thunk_bodies.len() >= 2).then_some(thunk_bodies)
 }
-
 
 /// If `expr` is an inline `fn() -> Fuzzer<T>` zero-arg thunk, return its
 /// body. Otherwise `None`.
@@ -13044,7 +13222,6 @@ mod test {
         }
     }
 
-
     /// Build a filter/such_that call: (Fuzzer<a>, fn(a) -> Bool) -> Fuzzer<a>
     fn make_typed_filter_call(source: TypedExpr, predicate: TypedExpr) -> TypedExpr {
         let payload_type =
@@ -13739,6 +13916,36 @@ mod test {
         );
     }
 
+    fn make_typed_int_fuzzer() -> TypedExpr {
+        let output_type = Type::int();
+        let fuzzer_type = Type::fuzzer(output_type.clone());
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: fuzzer_type.clone(),
+            fun: Box::new(module_fn_var(
+                "int",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![], fuzzer_type),
+            )),
+            args: vec![],
+        }
+    }
+
+    fn make_typed_byte_fuzzer() -> TypedExpr {
+        let output_type = Type::int();
+        let fuzzer_type = Type::fuzzer(output_type.clone());
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: fuzzer_type.clone(),
+            fun: Box::new(module_fn_var(
+                "byte",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![], fuzzer_type),
+            )),
+            args: vec![],
+        }
+    }
+
     fn make_typed_int_at_least_fuzzer(min: &str) -> TypedExpr {
         let output_type = Type::int();
         let fuzzer_type = Type::fuzzer(output_type.clone());
@@ -13769,13 +13976,85 @@ mod test {
         }
     }
 
-    /// `fuzz.int_at_least(5)` is recognized as a stdlib fuzzer and produces
-    /// the closed-range `IntRange { min: "5", max: i128::MAX }` constraint;
-    /// the semantics layer strips the `i128::MAX` sentinel into an open
-    /// upper bound so downstream Lean emission sees a half-open range and
-    /// no 39-digit literal leaks through.
+    fn make_typed_bytearray_fixed_fuzzer(len: &str) -> TypedExpr {
+        let output_type = Type::byte_array();
+        let fuzzer_type = Type::fuzzer(output_type.clone());
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: fuzzer_type.clone(),
+            fun: Box::new(module_fn_var(
+                "bytearray_fixed",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::int()], fuzzer_type),
+            )),
+            args: vec![call_arg(uint_lit(len))],
+        }
+    }
+
     #[test]
-    fn int_at_least_semantics_has_open_upper_bound() {
+    fn int_primitive_constraint_uses_trusted_bounded_support() {
+        let via = make_typed_int_fuzzer();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "-255".to_string(),
+                max: "16383".to_string(),
+            }
+        );
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::int().as_ref(),
+        );
+
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::IntRange {
+                min: Some("-255".to_string()),
+                max: Some("16383".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn byte_primitive_constraint_uses_exact_byte_range() {
+        let via = make_typed_byte_fuzzer();
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "255".to_string(),
+            }
+        );
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::int().as_ref(),
+        );
+
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::IntRange {
+                min: Some("0".to_string()),
+                max: Some("255".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn int_at_least_semantics_use_bounded_upper_support() {
         let via = make_typed_int_at_least_fuzzer("5");
         let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
 
@@ -13784,7 +14063,7 @@ mod test {
             constraint,
             FuzzerConstraint::IntRange {
                 min: "5".to_string(),
-                max: i128::MAX.to_string(),
+                max: "255".to_string(),
             }
         );
 
@@ -13800,33 +14079,13 @@ mod test {
             semantics,
             FuzzerSemantics::IntRange {
                 min: Some("5".to_string()),
-                max: None,
+                max: Some("255".to_string()),
             }
-        );
-
-        // Defence-in-depth: no i128 sentinel should leak into the rendered
-        // semantics. The sentinel is stripped by
-        // `unbounded_int_sentinel_to_none`, leaving a half-open range.
-        let rendered = format!("{semantics:?}");
-        assert!(
-            !rendered.contains(&i128::MAX.to_string()),
-            "int_at_least semantics leaked i128::MAX sentinel: {rendered}"
-        );
-        assert!(
-            !rendered.contains(&i128::MIN.to_string()),
-            "int_at_least semantics leaked i128::MIN sentinel: {rendered}"
-        );
-        assert!(
-            !contains_39_plus_digit_run(&rendered),
-            "int_at_least semantics contains a 39+ digit numeric string: {rendered}"
         );
     }
 
-    /// Symmetric regression for `fuzz.int_at_most(10)`. The stdlib recognizer
-    /// extracts `IntRange { min: i128::MIN, max: "10" }` and the semantics
-    /// layer strips the `i128::MIN` sentinel into an open lower bound.
     #[test]
-    fn int_at_most_semantics_has_open_lower_bound() {
+    fn int_at_most_semantics_use_bounded_lower_support() {
         let via = make_typed_int_at_most_fuzzer("10");
         let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
 
@@ -13834,7 +14093,7 @@ mod test {
         assert_eq!(
             constraint,
             FuzzerConstraint::IntRange {
-                min: i128::MIN.to_string(),
+                min: "-255".to_string(),
                 max: "10".to_string(),
             }
         );
@@ -13850,43 +14109,41 @@ mod test {
         assert_eq!(
             semantics,
             FuzzerSemantics::IntRange {
-                min: None,
+                min: Some("-255".to_string()),
                 max: Some("10".to_string()),
             }
         );
-
-        let rendered = format!("{semantics:?}");
-        assert!(
-            !rendered.contains(&i128::MAX.to_string()),
-            "int_at_most semantics leaked i128::MAX sentinel: {rendered}"
-        );
-        assert!(
-            !rendered.contains(&i128::MIN.to_string()),
-            "int_at_most semantics leaked i128::MIN sentinel: {rendered}"
-        );
-        assert!(
-            !contains_39_plus_digit_run(&rendered),
-            "int_at_most semantics contains a 39+ digit numeric string: {rendered}"
-        );
     }
 
-    /// Scans a string for any run of 39 or more consecutive ASCII digits.
-    /// `i128::MAX` / `i128::MIN` serialize to 39-digit runs (ignoring the sign),
-    /// so this catches both sentinels and any accidental leak of similarly
-    /// sized literals.
-    fn contains_39_plus_digit_run(s: &str) -> bool {
-        let mut run = 0usize;
-        for c in s.chars() {
-            if c.is_ascii_digit() {
-                run += 1;
-                if run >= 39 {
-                    return true;
-                }
-            } else {
-                run = 0;
+    #[test]
+    fn bytearray_fixed_constraint_preserves_exact_length() {
+        let via = make_typed_bytearray_fixed_fuzzer("4");
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::ByteStringLenRange {
+                min_len: 4,
+                max_len: 4,
             }
-        }
-        false
+        );
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::byte_array().as_ref(),
+        );
+
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::ByteArrayRange {
+                min_len: Some(4),
+                max_len: Some(4),
+            }
+        );
     }
 
     #[test]
@@ -13957,7 +14214,6 @@ mod test {
             FuzzerConstraint::Exact(FuzzerExactValue::Bool(true))
         );
     }
-
 
     #[test]
     fn extract_constraint_name_agnostic_constant_int_map_is_singleton_range() {
@@ -18707,7 +18963,11 @@ mod test {
         };
         let continuation =
             make_inline_bind_continuation("x", Type::int(), return_body, Type::int());
-        let fake = make_typed_bind_call(make_typed_int_between_fuzzer("0", "10"), continuation, Type::int());
+        let fake = make_typed_bind_call(
+            make_typed_int_between_fuzzer("0", "10"),
+            continuation,
+            Type::int(),
+        );
 
         let prop = typed_expr_to_transition_prop(
             &fake,
@@ -18761,7 +19021,13 @@ mod test {
 
         match prop {
             TransitionProp::Exists { domain, .. } => assert!(
-                matches!(*domain, FuzzerSemantics::IntRange { min: None, max: None }),
+                matches!(
+                    *domain,
+                    FuzzerSemantics::IntRange {
+                        min: None,
+                        max: None
+                    }
+                ),
                 "opaque Int source should widen to unconstrained Int domain, got {domain:?}"
             ),
             other => panic!("expected Exists, got {other:?}"),
@@ -18791,12 +19057,8 @@ mod test {
             )),
             args: vec![call_arg(local_var("x", input_type.clone()))],
         };
-        let continuation = make_inline_bind_continuation(
-            "x",
-            input_type.clone(),
-            return_body,
-            input_type.clone(),
-        );
+        let continuation =
+            make_inline_bind_continuation("x", input_type.clone(), return_body, input_type.clone());
         let bind_call = make_stdlib_bind_call(source, continuation, input_type);
 
         let prop = typed_expr_to_transition_prop(
@@ -19002,7 +19264,9 @@ mod test {
                             TransitionProp::EqOutput(ShallowIr::BoundVar { name, .. })
                                 if name == "x" => {}
                             other => {
-                                panic!("expected EqOutput(BoundVar x) as second And leg, got {other:?}")
+                                panic!(
+                                    "expected EqOutput(BoundVar x) as second And leg, got {other:?}"
+                                )
                             }
                         }
                     }
@@ -19083,7 +19347,13 @@ mod test {
         match prop {
             TransitionProp::IfThenElse { cond, t, e } => {
                 assert!(
-                    matches!(cond, ShallowIr::BinOp { op: ShallowBinOp::Eq, .. }),
+                    matches!(
+                        cond,
+                        ShallowIr::BinOp {
+                            op: ShallowBinOp::Eq,
+                            ..
+                        }
+                    ),
                     "fork_if_and_then must preserve its Bool condition, got {cond:?}",
                 );
                 assert!(
@@ -19137,14 +19407,18 @@ mod test {
         match prop {
             TransitionProp::Or(branches) => {
                 assert_eq!(branches.len(), 2);
-                assert!(matches!(&branches[0], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "0"));
-                assert!(matches!(&branches[1], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "1"));
+                assert!(
+                    matches!(&branches[0], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "0")
+                );
+                assert!(
+                    matches!(&branches[1], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "1")
+                );
             }
             other => panic!("expected Or for top-level one_of, got {other:?}"),
         }
     }
 
-#[test]
+    #[test]
     fn typed_expr_to_transition_prop_one_of_rejects_inexact_literal_element() {
         let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
             empty_transition_prop_context();
@@ -19211,7 +19485,10 @@ mod test {
             fun: Box::new(module_fn_var(
                 "map",
                 STDLIB_FUZZ_MODULE,
-                Type::function(vec![source.tipo(), mapper.tipo()], Type::fuzzer(Type::int())),
+                Type::function(
+                    vec![source.tipo(), mapper.tipo()],
+                    Type::fuzzer(Type::int()),
+                ),
             )),
             args: vec![call_arg(source), call_arg(mapper)],
         };
@@ -19267,7 +19544,10 @@ mod test {
             fun: Box::new(module_fn_var(
                 "either",
                 STDLIB_FUZZ_MODULE,
-                Type::function(vec![int_fuzzer.clone(), int_fuzzer.clone()], int_fuzzer.clone()),
+                Type::function(
+                    vec![int_fuzzer.clone(), int_fuzzer.clone()],
+                    int_fuzzer.clone(),
+                ),
             )),
             args: vec![call_arg(make_return("0")), call_arg(make_return("1"))],
         };
@@ -19287,8 +19567,12 @@ mod test {
         match prop {
             TransitionProp::Or(branches) => {
                 assert_eq!(branches.len(), 2);
-                assert!(matches!(&branches[0], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "0"));
-                assert!(matches!(&branches[1], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "1"));
+                assert!(
+                    matches!(&branches[0], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "0")
+                );
+                assert!(
+                    matches!(&branches[1], TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) if v == "1")
+                );
             }
             other => panic!("expected Or for top-level either, got {other:?}"),
         }
@@ -19317,7 +19601,10 @@ mod test {
             fun: Box::new(module_fn_var(
                 "either",
                 STDLIB_FUZZ_MODULE,
-                Type::function(vec![int_fuzzer.clone(), int_fuzzer.clone()], int_fuzzer.clone()),
+                Type::function(
+                    vec![int_fuzzer.clone(), int_fuzzer.clone()],
+                    int_fuzzer.clone(),
+                ),
             )),
             args: vec![
                 call_arg(make_return("0")),
@@ -19353,7 +19640,9 @@ mod test {
                     "unexpected Unsupported reason: {reason}"
                 );
             }
-            other => panic!("expected Unsupported for either-with-unsupported-branch, got {other:?}"),
+            other => {
+                panic!("expected Unsupported for either-with-unsupported-branch, got {other:?}")
+            }
         }
     }
 
@@ -19419,7 +19708,11 @@ mod test {
 
         match prop {
             TransitionProp::Or(branches) => {
-                assert_eq!(branches.len(), 2, "expected unsupported clause + fallback, got {branches:?}");
+                assert_eq!(
+                    branches.len(),
+                    2,
+                    "expected unsupported clause + fallback, got {branches:?}"
+                );
                 match &branches[1] {
                     TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) => {
                         assert_eq!(v, "2", "fallback branch should remain reachable");
@@ -19427,7 +19720,9 @@ mod test {
                     other => panic!("expected fallback EqOutput(2), got {other:?}"),
                 }
             }
-            other => panic!("expected Or preserving fallback after unsupported clause, got {other:?}"),
+            other => {
+                panic!("expected Or preserving fallback after unsupported clause, got {other:?}")
+            }
         }
     }
 
@@ -19501,7 +19796,10 @@ mod test {
             location: Span::empty(),
             tipo: Type::function(vec![int_tipo.clone(), int_tipo.clone()], int_fuzzer.clone()),
             is_capture: false,
-            args: vec![TypedArg::new("st", int_tipo.clone()), TypedArg::new("input", int_tipo.clone())],
+            args: vec![
+                TypedArg::new("st", int_tipo.clone()),
+                TypedArg::new("input", int_tipo.clone()),
+            ],
             body: Box::new(TypedExpr::Call {
                 location: Span::empty(),
                 tipo: int_fuzzer,
@@ -19580,10 +19878,7 @@ mod test {
     fn pair_projection_bindings_preserve_scalar_types() {
         let binding = LocalBinding::DrawnValue {
             lean_name: "pair".to_string(),
-            ty: ShallowIrType::Pair(
-                Box::new(ShallowIrType::Int),
-                Box::new(ShallowIrType::Bool),
-            ),
+            ty: ShallowIrType::Pair(Box::new(ShallowIrType::Int), Box::new(ShallowIrType::Bool)),
             domain: FuzzerSemantics::Data,
         };
         let pattern = TypedPattern::Pair {
@@ -19602,7 +19897,8 @@ mod test {
         let flag_binding = locals
             .get("flag")
             .expect("pair-pattern binding should create a flag projection");
-        match local_binding_to_shallow_ir(flag_binding, &data_types, &locals, &mut BTreeSet::new()) {
+        match local_binding_to_shallow_ir(flag_binding, &data_types, &locals, &mut BTreeSet::new())
+        {
             ShallowIr::FieldAccess { ty, kind, .. } => {
                 assert_eq!(ty, ShallowIrType::Bool);
                 assert_eq!(kind, ShallowFieldAccessKind::ListElement);
@@ -19618,10 +19914,7 @@ mod test {
         let pair_type = Type::pair(Type::int(), Type::bool());
         let pair_binding = LocalBinding::DrawnValue {
             lean_name: "pair_input".to_string(),
-            ty: ShallowIrType::Pair(
-                Box::new(ShallowIrType::Int),
-                Box::new(ShallowIrType::Bool),
-            ),
+            ty: ShallowIrType::Pair(Box::new(ShallowIrType::Int), Box::new(ShallowIrType::Bool)),
             domain: FuzzerSemantics::Data,
         };
         let mut locals = BTreeMap::new();
@@ -19769,12 +20062,8 @@ mod test {
             ],
         };
 
-        let ir = typed_expr_to_shallow_ir_with_locals(
-            &expr,
-            &data_types,
-            &locals,
-            &mut BTreeSet::new(),
-        );
+        let ir =
+            typed_expr_to_shallow_ir_with_locals(&expr, &data_types, &locals, &mut BTreeSet::new());
 
         match terminal_let_body(&ir) {
             ShallowIr::FieldAccess {
@@ -19858,7 +20147,6 @@ mod test {
         }
     }
 
-
     #[test]
     fn lower_bool_predicate_with_locals_preserves_constructor_false_literal() {
         let (function_index, constant_index, _, _, _) = empty_transition_prop_context();
@@ -19881,11 +20169,7 @@ mod test {
         };
 
         let predicate = make_constant_bool_mapper(Type::bool(), false);
-        let prop = lower_bool_predicate_with_locals(
-            &predicate,
-            &output_binding,
-            &mut ctx,
-        );
+        let prop = lower_bool_predicate_with_locals(&predicate, &output_binding, &mut ctx);
 
         assert!(
             matches!(
@@ -19896,7 +20180,7 @@ mod test {
         );
     }
 
-#[test]
+    #[test]
     fn lower_bool_predicate_with_locals_resolves_named_helper() {
         let (predicate_key, predicate_fn) =
             make_named_unary_tautology_mapper_function("always_true", Type::bool());
@@ -20028,10 +20312,7 @@ mod test {
             ),
             Type::int(),
         );
-        let filtered = make_typed_filter_call(
-            source,
-            make_bool_predicate("n", Type::int()),
-        );
+        let filtered = make_typed_filter_call(source, make_bool_predicate("n", Type::int()));
 
         let expected = FuzzerSemantics::IntRange {
             min: Some("1".to_string()),
@@ -20165,7 +20446,8 @@ mod test {
     #[test]
     fn typed_expr_to_transition_prop_rejects_unresolved_fork_continuation() {
         let int_type = Type::int();
-        let continuation_type = Type::function(vec![int_type.clone()], Type::fuzzer(int_type.clone()));
+        let continuation_type =
+            Type::function(vec![int_type.clone()], Type::fuzzer(int_type.clone()));
         let (function_index, constant_index, local_values, empty_data_types, mut visiting) =
             empty_transition_prop_context();
 
@@ -20300,7 +20582,6 @@ mod test {
         }
     }
 
-
     #[test]
     fn shallow_ir_record_update_is_not_vacuous() {
         let ir = ShallowIr::RecordUpdate {
@@ -20317,7 +20598,6 @@ mod test {
             "RecordUpdate now emits structural Data and must not be classified as vacuous",
         );
     }
-
 
     #[test]
     fn typed_expr_to_transition_prop_return_produces_eq_output() {
@@ -20413,7 +20693,10 @@ mod test {
 
         match prop {
             TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) => {
-                assert_eq!(v, "42", "catch-all first clause must short-circuit later clauses");
+                assert_eq!(
+                    v, "42",
+                    "catch-all first clause must short-circuit later clauses"
+                );
             }
             other => panic!("expected EqOutput(Int 42) for catch-all when, got {other:?}"),
         }
@@ -20562,7 +20845,13 @@ mod test {
         match &prop {
             TransitionProp::IfThenElse { cond, t, e } => {
                 assert!(
-                    matches!(cond, ShallowIr::BinOp { op: ShallowBinOp::Eq, .. }),
+                    matches!(
+                        cond,
+                        ShallowIr::BinOp {
+                            op: ShallowBinOp::Eq,
+                            ..
+                        }
+                    ),
                     "outer constructor clause should lower to an Eq guard, got {cond:?}",
                 );
                 assert!(
@@ -20572,7 +20861,13 @@ mod test {
                 match &**e {
                     TransitionProp::IfThenElse { cond, t, e } => {
                         assert!(
-                            matches!(cond, ShallowIr::BinOp { op: ShallowBinOp::Eq, .. }),
+                            matches!(
+                                cond,
+                                ShallowIr::BinOp {
+                                    op: ShallowBinOp::Eq,
+                                    ..
+                                }
+                            ),
                             "inner constructor clause should lower to an Eq guard, got {cond:?}",
                         );
                         assert!(
@@ -20584,10 +20879,14 @@ mod test {
                             "discard branch should remain the final fallback, got {e:?}",
                         );
                     }
-                    other => panic!("expected nested IfThenElse for second constructor clause, got {other:?}"),
+                    other => panic!(
+                        "expected nested IfThenElse for second constructor clause, got {other:?}"
+                    ),
                 }
             }
-            other => panic!("expected nested IfThenElse for constructor-pattern when, got {other:?}"),
+            other => {
+                panic!("expected nested IfThenElse for constructor-pattern when, got {other:?}")
+            }
         }
     }
 
@@ -20682,9 +20981,9 @@ mod test {
                 TransitionProp::And(parts) | TransitionProp::Or(parts) => {
                     parts.iter().find_map(find_first_unsupported)
                 }
-                TransitionProp::Match { arms, .. } => {
-                    arms.iter().find_map(|arm| find_first_unsupported(&arm.body))
-                }
+                TransitionProp::Match { arms, .. } => arms
+                    .iter()
+                    .find_map(|arm| find_first_unsupported(&arm.body)),
                 TransitionProp::IfThenElse { t, e, .. } => {
                     find_first_unsupported(t).or_else(|| find_first_unsupported(e))
                 }
@@ -20768,7 +21067,10 @@ mod test {
         );
         match &prop {
             TransitionProp::EqOutput(ShallowIr::Const(ShallowConst::Int(v))) => {
-                assert_eq!(v, "42", "leading var-pattern clause should short-circuit later clauses");
+                assert_eq!(
+                    v, "42",
+                    "leading var-pattern clause should short-circuit later clauses"
+                );
             }
             other => panic!("expected EqOutput(Int 42), got {other:?}"),
         }
@@ -21099,7 +21401,12 @@ mod test {
         );
 
         match prop {
-            TransitionProp::Exists { binder, domain, body, .. } => {
+            TransitionProp::Exists {
+                binder,
+                domain,
+                body,
+                ..
+            } => {
                 assert_eq!(binder, "draw");
                 assert!(
                     matches!(
@@ -22329,11 +22636,18 @@ mod test {
             &mut visiting,
         ) {
             Ok(arm) => arm,
-            Err(failure) => panic!("constructor clause should translate, got failure: {}", failure.reason),
+            Err(failure) => panic!(
+                "constructor clause should translate, got failure: {}",
+                failure.reason
+            ),
         };
 
         match arm.body {
-            ShallowIr::Construct { constructor, fields, .. } => {
+            ShallowIr::Construct {
+                constructor,
+                fields,
+                ..
+            } => {
                 assert_eq!(constructor, "Step");
                 assert!(
                     matches!(

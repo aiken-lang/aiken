@@ -348,6 +348,200 @@ fn derive_fixture_semantics_from_constraint(
     }
 }
 
+fn bridged_bool_constructor_tag(value: bool) -> u64 {
+    u64::from(value)
+}
+
+fn bridged_value_matches_exact(
+    value: &BridgedAikenValue,
+    exact: &crate::export::FuzzerExactValue,
+) -> bool {
+    match (value, exact) {
+        (BridgedAikenValue::Bool(actual), crate::export::FuzzerExactValue::Bool(expected)) => {
+            actual == expected
+        }
+        (
+            BridgedAikenValue::ByteArray(actual),
+            crate::export::FuzzerExactValue::ByteArray(expected),
+        ) => actual == expected,
+        (
+            BridgedAikenValue::ByteArray(actual),
+            crate::export::FuzzerExactValue::String(expected),
+        ) => actual.as_slice() == expected.as_bytes(),
+        (BridgedAikenValue::Int(actual), crate::export::FuzzerExactValue::String(expected)) => {
+            actual.to_string() == *expected
+        }
+        (
+            BridgedAikenValue::Constructor { tag, fields },
+            crate::export::FuzzerExactValue::Bool(expected),
+        ) => *tag == bridged_bool_constructor_tag(*expected) && fields.is_empty(),
+        _ => false,
+    }
+}
+
+fn compact_relation_accepts_value(relation: &DomainRel, value: &BridgedAikenValue) -> bool {
+    match relation {
+        DomainRel::Constraint { constraint } => match constraint {
+            FuzzerConstraint::Any => true,
+            FuzzerConstraint::IntRange { min, max } => match value {
+                BridgedAikenValue::Int(actual) => {
+                    let min = BigInt::parse_bytes(min.as_bytes(), 10).unwrap();
+                    let max = BigInt::parse_bytes(max.as_bytes(), 10).unwrap();
+                    min <= *actual && *actual <= max
+                }
+                _ => false,
+            },
+            FuzzerConstraint::ByteStringLenRange { min_len, max_len } => match value {
+                BridgedAikenValue::ByteArray(actual) => {
+                    *min_len <= actual.len() && actual.len() <= *max_len
+                }
+                _ => false,
+            },
+            FuzzerConstraint::Exact(exact) => bridged_value_matches_exact(value, exact),
+            FuzzerConstraint::OneOf(values) => values
+                .iter()
+                .any(|exact| bridged_value_matches_exact(value, exact)),
+            FuzzerConstraint::Tuple(items) => match value {
+                BridgedAikenValue::Tuple(values) if values.len() == items.len() => {
+                    values.iter().zip(items.iter()).all(|(value, constraint)| {
+                        compact_relation_accepts_value(
+                            &DomainRel::Constraint {
+                                constraint: constraint.clone(),
+                            },
+                            value,
+                        )
+                    })
+                }
+                _ => false,
+            },
+            FuzzerConstraint::List {
+                elem,
+                min_len,
+                max_len,
+            } => match value {
+                BridgedAikenValue::List(values) => {
+                    min_len.is_none_or(|min| min <= values.len())
+                        && max_len.is_none_or(|max| values.len() <= max)
+                        && values.iter().all(|value| {
+                            compact_relation_accepts_value(
+                                &DomainRel::Constraint {
+                                    constraint: elem.as_ref().clone(),
+                                },
+                                value,
+                            )
+                        })
+                }
+                _ => false,
+            },
+            FuzzerConstraint::DataConstructorTags { tags } => match value {
+                BridgedAikenValue::Constructor { tag, .. } => tags.contains(tag),
+                BridgedAikenValue::Bool(actual) => {
+                    tags.contains(&bridged_bool_constructor_tag(*actual))
+                }
+                _ => false,
+            },
+            FuzzerConstraint::Map(_)
+            | FuzzerConstraint::And(_)
+            | FuzzerConstraint::Unsupported { .. } => false,
+        },
+        DomainRel::Semantics { semantics } => match semantics {
+            FuzzerSemantics::Bool => matches!(value, BridgedAikenValue::Bool(_)),
+            FuzzerSemantics::IntRange { min, max } => match value {
+                BridgedAikenValue::Int(actual) => {
+                    let lower_ok = min.as_ref().is_none_or(|min| {
+                        BigInt::parse_bytes(min.as_bytes(), 10).unwrap() <= *actual
+                    });
+                    let upper_ok = max.as_ref().is_none_or(|max| {
+                        *actual <= BigInt::parse_bytes(max.as_bytes(), 10).unwrap()
+                    });
+                    lower_ok && upper_ok
+                }
+                _ => false,
+            },
+            FuzzerSemantics::ByteArrayRange { min_len, max_len } => match value {
+                BridgedAikenValue::ByteArray(actual) => {
+                    min_len.is_none_or(|min| min <= actual.len())
+                        && max_len.is_none_or(|max| actual.len() <= max)
+                }
+                _ => false,
+            },
+            FuzzerSemantics::Exact(exact) => bridged_value_matches_exact(value, exact),
+            FuzzerSemantics::OneOf(values) => values
+                .iter()
+                .any(|exact| bridged_value_matches_exact(value, exact)),
+            FuzzerSemantics::Product(items) => match value {
+                BridgedAikenValue::Tuple(values) if values.len() == items.len() => {
+                    values.iter().zip(items.iter()).all(|(value, semantics)| {
+                        compact_relation_accepts_value(
+                            &DomainRel::Semantics {
+                                semantics: semantics.clone(),
+                            },
+                            value,
+                        )
+                    })
+                }
+                _ => false,
+            },
+            FuzzerSemantics::Constructors { tags } => match value {
+                BridgedAikenValue::Constructor { tag, .. } => tags.contains(tag),
+                BridgedAikenValue::Bool(actual) => {
+                    tags.contains(&bridged_bool_constructor_tag(*actual))
+                }
+                _ => false,
+            },
+            FuzzerSemantics::String => matches!(value, BridgedAikenValue::ByteArray(_)),
+            FuzzerSemantics::Data => true,
+            FuzzerSemantics::DataWithSchema { .. }
+            | FuzzerSemantics::List { .. }
+            | FuzzerSemantics::StateMachineTrace { .. }
+            | FuzzerSemantics::Opaque { .. } => false,
+        },
+        DomainRel::And { items } => items
+            .iter()
+            .all(|item| compact_relation_accepts_value(item, value)),
+        DomainRel::Or { items } => items
+            .iter()
+            .any(|item| compact_relation_accepts_value(item, value)),
+        DomainRel::Exists { .. }
+        | DomainRel::Not { .. }
+        | DomainRel::Witness { .. }
+        | DomainRel::SamplerReturns { .. }
+        | DomainRel::TrueWithExplicitWidening { .. }
+        | DomainRel::Unknown { .. } => false,
+    }
+}
+
+fn decode_bridged_sample(
+    test: &ExportedPropertyTest,
+    data: &uplc::PlutusData,
+) -> BridgedAikenValue {
+    let bridge = input_bridge_for_test(test);
+    bridge
+        .schema
+        .as_ref()
+        .expect("test fixture bridge should expose a schema")
+        .decode_plutus_data(data)
+        .expect("sample should decode through the exported bridge schema")
+}
+
+fn sample_fuzzer_value(test: &ExportedPropertyTest, seed: u32) -> uplc::PlutusData {
+    let bytes = test
+        .fuzzer_program
+        .flat_bytes
+        .as_deref()
+        .expect("primitive lowering fixture should export raw flat bytes");
+    let debruijn = uplc::ast::Program::<uplc::ast::DeBruijn>::from_flat(bytes)
+        .expect("fuzzer program should decode from exported raw flat bytes");
+    let program: uplc::ast::Program<uplc::ast::Name> = debruijn
+        .try_into()
+        .expect("decoded fuzzer program should convert back into named form");
+    let (_next_prng, value) = aiken_lang::test_framework::Prng::from_seed(seed)
+        .sample(&program)
+        .expect("seeded sampling should evaluate")
+        .expect("seeded sampling should return a value");
+    value
+}
+
 #[derive(Debug, Clone)]
 struct ProofBenchmarkMetrics {
     theorem_size_bytes: usize,
@@ -8530,6 +8724,109 @@ test foo_mint_via_if_is_shadowed_argument(policy_id via byte_fuzzer()) {
     .unwrap();
 }
 
+fn write_verify_primitive_lowering_fixture(root: &Path) {
+    fs::create_dir_all(root.join("validators")).unwrap();
+
+    fs::write(
+        root.join("aiken.toml"),
+        r#"
+name = "test/verify_primitive_lowering_fixture"
+version = "0.0.0"
+plutusVersion = "v3"
+description = "verify primitive lowering fixture"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "main"
+source = "github"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("validators/tests.ak"),
+        r#"
+use aiken/fuzz
+
+fn keep_true(flag: Bool) -> Bool {
+  flag
+}
+
+test prop_bool(flag via fuzz.bool()) {
+  True
+}
+
+test prop_bool_filtered(flag via fuzz.such_that(fuzz.bool(), keep_true)) {
+  True
+}
+
+test prop_byte(x via fuzz.byte()) {
+  True
+}
+
+test prop_int(x via fuzz.int()) {
+  True
+}
+
+test prop_int_at_least(x via fuzz.int_at_least(5)) {
+  True
+}
+
+test prop_int_at_most(x via fuzz.int_at_most(10)) {
+  True
+}
+
+test prop_int_between(x via fuzz.int_between(2, 7)) {
+  True
+}
+
+test prop_bytearray_fixed(bytes via fuzz.bytearray_fixed(4)) {
+  True
+}
+
+test prop_option(x via fuzz.option(fuzz.int())) {
+  True
+}
+
+test prop_either(x via fuzz.either(fuzz.constant(False), fuzz.bool())) {
+  True
+}
+"#,
+    )
+    .unwrap();
+}
+
+fn export_verify_primitive_lowering_fixture() -> (tempfile::TempDir, crate::export::ExportedTests) {
+    let tmp = tempfile::tempdir().unwrap();
+    write_verify_primitive_lowering_fixture(tmp.path());
+
+    let mut project = Project::new(tmp.path().to_path_buf(), EventTarget::default()).unwrap();
+    project.compile(Options::default()).unwrap();
+    let exported = project
+        .export_tests(None, false, Tracing::silent(), true)
+        .unwrap();
+
+    (tmp, exported)
+}
+
+fn exported_primitive_test<'a>(
+    exported: &'a crate::export::ExportedTests,
+    suffix: &str,
+) -> &'a ExportedPropertyTest {
+    exported
+        .property_tests
+        .iter()
+        .find(|test| test.name.ends_with(suffix))
+        .unwrap_or_else(|| {
+            panic!("primitive lowering fixture missing property test suffix '{suffix}'")
+        })
+}
+
 fn write_verify_export_cross_module_fixture(root: &Path) {
     fs::create_dir_all(root.join("validators")).unwrap();
 
@@ -9726,6 +10023,225 @@ fn export_tests_output_generates_validator_and_equivalence_workspaces() {
                 "equivalence target should generate an equivalence theorem"
             );
         }
+    }
+}
+
+#[test]
+fn primitive_bool_domain_is_exact_and_samples_stay_within_bounds() {
+    let (_tmp, exported) = export_verify_primitive_lowering_fixture();
+    let test = exported_primitive_test(&exported, "prop_bool");
+    let domain = lowered_domain_for_test(
+        test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+
+    assert_eq!(domain.precision, DomainPrecision::Exact);
+    assert_eq!(domain.certificate, DomainCertificate::TrustedVersionedModel);
+    assert!(domain.widenings.is_empty());
+
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(test, seed);
+        let decoded = decode_bridged_sample(test, &sample);
+        assert!(
+            compact_relation_accepts_value(&domain.relation, &decoded),
+            "bool sample for seed {seed} should satisfy the exact compact domain: {decoded:?}",
+        );
+    }
+}
+
+#[test]
+fn primitive_filtered_bool_domain_is_not_exact() {
+    let (_tmp, exported) = export_verify_primitive_lowering_fixture();
+    let test = exported_primitive_test(&exported, "prop_bool_filtered");
+    let domain = lowered_domain_for_test(
+        test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+
+    assert_eq!(domain.precision, DomainPrecision::OverApprox);
+    assert!(
+        domain
+            .widenings
+            .iter()
+            .any(|widening| widening.kind == "constraint"),
+        "filtered bool domains must stay visibly over-approximated rather than exact"
+    );
+}
+
+#[test]
+fn primitive_int_domain_is_exact_and_samples_stay_within_bounds() {
+    let (_tmp, exported) = export_verify_primitive_lowering_fixture();
+    let test = exported_primitive_test(&exported, "prop_int");
+    let domain = lowered_domain_for_test(
+        test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+
+    assert_eq!(domain.precision, DomainPrecision::Exact);
+    assert_eq!(domain.certificate, DomainCertificate::TrustedVersionedModel);
+
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(test, seed);
+        let decoded = decode_bridged_sample(test, &sample);
+        assert!(
+            compact_relation_accepts_value(&domain.relation, &decoded),
+            "int sample for seed {seed} should satisfy the exact compact domain: {decoded:?}",
+        );
+    }
+}
+
+#[test]
+fn primitive_byte_domain_is_exact_and_samples_stay_within_bounds() {
+    let (_tmp, exported) = export_verify_primitive_lowering_fixture();
+    let test = exported_primitive_test(&exported, "prop_byte");
+    let domain = lowered_domain_for_test(
+        test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+
+    assert_eq!(domain.precision, DomainPrecision::Exact);
+    assert_eq!(domain.certificate, DomainCertificate::TrustedVersionedModel);
+
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(test, seed);
+        let decoded = decode_bridged_sample(test, &sample);
+        assert!(
+            compact_relation_accepts_value(&domain.relation, &decoded),
+            "byte sample for seed {seed} should satisfy the exact compact domain: {decoded:?}",
+        );
+    }
+}
+
+#[test]
+fn primitive_bytearray_fixed_domain_is_overapprox_and_samples_match_exact_length() {
+    let (_tmp, exported) = export_verify_primitive_lowering_fixture();
+    let test = exported_primitive_test(&exported, "prop_bytearray_fixed");
+    let domain = lowered_domain_for_test(
+        test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+
+    assert_eq!(domain.precision, DomainPrecision::OverApprox);
+    assert_eq!(domain.certificate, DomainCertificate::TrustedVersionedModel);
+    assert!(
+        domain
+            .widenings
+            .iter()
+            .any(|widening| widening.kind == "bytearray_content"),
+        "fixed bytearray domains must record the content over-approximation explicitly"
+    );
+
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(test, seed);
+        let decoded = decode_bridged_sample(test, &sample);
+        match &decoded {
+            BridgedAikenValue::ByteArray(bytes) => assert_eq!(bytes.len(), 4),
+            other => panic!("expected bytearray sample for seed {seed}, got {other:?}"),
+        }
+        assert!(
+            compact_relation_accepts_value(&domain.relation, &decoded),
+            "bytearray_fixed sample for seed {seed} should satisfy the compact length domain: {decoded:?}",
+        );
+    }
+}
+
+#[test]
+fn primitive_option_domain_remains_overapprox_without_exported_inner_support() {
+    let (_tmp, exported) = export_verify_primitive_lowering_fixture();
+    let test = exported_primitive_test(&exported, "prop_option");
+    let domain = lowered_domain_for_test(
+        test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+
+    assert_eq!(domain.precision, DomainPrecision::OverApprox);
+    assert_eq!(domain.certificate, DomainCertificate::TrustedVersionedModel);
+}
+
+#[test]
+fn primitive_fixture_hashes_are_pinned() {
+    let (tmp, exported) = export_verify_primitive_lowering_fixture();
+    let config = VerifyConfig {
+        out_dir: tmp.path().join("build/verify"),
+        cek_budget: 20_000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
+        existential_mode: ExistentialMode::default(),
+        target: VerificationTargetKind::PropertyWrapper,
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: Some(tmp.path().to_path_buf()),
+        plutus_core_dir: None,
+        raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
+        allow_vacuous_subgenerators: false,
+    };
+    let (aiken_metadata, _) = manifest_aiken_metadata(&config).unwrap();
+    assert_eq!(
+        aiken_metadata.fuzz_package_hash.as_deref(),
+        Some("2ab10e1f3a042a9c3bbba74c5b11b7be97a6b799242d8748007359a36657ae08"),
+    );
+
+    let expected = [
+        (
+            "prop_bool",
+            "a0ec4a731bddbca92163749a6cb7089b85a51a278368517da3757c413d21eacb",
+        ),
+        (
+            "prop_bool_filtered",
+            "8469f346ed33e2adc9a7203c36d550f9b4809c61111bf5896647dd7b9651ad02",
+        ),
+        (
+            "prop_byte",
+            "d8971dbe0782470bbb422d613ce1c4ce069f35744342da048531a963b6c5489e",
+        ),
+        (
+            "prop_int",
+            "caedc27614c201fdabaf332ceca3b428df1c5efa7a71524227142576b53a03e3",
+        ),
+        (
+            "prop_int_at_least",
+            "f9eb4c219d03bbdcf3d851a2825471eab901386cdfa489cf52e7f2f8dd4a2d4f",
+        ),
+        (
+            "prop_int_between",
+            "9b9893d7c98f493f0a9176984af4701193f79cdb2f92a4dd3670967c1cce20f8",
+        ),
+        (
+            "prop_bytearray_fixed",
+            "b8f48d8f15616d16d8306e0e148d72d5f86e3247de0e478bf60020e311dc3061",
+        ),
+    ];
+
+    for (suffix, expected_hash) in expected {
+        let test = exported_primitive_test(&exported, suffix);
+        let actual = fuzzer_model_hash_for_test(test).unwrap();
+        assert_eq!(
+            actual, expected_hash,
+            "unexpected model hash drift for {suffix}"
+        );
     }
 }
 

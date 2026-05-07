@@ -533,6 +533,13 @@ fn render_manifest_sampler(sampler: Option<&verify::SamplerMetadata>) -> Option<
     })
 }
 
+fn render_manifest_domain(entry: &verify::ManifestEntry) -> Option<String> {
+    entry
+        .domain
+        .as_ref()
+        .map(|domain| format!("domain={}/{}", domain.precision, domain.certificate))
+}
+
 fn render_manifest_entry_debug(entry: &verify::ManifestEntry) -> String {
     let mut parts = vec![format!(
         "{} -> {} [return_mode={}, test_mode={}, on_test_failure={}]",
@@ -542,6 +549,9 @@ fn render_manifest_entry_debug(entry: &verify::ManifestEntry) -> String {
         render_manifest_test_mode(entry.test_mode.as_ref()),
         render_manifest_on_test_failure(entry.on_test_failure.as_ref()),
     )];
+    if let Some(domain) = render_manifest_domain(entry) {
+        parts.push(domain);
+    }
     if let Some(sampler) = render_manifest_sampler(entry.sampler.as_ref()) {
         parts.push(sampler);
     }
@@ -3352,7 +3362,7 @@ members = [1, 2]
         );
         assert_eq!(
             render_manifest_entry_debug(&manifest.tests[0]),
-            "example -> Example.TestOk [return_mode=bool, test_mode=normal, on_test_failure=fail_immediately] sampler=seeded_generation/seeded"
+            "example -> Example.TestOk [return_mode=bool, test_mode=normal, on_test_failure=fail_immediately] domain=OverApprox/TrustedVersionedModel sampler=seeded_generation/seeded"
         );
     }
 

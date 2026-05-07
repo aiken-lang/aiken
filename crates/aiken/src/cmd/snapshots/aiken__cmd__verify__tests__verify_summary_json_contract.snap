@@ -100,7 +100,8 @@ expression: "&summary"
       },
       "proof_status": {
         "kind": "proved"
-      }
+      },
+      "explanation": "input domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
     },
     {
       "test_name": "example.test_witness",
@@ -153,7 +154,8 @@ expression: "&summary"
           "01"
         ],
         "note": "witness-only proof"
-      }
+      },
+      "explanation": "input domain: WitnessOnly (WitnessReplay)\nlowering: witness_replay"
     },
     {
       "test_name": "example.test_partial",
@@ -208,7 +210,7 @@ expression: "&summary"
         "kind": "partial",
         "note": "partial proof"
       },
-      "explanation": "partial proof",
+      "explanation": "partial proof\ninput domain: Unknown (Unchecked)\nlowering: placeholder_scan\nwidening: partial proof",
       "over_approximations": 2
     },
     {
@@ -277,7 +279,7 @@ expression: "&summary"
         },
         "reason": "build failed"
       },
-      "explanation": "build failed"
+      "explanation": "build failed\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
     },
     {
       "test_name": "example.test_timed_out",
@@ -342,7 +344,7 @@ expression: "&summary"
         "kind": "timed_out",
         "reason": "timed out"
       },
-      "explanation": "timed out"
+      "explanation": "timed out\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
     },
     {
       "test_name": "example.test_unknown",
@@ -406,7 +408,7 @@ expression: "&summary"
       "proof_status": {
         "kind": "unknown"
       },
-      "explanation": "Lean/Blaster completed without a trustworthy proof classification for this theorem."
+      "explanation": "Lean/Blaster completed without a trustworthy proof classification for this theorem.\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
     }
   ],
   "raw_output": {
@@ -486,7 +488,8 @@ expression: "&summary"
         },
         "proof_status": {
           "kind": "proved"
-        }
+        },
+        "explanation": "input domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
       },
       {
         "test_name": "example.test_witness",
@@ -539,7 +542,8 @@ expression: "&summary"
             "01"
           ],
           "note": "witness-only proof"
-        }
+        },
+        "explanation": "input domain: WitnessOnly (WitnessReplay)\nlowering: witness_replay"
       },
       {
         "test_name": "example.test_partial",
@@ -594,7 +598,7 @@ expression: "&summary"
           "kind": "partial",
           "note": "partial proof"
         },
-        "explanation": "partial proof",
+        "explanation": "partial proof\ninput domain: Unknown (Unchecked)\nlowering: placeholder_scan\nwidening: partial proof",
         "over_approximations": 2
       },
       {
@@ -663,7 +667,7 @@ expression: "&summary"
           },
           "reason": "build failed"
         },
-        "explanation": "build failed"
+        "explanation": "build failed\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
       },
       {
         "test_name": "example.test_timed_out",
@@ -728,7 +732,7 @@ expression: "&summary"
           "kind": "timed_out",
           "reason": "timed out"
         },
-        "explanation": "timed out"
+        "explanation": "timed out\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
       },
       {
         "test_name": "example.test_unknown",
@@ -792,7 +796,7 @@ expression: "&summary"
         "proof_status": {
           "kind": "unknown"
         },
-        "explanation": "Lean/Blaster completed without a trustworthy proof classification for this theorem."
+        "explanation": "Lean/Blaster completed without a trustworthy proof classification for this theorem.\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
       }
     ]
   },
