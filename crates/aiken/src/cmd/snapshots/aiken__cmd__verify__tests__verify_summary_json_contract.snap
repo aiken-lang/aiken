@@ -75,6 +75,9 @@ expression: "&summary"
         "obligations_discharged": [
           "FuzzerReturnsImpliesDomain",
           "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
           "PropertyHarnessMatchesExportedUPLC"
         ],
         "lowering_path": [
@@ -84,6 +87,16 @@ expression: "&summary"
         "widenings": [],
         "production_allowed": true,
         "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
       },
       "proof_status": {
         "kind": "proved"
@@ -110,6 +123,9 @@ expression: "&summary"
           "WitnessReplaysThroughFuzzer",
           "WitnessSatisfiesDomain",
           "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
           "PropertyHarnessMatchesExportedUPLC"
         ],
         "lowering_path": [
@@ -118,6 +134,16 @@ expression: "&summary"
         "widenings": [],
         "production_allowed": true,
         "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
       },
       "proof_status": {
         "kind": "witness_proved",
@@ -144,7 +170,10 @@ expression: "&summary"
         "precision": "Unknown",
         "certificate": "Unchecked",
         "obligations_open": [
-          "FuzzerReturnsImpliesDomain"
+          "FuzzerReturnsImpliesDomain",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput"
         ],
         "obligations_discharged": [
           "FuzzerModelHashMatches",
@@ -164,6 +193,16 @@ expression: "&summary"
         "diagnostics": [
           "partial proof"
         ]
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
       },
       "proof_status": {
         "kind": "partial",
@@ -208,6 +247,9 @@ expression: "&summary"
         "obligations_discharged": [
           "FuzzerReturnsImpliesDomain",
           "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
           "PropertyHarnessMatchesExportedUPLC"
         ],
         "lowering_path": [
@@ -217,6 +259,16 @@ expression: "&summary"
         "widenings": [],
         "production_allowed": true,
         "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
       },
       "proof_status": {
         "kind": "failed",
@@ -263,6 +315,9 @@ expression: "&summary"
         "obligations_discharged": [
           "FuzzerReturnsImpliesDomain",
           "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
           "PropertyHarnessMatchesExportedUPLC"
         ],
         "lowering_path": [
@@ -272,6 +327,16 @@ expression: "&summary"
         "widenings": [],
         "production_allowed": true,
         "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
       },
       "proof_status": {
         "kind": "timed_out",
@@ -315,6 +380,9 @@ expression: "&summary"
         "obligations_discharged": [
           "FuzzerReturnsImpliesDomain",
           "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
           "PropertyHarnessMatchesExportedUPLC"
         ],
         "lowering_path": [
@@ -324,6 +392,16 @@ expression: "&summary"
         "widenings": [],
         "production_allowed": true,
         "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
       },
       "proof_status": {
         "kind": "unknown"
@@ -383,6 +461,9 @@ expression: "&summary"
           "obligations_discharged": [
             "FuzzerReturnsImpliesDomain",
             "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
             "PropertyHarnessMatchesExportedUPLC"
           ],
           "lowering_path": [
@@ -392,6 +473,16 @@ expression: "&summary"
           "widenings": [],
           "production_allowed": true,
           "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
         },
         "proof_status": {
           "kind": "proved"
@@ -418,6 +509,9 @@ expression: "&summary"
             "WitnessReplaysThroughFuzzer",
             "WitnessSatisfiesDomain",
             "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
             "PropertyHarnessMatchesExportedUPLC"
           ],
           "lowering_path": [
@@ -426,6 +520,16 @@ expression: "&summary"
           "widenings": [],
           "production_allowed": true,
           "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
         },
         "proof_status": {
           "kind": "witness_proved",
@@ -452,7 +556,10 @@ expression: "&summary"
           "precision": "Unknown",
           "certificate": "Unchecked",
           "obligations_open": [
-            "FuzzerReturnsImpliesDomain"
+            "FuzzerReturnsImpliesDomain",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput"
           ],
           "obligations_discharged": [
             "FuzzerModelHashMatches",
@@ -472,6 +579,16 @@ expression: "&summary"
           "diagnostics": [
             "partial proof"
           ]
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
         },
         "proof_status": {
           "kind": "partial",
@@ -516,6 +633,9 @@ expression: "&summary"
           "obligations_discharged": [
             "FuzzerReturnsImpliesDomain",
             "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
             "PropertyHarnessMatchesExportedUPLC"
           ],
           "lowering_path": [
@@ -525,6 +645,16 @@ expression: "&summary"
           "widenings": [],
           "production_allowed": true,
           "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
         },
         "proof_status": {
           "kind": "failed",
@@ -571,6 +701,9 @@ expression: "&summary"
           "obligations_discharged": [
             "FuzzerReturnsImpliesDomain",
             "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
             "PropertyHarnessMatchesExportedUPLC"
           ],
           "lowering_path": [
@@ -580,6 +713,16 @@ expression: "&summary"
           "widenings": [],
           "production_allowed": true,
           "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
         },
         "proof_status": {
           "kind": "timed_out",
@@ -623,6 +766,9 @@ expression: "&summary"
           "obligations_discharged": [
             "FuzzerReturnsImpliesDomain",
             "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
             "PropertyHarnessMatchesExportedUPLC"
           ],
           "lowering_path": [
@@ -632,6 +778,16 @@ expression: "&summary"
           "widenings": [],
           "production_allowed": true,
           "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
         },
         "proof_status": {
           "kind": "unknown"

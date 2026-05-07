@@ -112,6 +112,33 @@ fn make_test_with_failure(
     }
 }
 
+fn input_bridge_for_test(test: &ExportedPropertyTest) -> InputValueBridge {
+    super::input_value_bridge_for_test(test).input_type
+}
+
+fn default_input_bridge() -> InputValueBridge {
+    input_bridge_for_test(&make_test("example", "value_bridge"))
+}
+
+fn make_bridge_test(
+    name: &str,
+    output_type: FuzzerOutputType,
+    constraint: FuzzerConstraint,
+    fuzzer_data_schema: Option<ExportedDataSchema>,
+) -> ExportedPropertyTest {
+    let mut test = make_test("bridge", name);
+    let aiken_type = match &output_type {
+        FuzzerOutputType::Unsupported(raw) => raw.clone(),
+        other => other.to_string(),
+    };
+    test.fuzzer_output_type = output_type.clone();
+    test.fuzzer_type = format!("Fuzzer<{aiken_type}>");
+    test.constraint = constraint.clone();
+    test.semantics = derive_fixture_semantics_from_constraint(&output_type, &constraint, true);
+    test.fuzzer_data_schema = fuzzer_data_schema;
+    test
+}
+
 fn fixture_semantics_opaque() -> FuzzerSemantics {
     FuzzerSemantics::Opaque {
         reason: "test fixture semantics not set".to_string(),
@@ -532,6 +559,26 @@ fn make_state_machine_trace_failure_schema() -> ExportedDataSchema {
     );
     schema.root = root;
     schema
+}
+
+fn make_small_record_schema() -> ExportedDataSchema {
+    let mut definitions = Definitions::new();
+    let root = Reference::new("fixtures/MyDatum");
+    definitions.insert(
+        &root,
+        Annotated::from(Schema::Data(Data::AnyOf(vec![
+            Constructor {
+                index: 0,
+                fields: vec![
+                    Declaration::Inline(Box::new(Data::Bytes)).into(),
+                    Declaration::Inline(Box::new(Data::Integer)).into(),
+                ],
+            }
+            .into(),
+        ]))),
+    );
+
+    ExportedDataSchema { root, definitions }
 }
 
 fn make_state_machine_transition_semantics() -> StateMachineTransitionSemantics {
@@ -4470,6 +4517,9 @@ fn trusted_overapprox_domain() -> LoweredDomain {
         obligations_discharged: vec![
             DomainObligation::FuzzerReturnsImpliesDomain,
             DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::ValueDecoderRoundTrip,
+            DomainObligation::FuzzerOutputTypeMatchesPropertyInputType,
+            DomainObligation::PropertyHarnessAcceptsDecodedInput,
             DomainObligation::PropertyHarnessMatchesExportedUPLC,
         ],
         lowering_path: vec!["constraint_ir".to_string(), "known_combinator".to_string()],
@@ -4492,6 +4542,9 @@ fn witness_only_domain(witnesses: &[&str]) -> LoweredDomain {
             DomainObligation::WitnessReplaysThroughFuzzer,
             DomainObligation::WitnessSatisfiesDomain,
             DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::ValueDecoderRoundTrip,
+            DomainObligation::FuzzerOutputTypeMatchesPropertyInputType,
+            DomainObligation::PropertyHarnessAcceptsDecodedInput,
             DomainObligation::PropertyHarnessMatchesExportedUPLC,
         ],
         lowering_path: vec!["witness_replay".to_string()],
@@ -4510,7 +4563,12 @@ fn placeholder_domain(reason: &str) -> LoweredDomain {
         },
         precision: DomainPrecision::Unknown,
         certificate: DomainCertificate::Unchecked,
-        obligations_open: vec![DomainObligation::FuzzerReturnsImpliesDomain],
+        obligations_open: vec![
+            DomainObligation::FuzzerReturnsImpliesDomain,
+            DomainObligation::ValueDecoderRoundTrip,
+            DomainObligation::FuzzerOutputTypeMatchesPropertyInputType,
+            DomainObligation::PropertyHarnessAcceptsDecodedInput,
+        ],
         obligations_discharged: vec![
             DomainObligation::FuzzerModelHashMatches,
             DomainObligation::PropertyHarnessMatchesExportedUPLC,
@@ -4560,7 +4618,19 @@ fn domain_fixture(
         precision,
         certificate,
         obligations_open,
-        obligations_discharged,
+        obligations_discharged: {
+            let mut obligations_discharged = obligations_discharged;
+            for obligation in [
+                DomainObligation::ValueDecoderRoundTrip,
+                DomainObligation::FuzzerOutputTypeMatchesPropertyInputType,
+                DomainObligation::PropertyHarnessAcceptsDecodedInput,
+            ] {
+                if !obligations_discharged.contains(&obligation) {
+                    obligations_discharged.push(obligation);
+                }
+            }
+            obligations_discharged
+        },
         lowering_path: vec!["test_fixture".to_string()],
         widenings: Vec::new(),
         production_allowed: false,
@@ -4675,6 +4745,7 @@ fn make_manifest_with_termination(
                 fuzzer_harness_hash: Some("66".repeat(28)),
                 fuzzer_model_hash: Some("77".repeat(32)),
                 domain: Some(trusted_overapprox_domain()),
+                input_type: Some(default_input_bridge()),
                 compatibility_limitations: Vec::new(),
                 has_termination_theorem,
                 has_equivalence_theorem: false,
@@ -4847,7 +4918,80 @@ fn generate_workspace_manifest_v2_records_mode_execution_and_hash_metadata() {
         assert!(entry.fuzzer_uplc_hash.is_some());
         assert!(entry.fuzzer_harness_hash.is_some());
         assert!(entry.fuzzer_model_hash.is_some());
+        assert!(entry.input_type.is_some());
+        assert!(
+            entry
+                .input_type
+                .as_ref()
+                .and_then(|input| input.schema_hash.as_ref())
+                .is_some()
+        );
+        assert!(entry.domain.as_ref().is_some_and(|domain| {
+            domain
+                .obligations_discharged
+                .contains(&DomainObligation::ValueDecoderRoundTrip)
+        }));
     }
+}
+
+#[test]
+fn generate_workspace_manifest_records_tuple_input_schema_hashes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path().join("build/verify");
+    let tuple_test = make_bridge_test(
+        "tuple_bridge_manifest",
+        FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
+        FuzzerConstraint::Tuple(vec![
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "10".to_string(),
+            },
+            FuzzerConstraint::IntRange {
+                min: "20".to_string(),
+                max: "30".to_string(),
+            },
+        ]),
+        None,
+    );
+
+    let config = VerifyConfig {
+        out_dir,
+        cek_budget: 20_000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
+        existential_mode: ExistentialMode::default(),
+        target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
+        plutus_core_dir: None,
+        raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
+        allow_vacuous_subgenerators: false,
+    };
+
+    let manifest = generate_lean_workspace(&[tuple_test], &config, &SkipPolicy::None).unwrap();
+    let entry = &manifest.tests[0];
+    let input_type = entry.input_type.as_ref().expect("tuple bridge metadata");
+    assert!(input_type.schema_hash.is_some());
+    assert!(matches!(
+        input_type.schema.as_ref(),
+        Some(InputTypeSchema::Tuple { .. })
+    ));
+    let domain = entry.domain.as_ref().expect("tuple bridge domain");
+    assert!(
+        domain
+            .obligations_discharged
+            .contains(&DomainObligation::ValueDecoderRoundTrip)
+    );
+    assert!(
+        domain
+            .obligations_discharged
+            .contains(&DomainObligation::FuzzerOutputTypeMatchesPropertyInputType)
+    );
+    assert!(
+        domain
+            .obligations_discharged
+            .contains(&DomainObligation::PropertyHarnessAcceptsDecodedInput)
+    );
 }
 
 #[test]
@@ -4924,11 +5068,13 @@ fn legacy_manifest_without_v2_mode_execution_fields_downgrades_to_partial() {
         .expect("legacy manifest should require a compatibility downgrade");
     assert!(note.contains("return_mode"));
     assert!(note.contains("execution.decode_policy"));
+    assert!(note.contains("input_type"));
 
     match manifest_entry_caveat_with_soundness_lint(out_dir, &legacy_manifest, entry) {
         ProofCaveat::Partial(note) => {
             assert!(note.contains("Manifest schema v1 lacks explicit"));
             assert!(note.contains("test_mode"));
+            assert!(note.contains("input_type"));
         }
         other => panic!("legacy manifest should downgrade to Partial, got {other:?}"),
     }
@@ -4956,6 +5102,7 @@ fn equivalence_theorem_name_for_entry_detects_marker_in_proof_file() {
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: true,
@@ -4999,6 +5146,7 @@ fn equivalence_theorem_name_for_entry_returns_none_without_marker() {
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5196,6 +5344,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: true,
         has_equivalence_theorem: false,
@@ -5239,6 +5388,7 @@ fn manifest_entry_partial_proof_note_serializes_only_when_set() {
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5451,6 +5601,7 @@ fn theorem_result_serializes_new_status_and_certification() {
         0,
         TrustProfile::Production,
         trusted_overapprox_domain(),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::Normal),
         Some(TestReturnMode::Bool),
     );
@@ -5471,7 +5622,241 @@ fn theorem_result_serializes_new_status_and_certification() {
         serde_json::json!("TrustedVersionedModel")
     );
     assert_eq!(value["domain"]["obligations_open"], serde_json::json!([]));
+    assert_eq!(value["input_type"]["aiken_type"], serde_json::json!("Int"));
+    assert!(value["input_type"]["schema_hash"].as_str().is_some());
     assert_eq!(value["proof_status"], serde_json::json!({"kind": "proved"}));
+}
+
+#[test]
+fn input_bridge_round_trips_core_primitive_values() {
+    let bool_bridge = input_bridge_for_test(&make_bridge_test(
+        "bool_bridge",
+        FuzzerOutputType::Bool,
+        FuzzerConstraint::Any,
+        None,
+    ));
+    let bool_value = BridgedAikenValue::Bool(true);
+    let bool_runtime = bool_bridge.encode_runtime_value(&bool_value).unwrap();
+    let bool_data = bool_bridge.encode_plutus_data(&bool_value).unwrap();
+    assert_eq!(
+        bool_bridge.decode_runtime_value(&bool_runtime).unwrap(),
+        bool_value
+    );
+    assert_eq!(
+        bool_bridge.decode_plutus_data(&bool_data).unwrap(),
+        bool_value
+    );
+    assert_eq!(bool_bridge.to_lean_literal(&bool_value).unwrap(), "true");
+
+    let int_bridge = input_bridge_for_test(&make_bridge_test(
+        "int_bridge",
+        FuzzerOutputType::Int,
+        FuzzerConstraint::IntRange {
+            min: "0".to_string(),
+            max: "10".to_string(),
+        },
+        None,
+    ));
+    let int_value = BridgedAikenValue::Int(BigInt::from(7));
+    let int_runtime = int_bridge.encode_runtime_value(&int_value).unwrap();
+    let int_data = int_bridge.encode_plutus_data(&int_value).unwrap();
+    assert_eq!(
+        int_bridge.decode_runtime_value(&int_runtime).unwrap(),
+        int_value
+    );
+    assert_eq!(int_bridge.decode_plutus_data(&int_data).unwrap(), int_value);
+    assert_eq!(int_bridge.to_lean_literal(&int_value).unwrap(), "7");
+
+    let bytes_bridge = input_bridge_for_test(&make_bridge_test(
+        "bytes_bridge",
+        FuzzerOutputType::ByteArray,
+        FuzzerConstraint::ByteStringLenRange {
+            min_len: 1,
+            max_len: 4,
+        },
+        None,
+    ));
+    let bytes_value = BridgedAikenValue::ByteArray(vec![0xde, 0xad, 0xbe, 0xef]);
+    let bytes_runtime = bytes_bridge.encode_runtime_value(&bytes_value).unwrap();
+    let bytes_data = bytes_bridge.encode_plutus_data(&bytes_value).unwrap();
+    assert_eq!(
+        bytes_bridge.decode_runtime_value(&bytes_runtime).unwrap(),
+        bytes_value
+    );
+    assert_eq!(
+        bytes_bridge.decode_plutus_data(&bytes_data).unwrap(),
+        bytes_value
+    );
+    assert!(
+        bytes_bridge
+            .to_lean_literal(&bytes_value)
+            .unwrap()
+            .contains("consByteStringV1")
+    );
+
+    let data_bridge = input_bridge_for_test(&make_bridge_test(
+        "data_bridge",
+        FuzzerOutputType::Data,
+        FuzzerConstraint::Any,
+        None,
+    ));
+    let data_value =
+        BridgedAikenValue::Data(PlutusData::BigInt(to_pallas_bigint(&BigInt::from(5))));
+    let data_runtime = data_bridge.encode_runtime_value(&data_value).unwrap();
+    let data_data = data_bridge.encode_plutus_data(&data_value).unwrap();
+    assert_eq!(
+        data_bridge.decode_runtime_value(&data_runtime).unwrap(),
+        data_value
+    );
+    assert_eq!(
+        data_bridge.decode_plutus_data(&data_data).unwrap(),
+        data_value
+    );
+    assert!(
+        data_bridge
+            .to_lean_literal(&data_value)
+            .unwrap()
+            .contains("Data.I")
+    );
+}
+
+#[test]
+fn input_bridge_round_trips_list_and_tuple_values() {
+    let list_bridge = input_bridge_for_test(&make_bridge_test(
+        "list_bridge",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: Some(2),
+        },
+        None,
+    ));
+    let list_value = BridgedAikenValue::List(vec![
+        BridgedAikenValue::Data(PlutusData::BigInt(to_pallas_bigint(&BigInt::from(1)))),
+        BridgedAikenValue::Data(plutus_constructor_data(0, Vec::new())),
+    ]);
+    let list_runtime = list_bridge.encode_runtime_value(&list_value).unwrap();
+    let list_data = list_bridge.encode_plutus_data(&list_value).unwrap();
+    assert_eq!(
+        list_bridge.decode_runtime_value(&list_runtime).unwrap(),
+        list_value
+    );
+    assert_eq!(
+        list_bridge.decode_plutus_data(&list_data).unwrap(),
+        list_value
+    );
+
+    let tuple_bridge = input_bridge_for_test(&make_bridge_test(
+        "tuple_bridge",
+        FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::ByteArray]),
+        FuzzerConstraint::Tuple(vec![
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "10".to_string(),
+            },
+            FuzzerConstraint::ByteStringLenRange {
+                min_len: 1,
+                max_len: 3,
+            },
+        ]),
+        None,
+    ));
+    let tuple_value = BridgedAikenValue::Tuple(vec![
+        BridgedAikenValue::Int(BigInt::from(3)),
+        BridgedAikenValue::ByteArray(vec![0xaa, 0xbb]),
+    ]);
+    let tuple_runtime = tuple_bridge.encode_runtime_value(&tuple_value).unwrap();
+    let tuple_data = tuple_bridge.encode_plutus_data(&tuple_value).unwrap();
+    assert_eq!(
+        tuple_bridge.decode_runtime_value(&tuple_runtime).unwrap(),
+        tuple_value
+    );
+    assert_eq!(
+        tuple_bridge.decode_plutus_data(&tuple_data).unwrap(),
+        tuple_value
+    );
+    assert!(tuple_bridge.schema_hash.is_some());
+}
+
+#[test]
+fn schema_backed_adt_input_bridge_round_trips() {
+    let bridge = input_bridge_for_test(&make_bridge_test(
+        "schema_backed_adt",
+        FuzzerOutputType::Unsupported("fixtures.MyDatum".to_string()),
+        FuzzerConstraint::Any,
+        Some(make_small_record_schema()),
+    ));
+    assert!(bridge.schema_hash.is_some());
+    assert!(matches!(
+        bridge.schema.as_ref(),
+        Some(InputTypeSchema::ConstructorTagged { .. })
+    ));
+
+    let value = BridgedAikenValue::Constructor {
+        tag: 0,
+        fields: vec![
+            BridgedAikenValue::ByteArray(vec![0x01, 0x02]),
+            BridgedAikenValue::Int(BigInt::from(42)),
+        ],
+    };
+    let runtime = bridge.encode_runtime_value(&value).unwrap();
+    let data = bridge.encode_plutus_data(&value).unwrap();
+    assert_eq!(bridge.decode_runtime_value(&runtime).unwrap(), value);
+    assert_eq!(bridge.decode_plutus_data(&data).unwrap(), value);
+    assert!(
+        bridge
+            .to_lean_literal(&value)
+            .unwrap()
+            .contains("Data.Constr")
+    );
+}
+
+#[test]
+fn schema_less_raw_data_fallback_opens_decoder_obligations_and_blocks_success() {
+    let test = make_bridge_test(
+        "raw_data_fallback",
+        FuzzerOutputType::Unsupported("fixtures.UnknownDatum".to_string()),
+        FuzzerConstraint::Any,
+        None,
+    );
+    let assessment = super::input_value_bridge_for_test(&test);
+    assert!(assessment.input_type.schema_hash.is_none());
+    assert!(matches!(
+        assessment.input_type.schema.as_ref(),
+        Some(InputTypeSchema::RawDataFallback { .. })
+    ));
+    assert_eq!(
+        assessment.obligations_open,
+        vec![
+            DomainObligation::ValueDecoderRoundTrip,
+            DomainObligation::FuzzerOutputTypeMatchesPropertyInputType,
+            DomainObligation::PropertyHarnessAcceptsDecodedInput,
+        ]
+    );
+
+    let domain =
+        super::lowered_domain_for_test(&test, CompatibilityMode::UniversalSuccess, None, None);
+    assert!(
+        domain
+            .widenings
+            .iter()
+            .any(|widening| widening.kind == "value_decoder")
+    );
+
+    let result = TheoremResult::new_with_domain(
+        "bridge.raw_data_fallback".to_string(),
+        "raw_data_fallback".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        domain,
+        Some(assessment.input_type.clone()),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
+    );
+    assert_eq!(result.status, VerificationStatus::Partial);
+    assert!(matches!(result.proof_status, ProofStatus::Partial { .. }));
 }
 
 #[test]
@@ -5573,6 +5958,7 @@ fn unknown_or_unchecked_domain_cannot_report_solver_validated_under_production()
         0,
         TrustProfile::Production,
         placeholder_domain("placeholder widened to True"),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::Normal),
         Some(TestReturnMode::Bool),
     );
@@ -5701,6 +6087,7 @@ fn differential_only_domain_cannot_report_solver_validated_under_production() {
         0,
         TrustProfile::Production,
         differential_overapprox_domain(),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::Normal),
         Some(TestReturnMode::Bool),
     );
@@ -5718,6 +6105,7 @@ fn unchecked_domain_cannot_report_solver_validated_under_production() {
         0,
         TrustProfile::Production,
         unchecked_exact_domain(),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::Normal),
         Some(TestReturnMode::Bool),
     );
@@ -5735,6 +6123,7 @@ fn experimental_differential_only_success_is_labeled() {
         0,
         TrustProfile::Experimental,
         differential_overapprox_domain(),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::Normal),
         Some(TestReturnMode::Bool),
     );
@@ -5758,6 +6147,7 @@ fn unsafe_dev_never_reports_verified_success() {
         0,
         TrustProfile::UnsafeDev,
         exact_solver_domain(),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::Normal),
         Some(TestReturnMode::Bool),
     );
@@ -5775,6 +6165,7 @@ fn manifest_test_mode_changes_result_classification() {
         0,
         TrustProfile::Production,
         trusted_overapprox_domain(),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::Normal),
         Some(TestReturnMode::Bool),
     );
@@ -5786,6 +6177,7 @@ fn manifest_test_mode_changes_result_classification() {
         0,
         TrustProfile::Production,
         trusted_overapprox_domain(),
+        Some(default_input_bridge()),
         Some(ManifestTestMode::FailOnce),
         Some(TestReturnMode::Bool),
     );
@@ -5847,6 +6239,7 @@ fn placeholder_domain_fixture_cannot_report_solver_validated() {
         domain: Some(placeholder_domain(
             "Opaque existential domain widened to True: missing schema",
         )),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -5974,6 +6367,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
         domain: Some(witness_only_domain(&["00", "01", "02"])),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -6034,6 +6428,7 @@ fn manifest_entry_serializes_witness_proof_note_when_set() {
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
         domain: Some(trusted_overapprox_domain()),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,
@@ -6441,6 +6836,7 @@ fn manifest_entry_caveat_round_trips_witness_proof_note() {
         fuzzer_harness_hash: None,
         fuzzer_model_hash: None,
         domain: Some(witness_only_domain(&["aa", "bb", "cc"])),
+        input_type: Some(default_input_bridge()),
         compatibility_limitations: Vec::new(),
         has_termination_theorem: false,
         has_equivalence_theorem: false,

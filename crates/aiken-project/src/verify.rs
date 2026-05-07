@@ -74,7 +74,13 @@ use std::sync::{
 };
 use std::thread;
 use std::time::{Duration, Instant};
-use uplc::{PlutusData, machine::runtime::convert_tag_to_constr};
+use uplc::{
+    BoundedBytes, Constr, MaybeIndefArray, PlutusData,
+    machine::{
+        runtime::{convert_constr_to_tag, convert_tag_to_constr},
+        value::{Value as UplcRuntimeValue, to_pallas_bigint},
+    },
+};
 use walkdir::WalkDir;
 
 fn is_zero(n: &usize) -> bool {
@@ -1115,6 +1121,8 @@ pub enum DomainObligation {
     WitnessSatisfiesDomain,
     FuzzerModelHashMatches,
     ValueDecoderRoundTrip,
+    FuzzerOutputTypeMatchesPropertyInputType,
+    PropertyHarnessAcceptsDecodedInput,
     PropertyHarnessMatchesExportedUPLC,
 }
 
@@ -1128,11 +1136,119 @@ impl std::fmt::Display for DomainObligation {
             DomainObligation::WitnessSatisfiesDomain => "WitnessSatisfiesDomain",
             DomainObligation::FuzzerModelHashMatches => "FuzzerModelHashMatches",
             DomainObligation::ValueDecoderRoundTrip => "ValueDecoderRoundTrip",
+            DomainObligation::FuzzerOutputTypeMatchesPropertyInputType => {
+                "FuzzerOutputTypeMatchesPropertyInputType"
+            }
+            DomainObligation::PropertyHarnessAcceptsDecodedInput => {
+                "PropertyHarnessAcceptsDecodedInput"
+            }
             DomainObligation::PropertyHarnessMatchesExportedUPLC => {
                 "PropertyHarnessMatchesExportedUPLC"
             }
         })
     }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeValueEncoding {
+    BoolConstant,
+    IntegerConstant,
+    ByteStringConstant,
+    StringConstant,
+    DataConstant,
+    ConstructorValue,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlutusDataEncoding {
+    BoolConstructor,
+    Integer,
+    Bytes,
+    Utf8Bytes,
+    RawData,
+    List,
+    PairAsList,
+    TupleAsList,
+    ConstructorTagged,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LeanValueEncoding {
+    Bool,
+    Integer,
+    ByteString,
+    Data,
+    List,
+    Tuple,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct InputTypeField {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub schema: InputTypeSchema,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct InputTypeConstructor {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub tag: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<InputTypeField>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum InputTypeSchema {
+    Bool,
+    Int,
+    ByteArray,
+    String,
+    Data,
+    List {
+        element: Box<InputTypeSchema>,
+    },
+    Pair {
+        first: Box<InputTypeSchema>,
+        second: Box<InputTypeSchema>,
+    },
+    Tuple {
+        elements: Vec<InputTypeSchema>,
+    },
+    ConstructorTagged {
+        type_name: String,
+        constructors: Vec<InputTypeConstructor>,
+    },
+    RawDataFallback {
+        type_name: String,
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct InputValueBridge {
+    pub aiken_type: String,
+    pub runtime_encoding: RuntimeValueEncoding,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_encoding: Option<PlutusDataEncoding>,
+    pub lean_encoding: LeanValueEncoding,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<InputTypeSchema>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1836,6 +1952,8 @@ pub struct TheoremResult {
     pub certification: Certification,
     pub trust_profile: TrustProfile,
     pub domain: LoweredDomain,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type: Option<InputValueBridge>,
     pub proof_status: ProofStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
@@ -1908,6 +2026,8 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
             #[serde(default)]
             domain: Option<LoweredDomain>,
             #[serde(default)]
+            input_type: Option<InputValueBridge>,
+            #[serde(default)]
             proof_status: Option<ProofStatus>,
             #[serde(default)]
             explanation: Option<String>,
@@ -1947,6 +2067,7 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
             certification,
             trust_profile,
             domain,
+            input_type: wire.input_type,
             proof_status,
             explanation,
             over_approximations: wire.over_approximations,
@@ -1974,6 +2095,7 @@ impl TheoremResult {
         over_approximations: usize,
         trust_profile: TrustProfile,
         domain: LoweredDomain,
+        input_type: Option<InputValueBridge>,
     ) -> Self {
         let status = VerificationStatus::from_proof_status(&proof_status);
         let certification = Certification::from_proof_status(&proof_status);
@@ -1985,6 +2107,7 @@ impl TheoremResult {
             certification,
             trust_profile,
             domain,
+            input_type,
             proof_status,
             explanation,
             over_approximations,
@@ -2004,6 +2127,7 @@ impl TheoremResult {
             over_approximations,
             default_trust_profile(),
             default_result_domain(),
+            None,
         )
     }
 
@@ -2014,6 +2138,7 @@ impl TheoremResult {
         over_approximations: usize,
         trust_profile: TrustProfile,
         domain: LoweredDomain,
+        input_type: Option<InputValueBridge>,
         test_mode: Option<ManifestTestMode>,
         return_mode: Option<TestReturnMode>,
     ) -> Self {
@@ -2039,6 +2164,7 @@ impl TheoremResult {
             over_approximations,
             trust_profile,
             domain,
+            input_type,
         );
 
         if matches!(
@@ -2089,6 +2215,7 @@ impl TheoremResult {
             over_approximations,
             default_trust_profile(),
             domain,
+            entry.input_type.clone(),
             entry.test_mode,
             entry.return_mode.clone(),
         )
@@ -2790,6 +2917,8 @@ pub struct ManifestEntry {
     pub fuzzer_model_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<LoweredDomain>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type: Option<InputValueBridge>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compatibility_limitations: Vec<String>,
     /// Whether this test generates a separate `_alwaysTerminating` theorem.
@@ -2915,12 +3044,15 @@ impl GeneratedManifest {
         if entry.domain.is_none() {
             missing.push("domain");
         }
+        if entry.input_type.is_none() {
+            missing.push("input_type");
+        }
 
         if missing.is_empty() {
             None
         } else {
             Some(format!(
-                "Manifest schema v{} lacks explicit {}; downgraded to Partial instead of assuming proof-grade mode/execution/domain semantics.",
+                "Manifest schema v{} lacks explicit {}; downgraded to Partial instead of assuming proof-grade mode/execution/domain/value-bridge semantics.",
                 self.schema_version,
                 missing.join(", "),
             ))
@@ -3277,6 +3409,10 @@ fn lowered_domain_for_test(
     if matches!(mode, CompatibilityMode::WitnessCheck) {
         push_lowering_step(&mut lowering_path, "witness_replay");
     }
+    let input_bridge = input_value_bridge_for_test(test);
+    if input_bridge.input_type.schema_hash.is_some() || !input_bridge.diagnostics.is_empty() {
+        push_lowering_step(&mut lowering_path, "value_bridge");
+    }
 
     let mut widenings = transition_prop_domain_widenings(test);
     let placeholder_widenings = proof_content
@@ -3294,6 +3430,7 @@ fn lowered_domain_for_test(
         });
     }
     widenings.extend(placeholder_widenings.iter().cloned());
+    widenings.extend(input_bridge.widenings.iter().cloned());
 
     let mut diagnostics = Vec::new();
     if let Some(ProofCaveat::Partial(note)) = proof_caveat {
@@ -3314,6 +3451,7 @@ fn lowered_domain_for_test(
                 .to_string(),
         );
     }
+    diagnostics.extend(input_bridge.diagnostics.iter().cloned());
     if matches!(mode, CompatibilityMode::SemanticExistential) {
         diagnostics.push(
             "Current bridge does not yet prove DomainImpliesFuzzerReturns for fail_once theorems; production success is downgraded to Partial.".to_string(),
@@ -3326,7 +3464,7 @@ fn lowered_domain_for_test(
         DomainObligation::PropertyHarnessMatchesExportedUPLC,
     ];
 
-    let (precision, certificate, obligations_open) =
+    let (precision, certificate, mut obligations_open) =
         if matches!(mode, CompatibilityMode::WitnessCheck) {
             obligations_discharged.push(DomainObligation::WitnessReplaysThroughFuzzer);
             obligations_discharged.push(DomainObligation::WitnessSatisfiesDomain);
@@ -3365,6 +3503,17 @@ fn lowered_domain_for_test(
                 Vec::new(),
             )
         };
+
+    for obligation in &input_bridge.obligations_discharged {
+        if !obligations_discharged.contains(obligation) {
+            obligations_discharged.push(*obligation);
+        }
+    }
+    for obligation in &input_bridge.obligations_open {
+        if !obligations_open.contains(obligation) {
+            obligations_open.push(*obligation);
+        }
+    }
 
     let mut domain = LoweredDomain {
         relation,
@@ -4974,6 +5123,7 @@ pub fn generate_lean_workspace(
         fuzzer_harness_hash: String,
         fuzzer_model_hash: String,
         domain: LoweredDomain,
+        input_type: InputValueBridge,
         compatibility_limitations: Vec<String>,
         has_termination_theorem: bool,
         has_equivalence_theorem: bool,
@@ -5195,6 +5345,7 @@ pub fn generate_lean_workspace(
             compatibility_mode_for_generation(test, config.existential_mode, Some(&proof_caveat));
         let domain =
             lowered_domain_for_test(test, final_mode, Some(&proof_content), Some(&proof_caveat));
+        let input_type = input_value_bridge_for_test(test).input_type;
 
         prepared_entries.push(PreparedManifestEntry {
             id,
@@ -5216,6 +5367,7 @@ pub fn generate_lean_workspace(
             fuzzer_harness_hash,
             fuzzer_model_hash,
             domain,
+            input_type,
             compatibility_limitations: Vec::new(),
             has_termination_theorem,
             has_equivalence_theorem,
@@ -5276,6 +5428,7 @@ pub fn generate_lean_workspace(
             fuzzer_harness_hash: Some(entry.fuzzer_harness_hash),
             fuzzer_model_hash: Some(entry.fuzzer_model_hash),
             domain: Some(entry.domain),
+            input_type: Some(entry.input_type),
             compatibility_limitations: entry.compatibility_limitations,
             has_termination_theorem: entry.has_termination_theorem,
             has_equivalence_theorem: entry.has_equivalence_theorem,
@@ -5958,6 +6111,889 @@ fn lean_bytestring_literal_from_bytes_qualified(bytes: &[u8]) -> String {
         "PlutusCore.ByteString.emptyByteString".to_string(),
         |acc, b| format!("PlutusCore.ByteString.consByteStringV1 {} ({acc})", b),
     )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq)]
+enum BridgedAikenValue {
+    Bool(bool),
+    Int(BigInt),
+    ByteArray(Vec<u8>),
+    String(String),
+    Data(PlutusData),
+    List(Vec<BridgedAikenValue>),
+    Tuple(Vec<BridgedAikenValue>),
+    Constructor {
+        tag: u64,
+        fields: Vec<BridgedAikenValue>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct InputBridgeAssessment {
+    input_type: InputValueBridge,
+    obligations_open: Vec<DomainObligation>,
+    obligations_discharged: Vec<DomainObligation>,
+    widenings: Vec<Widening>,
+    diagnostics: Vec<String>,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+
+impl InputTypeSchema {
+    fn has_raw_data_fallback(&self) -> bool {
+        match self {
+            InputTypeSchema::RawDataFallback { .. } => true,
+            InputTypeSchema::List { element } => element.has_raw_data_fallback(),
+            InputTypeSchema::Pair { first, second } => {
+                first.has_raw_data_fallback() || second.has_raw_data_fallback()
+            }
+            InputTypeSchema::Tuple { elements } => {
+                elements.iter().any(InputTypeSchema::has_raw_data_fallback)
+            }
+            InputTypeSchema::ConstructorTagged { constructors, .. } => {
+                constructors.iter().any(|ctor| {
+                    ctor.fields
+                        .iter()
+                        .any(|field| field.schema.has_raw_data_fallback())
+                })
+            }
+            InputTypeSchema::Bool
+            | InputTypeSchema::Int
+            | InputTypeSchema::ByteArray
+            | InputTypeSchema::String
+            | InputTypeSchema::Data => false,
+        }
+    }
+
+    fn encode_plutus_data(&self, value: &BridgedAikenValue) -> Result<PlutusData, String> {
+        match (self, value) {
+            (InputTypeSchema::Bool, BridgedAikenValue::Bool(value)) => {
+                Ok(plutus_constructor_data(u64::from(*value), Vec::new()))
+            }
+            (InputTypeSchema::Int, BridgedAikenValue::Int(value)) => {
+                Ok(PlutusData::BigInt(to_pallas_bigint(value)))
+            }
+            (InputTypeSchema::ByteArray, BridgedAikenValue::ByteArray(value)) => {
+                Ok(PlutusData::BoundedBytes(BoundedBytes::from(value.clone())))
+            }
+            (InputTypeSchema::String, BridgedAikenValue::String(value)) => Ok(
+                PlutusData::BoundedBytes(BoundedBytes::from(value.as_bytes().to_vec())),
+            ),
+            (InputTypeSchema::Data, BridgedAikenValue::Data(value)) => Ok(value.clone()),
+            (InputTypeSchema::List { element }, BridgedAikenValue::List(values)) => {
+                Ok(PlutusData::Array(MaybeIndefArray::Def(
+                    values
+                        .iter()
+                        .map(|item| element.encode_plutus_data(item))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )))
+            }
+            (InputTypeSchema::Pair { first, second }, BridgedAikenValue::Tuple(values)) => {
+                if values.len() != 2 {
+                    return Err(format!(
+                        "expected pair bridge value with 2 items, got {}",
+                        values.len()
+                    ));
+                }
+                Ok(PlutusData::Array(MaybeIndefArray::Def(vec![
+                    first.encode_plutus_data(&values[0])?,
+                    second.encode_plutus_data(&values[1])?,
+                ])))
+            }
+            (InputTypeSchema::Tuple { elements }, BridgedAikenValue::Tuple(values)) => {
+                if elements.len() == 1 {
+                    if values.len() != 1 {
+                        return Err(format!(
+                            "expected single-element tuple bridge value, got {} item(s)",
+                            values.len()
+                        ));
+                    }
+                    return elements[0].encode_plutus_data(&values[0]);
+                }
+                if elements.len() != values.len() {
+                    return Err(format!(
+                        "expected tuple bridge value with {} items, got {}",
+                        elements.len(),
+                        values.len()
+                    ));
+                }
+                Ok(PlutusData::Array(MaybeIndefArray::Def(
+                    elements
+                        .iter()
+                        .zip(values.iter())
+                        .map(|(schema, value)| schema.encode_plutus_data(value))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )))
+            }
+            (
+                InputTypeSchema::ConstructorTagged { constructors, .. },
+                BridgedAikenValue::Constructor { tag, fields },
+            ) => {
+                let constructor = constructors
+                    .iter()
+                    .find(|candidate| candidate.tag == *tag)
+                    .ok_or_else(|| format!("unknown constructor tag {tag}"))?;
+                if constructor.fields.len() != fields.len() {
+                    return Err(format!(
+                        "constructor tag {tag} expects {} field(s), got {}",
+                        constructor.fields.len(),
+                        fields.len()
+                    ));
+                }
+                Ok(plutus_constructor_data(
+                    *tag,
+                    constructor
+                        .fields
+                        .iter()
+                        .zip(fields.iter())
+                        .map(|(field, value)| field.schema.encode_plutus_data(value))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+            }
+            (InputTypeSchema::RawDataFallback { .. }, BridgedAikenValue::Data(value)) => {
+                Ok(value.clone())
+            }
+            _ => Err(format!(
+                "value {value:?} does not match input schema {self:?}"
+            )),
+        }
+    }
+
+    fn decode_plutus_data(&self, data: &PlutusData) -> Result<BridgedAikenValue, String> {
+        match self {
+            InputTypeSchema::Bool => match data {
+                PlutusData::Constr(constr) => {
+                    let tag = recover_constructor_tag(constr);
+                    if !constr.fields.is_empty() {
+                        return Err("bool bridge requires a nullary constructor".to_string());
+                    }
+                    match tag {
+                        0 => Ok(BridgedAikenValue::Bool(false)),
+                        1 => Ok(BridgedAikenValue::Bool(true)),
+                        _ => Err(format!("unexpected bool constructor tag {tag}")),
+                    }
+                }
+                _ => Err("bool bridge expected constructor-tagged Data".to_string()),
+            },
+            InputTypeSchema::Int => match data {
+                PlutusData::BigInt(value) => Ok(BridgedAikenValue::Int(from_pallas_bigint(value))),
+                _ => Err("int bridge expected Data integer".to_string()),
+            },
+            InputTypeSchema::ByteArray => match data {
+                PlutusData::BoundedBytes(bytes) => {
+                    let bytes: Vec<u8> = bytes.clone().into();
+                    Ok(BridgedAikenValue::ByteArray(bytes))
+                }
+                _ => Err("bytearray bridge expected Data bytes".to_string()),
+            },
+            InputTypeSchema::String => match data {
+                PlutusData::BoundedBytes(bytes) => {
+                    let bytes: Vec<u8> = bytes.clone().into();
+                    String::from_utf8(bytes)
+                        .map(BridgedAikenValue::String)
+                        .map_err(|error| format!("string bridge expected UTF-8 bytes: {error}"))
+                }
+                _ => Err("string bridge expected Data bytes".to_string()),
+            },
+            InputTypeSchema::Data => Ok(BridgedAikenValue::Data(data.clone())),
+            InputTypeSchema::List { element } => match data {
+                PlutusData::Array(items) => items
+                    .iter()
+                    .map(|item| element.decode_plutus_data(item))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(BridgedAikenValue::List),
+                _ => Err("list bridge expected Data list".to_string()),
+            },
+            InputTypeSchema::Pair { first, second } => match data {
+                PlutusData::Array(items) => {
+                    let values = items.iter().collect::<Vec<_>>();
+                    if values.len() != 2 {
+                        return Err(format!(
+                            "pair bridge expected Data list with 2 items, got {}",
+                            values.len()
+                        ));
+                    }
+                    Ok(BridgedAikenValue::Tuple(vec![
+                        first.decode_plutus_data(values[0])?,
+                        second.decode_plutus_data(values[1])?,
+                    ]))
+                }
+                _ => Err("pair bridge expected Data list".to_string()),
+            },
+            InputTypeSchema::Tuple { elements } => {
+                if elements.len() == 1 {
+                    return elements[0]
+                        .decode_plutus_data(data)
+                        .map(|value| BridgedAikenValue::Tuple(vec![value]));
+                }
+                match data {
+                    PlutusData::Array(items) => {
+                        let values = items.iter().collect::<Vec<_>>();
+                        if values.len() != elements.len() {
+                            return Err(format!(
+                                "tuple bridge expected Data list with {} items, got {}",
+                                elements.len(),
+                                values.len()
+                            ));
+                        }
+                        elements
+                            .iter()
+                            .zip(values.iter())
+                            .map(|(schema, item)| schema.decode_plutus_data(item))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map(BridgedAikenValue::Tuple)
+                    }
+                    _ => Err("tuple bridge expected Data list".to_string()),
+                }
+            }
+            InputTypeSchema::ConstructorTagged { constructors, .. } => match data {
+                PlutusData::Constr(constr) => {
+                    let tag = recover_constructor_tag(constr);
+                    let constructor = constructors
+                        .iter()
+                        .find(|candidate| candidate.tag == tag)
+                        .ok_or_else(|| format!("unexpected constructor tag {tag}"))?;
+                    let fields = constr.fields.iter().collect::<Vec<_>>();
+                    if fields.len() != constructor.fields.len() {
+                        return Err(format!(
+                            "constructor tag {tag} expected {} field(s), got {}",
+                            constructor.fields.len(),
+                            fields.len()
+                        ));
+                    }
+                    constructor
+                        .fields
+                        .iter()
+                        .zip(fields.iter())
+                        .map(|(field, item)| field.schema.decode_plutus_data(item))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map(|fields| BridgedAikenValue::Constructor { tag, fields })
+                }
+                _ => Err("constructor bridge expected constructor-tagged Data".to_string()),
+            },
+            InputTypeSchema::RawDataFallback { .. } => Ok(BridgedAikenValue::Data(data.clone())),
+        }
+    }
+
+    fn encode_runtime_value(&self, value: &BridgedAikenValue) -> Result<UplcRuntimeValue, String> {
+        match (self, value) {
+            (InputTypeSchema::Bool, BridgedAikenValue::Bool(value)) => {
+                Ok(UplcRuntimeValue::bool(*value))
+            }
+            (InputTypeSchema::Int, BridgedAikenValue::Int(value)) => {
+                Ok(UplcRuntimeValue::integer(value.clone()))
+            }
+            (InputTypeSchema::ByteArray, BridgedAikenValue::ByteArray(value)) => {
+                Ok(UplcRuntimeValue::byte_string(value.clone()))
+            }
+            (InputTypeSchema::String, BridgedAikenValue::String(value)) => {
+                Ok(UplcRuntimeValue::string(value.clone()))
+            }
+            (InputTypeSchema::Data, BridgedAikenValue::Data(value)) => {
+                Ok(UplcRuntimeValue::data(value.clone()))
+            }
+            (
+                InputTypeSchema::ConstructorTagged { constructors, .. },
+                BridgedAikenValue::Constructor { tag, fields },
+            ) => {
+                let constructor = constructors
+                    .iter()
+                    .find(|candidate| candidate.tag == *tag)
+                    .ok_or_else(|| format!("unknown constructor tag {tag}"))?;
+                if constructor.fields.len() != fields.len() {
+                    return Err(format!(
+                        "constructor tag {tag} expects {} field(s), got {}",
+                        constructor.fields.len(),
+                        fields.len()
+                    ));
+                }
+                Ok(UplcRuntimeValue::Constr {
+                    tag: *tag as usize,
+                    fields: constructor
+                        .fields
+                        .iter()
+                        .zip(fields.iter())
+                        .map(|(field, value)| field.schema.encode_runtime_value(value))
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
+            }
+            _ => self.encode_plutus_data(value).map(UplcRuntimeValue::data),
+        }
+    }
+
+    fn decode_runtime_value(&self, value: &UplcRuntimeValue) -> Result<BridgedAikenValue, String> {
+        match self {
+            InputTypeSchema::Bool => match value {
+                UplcRuntimeValue::Con(constant) => match constant.as_ref() {
+                    uplc::ast::Constant::Bool(value) => Ok(BridgedAikenValue::Bool(*value)),
+                    uplc::ast::Constant::Data(data) => self.decode_plutus_data(data),
+                    other => Err(format!(
+                        "bool bridge expected Bool/Data constant, got {other:?}"
+                    )),
+                },
+                other => Err(format!(
+                    "bool bridge expected constant runtime value, got {other:?}"
+                )),
+            },
+            InputTypeSchema::Int => match value {
+                UplcRuntimeValue::Con(constant) => match constant.as_ref() {
+                    uplc::ast::Constant::Integer(value) => {
+                        Ok(BridgedAikenValue::Int(value.clone()))
+                    }
+                    uplc::ast::Constant::Data(data) => self.decode_plutus_data(data),
+                    other => Err(format!(
+                        "int bridge expected Integer/Data constant, got {other:?}"
+                    )),
+                },
+                other => Err(format!(
+                    "int bridge expected constant runtime value, got {other:?}"
+                )),
+            },
+            InputTypeSchema::ByteArray => match value {
+                UplcRuntimeValue::Con(constant) => match constant.as_ref() {
+                    uplc::ast::Constant::ByteString(value) => {
+                        Ok(BridgedAikenValue::ByteArray(value.clone()))
+                    }
+                    uplc::ast::Constant::Data(data) => self.decode_plutus_data(data),
+                    other => Err(format!(
+                        "bytearray bridge expected ByteString/Data constant, got {other:?}",
+                    )),
+                },
+                other => Err(format!(
+                    "bytearray bridge expected constant runtime value, got {other:?}",
+                )),
+            },
+            InputTypeSchema::String => match value {
+                UplcRuntimeValue::Con(constant) => match constant.as_ref() {
+                    uplc::ast::Constant::String(value) => {
+                        Ok(BridgedAikenValue::String(value.clone()))
+                    }
+                    uplc::ast::Constant::Data(data) => self.decode_plutus_data(data),
+                    other => Err(format!(
+                        "string bridge expected String/Data constant, got {other:?}"
+                    )),
+                },
+                other => Err(format!(
+                    "string bridge expected constant runtime value, got {other:?}"
+                )),
+            },
+            InputTypeSchema::Data => match value {
+                UplcRuntimeValue::Con(constant) => match constant.as_ref() {
+                    uplc::ast::Constant::Data(data) => Ok(BridgedAikenValue::Data(data.clone())),
+                    other => Err(format!("data bridge expected Data constant, got {other:?}")),
+                },
+                other => Err(format!(
+                    "data bridge expected constant runtime value, got {other:?}"
+                )),
+            },
+            InputTypeSchema::ConstructorTagged { constructors, .. } => match value {
+                UplcRuntimeValue::Constr { tag, fields } => {
+                    let constructor = constructors
+                        .iter()
+                        .find(|candidate| candidate.tag == *tag as u64)
+                        .ok_or_else(|| format!("unexpected runtime constructor tag {tag}"))?;
+                    if constructor.fields.len() != fields.len() {
+                        return Err(format!(
+                            "runtime constructor tag {tag} expected {} field(s), got {}",
+                            constructor.fields.len(),
+                            fields.len()
+                        ));
+                    }
+                    constructor
+                        .fields
+                        .iter()
+                        .zip(fields.iter())
+                        .map(|(field, item)| field.schema.decode_runtime_value(item))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map(|fields| BridgedAikenValue::Constructor {
+                            tag: *tag as u64,
+                            fields,
+                        })
+                }
+                UplcRuntimeValue::Con(constant) => match constant.as_ref() {
+                    uplc::ast::Constant::Data(data) => self.decode_plutus_data(data),
+                    other => Err(format!(
+                        "constructor bridge expected constructor/Data constant, got {other:?}",
+                    )),
+                },
+                other => Err(format!(
+                    "constructor bridge expected constructor/Data runtime value, got {other:?}",
+                )),
+            },
+            InputTypeSchema::List { .. }
+            | InputTypeSchema::Pair { .. }
+            | InputTypeSchema::Tuple { .. }
+            | InputTypeSchema::RawDataFallback { .. } => match value {
+                UplcRuntimeValue::Con(constant) => match constant.as_ref() {
+                    uplc::ast::Constant::Data(data) => self.decode_plutus_data(data),
+                    other => Err(format!(
+                        "composite bridge expected Data constant, got {other:?}"
+                    )),
+                },
+                other => Err(format!(
+                    "composite bridge expected constant runtime value, got {other:?}"
+                )),
+            },
+        }
+    }
+
+    fn to_lean_literal(&self, value: &BridgedAikenValue) -> Result<String, String> {
+        match (self, value) {
+            (InputTypeSchema::Bool, BridgedAikenValue::Bool(value)) => Ok(value.to_string()),
+            (InputTypeSchema::Int, BridgedAikenValue::Int(value)) => {
+                Ok(lean_integer_literal_from_bigint(value))
+            }
+            (InputTypeSchema::ByteArray, BridgedAikenValue::ByteArray(value)) => {
+                Ok(lean_bytestring_literal_from_bytes_qualified(value))
+            }
+            (InputTypeSchema::String, BridgedAikenValue::String(value)) => Ok(
+                lean_bytestring_literal_from_bytes_qualified(value.as_bytes()),
+            ),
+            (InputTypeSchema::Data, BridgedAikenValue::Data(value)) => {
+                Ok(data_to_lean_literal(value))
+            }
+            (InputTypeSchema::List { element }, BridgedAikenValue::List(values)) => values
+                .iter()
+                .map(|value| element.to_lean_literal(value))
+                .collect::<Result<Vec<_>, _>>()
+                .map(|items| format!("[{}]", items.join(", "))),
+            (InputTypeSchema::Pair { first, second }, BridgedAikenValue::Tuple(values)) => {
+                if values.len() != 2 {
+                    return Err(format!(
+                        "expected pair bridge value with 2 items, got {}",
+                        values.len()
+                    ));
+                }
+                Ok(format!(
+                    "({}, {})",
+                    first.to_lean_literal(&values[0])?,
+                    second.to_lean_literal(&values[1])?
+                ))
+            }
+            (InputTypeSchema::Tuple { elements }, BridgedAikenValue::Tuple(values)) => {
+                if elements.len() == 1 {
+                    if values.len() != 1 {
+                        return Err(format!(
+                            "expected single-element tuple bridge value, got {} item(s)",
+                            values.len()
+                        ));
+                    }
+                    return elements[0].to_lean_literal(&values[0]);
+                }
+                if elements.len() != values.len() {
+                    return Err(format!(
+                        "expected tuple bridge value with {} items, got {}",
+                        elements.len(),
+                        values.len()
+                    ));
+                }
+                let literals = elements
+                    .iter()
+                    .zip(values.iter())
+                    .map(|(schema, value)| schema.to_lean_literal(value))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(lean_tuple_literal(&literals))
+            }
+            (InputTypeSchema::ConstructorTagged { .. }, BridgedAikenValue::Constructor { .. })
+            | (InputTypeSchema::RawDataFallback { .. }, BridgedAikenValue::Data(_)) => self
+                .encode_plutus_data(value)
+                .map(|data| data_to_lean_literal(&data)),
+            _ => Err(format!(
+                "value {value:?} does not match input schema {self:?}"
+            )),
+        }
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+
+impl InputValueBridge {
+    fn encode_plutus_data(&self, value: &BridgedAikenValue) -> Result<PlutusData, String> {
+        let schema = self
+            .schema
+            .as_ref()
+            .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
+        schema.encode_plutus_data(value)
+    }
+
+    fn decode_plutus_data(&self, data: &PlutusData) -> Result<BridgedAikenValue, String> {
+        let schema = self
+            .schema
+            .as_ref()
+            .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
+        schema.decode_plutus_data(data)
+    }
+
+    fn encode_runtime_value(&self, value: &BridgedAikenValue) -> Result<UplcRuntimeValue, String> {
+        let schema = self
+            .schema
+            .as_ref()
+            .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
+        schema.encode_runtime_value(value)
+    }
+
+    fn decode_runtime_value(&self, value: &UplcRuntimeValue) -> Result<BridgedAikenValue, String> {
+        let schema = self
+            .schema
+            .as_ref()
+            .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
+        schema.decode_runtime_value(value)
+    }
+
+    fn to_lean_literal(&self, value: &BridgedAikenValue) -> Result<String, String> {
+        let schema = self
+            .schema
+            .as_ref()
+            .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
+        schema.to_lean_literal(value)
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+
+fn plutus_constructor_data(tag: u64, fields: Vec<PlutusData>) -> PlutusData {
+    let compact_tag = convert_constr_to_tag(tag).unwrap_or(102);
+    PlutusData::Constr(Constr {
+        tag: compact_tag,
+        any_constructor: (compact_tag == 102).then_some(tag),
+        fields: MaybeIndefArray::Def(fields),
+    })
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+
+fn recover_constructor_tag(constr: &Constr<PlutusData>) -> u64 {
+    convert_tag_to_constr(constr.tag)
+        .or(constr.any_constructor)
+        .unwrap_or(constr.tag)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+
+fn lean_tuple_literal(items: &[String]) -> String {
+    match items {
+        [] => "()".to_string(),
+        [single] => single.clone(),
+        [first, second] => format!("({first}, {second})"),
+        [first, rest @ ..] => format!("({first}, {})", lean_tuple_literal(rest)),
+    }
+}
+
+fn schema_hash_for_input_schema(schema: &InputTypeSchema) -> Option<String> {
+    if schema.has_raw_data_fallback() {
+        return None;
+    }
+
+    serde_json::to_vec(schema)
+        .ok()
+        .map(|bytes| blake2b_256_hex(&bytes))
+}
+
+fn collect_input_schema_diagnostics(schema: &InputTypeSchema, diagnostics: &mut Vec<String>) {
+    match schema {
+        InputTypeSchema::RawDataFallback { type_name, reason } => diagnostics.push(format!(
+            "Value bridge fell back to raw Data for '{type_name}': {reason}",
+        )),
+        InputTypeSchema::List { element } => {
+            collect_input_schema_diagnostics(element, diagnostics);
+        }
+        InputTypeSchema::Pair { first, second } => {
+            collect_input_schema_diagnostics(first, diagnostics);
+            collect_input_schema_diagnostics(second, diagnostics);
+        }
+        InputTypeSchema::Tuple { elements } => {
+            for element in elements {
+                collect_input_schema_diagnostics(element, diagnostics);
+            }
+        }
+        InputTypeSchema::ConstructorTagged { constructors, .. } => {
+            for constructor in constructors {
+                for field in &constructor.fields {
+                    collect_input_schema_diagnostics(&field.schema, diagnostics);
+                }
+            }
+        }
+        InputTypeSchema::Bool
+        | InputTypeSchema::Int
+        | InputTypeSchema::ByteArray
+        | InputTypeSchema::String
+        | InputTypeSchema::Data => {}
+    }
+}
+
+fn bridge_aiken_type_name(test: &ExportedPropertyTest) -> String {
+    match &test.fuzzer_output_type {
+        FuzzerOutputType::Unsupported(raw) => raw.clone(),
+        other => other.to_string(),
+    }
+}
+
+fn runtime_value_encoding_for_schema(schema: &InputTypeSchema) -> RuntimeValueEncoding {
+    match schema {
+        InputTypeSchema::Bool => RuntimeValueEncoding::BoolConstant,
+        InputTypeSchema::Int => RuntimeValueEncoding::IntegerConstant,
+        InputTypeSchema::ByteArray => RuntimeValueEncoding::ByteStringConstant,
+        InputTypeSchema::String => RuntimeValueEncoding::StringConstant,
+        InputTypeSchema::ConstructorTagged { .. } => RuntimeValueEncoding::ConstructorValue,
+        InputTypeSchema::Data
+        | InputTypeSchema::List { .. }
+        | InputTypeSchema::Pair { .. }
+        | InputTypeSchema::Tuple { .. }
+        | InputTypeSchema::RawDataFallback { .. } => RuntimeValueEncoding::DataConstant,
+    }
+}
+
+fn plutus_data_encoding_for_schema(schema: &InputTypeSchema) -> PlutusDataEncoding {
+    match schema {
+        InputTypeSchema::Bool => PlutusDataEncoding::BoolConstructor,
+        InputTypeSchema::Int => PlutusDataEncoding::Integer,
+        InputTypeSchema::ByteArray => PlutusDataEncoding::Bytes,
+        InputTypeSchema::String => PlutusDataEncoding::Utf8Bytes,
+        InputTypeSchema::Data | InputTypeSchema::RawDataFallback { .. } => {
+            PlutusDataEncoding::RawData
+        }
+        InputTypeSchema::List { .. } => PlutusDataEncoding::List,
+        InputTypeSchema::Pair { .. } => PlutusDataEncoding::PairAsList,
+        InputTypeSchema::Tuple { .. } => PlutusDataEncoding::TupleAsList,
+        InputTypeSchema::ConstructorTagged { .. } => PlutusDataEncoding::ConstructorTagged,
+    }
+}
+
+fn lean_value_encoding_for_schema(schema: &InputTypeSchema) -> LeanValueEncoding {
+    match schema {
+        InputTypeSchema::Bool => LeanValueEncoding::Bool,
+        InputTypeSchema::Int => LeanValueEncoding::Integer,
+        InputTypeSchema::ByteArray | InputTypeSchema::String => LeanValueEncoding::ByteString,
+        InputTypeSchema::Data
+        | InputTypeSchema::ConstructorTagged { .. }
+        | InputTypeSchema::RawDataFallback { .. } => LeanValueEncoding::Data,
+        InputTypeSchema::List { .. } => LeanValueEncoding::List,
+        InputTypeSchema::Pair { .. } | InputTypeSchema::Tuple { .. } => LeanValueEncoding::Tuple,
+    }
+}
+
+fn input_type_schema_for_test(
+    test: &ExportedPropertyTest,
+    output_type: &FuzzerOutputType,
+    top_level: bool,
+) -> InputTypeSchema {
+    match output_type {
+        FuzzerOutputType::Bool => InputTypeSchema::Bool,
+        FuzzerOutputType::Int => InputTypeSchema::Int,
+        FuzzerOutputType::ByteArray => InputTypeSchema::ByteArray,
+        FuzzerOutputType::String => InputTypeSchema::String,
+        FuzzerOutputType::Data => InputTypeSchema::Data,
+        FuzzerOutputType::List(element) => InputTypeSchema::List {
+            element: Box::new(input_type_schema_for_test(test, element.as_ref(), false)),
+        },
+        FuzzerOutputType::Pair(first, second) => InputTypeSchema::Pair {
+            first: Box::new(input_type_schema_for_test(test, first.as_ref(), false)),
+            second: Box::new(input_type_schema_for_test(test, second.as_ref(), false)),
+        },
+        FuzzerOutputType::Tuple(elements) => InputTypeSchema::Tuple {
+            elements: elements
+                .iter()
+                .map(|element| input_type_schema_for_test(test, element, false))
+                .collect(),
+        },
+        FuzzerOutputType::Unsupported(type_name) => {
+            let schema = schema_type_name_candidates(type_name)
+                .iter()
+                .find_map(|candidate| test.inner_data_schemas.get(candidate))
+                .or_else(|| {
+                    top_level
+                        .then_some(test.fuzzer_data_schema.as_ref())
+                        .flatten()
+                });
+            match schema {
+                Some(schema) => exported_data_schema_to_input_schema(type_name, schema)
+                    .unwrap_or_else(|reason| InputTypeSchema::RawDataFallback {
+                        type_name: type_name.clone(),
+                        reason,
+                    }),
+                None => InputTypeSchema::RawDataFallback {
+                    type_name: type_name.clone(),
+                    reason: format!("no exported schema is available for '{type_name}'"),
+                },
+            }
+        }
+    }
+}
+
+fn exported_data_schema_to_input_schema(
+    type_name: &str,
+    schema: &ExportedDataSchema,
+) -> Result<InputTypeSchema, String> {
+    fn resolve_schema_data<'a>(
+        schema: &'a ExportedDataSchema,
+        reference: &Reference,
+    ) -> Result<&'a SchemaData, String> {
+        let definition = schema
+            .definitions
+            .lookup(reference)
+            .ok_or_else(|| format!("missing schema definition for {}", reference.as_key()))?;
+        match &definition.annotated {
+            Schema::Data(data) => Ok(data),
+            other => Err(format!(
+                "expected data schema for {}, got {other:?}",
+                reference.as_key()
+            )),
+        }
+    }
+
+    fn declaration_to_input_schema(
+        type_name: &str,
+        schema: &ExportedDataSchema,
+        declaration: &SchemaDeclaration<SchemaData>,
+        seen: &mut Vec<String>,
+    ) -> Result<InputTypeSchema, String> {
+        match declaration {
+            SchemaDeclaration::Inline(data) => {
+                data_to_input_schema(type_name, schema, data.as_ref(), seen)
+            }
+            SchemaDeclaration::Referenced(reference) => {
+                let key = reference.as_key();
+                if seen.contains(&key) {
+                    return Err(format!(
+                        "recursive schema reference '{key}' is not yet supported by the initial decoder bridge",
+                    ));
+                }
+                seen.push(key.clone());
+                let data = resolve_schema_data(schema, reference)?;
+                let lowered = data_to_input_schema(type_name, schema, data, seen);
+                seen.pop();
+                lowered
+            }
+        }
+    }
+
+    fn data_to_input_schema(
+        type_name: &str,
+        schema: &ExportedDataSchema,
+        data: &SchemaData,
+        seen: &mut Vec<String>,
+    ) -> Result<InputTypeSchema, String> {
+        match data {
+            SchemaData::Integer => Ok(InputTypeSchema::Int),
+            SchemaData::Bytes => Ok(InputTypeSchema::ByteArray),
+            SchemaData::List(SchemaItems::One(declaration)) => Ok(InputTypeSchema::List {
+                element: Box::new(declaration_to_input_schema(
+                    type_name,
+                    schema,
+                    declaration,
+                    seen,
+                )?),
+            }),
+            SchemaData::List(SchemaItems::Many(items)) => Ok(InputTypeSchema::Tuple {
+                elements: items
+                    .iter()
+                    .map(|item| {
+                        declaration_to_input_schema(type_name, schema, &item.annotated, seen)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            }),
+            SchemaData::AnyOf(constructors) => Ok(InputTypeSchema::ConstructorTagged {
+                type_name: type_name.to_string(),
+                constructors: constructors
+                    .iter()
+                    .map(|constructor| {
+                        Ok(InputTypeConstructor {
+                            name: constructor.title.clone(),
+                            tag: constructor.annotated.index as u64,
+                            fields: constructor
+                                .annotated
+                                .fields
+                                .iter()
+                                .map(|field| {
+                                    Ok(InputTypeField {
+                                        name: field.title.clone(),
+                                        schema: declaration_to_input_schema(
+                                            type_name,
+                                            schema,
+                                            &field.annotated,
+                                            seen,
+                                        )?,
+                                    })
+                                })
+                                .collect::<Result<Vec<_>, String>>()?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, String>>()?,
+            }),
+            SchemaData::Opaque => Err(format!(
+                "schema for '{type_name}' is opaque and cannot yet be round-tripped",
+            )),
+            SchemaData::Map(_, _) => Err(format!(
+                "schema for '{type_name}' contains maps, which the initial decoder bridge does not yet support",
+            )),
+        }
+    }
+
+    let mut seen = vec![schema.root.as_key()];
+    let root = resolve_schema_data(schema, &schema.root)?;
+    data_to_input_schema(type_name, schema, root, &mut seen)
+}
+
+fn input_value_bridge_for_test(test: &ExportedPropertyTest) -> InputBridgeAssessment {
+    let aiken_type = bridge_aiken_type_name(test);
+    let schema = input_type_schema_for_test(test, &test.fuzzer_output_type, true);
+    let mut diagnostics = Vec::new();
+    collect_input_schema_diagnostics(&schema, &mut diagnostics);
+
+    let runtime_encoding = runtime_value_encoding_for_schema(&schema);
+    let data_encoding = Some(plutus_data_encoding_for_schema(&schema));
+    let lean_encoding = lean_value_encoding_for_schema(&schema);
+    let schema_hash = schema_hash_for_input_schema(&schema);
+    let has_raw_fallback = schema.has_raw_data_fallback();
+    let harness_supported = lean_type_for(&test.fuzzer_output_type).is_some()
+        && lean_data_encoder(&test.fuzzer_output_type, "bridge_value").is_some();
+
+    let mut obligations_open = Vec::new();
+    let mut obligations_discharged = Vec::new();
+
+    if has_raw_fallback {
+        obligations_open.push(DomainObligation::ValueDecoderRoundTrip);
+        obligations_open.push(DomainObligation::FuzzerOutputTypeMatchesPropertyInputType);
+        obligations_open.push(DomainObligation::PropertyHarnessAcceptsDecodedInput);
+    } else {
+        obligations_discharged.push(DomainObligation::ValueDecoderRoundTrip);
+        obligations_discharged.push(DomainObligation::FuzzerOutputTypeMatchesPropertyInputType);
+        if harness_supported {
+            obligations_discharged.push(DomainObligation::PropertyHarnessAcceptsDecodedInput);
+        } else {
+            obligations_open.push(DomainObligation::PropertyHarnessAcceptsDecodedInput);
+            diagnostics.push(format!(
+                "Current bridge cannot show that the property harness accepts decoded '{}' inputs.",
+                aiken_type
+            ));
+        }
+    }
+
+    let widenings = diagnostics
+        .iter()
+        .map(|message| Widening {
+            kind: "value_decoder".to_string(),
+            message: message.clone(),
+            allowed_only_under: None,
+        })
+        .collect();
+
+    InputBridgeAssessment {
+        input_type: InputValueBridge {
+            aiken_type,
+            runtime_encoding,
+            data_encoding,
+            lean_encoding,
+            schema_hash,
+            schema: Some(schema),
+            diagnostics: diagnostics.clone(),
+        },
+        obligations_open,
+        obligations_discharged,
+        widenings,
+        diagnostics,
+    }
 }
 
 fn exact_value_to_scalar_literal(

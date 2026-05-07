@@ -68,6 +68,9 @@ expression: "&manifest"
         "obligations_discharged": [
           "FuzzerReturnsImpliesDomain",
           "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
           "PropertyHarnessMatchesExportedUPLC"
         ],
         "lowering_path": [

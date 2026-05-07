@@ -2376,6 +2376,9 @@ test unit_smoke() {
             "obligations_discharged": [
                 "FuzzerReturnsImpliesDomain",
                 "FuzzerModelHashMatches",
+                "ValueDecoderRoundTrip",
+                "FuzzerOutputTypeMatchesPropertyInputType",
+                "PropertyHarnessAcceptsDecodedInput",
                 "PropertyHarnessMatchesExportedUPLC"
             ],
             "lowering_path": ["constraint_ir", "known_combinator"],
@@ -2407,6 +2410,18 @@ test unit_smoke() {
             .expect("trusted domain JSON should deserialize")
     }
 
+    fn trusted_input_type() -> verify::InputValueBridge {
+        serde_json::from_value(serde_json::json!({
+            "aiken_type": "Int",
+            "runtime_encoding": "integer_constant",
+            "data_encoding": "integer",
+            "lean_encoding": "integer",
+            "schema_hash": "88".repeat(32),
+            "schema": { "kind": "int" }
+        }))
+        .expect("trusted input bridge JSON should deserialize")
+    }
+
     fn witness_domain(values: &[&str]) -> verify::LoweredDomain {
         serde_json::from_value(serde_json::json!({
             "relation": {
@@ -2420,6 +2435,9 @@ test unit_smoke() {
                 "WitnessReplaysThroughFuzzer",
                 "WitnessSatisfiesDomain",
                 "FuzzerModelHashMatches",
+                "ValueDecoderRoundTrip",
+                "FuzzerOutputTypeMatchesPropertyInputType",
+                "PropertyHarnessAcceptsDecodedInput",
                 "PropertyHarnessMatchesExportedUPLC"
             ],
             "lowering_path": ["witness_replay"],
@@ -2439,7 +2457,12 @@ test unit_smoke() {
             },
             "precision": "Unknown",
             "certificate": "Unchecked",
-            "obligations_open": ["FuzzerReturnsImpliesDomain"],
+            "obligations_open": [
+                "FuzzerReturnsImpliesDomain",
+                "ValueDecoderRoundTrip",
+                "FuzzerOutputTypeMatchesPropertyInputType",
+                "PropertyHarnessAcceptsDecodedInput"
+            ],
             "obligations_discharged": [
                 "FuzzerModelHashMatches",
                 "PropertyHarnessMatchesExportedUPLC"
@@ -3050,6 +3073,7 @@ members = [1, 2]
                 0,
                 verify::TrustProfile::Production,
                 trusted_domain(),
+                Some(trusted_input_type()),
                 Some(verify::ManifestTestMode::Normal),
                 Some(aiken_project::export::TestReturnMode::Bool),
             ),
@@ -3064,6 +3088,7 @@ members = [1, 2]
                 0,
                 verify::TrustProfile::Production,
                 witness_domain(&["00", "01"]),
+                Some(trusted_input_type()),
                 Some(verify::ManifestTestMode::FailOnce),
                 Some(aiken_project::export::TestReturnMode::Bool),
             ),
@@ -3076,6 +3101,7 @@ members = [1, 2]
                 2,
                 verify::TrustProfile::Production,
                 partial_domain("partial proof"),
+                Some(trusted_input_type()),
                 Some(verify::ManifestTestMode::Normal),
                 Some(aiken_project::export::TestReturnMode::Bool),
             ),
@@ -3089,6 +3115,7 @@ members = [1, 2]
                 0,
                 verify::TrustProfile::Production,
                 trusted_domain(),
+                Some(trusted_input_type()),
                 Some(verify::ManifestTestMode::Normal),
                 Some(aiken_project::export::TestReturnMode::Bool),
             ),
@@ -3101,6 +3128,7 @@ members = [1, 2]
                 0,
                 verify::TrustProfile::Production,
                 trusted_domain(),
+                Some(trusted_input_type()),
                 Some(verify::ManifestTestMode::Normal),
                 Some(aiken_project::export::TestReturnMode::Bool),
             ),
@@ -3111,6 +3139,7 @@ members = [1, 2]
                 0,
                 verify::TrustProfile::Production,
                 trusted_domain(),
+                Some(trusted_input_type()),
                 Some(verify::ManifestTestMode::Normal),
                 Some(aiken_project::export::TestReturnMode::Bool),
             ),
