@@ -59,9 +59,9 @@ use aiken_lang::{
 };
 use export::{
     Export, ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedProgram,
-    ExportedPropertyTest, ExportedTests, FuzzerConstraint, FuzzerExactValue, FuzzerSemantics,
-    StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode, ValidatorTarget,
-    VerificationTargetKind, fuzzer_output_type_from,
+    ExportedPropertyTest, ExportedReplayWitness, ExportedTests, FuzzerConstraint, FuzzerExactValue,
+    FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode,
+    ValidatorTarget, VerificationTargetKind, fuzzer_output_type_from,
 };
 use indexmap::IndexMap;
 use miette::NamedSource;
@@ -987,6 +987,47 @@ fn maybe_compute_concrete_error_witnesses(
     }
 
     collect_state_machine_trace_witnesses(test, plutus_version, /*want_error=*/ true)
+}
+/// For generic `fail once` (`SucceedImmediately`) properties whose domain is
+/// hard to model exactly, record one concrete fuzzer-generated failing input so
+/// `verify.rs` can emit a replay-backed existential theorem instead of
+/// over-claiming exactness.
+fn maybe_compute_fail_once_replay_witness(
+    test: &PropertyTest,
+    semantics: &FuzzerSemantics,
+    plutus_version: &aiken_lang::plutus_version::PlutusVersion,
+    max_attempts: usize,
+) -> Option<ExportedReplayWitness> {
+    if !matches!(
+        test.on_test_failure,
+        aiken_lang::ast::OnTestFailure::SucceedImmediately
+    ) {
+        return None;
+    }
+    if matches!(semantics, FuzzerSemantics::StateMachineTrace { .. }) {
+        return None;
+    }
+
+    for seed_offset in 0..max_attempts {
+        let generation_seed =
+            crate::verify::CONCRETE_WITNESS_BASE_SEED.wrapping_add(seed_offset as u32);
+        let prng = aiken_lang::test_framework::Prng::from_seed(generation_seed);
+        let Ok(Some((_next_prng, value))) = prng.sample(&test.fuzzer.program) else {
+            continue;
+        };
+        let eval = test.eval(&value, plutus_version);
+        if !eval.failed(false, &plutus_version.into()) {
+            continue;
+        }
+
+        return Some(ExportedReplayWitness {
+            data_hex: uplc::ast::Data::to_hex(value),
+            generation_seed,
+            replay_choices_hex: None,
+        });
+    }
+
+    None
 }
 
 /// Shared seed-sweep for state-machine trace witness collection. When
@@ -3059,6 +3100,12 @@ where
             &return_mode,
             &self.config.plutus,
         );
+        let fail_once_replay_witness = maybe_compute_fail_once_replay_witness(
+            &test_for_witnesses,
+            &semantics,
+            &self.config.plutus,
+            MAX_WITNESS_SEED_ATTEMPTS,
+        );
 
         Ok(ExportedPropertyTest {
             name: format!("{}.{}", &test.module, &test.name),
@@ -3086,6 +3133,7 @@ where
             transition_prop_lean,
             concrete_halt_witnesses,
             concrete_error_witnesses,
+            fail_once_replay_witness,
         })
     }
 

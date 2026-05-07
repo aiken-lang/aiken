@@ -58,8 +58,9 @@ fn generate_proof_file_with_vacuous_subgenerators(
 }
 use crate::export::{
     ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedProgram,
-    ExportedPropertyTest, FuzzerConstraint, FuzzerOutputType, FuzzerSemantics,
-    StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode, ValidatorTarget,
+    ExportedPropertyTest, ExportedReplayWitness, FuzzerConstraint, FuzzerOutputType,
+    FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode,
+    ValidatorTarget,
 };
 use crate::{Project, options::Options, telemetry::EventTarget};
 use aiken_lang::ast::{Definition, OnTestFailure, Tracing};
@@ -110,6 +111,7 @@ fn make_test_with_failure(
         transition_prop_lean: None,
         concrete_halt_witnesses: Vec::new(),
         concrete_error_witnesses: Vec::new(),
+        fail_once_replay_witness: None,
     }
 }
 
@@ -119,6 +121,18 @@ fn input_bridge_for_test(test: &ExportedPropertyTest) -> InputValueBridge {
 
 fn default_input_bridge() -> InputValueBridge {
     input_bridge_for_test(&make_test("example", "value_bridge"))
+}
+
+fn exported_replay_witness(
+    data: PlutusData,
+    generation_seed: u32,
+    replay_choices_hex: Option<&str>,
+) -> ExportedReplayWitness {
+    ExportedReplayWitness {
+        data_hex: uplc::ast::Data::to_hex(data),
+        generation_seed,
+        replay_choices_hex: replay_choices_hex.map(str::to_string),
+    }
 }
 
 fn make_bridge_test(
@@ -2449,6 +2463,45 @@ fn fail_once_unsupported_proof_mode_uses_sampler_relation() {
     assert!(proof.contains("SeededFuzzerReturns samplerConfig samplerHarness x"));
 }
 
+#[test]
+fn fail_once_bytearray_replay_witness_generates_native_decide_existential() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_bytearray_exist",
+        FuzzerOutputType::ByteArray,
+        FuzzerConstraint::ByteStringLenRange {
+            min_len: 32,
+            max_len: 32,
+        },
+    );
+    test.on_test_failure = OnTestFailure::SucceedImmediately;
+    let witness_data = InputTypeSchema::ByteArray
+        .encode_plutus_data(&BridgedAikenValue::ByteArray(vec![7; 32]))
+        .expect("bytearray witness should encode to PlutusData");
+    test.fail_once_replay_witness = Some(exported_replay_witness(witness_data, 47, Some("abcd")));
+
+    let id = test_id("my_module", "test_bytearray_exist");
+    let lean_name = sanitize_lean_name("test_bytearray_exist");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bytearray_exist";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+    )
+    .expect("bytearray fail_once should use replay-backed existential proof");
+
+    assert!(proof.contains("replayedWitnessDomain"));
+    assert!(proof.contains("generation_seed=47"));
+    assert!(proof.contains("replay_choices=abcd"));
+    assert!(proof.contains("native_decide"));
+    assert!(!proof.contains("by blaster"));
+    assert!(proof.contains("does NOT claim the randomized runner"));
+}
+
 /// Pin the S0003 short-circuit for the `Unsupported` carrier (custom user
 /// types whose semantic export is opaque). The catalogue surfaces the
 /// type's own `pretty_print` rendering as the `domain` field.
@@ -2714,6 +2767,7 @@ fn make_test_with_type(
         transition_prop_lean: None,
         concrete_halt_witnesses: Vec::new(),
         concrete_error_witnesses: Vec::new(),
+        fail_once_replay_witness: None,
     }
 }
 
@@ -6755,6 +6809,80 @@ fn manifest_test_mode_changes_result_classification() {
         fail_once.proof_status,
         ProofStatus::Partial { .. }
     ));
+}
+
+#[test]
+fn replay_backed_fail_once_domain_is_underapprox_and_solver_validated() {
+    let mut test = make_test_with_type(
+        "my_module",
+        "test_bytearray_exist",
+        FuzzerOutputType::ByteArray,
+        FuzzerConstraint::ByteStringLenRange {
+            min_len: 32,
+            max_len: 32,
+        },
+    );
+    test.on_test_failure = OnTestFailure::SucceedImmediately;
+    let witness_data = InputTypeSchema::ByteArray
+        .encode_plutus_data(&BridgedAikenValue::ByteArray(vec![7; 32]))
+        .expect("bytearray witness should encode to PlutusData");
+    test.fail_once_replay_witness = Some(exported_replay_witness(witness_data, 47, Some("abcd")));
+
+    let domain = lowered_domain_for_test(
+        &test,
+        CompatibilityMode::SemanticExistential,
+        None,
+        None,
+        &VerificationTargetKind::default(),
+        ExistentialMode::Proof,
+    );
+    assert_eq!(domain.precision, DomainPrecision::UnderApprox);
+    assert_eq!(domain.certificate, DomainCertificate::WitnessReplay);
+    assert!(domain.production_allowed);
+    assert!(domain.obligations_open.is_empty());
+    assert!(
+        domain
+            .obligations_discharged
+            .contains(&DomainObligation::DomainImpliesFuzzerReturns)
+    );
+    assert_eq!(
+        domain.sampler.as_ref().map(|sampler| sampler.run_kind),
+        Some(SamplerRunKind::WitnessReplay)
+    );
+    assert_eq!(
+        domain
+            .sampler
+            .as_ref()
+            .and_then(|sampler| sampler.generation_seed),
+        Some(47)
+    );
+    assert_eq!(
+        domain
+            .sampler
+            .as_ref()
+            .and_then(|sampler| sampler.replay_choices_hex.clone()),
+        Some("abcd".to_string())
+    );
+
+    let result = TheoremResult::new_with_domain(
+        test.name.clone(),
+        "test_bytearray_exist".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        domain,
+        Some(input_bridge_for_test(&test)),
+        Some(ManifestTestMode::FailOnce),
+        Some(TestReturnMode::Bool),
+    );
+    assert_eq!(result.status, VerificationStatus::SolverValidated);
+    assert!(
+        result
+            .domain
+            .diagnostics
+            .first()
+            .is_some_and(|message| message.contains("randomized runner"))
+    );
 }
 
 #[test]

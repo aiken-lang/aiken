@@ -55,9 +55,9 @@ use crate::blueprint::{
 use crate::config::compiler_version;
 use crate::export::{
     ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedPropertyTest,
-    FuzzerConstraint, FuzzerExactValue, FuzzerOutputType, FuzzerSemantics, StateMachineAcceptance,
-    StateMachineTransitionSemantics, TestReturnMode, TransitionWidening, TransitionWideningKind,
-    VerificationTargetKind,
+    ExportedReplayWitness, FuzzerConstraint, FuzzerExactValue, FuzzerOutputType, FuzzerSemantics,
+    StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode, TransitionWidening,
+    TransitionWideningKind, VerificationTargetKind,
 };
 use aiken_lang::{ast::OnTestFailure, plutus_version::PlutusVersion};
 use num_bigint::BigInt;
@@ -1528,7 +1528,10 @@ impl LoweredDomain {
     }
 }
 
-fn witness_replay_domain_from_values(witnesses: Vec<String>) -> LoweredDomain {
+fn witness_replay_domain_from_values(
+    witnesses: Vec<String>,
+    sampler: Option<SamplerMetadata>,
+) -> LoweredDomain {
     LoweredDomain {
         relation: DomainRel::Witness {
             encoded_values: witnesses,
@@ -1545,7 +1548,7 @@ fn witness_replay_domain_from_values(witnesses: Vec<String>) -> LoweredDomain {
         lowering_path: vec!["witness_replay".to_string()],
         widenings: Vec::new(),
         production_allowed: true,
-        sampler: Some(default_witness_sampler_metadata()),
+        sampler: sampler.or_else(|| Some(default_witness_sampler_metadata())),
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -2344,7 +2347,7 @@ impl TheoremResult {
                 {
                     existing
                 } else {
-                    witness_replay_domain_from_values(witnesses.clone())
+                    witness_replay_domain_from_values(witnesses.clone(), entry.sampler.clone())
                 }
             }
             _ => entry
@@ -4185,6 +4188,83 @@ fn structured_profile_requires_block(profile: &RelationalStructureProfile) -> bo
     }
 }
 
+fn replay_backed_existential_witness(
+    test: &ExportedPropertyTest,
+) -> Option<&ExportedReplayWitness> {
+    test.fail_once_replay_witness.as_ref()
+}
+
+fn replay_witness_sampler_metadata(witness: &ExportedReplayWitness) -> SamplerMetadata {
+    sampler_metadata(
+        SamplerRunKind::WitnessReplay,
+        SamplerPrngMode::Seeded,
+        Some(witness.generation_seed),
+        witness.replay_choices_hex.clone(),
+    )
+}
+
+fn exact_semantic_existential_support_available(
+    test: &ExportedPropertyTest,
+    target: &VerificationTargetKind,
+    existential_mode: ExistentialMode,
+) -> bool {
+    if sampler_relation_supported(test, target, existential_mode) {
+        return true;
+    }
+    if semantics_is_opaque(&test.semantics) {
+        return false;
+    }
+
+    let compact_profile = compact_domain_profile(&test.fuzzer_output_type, &test.semantics);
+    let structured_profile = test
+        .fuzzer_structure
+        .as_ref()
+        .map(relational_profile_from_structure);
+    let constraint_gap_active = constraint_is_unsupported(&test.constraint);
+
+    if let Some(profile) = &structured_profile {
+        let precision = if profile.precision == DomainPrecision::Unknown
+            && !structured_profile_requires_block(profile)
+            && let Some(compact) = &compact_profile
+        {
+            if constraint_gap_active && compact.precision == DomainPrecision::Exact {
+                DomainPrecision::OverApprox
+            } else {
+                compact.precision
+            }
+        } else {
+            profile.precision
+        };
+        return precision == DomainPrecision::Exact;
+    }
+
+    if let Some(profile) = &compact_profile {
+        let precision = if constraint_gap_active && profile.precision == DomainPrecision::Exact {
+            DomainPrecision::OverApprox
+        } else {
+            profile.precision
+        };
+        return precision == DomainPrecision::Exact
+            && matches!(profile.coverage, CompactDomainCoverage::ExactSupport);
+    }
+
+    false
+}
+
+fn should_use_replay_backed_existential_domain(
+    test: &ExportedPropertyTest,
+    target: &VerificationTargetKind,
+    existential_mode: ExistentialMode,
+) -> bool {
+    use aiken_lang::ast::OnTestFailure;
+
+    matches!(test.on_test_failure, OnTestFailure::SucceedImmediately)
+        && matches!(existential_mode, ExistentialMode::Proof)
+        && !matches!(target, VerificationTargetKind::Equivalence)
+        && replay_backed_existential_witness(test).is_some()
+        && !exact_semantic_existential_support_available(test, target, existential_mode)
+}
+
 fn witness_values_for_mode(
     test: &ExportedPropertyTest,
     proof_caveat: Option<&ProofCaveat>,
@@ -4211,6 +4291,10 @@ fn sampler_metadata_for_domain(
         && !witness_values_for_mode(test, proof_caveat).is_empty()
     {
         return Some(default_witness_sampler_metadata());
+    }
+
+    if should_use_replay_backed_existential_domain(test, target, existential_mode) {
+        return replay_backed_existential_witness(test).map(replay_witness_sampler_metadata);
     }
 
     sampler_relation_supported(test, target, existential_mode)
@@ -4329,6 +4413,16 @@ fn lowered_domain_for_test(
     if structured_profile.is_some() {
         push_lowering_step(&mut lowering_path, "relational_domain");
     }
+    let replay_existential_witness = if matches!(mode, CompatibilityMode::SemanticExistential)
+        && should_use_replay_backed_existential_domain(test, target, existential_mode)
+    {
+        replay_backed_existential_witness(test)
+    } else {
+        None
+    };
+    if replay_existential_witness.is_some() {
+        push_lowering_step(&mut lowering_path, "replay_witness_domain");
+    }
 
     let mut widenings = transition_prop_domain_widenings(test);
     let placeholder_widenings = proof_content
@@ -4360,6 +4454,16 @@ fn lowered_domain_for_test(
     if let Some(ProofCaveat::Partial(note)) = proof_caveat {
         diagnostics.push(note.clone());
     }
+    if let Some(witness) = replay_existential_witness {
+        diagnostics.push(format!(
+            "Replay-backed fail_once domain uses the concrete witness from generation_seed={} (replay_choices={}) as an under-approximate semantic existential domain. It proves only that the intended fuzzer/property path has a failing input for this recorded replay; it does not claim the randomized runner will find one within any bounded number of attempts.",
+            witness.generation_seed,
+            witness
+                .replay_choices_hex
+                .as_deref()
+                .unwrap_or("none"),
+        ));
+    }
     if semantics_is_opaque(&test.semantics)
         && !matches!(mode, CompatibilityMode::WitnessCheck)
         && !sampler_relation_active
@@ -4390,13 +4494,20 @@ fn lowered_domain_for_test(
         );
     }
     diagnostics.extend(input_bridge.diagnostics.iter().cloned());
-    if matches!(mode, CompatibilityMode::SemanticExistential) && !sampler_relation_active {
+    if matches!(mode, CompatibilityMode::SemanticExistential)
+        && replay_existential_witness.is_none()
+        && !sampler_relation_active
+    {
         diagnostics.push(
             "Current bridge does not yet prove DomainImpliesFuzzerReturns for fail_once theorems; production success is downgraded to Partial.".to_string(),
         );
     }
 
-    let relation = if matches!(mode, CompatibilityMode::WitnessCheck)
+    let relation = if let Some(witness) = replay_existential_witness {
+        DomainRel::Witness {
+            encoded_values: vec![witness.data_hex.clone()],
+        }
+    } else if matches!(mode, CompatibilityMode::WitnessCheck)
         || !placeholder_widenings.is_empty()
         || sampler_relation_active
     {
@@ -4431,6 +4542,15 @@ fn lowered_domain_for_test(
             obligations_discharged.push(DomainObligation::WitnessSatisfiesDomain);
             (
                 DomainPrecision::WitnessOnly,
+                DomainCertificate::WitnessReplay,
+                Vec::new(),
+            )
+        } else if replay_existential_witness.is_some() {
+            obligations_discharged.push(DomainObligation::DomainImpliesFuzzerReturns);
+            obligations_discharged.push(DomainObligation::WitnessReplaysThroughFuzzer);
+            obligations_discharged.push(DomainObligation::WitnessSatisfiesDomain);
+            (
+                DomainPrecision::UnderApprox,
                 DomainCertificate::WitnessReplay,
                 Vec::new(),
             )
@@ -6766,6 +6886,28 @@ abbrev PropertyFails
       | .decodeErrorIsExportError => False
   | _, _ => False
 
+
+abbrev PropertyFailsBool
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) : Bool :=
+  match returnMode, out with
+  | .bool, .returnsFalse => true
+  | .void, .evalError => true
+  | _, .budgetExceeded => false
+  | _, .decodeError =>
+      match decodePolicy with
+      | .decodeErrorIsTestFailure => true
+      | .decodeErrorIsExportError => false
+  | _, _ => false
+
+theorem PropertyFailsBool_iff_PropertyFails
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) :
+    PropertyFailsBool returnMode decodePolicy out = true ↔
+      PropertyFails returnMode decodePolicy out := by
+  cases returnMode <;> cases decodePolicy <;> cases out <;> simp [PropertyFailsBool, PropertyFails]
 abbrev PropertyReturns (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
   match returnMode, out with
   | .bool, .returnsTrue => True
@@ -13756,7 +13898,12 @@ fn generate_proof_file(
     // Skip the remaining cases with `FallbackRequired` so `--skip-unsupported`
     // treats them as skipped rather than as generation failures.
     let sampler_fallback = sampler_relation_supported(test, target, existential_mode);
-    if !sampler_fallback && bytestring_skip_required(&test.semantics, &test.fuzzer_output_type) {
+    let replay_existential_fallback =
+        should_use_replay_backed_existential_domain(test, target, existential_mode);
+    if !sampler_fallback
+        && !replay_existential_fallback
+        && bytestring_skip_required(&test.semantics, &test.fuzzer_output_type)
+    {
         return Err(unsupported_error(
             "E0011",
             UnsupportedReason::UnboundedBytearray {
@@ -13768,7 +13915,7 @@ fn generate_proof_file(
     // Bool-list preflight is centralized here: supported bounded top-level
     // `List<Bool>` shapes pass through to the finite enumerator, unsupported
     // bool-list shapes return E0013, and over-cap bounded shapes return E0034.
-    if !sampler_fallback {
+    if !sampler_fallback && !replay_existential_fallback {
         match supported_top_level_bool_list_cardinality(&test.fuzzer_output_type, &test.semantics) {
             Ok(Some(_)) => {}
             Ok(None) => {
@@ -13798,7 +13945,10 @@ fn generate_proof_file(
     // could be spuriously reported as PROVED for validators that happen to
     // accept all `Data`. Surface as a clean SKIP rather than emitting an
     // unconstrained universal theorem.
-    if fuzzer_semantics_requires_schema(&test.semantics) && test.fuzzer_data_schema.is_none() {
+    if !replay_existential_fallback
+        && fuzzer_semantics_requires_schema(&test.semantics)
+        && test.fuzzer_data_schema.is_none()
+    {
         return Err(unsupported_error(
             "E0015",
             UnsupportedReason::QualifiedAdtNoSchema {
@@ -13826,6 +13976,17 @@ fn generate_proof_file(
         VerificationTargetKind::ValidatorHandler => handler_prog.clone(),
         _ => prog.clone(),
     };
+    if should_use_replay_backed_existential_domain(test, target, existential_mode) {
+        return generate_replay_backed_fail_once_proof_file(
+            test,
+            &form,
+            lean_test_name,
+            &verify_prog,
+            &direct_header,
+            &footer,
+        )
+        .map(|content| (content, ProofCaveat::None));
+    }
 
     // S4: two-phase halt theorem emission. When the test is a state-machine
     // trace halt test (`_ok`) that carries a pre-emitted `transition_prop_lean`,
@@ -14344,6 +14505,68 @@ fn generate_state_machine_error_proof_file(
          exact {lean_test_name}_instance_0\n"
     ));
 
+    content.push_str(footer);
+    Ok(content)
+}
+
+fn generate_replay_backed_fail_once_proof_file(
+    test: &ExportedPropertyTest,
+    form: &TheoremForm,
+    lean_test_name: &str,
+    verify_prog: &str,
+    direct_header: &dyn Fn(&str) -> String,
+    footer: &str,
+) -> miette::Result<String> {
+    let witness = test.fail_once_replay_witness.as_ref().ok_or_else(|| {
+        generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            format!(
+                "Test '{}' needs a replay-backed fail_once witness, but none was exported.",
+                test.name
+            ),
+        )
+    })?;
+    let bytes = hex::decode(&witness.data_hex).map_err(|e| {
+        generation_error(
+            GenerationErrorCategory::InvalidConstraint,
+            format!(
+                "Test '{}': fail_once replay witness is not valid hex: {}",
+                test.name, e
+            ),
+        )
+    })?;
+    let witness_data = uplc::plutus_data(&bytes).map_err(|e| {
+        generation_error(
+            GenerationErrorCategory::InvalidConstraint,
+            format!(
+                "Test '{}': fail_once replay witness failed to decode as PlutusData: {}",
+                test.name, e
+            ),
+        )
+    })?;
+    let literal = data_to_lean_literal(&witness_data);
+    let replay_choices = witness.replay_choices_hex.as_deref().unwrap_or("none");
+
+    let mut content = direct_header(
+        "open PlutusCore.Data (Data)\nopen PlutusCore.ByteString (ByteString)\nopen PlutusCore.Integer (Integer)\nopen PlutusCore.UPLC.CekMachine (State cekExecuteProgram)",
+    );
+    content.push_str(&format_mode_context(form, verify_prog));
+    content.push_str(&format!(
+        "-- Replay-backed semantic existential witness.\n\
+         -- generation_seed={}; replay_choices={}.\n\
+         -- This proves only that the exported fuzzer/property path has a failing input\n\
+         -- for this recorded replay. It does NOT claim the randomized runner will\n\
+         -- find a failure within any bounded number of attempts.\n\n\
+         private def sample_0 : Data :=\n  {literal}\n\n\
+         private abbrev replayedWitnessDomain (x : Data) : Prop :=\n  x = sample_0\n\n\
+         theorem {lean_test_name} :\n  {EXISTS} x : Data,\n    replayedWitnessDomain x\n    {AND}\n    PropertyFails testReturnMode testDecodePolicy (testOutcome (dataArg x)) := by\n  refine {ANGLE_OPEN}sample_0, ?_{ANGLE_CLOSE}\n  constructor\n  · rfl\n  · rw [← PropertyFailsBool_iff_PropertyFails testReturnMode testDecodePolicy (testOutcome (dataArg sample_0))]\n    native_decide\n",
+        witness.generation_seed,
+        replay_choices,
+        EXISTS = lean_sym::EXISTS,
+        AND = lean_sym::AND,
+        ANGLE_OPEN = lean_sym::ANGLE_OPEN,
+        ANGLE_CLOSE = lean_sym::ANGLE_CLOSE,
+    ));
     content.push_str(footer);
     Ok(content)
 }

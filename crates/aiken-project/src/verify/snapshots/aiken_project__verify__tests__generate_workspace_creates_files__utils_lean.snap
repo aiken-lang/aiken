@@ -181,6 +181,28 @@ abbrev PropertyFails
       | .decodeErrorIsExportError => False
   | _, _ => False
 
+
+abbrev PropertyFailsBool
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) : Bool :=
+  match returnMode, out with
+  | .bool, .returnsFalse => true
+  | .void, .evalError => true
+  | _, .budgetExceeded => false
+  | _, .decodeError =>
+      match decodePolicy with
+      | .decodeErrorIsTestFailure => true
+      | .decodeErrorIsExportError => false
+  | _, _ => false
+
+theorem PropertyFailsBool_iff_PropertyFails
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) :
+    PropertyFailsBool returnMode decodePolicy out = true ↔
+      PropertyFails returnMode decodePolicy out := by
+  cases returnMode <;> cases decodePolicy <;> cases out <;> simp [PropertyFailsBool, PropertyFails]
 abbrev PropertyReturns (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
   match returnMode, out with
   | .bool, .returnsTrue => True

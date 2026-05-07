@@ -689,6 +689,16 @@ mod on_test_failure_wire {
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
+pub struct ExportedReplayWitness {
+    pub data_hex: String,
+    pub generation_seed: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub replay_choices_hex: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub struct ExportedPropertyTest {
     pub name: String,
     pub module: String,
@@ -762,6 +772,14 @@ pub struct ExportedPropertyTest {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     pub concrete_error_witnesses: Vec<String>,
+    /// Concrete replay-backed witness for generic `fail once` properties whose
+    /// compact domain is not exact enough for a universal semantic existential.
+    /// The witness is produced by the real exported fuzzer/property path and is
+    /// carried with seed/replay metadata so `verify.rs` can emit a sound
+    /// replay-backed existential theorem instead of over-claiming support.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub fail_once_replay_witness: Option<ExportedReplayWitness>,
 }
 
 /// Schema version for `aiken export-tests` JSON output.
