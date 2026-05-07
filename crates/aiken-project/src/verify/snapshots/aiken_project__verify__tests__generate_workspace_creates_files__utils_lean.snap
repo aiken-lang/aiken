@@ -56,16 +56,79 @@ def isHaltState : State -> Prop
  | .Halt _ => True
  | _ => False
 
+inductive ReturnMode where
+  | bool
+  | void
+deriving DecidableEq
+
+inductive TestMode where
+  | normal
+  | fail
+  | failOnce
+deriving DecidableEq
+
+inductive DecodePolicy where
+  | decodeErrorIsTestFailure
+  | decodeErrorIsExportError
+deriving DecidableEq
+
+inductive TestEvalOutcome where
+  | returnsTrue
+  | returnsFalse
+  | returnsVoid
+  | evalError
+  | budgetExceeded
+  | decodeError
+deriving DecidableEq
+
+abbrev RunProperty (returnMode : ReturnMode) (p : PlutusScript) (args : List Term) : TestEvalOutcome :=
+  match returnMode, cekExecuteProgram p.script args 20000 with
+  | .bool, .Halt (.VCon (Const.Bool true)) => .returnsTrue
+  | .bool, .Halt (.VCon (Const.Bool false)) => .returnsFalse
+  | .bool, _ => .evalError
+  | .void, .Halt _ => .returnsVoid
+  | .void, _ => .evalError
+
+abbrev PropertySucceeds (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsTrue => True
+  | .void, .returnsVoid => True
+  | _, _ => False
+
+abbrev PropertyFails
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsFalse => True
+  | .void, .evalError => True
+  | _, .budgetExceeded => False
+  | _, .decodeError =>
+      match decodePolicy with
+      | .decodeErrorIsTestFailure => True
+      | .decodeErrorIsExportError => False
+  | _, _ => False
+
+abbrev PropertyReturns (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsTrue => True
+  | .bool, .returnsFalse => True
+  | .void, .returnsVoid => True
+  | _, _ => False
+
 def proveTests (p : PlutusScript) (args : List Term) : Option Bool :=
-  fromFrameToBool $ cekExecuteProgram p.script args 20000
+  match RunProperty .bool p args with
+  | .returnsTrue => some true
+  | .returnsFalse => some false
+  | _ => none
 
-/-- For Void-returning tests: True iff the program halts without error. -/
+/-- For Void-returning tests: True iff the shared outcome classifier sees a successful halt. -/
 def proveTestsHalt (p : PlutusScript) (args : List Term) : Prop :=
-  isHaltState (cekExecuteProgram p.script args 20000)
+  PropertySucceeds .void (RunProperty .void p args)
 
-/-- For Void+fail tests: True iff the program reaches an error state. -/
+/-- For Void+fail tests: True iff the shared outcome classifier sees an evaluation error. -/
 def proveTestsError (p : PlutusScript) (args : List Term) : Prop :=
-  isErrorState (cekExecuteProgram p.script args 20000)
+  PropertyFails .void .decodeErrorIsExportError (RunProperty .void p args)
 
 def intArg (x : Integer) : List Term :=
   [Term.Const (Const.Data (Data.I x))]
@@ -90,10 +153,6 @@ def stringArg (x : ByteString) : List Term :=
 
 def pairArg (x : Data) (y : Data) : List Term :=
   [Term.Const (Const.Data (Data.List [x, y]))]
-
-/-- For `fail once` witness mode: True iff the program returns `value` for the given args. -/
-def witnessTests (p : PlutusScript) (args : List Term) (value : Bool) : Prop :=
-  proveTests p args = some value
 
 /-- `allProp p xs` holds iff every element of `xs` satisfies predicate `p`.
     Used in generated theorem preconditions to express per-element constraints

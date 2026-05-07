@@ -3,10 +3,14 @@ source: crates/aiken-project/src/verify/tests.rs
 expression: proof
 ---
 import AikenVerify.Utils
+import PlutusCore.Integer
+import PlutusCore.ByteString
 import PlutusCore.UPLC.ScriptEncoding
 import Blaster
 
 namespace AikenVerify.Proofs.My_module.test_bool
+open PlutusCore.Integer (Integer)
+open PlutusCore.ByteString (ByteString)
 open PlutusCore.Integer (Integer)
 open PlutusCore.UPLC.CekMachine
 open PlutusCore.UPLC.Term (Term Const Program)
@@ -14,18 +18,27 @@ open AikenVerify.Utils
 
 #import_uplc prog_my_module__test_bool_34d285b7 PlutusV3 single_cbor_hex "./cbor/my_module__test_bool_34d285b7.cbor"
 
+set_option maxRecDepth 16384
+
+-- Manifest-driven mode and execution metadata.
+private abbrev testReturnMode : ReturnMode := .bool
+private abbrev testMode : TestMode := .normal
+private abbrev testDecodePolicy : DecodePolicy := .decodeErrorIsTestFailure
+private abbrev testOutcome (args : List Term) : TestEvalOutcome :=
+  RunProperty testReturnMode prog_my_module__test_bool_34d285b7 args
+
 theorem test_bool :
   ∀ (x : Integer),
   (0 <= x ∧ x <= 255)
   →
-  (proveTests prog_my_module__test_bool_34d285b7 (intArg x)) = true :=
+  PropertySucceeds testReturnMode (testOutcome (intArg x)) :=
   by blaster
 
 theorem test_bool_alwaysTerminating :
   ∀ (x : Integer),
   (0 <= x ∧ x <= 255)
   →
-  Option.isSome (proveTests prog_my_module__test_bool_34d285b7 (intArg x)) :=
+  PropertyReturns testReturnMode (testOutcome (intArg x)) :=
   by blaster
 
 end AikenVerify.Proofs.My_module.test_bool

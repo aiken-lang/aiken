@@ -1570,7 +1570,7 @@ fn witness_mode_rejected_for_int_domain() {
 /// sole sound domain for witness mode — the trivial witness (`true`) and
 /// the alternative (`false`) together cover the two-element domain, so the
 /// `⟨true, by decide⟩` proof is sound. The generated proof must use the
-/// witness-specific `witnessTests` helper and `by decide` tactic.
+/// mode-aware `PropertyFails` predicate and `by decide` tactic.
 #[test]
 fn witness_mode_accepted_for_bool_domain() {
     let mut test = make_test_with_type(
@@ -1582,8 +1582,8 @@ fn witness_mode_accepted_for_bool_domain() {
     test.on_test_failure = OnTestFailure::SucceedImmediately;
     // S0003 fires *after* `ensure_target_kind_compatible` but *before*
     // semantics-driven gates, so we still need real (non-opaque) Bool
-    // semantics for the post-S0003 path that emits `witnessTests` /
-    // `by decide` to actually run on the Bool branch.
+    // semantics for the post-S0003 path that emits a mode-aware
+    // existential witness theorem to actually run on the Bool branch.
     test.semantics = FuzzerSemantics::Bool;
     let id = test_id("my_module", "test_bool_witness");
     let lean_name = sanitize_lean_name("test_bool_witness");
@@ -1601,9 +1601,9 @@ fn witness_mode_accepted_for_bool_domain() {
 
     // Snapshot pins the canonical witness-mode shape (the sound replacement
     // for the historic `fail_once_witness_mode_generates_existential_theorem`
-    // test): `∃` quantifier, `witnessTests` helper, and the `by decide`
-    // tactic — the path that makes Bool the sole accepted domain for witness
-    // mode under S0003.  Stable inputs → no redactions.
+    // test): `∃` quantifier, manifest-driven mode constants, the
+    // `PropertyFails` predicate, and the `by decide` tactic. Stable inputs
+    // → no redactions.
     insta::assert_snapshot!("witness_mode_accepted_for_bool_domain", proof);
 }
 
@@ -1680,8 +1680,8 @@ fn fail_once_proof_mode_int_domain_generates_existential_theorem() {
         "Proof mode should generate existential (\u{2203}) quantifier"
     );
     assert!(
-        proof.contains("proveTests"),
-        "Proof mode should use proveTests helper"
+        proof.contains("PropertyFails"),
+        "Proof mode should use the shared PropertyFails predicate"
     );
     assert!(
         proof.contains("by blaster"),
@@ -1692,8 +1692,8 @@ fn fail_once_proof_mode_int_domain_generates_existential_theorem() {
 #[test]
 fn fail_once_proof_mode_generates_existential_theorem() {
     // Snapshot pins the canonical SucceedImmediately + Proof mode shape:
-    // `∃` quantifier, `proveTests` helper, `= false` body, and the
-    // `by blaster` tactic invocation.  Stable inputs → no redactions.
+    // `∃` quantifier, manifest-driven mode constants, the shared
+    // `PropertyFails` predicate, and the `by blaster` tactic invocation.
     let test = make_test_with_failure("my_module", "test_ev", OnTestFailure::SucceedImmediately);
     let id = test_id("my_module", "test_ev");
     let lean_name = sanitize_lean_name("test_ev");
@@ -1715,8 +1715,8 @@ fn fail_once_proof_mode_generates_existential_theorem() {
 /// `Void + fail_once + Int` is rejected by S0003 under witness mode (the
 /// trivial witness `(0 : Integer)` is not necessarily an erroring input).
 /// Cover the equivalent existential-error theorem under the sound
-/// `--existential-mode proof` path so the `proveTestsError` lowering for
-/// `Void`-returning fail-once tests remains exercised.
+/// `--existential-mode proof` path so the shared mode-aware fail predicate
+/// for `Void`-returning fail-once tests remains exercised.
 #[test]
 fn fail_once_void_proof_mode_generates_existential_error_theorem() {
     let mut test = make_test_with_failure(
@@ -1748,8 +1748,8 @@ fn fail_once_void_proof_mode_generates_existential_error_theorem() {
         "Proof mode should generate existential (\u{2203}) quantifier"
     );
     assert!(
-        proof.contains("proveTestsError"),
-        "Void fail-once should use proveTestsError helper"
+        proof.contains("PropertyFails"),
+        "Void fail-once should use the shared PropertyFails predicate"
     );
     assert!(
         proof.contains("by blaster"),
@@ -1758,9 +1758,9 @@ fn fail_once_void_proof_mode_generates_existential_error_theorem() {
 }
 
 /// S0003 also blocks `Void + fail_once + Int + witness` (the witness
-/// path emits `⟨0, by decide⟩` and `proveTestsError`, both of which are
-/// unsound for the same reason as the bool-returning Int case). Pin the
-/// guard fires for this configuration.
+/// path emits `⟨0, by decide⟩` for a mode-aware existential error claim,
+/// which is unsound for the same reason as the bool-returning Int case).
+/// Pin the guard fires for this configuration.
 #[test]
 fn witness_mode_rejected_for_int_domain_void_fail_once() {
     let mut test = make_test_with_failure(
@@ -1850,8 +1850,8 @@ fn fail_once_tuple_proof_mode_uses_conjunction_between_bounds() {
         "Existential mode should not contain implication (\u{2192})"
     );
     assert!(
-        proof.contains("proveTests"),
-        "Proof mode should use proveTests helper, got:\n{proof}"
+        proof.contains("PropertyFails"),
+        "Proof mode should use the shared PropertyFails predicate, got:\n{proof}"
     );
     assert!(
         proof.contains("by blaster"),
@@ -2113,8 +2113,8 @@ fn fail_once_list_bool_exact_proof_mode_uses_exact_element() {
 
 #[test]
 fn void_return_mode_generates_halt_theorem() {
-    // Snapshot pins the canonical Void/halt shape: `proveTestsHalt` helper
-    // and the universal `∀` quantifier.  Stable inputs → no redactions.
+    // Snapshot pins the canonical Void/normal shape: manifest-driven mode
+    // constants plus the shared `PropertySucceeds` predicate.
     let mut test = make_test("my_module", "test_void");
     test.return_mode = TestReturnMode::Void;
     let id = test_id("my_module", "test_void");
@@ -2136,8 +2136,8 @@ fn void_return_mode_generates_halt_theorem() {
 
 #[test]
 fn void_fail_mode_generates_error_theorem() {
-    // Snapshot pins the canonical Void/fail shape: `proveTestsError` helper
-    // and the universal `∀` quantifier.  Stable inputs → no redactions.
+    // Snapshot pins the canonical Void/fail shape: manifest-driven mode
+    // constants plus the shared `PropertyFails` predicate.
     let mut test = make_test_with_failure(
         "my_module",
         "test_void_fail",
@@ -2163,10 +2163,9 @@ fn void_fail_mode_generates_error_theorem() {
 
 #[test]
 fn bool_return_mode_generates_prove_tests() {
-    // Verify Bool mode still works with explicit return_mode.  Snapshot pins
-    // the canonical Lean shape: `proveTests`, `= true`, the `∀` quantifier
-    // and the `alwaysTerminating` termination theorem.  Stable inputs (no
-    // tempdir, no rev, no UUID) → no redactions needed.
+    // Verify Bool mode still works with explicit return_mode. Snapshot pins
+    // the canonical Lean shape: manifest-driven mode constants, the shared
+    // `PropertySucceeds` predicate, and the `alwaysTerminating` theorem.
     let mut test = make_test("my_module", "test_bool");
     test.return_mode = TestReturnMode::Bool;
     let id = test_id("my_module", "test_bool");
@@ -2493,7 +2492,10 @@ fn bool_semantics_can_generate_direct_theorem_without_constraint_predicates() {
         proof.contains("boolArg"),
         "Bool semantics should use boolArg helper"
     );
-    assert!(proof.contains("= true"), "Bool mode should assert = true");
+    assert!(
+        proof.contains("PropertySucceeds"),
+        "Bool mode should use the shared PropertySucceeds predicate"
+    );
 }
 
 #[test]
@@ -4278,11 +4280,13 @@ fn utils_contains_arg_helpers() {
         utils.contains("def proveTestsError"),
         "Utils should contain proveTestsError for Void+fail mode"
     );
-    // Step 5.1: witness helper for fail-once existential mode
-    assert!(
-        utils.contains("def witnessTests"),
-        "Utils should contain witnessTests for fail-once witness mode"
-    );
+    assert!(utils.contains("inductive ReturnMode"));
+    assert!(utils.contains("inductive TestMode"));
+    assert!(utils.contains("inductive TestEvalOutcome"));
+    assert!(utils.contains("abbrev RunProperty"));
+    assert!(utils.contains("abbrev PropertySucceeds"));
+    assert!(utils.contains("abbrev PropertyFails"));
+    assert!(utils.contains("abbrev PropertyReturns"));
 }
 
 #[test]
@@ -5760,6 +5764,38 @@ fn unsafe_dev_never_reports_verified_success() {
 
     assert_eq!(result.status, VerificationStatus::Partial);
     assert!(matches!(result.proof_status, ProofStatus::Partial { .. }));
+}
+
+#[test]
+fn manifest_test_mode_changes_result_classification() {
+    let normal = TheoremResult::new_with_domain(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        trusted_overapprox_domain(),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
+    );
+
+    let fail_once = TheoremResult::new_with_domain(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        trusted_overapprox_domain(),
+        Some(ManifestTestMode::FailOnce),
+        Some(TestReturnMode::Bool),
+    );
+
+    assert_eq!(normal.status, VerificationStatus::SolverValidated);
+    assert_eq!(fail_once.status, VerificationStatus::Partial);
+    assert!(matches!(
+        fail_once.proof_status,
+        ProofStatus::Partial { .. }
+    ));
 }
 
 #[test]
@@ -11308,8 +11344,12 @@ fn compat_void_return_mode_generates_halt_theorem() {
     let proof_path = dir.path().join(&manifest.tests[0].lean_file);
     let content = fs::read_to_string(proof_path).unwrap();
     assert!(
-        content.contains("proveTestsHalt"),
-        "Void-returning test should use proveTestsHalt"
+        content.contains("PropertySucceeds"),
+        "Void-returning test should use the shared PropertySucceeds predicate"
+    );
+    assert!(
+        content.contains("testReturnMode : ReturnMode := .void"),
+        "Void-returning test should record the explicit return mode constant"
     );
 }
 

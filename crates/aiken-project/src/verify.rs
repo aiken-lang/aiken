@@ -2692,6 +2692,10 @@ impl std::fmt::Display for ManifestDecodePolicy {
     }
 }
 
+fn generated_decode_policy() -> ManifestDecodePolicy {
+    ManifestDecodePolicy::DecodeErrorIsTestFailure
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[non_exhaustive]
 pub struct ManifestAikenMetadata {
@@ -3048,7 +3052,7 @@ fn manifest_execution_metadata(config: &VerifyConfig) -> (ManifestExecutionMetad
                 mem: None,
                 fuel: Some(config.cek_budget),
             },
-            decode_policy: Some(ManifestDecodePolicy::DecodeErrorIsTestFailure),
+            decode_policy: Some(generated_decode_policy()),
         },
         vec![
             "execution.cek_budget records only the unified CEK fuel bound; CPU and memory sub-budgets are not currently exported.".to_string(),
@@ -5421,16 +5425,79 @@ def isHaltState : State -> Prop
  | .Halt _ => True
  | _ => False
 
+inductive ReturnMode where
+  | bool
+  | void
+deriving DecidableEq
+
+inductive TestMode where
+  | normal
+  | fail
+  | failOnce
+deriving DecidableEq
+
+inductive DecodePolicy where
+  | decodeErrorIsTestFailure
+  | decodeErrorIsExportError
+deriving DecidableEq
+
+inductive TestEvalOutcome where
+  | returnsTrue
+  | returnsFalse
+  | returnsVoid
+  | evalError
+  | budgetExceeded
+  | decodeError
+deriving DecidableEq
+
+abbrev RunProperty (returnMode : ReturnMode) (p : PlutusScript) (args : List Term) : TestEvalOutcome :=
+  match returnMode, cekExecuteProgram p.script args {cek_budget} with
+  | .bool, .Halt (.VCon (Const.Bool true)) => .returnsTrue
+  | .bool, .Halt (.VCon (Const.Bool false)) => .returnsFalse
+  | .bool, _ => .evalError
+  | .void, .Halt _ => .returnsVoid
+  | .void, _ => .evalError
+
+abbrev PropertySucceeds (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsTrue => True
+  | .void, .returnsVoid => True
+  | _, _ => False
+
+abbrev PropertyFails
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsFalse => True
+  | .void, .evalError => True
+  | _, .budgetExceeded => False
+  | _, .decodeError =>
+      match decodePolicy with
+      | .decodeErrorIsTestFailure => True
+      | .decodeErrorIsExportError => False
+  | _, _ => False
+
+abbrev PropertyReturns (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsTrue => True
+  | .bool, .returnsFalse => True
+  | .void, .returnsVoid => True
+  | _, _ => False
+
 def proveTests (p : PlutusScript) (args : List Term) : Option Bool :=
-  fromFrameToBool $ cekExecuteProgram p.script args {cek_budget}
+  match RunProperty .bool p args with
+  | .returnsTrue => some true
+  | .returnsFalse => some false
+  | _ => none
 
-/-- For Void-returning tests: True iff the program halts without error. -/
+/-- For Void-returning tests: True iff the shared outcome classifier sees a successful halt. -/
 def proveTestsHalt (p : PlutusScript) (args : List Term) : Prop :=
-  isHaltState (cekExecuteProgram p.script args {cek_budget})
+  PropertySucceeds .void (RunProperty .void p args)
 
-/-- For Void+fail tests: True iff the program reaches an error state. -/
+/-- For Void+fail tests: True iff the shared outcome classifier sees an evaluation error. -/
 def proveTestsError (p : PlutusScript) (args : List Term) : Prop :=
-  isErrorState (cekExecuteProgram p.script args {cek_budget})
+  PropertyFails .void .decodeErrorIsExportError (RunProperty .void p args)
 
 def intArg (x : Integer) : List Term :=
   [Term.Const (Const.Data (Data.I x))]
@@ -5455,10 +5522,6 @@ def stringArg (x : ByteString) : List Term :=
 
 def pairArg (x : Data) (y : Data) : List Term :=
   [Term.Const (Const.Data (Data.List [x, y]))]
-
-/-- For `fail once` witness mode: True iff the program returns `value` for the given args. -/
-def witnessTests (p : PlutusScript) (args : List Term) (value : Bool) : Prop :=
-  proveTests p args = some value
 
 /-- `allProp p xs` holds iff every element of `xs` satisfies predicate `p`.
     Used in generated theorem preconditions to express per-element constraints
@@ -9336,7 +9399,7 @@ fn try_generate_state_machine_trace_proof_from_semantics(
     // rather than emit a provably-false universal theorem. The
     // `generate_state_machine_halt_proof_file` path replaces this with
     // concrete `native_decide` instance theorems whenever witnesses exist.
-    if matches!(form.correctness, TheoremBody::Halt)
+    if is_state_machine_trace_halt_test(test)
         && test.concrete_halt_witnesses.is_empty()
         && step_function_ir.is_none()
     {
@@ -9389,6 +9452,7 @@ fn try_generate_state_machine_trace_proof_from_semantics(
     content.push_str("-- compiler-exported state-machine reachability relation\n");
     content.push_str(&reachability_defs);
     content.push('\n');
+    content.push_str(&format_mode_context(form, verify_prog));
     content.push_str(&theorems);
     if let VerificationTargetKind::Equivalence = target {
         content.push_str(&format_equivalence_theorem(
@@ -10286,7 +10350,8 @@ fn extract_int_range_from_constraint(constraint: &FuzzerConstraint) -> Option<(S
 
 /// Theorem form descriptors determined by return mode and failure mode.
 struct TheoremForm {
-    /// The correctness theorem conclusion, e.g. `(proveTests {prog} ({arg})) = true`
+    /// The correctness theorem conclusion, expressed through the shared mode-aware
+    /// outcome helpers in `AikenVerify.Utils`.
     correctness: TheoremBody,
     /// The termination theorem conclusion.
     /// None when the correctness theorem already implies termination (Void mode).
@@ -10295,65 +10360,88 @@ struct TheoremForm {
     existential: bool,
     /// The existential mode used (only Some for existential theorems).
     existential_mode: Option<ExistentialMode>,
+    /// Lean expression naming the manifest-exported return mode constant.
+    return_mode_expr: &'static str,
+    /// Lean expression naming the manifest-exported test mode constant.
+    test_mode_expr: &'static str,
+    /// Lean expression naming the centralized decode-policy constant.
+    decode_policy_expr: &'static str,
 }
 
-enum TheoremBody {
-    /// `(proveTests {prog} ({arg})) = {value}`
-    BoolEq { value: &'static str },
-    /// `proveTestsHalt {prog} ({arg})`
-    Halt,
-    /// `isErrorState (cekExecuteProgram {prog} ({arg}) {budget})`
-    ErrorState,
-    /// `Option.isSome (proveTests {prog} ({arg}))`
-    IsSome,
-    /// Witness mode for `fail once`: concrete witness + `witnessTests {prog} ({arg}) {value}`
-    WitnessEq { value: &'static str },
-    /// Witness mode for `fail once` + Void: concrete witness + `proveTestsError {prog} ({arg})`
-    WitnessError,
-    /// Proof mode for `fail once`: existential theorem `∃ x, (proveTests {prog} ({arg})) = {value}`
-    ExistsEq { value: &'static str },
-    /// Proof mode for `fail once` + Void: `∃ x, proveTestsError {prog} ({arg})`
-    ExistsError,
-}
-
-impl TheoremBody {
-    /// Format the theorem conclusion, substituting prog and arg expression.
-    fn format(&self, prog: &str, arg_expr: &str) -> String {
-        match self {
-            TheoremBody::BoolEq { value } => {
-                format!("(proveTests {prog} ({arg_expr})) = {value}")
-            }
-            TheoremBody::Halt => {
-                format!("proveTestsHalt {prog} ({arg_expr})")
-            }
-            TheoremBody::ErrorState => {
-                format!("proveTestsError {prog} ({arg_expr})")
-            }
-            TheoremBody::IsSome => {
-                format!("Option.isSome (proveTests {prog} ({arg_expr}))")
-            }
-            TheoremBody::WitnessEq { value } => {
-                format!("witnessTests {prog} ({arg_expr}) {value}")
-            }
-            TheoremBody::WitnessError => {
-                format!("proveTestsError {prog} ({arg_expr})")
-            }
-            TheoremBody::ExistsEq { value } => {
-                format!("(proveTests {prog} ({arg_expr})) = {value}")
-            }
-            TheoremBody::ExistsError => {
-                format!("proveTestsError {prog} ({arg_expr})")
-            }
-        }
-    }
-
-    /// The tactic to use for this theorem body.
-    fn tactic(&self) -> &'static str {
-        match self {
-            TheoremBody::WitnessEq { .. } | TheoremBody::WitnessError => "decide",
+impl TheoremForm {
+    fn correctness_tactic(&self) -> &'static str {
+        match self.existential_mode {
+            Some(ExistentialMode::Witness) => "decide",
             _ => "blaster",
         }
     }
+}
+
+enum TheoremBody {
+    /// `PropertySucceeds testReturnMode (testOutcome ({arg}))`
+    Succeeds,
+    /// `PropertyFails testReturnMode testDecodePolicy (testOutcome ({arg}))`
+    Fails,
+    /// `PropertyReturns testReturnMode (testOutcome ({arg}))`
+    ReturnsValue,
+}
+
+impl TheoremBody {
+    /// Format the theorem conclusion, substituting the encoded argument expression.
+    fn format(&self, arg_expr: &str) -> String {
+        match self {
+            TheoremBody::Succeeds => {
+                format!("PropertySucceeds testReturnMode (testOutcome ({arg_expr}))")
+            }
+            TheoremBody::Fails => {
+                format!("PropertyFails testReturnMode testDecodePolicy (testOutcome ({arg_expr}))")
+            }
+            TheoremBody::ReturnsValue => {
+                format!("PropertyReturns testReturnMode (testOutcome ({arg_expr}))")
+            }
+        }
+    }
+
+    fn tactic(&self) -> &'static str {
+        "blaster"
+    }
+}
+
+fn lean_return_mode_expr(return_mode: &TestReturnMode) -> &'static str {
+    match return_mode {
+        TestReturnMode::Bool => ".bool",
+        TestReturnMode::Void => ".void",
+    }
+}
+
+fn lean_test_mode_expr(test_mode: ManifestTestMode) -> &'static str {
+    match test_mode {
+        ManifestTestMode::Normal => ".normal",
+        ManifestTestMode::Fail => ".fail",
+        ManifestTestMode::FailOnce => ".failOnce",
+    }
+}
+
+fn lean_decode_policy_expr(decode_policy: ManifestDecodePolicy) -> &'static str {
+    match decode_policy {
+        ManifestDecodePolicy::DecodeErrorIsTestFailure => ".decodeErrorIsTestFailure",
+        ManifestDecodePolicy::DecodeErrorIsExportError => ".decodeErrorIsExportError",
+    }
+}
+
+fn format_mode_context(form: &TheoremForm, prog: &str) -> String {
+    format!(
+        "set_option maxRecDepth 16384\n\n\
+-- Manifest-driven mode and execution metadata.\n\
+private abbrev testReturnMode : ReturnMode := {return_mode}\n\
+private abbrev testMode : TestMode := {test_mode}\n\
+private abbrev testDecodePolicy : DecodePolicy := {decode_policy}\n\
+private abbrev testOutcome (args : List Term) : TestEvalOutcome :=\n  \
+RunProperty testReturnMode {prog} args\n\n",
+        return_mode = form.return_mode_expr,
+        test_mode = form.test_mode_expr,
+        decode_policy = form.decode_policy_expr,
+    )
 }
 
 /// Format the correctness + termination theorems given a form, name, and variable/arg details.
@@ -10365,14 +10453,14 @@ impl TheoremBody {
 fn format_theorems(
     form: &TheoremForm,
     lean_test_name: &str,
-    prog: &str,
+    _prog: &str,
     arg_expr: &str,
     quantifier_vars: &str,
     precondition_parts: &[String],
     witness_value: Option<&str>,
 ) -> String {
-    let correctness_body = form.correctness.format(prog, arg_expr);
-    let correctness_tactic = form.correctness.tactic();
+    let correctness_body = form.correctness.format(arg_expr);
+    let correctness_tactic = form.correctness_tactic();
 
     let mut out = if form.existential {
         let quantifiers = format!("{} {quantifier_vars},", lean_sym::EXISTS);
@@ -10382,10 +10470,6 @@ fn format_theorems(
         } else {
             format!("\n  {}", precondition_parts.join(&and_sep))
         };
-        // Commit 18 (folds C16 #1): when there are no preconditions, emit a
-        // single space after the existential quantifier comma so the body
-        // does not collide with the variable list (e.g. `∃ (x : Bool),
-        // witnessTests …` rather than `∃ (x : Bool),witnessTests …`).
         let connector = if preconditions.is_empty() {
             " ".to_string()
         } else {
@@ -10429,9 +10513,8 @@ fn format_theorems(
     };
 
     if let Some(ref term_body) = form.termination {
-        let termination_body = term_body.format(prog, arg_expr);
+        let termination_body = term_body.format(arg_expr);
         let termination_tactic = term_body.tactic();
-        // Termination theorems are always universal
         let quantifiers = format!("{} {quantifier_vars},", lean_sym::FORALL);
         let implies_sep = format!("\n  {}\n  ", lean_sym::IMPLIES);
         let preconditions = if precondition_parts.is_empty() {
@@ -10455,12 +10538,11 @@ fn format_theorems(
 fn theorem_proposition(
     body: &TheoremBody,
     existential: bool,
-    prog: &str,
     arg_expr: &str,
     quantifier_vars: &str,
     precondition_parts: &[String],
 ) -> String {
-    let body = body.format(prog, arg_expr);
+    let body = body.format(arg_expr);
     if existential {
         let quantifiers = format!("{} {quantifier_vars},", lean_sym::EXISTS);
         let and_sep = format!("\n  {}\n  ", lean_sym::AND);
@@ -10524,7 +10606,7 @@ fn format_ground_theorem_family(
     arg_exprs: &[String],
     case_tactic: Option<&'static str>,
 ) -> String {
-    let mut out = String::new();
+    let mut out = format_mode_context(form, prog);
     let mut correctness_props = Vec::new();
     let mut correctness_names = Vec::new();
     let mut termination_props = Vec::new();
@@ -10532,8 +10614,8 @@ fn format_ground_theorem_family(
 
     for (index, arg_expr) in arg_exprs.iter().enumerate() {
         let theorem_name = finite_case_theorem_name(lean_test_name, index);
-        let correctness_body = form.correctness.format(prog, arg_expr);
-        let correctness_tactic = case_tactic.unwrap_or_else(|| form.correctness.tactic());
+        let correctness_body = form.correctness.format(arg_expr);
+        let correctness_tactic = case_tactic.unwrap_or_else(|| form.correctness_tactic());
         out.push_str(&format!(
             "theorem {theorem_name} :\n  {correctness_body} :=\n  by {correctness_tactic}\n"
         ));
@@ -10542,7 +10624,7 @@ fn format_ground_theorem_family(
 
         if let Some(ref term_body) = form.termination {
             let term_name = format!("{theorem_name}_alwaysTerminating");
-            let term_body_str = term_body.format(prog, arg_expr);
+            let term_body_str = term_body.format(arg_expr);
             let term_tactic = case_tactic.unwrap_or_else(|| term_body.tactic());
             out.push_str(&format!(
                 "\ntheorem {term_name} :\n  {term_body_str} :=\n  by {term_tactic}\n"
@@ -10604,7 +10686,6 @@ fn format_equivalence_theorem(
     quantifier_vars: &str,
     precondition_parts: &[String],
 ) -> String {
-    // Equivalence theorems are always universal
     let quantifiers = format!("{} {quantifier_vars},", lean_sym::FORALL);
     let implies_sep = format!("\n  {}\n  ", lean_sym::IMPLIES);
     let preconditions = if precondition_parts.is_empty() {
@@ -10619,9 +10700,9 @@ fn format_equivalence_theorem(
     };
     let equivalence_goal = equivalence_goal(test, prop_prog, handler_prog, arg_expr);
     format!(
-        "\ntheorem {lean_test_name}_equivalence :\n  \
-         {quantifiers}{preconditions}{arrow}\
-         {equivalence_goal} :=\n  \
+        "\ntheorem {lean_test_name}_equivalence :\n  \\
+         {quantifiers}{preconditions}{arrow}\\
+         {equivalence_goal} :=\n  \\
          by blaster\n"
     )
 }
@@ -10633,74 +10714,67 @@ fn determine_theorem_form(
     use crate::export::TestReturnMode;
     use aiken_lang::ast::OnTestFailure;
 
+    let return_mode_expr = lean_return_mode_expr(&test.return_mode);
+    let test_mode_expr = lean_test_mode_expr(ManifestTestMode::from_on_test_failure(
+        &test.on_test_failure,
+    ));
+    let decode_policy_expr = lean_decode_policy_expr(generated_decode_policy());
+
     match (&test.return_mode, &test.on_test_failure) {
         (TestReturnMode::Bool, OnTestFailure::FailImmediately) => Ok(TheoremForm {
-            correctness: TheoremBody::BoolEq { value: "true" },
-            termination: Some(TheoremBody::IsSome),
+            correctness: TheoremBody::Succeeds,
+            termination: Some(TheoremBody::ReturnsValue),
             existential: false,
             existential_mode: None,
+            return_mode_expr,
+            test_mode_expr,
+            decode_policy_expr,
         }),
         (TestReturnMode::Bool, OnTestFailure::SucceedEventually) => Ok(TheoremForm {
-            correctness: TheoremBody::BoolEq { value: "false" },
-            termination: Some(TheoremBody::IsSome),
+            correctness: TheoremBody::Fails,
+            termination: Some(TheoremBody::ReturnsValue),
             existential: false,
             existential_mode: None,
+            return_mode_expr,
+            test_mode_expr,
+            decode_policy_expr,
         }),
-        (TestReturnMode::Bool, OnTestFailure::SucceedImmediately) => {
-            // `fail once` for Bool succeeds when we find a falsifying input.
-            // Therefore existential theorems must witness `proveTests ... = false`.
-            match existential_mode {
-                ExistentialMode::Witness => Ok(TheoremForm {
-                    // Witness mode: concrete witness + `proveTests ... = false`
-                    // The tactic is `decide` (evaluation-based proof search)
-                    // If this deterministic witness is too weak for a property,
-                    // use `ExistentialMode::Proof` to search existentially.
-                    correctness: TheoremBody::WitnessEq { value: "false" },
-                    termination: None,
-                    existential: true,
-                    existential_mode: Some(existential_mode),
-                }),
-                ExistentialMode::Proof => Ok(TheoremForm {
-                    correctness: TheoremBody::ExistsEq { value: "false" },
-                    termination: None,
-                    existential: true,
-                    existential_mode: Some(existential_mode),
-                }),
-            }
-        }
+        (TestReturnMode::Bool, OnTestFailure::SucceedImmediately) => Ok(TheoremForm {
+            correctness: TheoremBody::Fails,
+            termination: None,
+            existential: true,
+            existential_mode: Some(existential_mode),
+            return_mode_expr,
+            test_mode_expr,
+            decode_policy_expr,
+        }),
         (TestReturnMode::Void, OnTestFailure::FailImmediately) => Ok(TheoremForm {
-            // Void default: program halts without error for all inputs
-            correctness: TheoremBody::Halt,
-            // Halt already implies termination
+            correctness: TheoremBody::Succeeds,
             termination: None,
             existential: false,
             existential_mode: None,
+            return_mode_expr,
+            test_mode_expr,
+            decode_policy_expr,
         }),
         (TestReturnMode::Void, OnTestFailure::SucceedEventually) => Ok(TheoremForm {
-            // Void + fail: program errors for all inputs
-            correctness: TheoremBody::ErrorState,
-            // Error state is also a form of termination (no infinite loop)
+            correctness: TheoremBody::Fails,
             termination: None,
             existential: false,
             existential_mode: None,
+            return_mode_expr,
+            test_mode_expr,
+            decode_policy_expr,
         }),
-        (TestReturnMode::Void, OnTestFailure::SucceedImmediately) => {
-            // `fail once` + Void: there exists an input that errors
-            match existential_mode {
-                ExistentialMode::Witness => Ok(TheoremForm {
-                    correctness: TheoremBody::WitnessError,
-                    termination: None,
-                    existential: true,
-                    existential_mode: Some(existential_mode),
-                }),
-                ExistentialMode::Proof => Ok(TheoremForm {
-                    correctness: TheoremBody::ExistsError,
-                    termination: None,
-                    existential: true,
-                    existential_mode: Some(existential_mode),
-                }),
-            }
-        }
+        (TestReturnMode::Void, OnTestFailure::SucceedImmediately) => Ok(TheoremForm {
+            correctness: TheoremBody::Fails,
+            termination: None,
+            existential: true,
+            existential_mode: Some(existential_mode),
+            return_mode_expr,
+            test_mode_expr,
+            decode_policy_expr,
+        }),
     }
 }
 
@@ -12205,7 +12279,12 @@ fn generate_tuple_proof_from_semantics(
         &precond_parts,
         witness.as_deref(),
     );
-    let mut content = format!("{}{theorems}", header(&opens));
+    let mut content = format!(
+        "{}{}{}",
+        header(&opens),
+        format_mode_context(form, prog),
+        theorems
+    );
     if let VerificationTargetKind::Equivalence = target {
         content.push_str(&format_equivalence_theorem(
             test,
@@ -12291,7 +12370,12 @@ fn try_generate_direct_proof_from_semantics(
             precondition_parts,
             theorem_witness,
         );
-        let mut content = format!("{}{theorems}", direct_header(opens));
+        let mut content = format!(
+            "{}{}{}",
+            direct_header(opens),
+            format_mode_context(form, verify_prog),
+            theorems
+        );
         if let VerificationTargetKind::Equivalence = target {
             content.push_str(&format_equivalence_theorem(
                 test,
@@ -12537,6 +12621,7 @@ fn try_generate_direct_proof_from_semantics(
                 content.push_str("-- compiler-exported structural domain predicate\n");
                 content.push_str(&defs);
                 content.push('\n');
+                content.push_str(&format_mode_context(form, verify_prog));
                 content.push_str(&theorems);
                 if let VerificationTargetKind::Equivalence = target {
                     content.push_str(&format_equivalence_theorem(
@@ -12630,7 +12715,7 @@ fn try_generate_direct_proof_from_semantics(
             );
             if let (Some(lo), Some(hi), true) = (*min_len, *max_len, is_scalar_elem) {
                 validate_list_len_bounds(&test.name, Some(lo), Some(hi))?;
-                let mut all_theorems = String::new();
+                let mut all_theorems = format_mode_context(form, verify_prog);
                 let mut correctness_props = Vec::new();
                 let mut correctness_names = Vec::new();
                 let mut termination_props = Vec::new();
@@ -12650,15 +12735,15 @@ fn try_generate_direct_proof_from_semantics(
 
                     if vars.is_empty() {
                         // len == 0: ground theorem, no universal quantifier.
-                        let correctness_body = form.correctness.format(verify_prog, &arg_expr);
-                        let correctness_tactic = form.correctness.tactic();
+                        let correctness_body = form.correctness.format(&arg_expr);
+                        let correctness_tactic = form.correctness_tactic();
                         all_theorems.push_str(&format!(
                             "theorem {theorem_name} :\n  {correctness_body} :=\n  by {correctness_tactic}\n"
                         ));
                         correctness_props.push(correctness_body);
                         correctness_names.push(theorem_name.clone());
                         if let Some(ref term_body) = form.termination {
-                            let term_str = term_body.format(verify_prog, &arg_expr);
+                            let term_str = term_body.format(&arg_expr);
                             let term_tactic = term_body.tactic();
                             all_theorems.push_str(&format!(
                                 "\ntheorem {theorem_name}_alwaysTerminating :\n  {term_str} :=\n  by {term_tactic}\n"
@@ -12694,7 +12779,6 @@ fn try_generate_direct_proof_from_semantics(
                     correctness_props.push(theorem_proposition(
                         &form.correctness,
                         form.existential,
-                        verify_prog,
                         &arg_expr,
                         &quantifier_vars,
                         &precondition_parts,
@@ -12704,7 +12788,6 @@ fn try_generate_direct_proof_from_semantics(
                         termination_props.push(theorem_proposition(
                             term_body,
                             false,
-                            verify_prog,
                             &arg_expr,
                             &quantifier_vars,
                             &precondition_parts,
