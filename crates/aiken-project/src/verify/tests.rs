@@ -57,9 +57,9 @@ fn generate_proof_file_with_vacuous_subgenerators(
     )
 }
 use crate::export::{
-    ExportedDataSchema, ExportedProgram, ExportedPropertyTest, FuzzerConstraint, FuzzerOutputType,
-    FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode,
-    ValidatorTarget,
+    ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedProgram,
+    ExportedPropertyTest, FuzzerConstraint, FuzzerOutputType, FuzzerSemantics,
+    StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode, ValidatorTarget,
 };
 use crate::{Project, options::Options, telemetry::EventTarget};
 use aiken_lang::ast::{Definition, OnTestFailure, Tracing};
@@ -104,6 +104,7 @@ fn make_test_with_failure(
         fuzzer_output_type,
         constraint,
         semantics,
+        fuzzer_structure: None,
         fuzzer_data_schema: None,
         inner_data_schemas: Default::default(),
         transition_prop_lean: None,
@@ -496,6 +497,37 @@ fn compact_relation_accepts_value(relation: &DomainRel, value: &BridgedAikenValu
             | FuzzerSemantics::StateMachineTrace { .. }
             | FuzzerSemantics::Opaque { .. } => false,
         },
+        DomainRel::Image { .. } => true,
+        DomainRel::Bind { result, .. } => compact_relation_accepts_value(result, value),
+        DomainRel::Product { elements } => match value {
+            BridgedAikenValue::Tuple(values) if values.len() == elements.len() => values
+                .iter()
+                .zip(elements.iter())
+                .all(|(value, element)| compact_relation_accepts_value(element, value)),
+            _ => false,
+        },
+        DomainRel::List {
+            element,
+            min_len,
+            max_len,
+            unique: _,
+            retry_limit: _,
+        } => match value {
+            BridgedAikenValue::List(values) => {
+                min_len.is_none_or(|min| min <= values.len())
+                    && max_len.is_none_or(|max| values.len() <= max)
+                    && values
+                        .iter()
+                        .all(|item| compact_relation_accepts_value(element, item))
+            }
+            _ => false,
+        },
+        DomainRel::Choice { branches, .. } => branches
+            .iter()
+            .any(|branch| compact_relation_accepts_value(branch, value)),
+        DomainRel::Filter {
+            source, impossible, ..
+        } => !impossible && compact_relation_accepts_value(source, value),
         DomainRel::And { items } => items
             .iter()
             .all(|item| compact_relation_accepts_value(item, value)),
@@ -508,6 +540,107 @@ fn compact_relation_accepts_value(relation: &DomainRel, value: &BridgedAikenValu
         | DomainRel::SamplerReturns { .. }
         | DomainRel::TrueWithExplicitWidening { .. }
         | DomainRel::Unknown { .. } => false,
+    }
+}
+
+fn constructor_tag_for_name(schema: &InputTypeSchema, constructor: &str) -> Option<u64> {
+    match schema {
+        InputTypeSchema::ConstructorTagged { constructors, .. } => constructors
+            .iter()
+            .find(|candidate| candidate.name.as_deref() == Some(constructor))
+            .map(|candidate| candidate.tag),
+        _ => None,
+    }
+}
+
+fn structured_relation_accepts_value_for_test(
+    test: &ExportedPropertyTest,
+    relation: &DomainRel,
+    value: &BridgedAikenValue,
+) -> bool {
+    match relation {
+        DomainRel::Image {
+            mapper_shape,
+            sources,
+            ..
+        } => {
+            let input_schema = input_bridge_for_test(test)
+                .schema
+                .expect("structured relation checks require an exported input schema");
+            match mapper_shape {
+                ExportedMapperShape::ConstructorWrap { constructor, .. } => match value {
+                    BridgedAikenValue::Constructor { tag, fields } => {
+                        fields.len() == 1
+                            && constructor_tag_for_name(&input_schema, constructor) == Some(*tag)
+                            && sources.len() == 1
+                            && structured_relation_accepts_value_for_test(
+                                test,
+                                &sources[0],
+                                &fields[0],
+                            )
+                    }
+                    _ => false,
+                },
+                ExportedMapperShape::ConstructorApply {
+                    constructor,
+                    arg_order,
+                    ..
+                } => match value {
+                    BridgedAikenValue::Constructor { tag, fields } => {
+                        constructor_tag_for_name(&input_schema, constructor) == Some(*tag)
+                            && fields.len() == arg_order.len()
+                            && sources.len() == arg_order.len()
+                            && arg_order
+                                .iter()
+                                .enumerate()
+                                .all(|(field_index, source_index)| {
+                                    fields.get(field_index).is_some_and(|field| {
+                                        sources.get(*source_index).is_some_and(|source| {
+                                            structured_relation_accepts_value_for_test(
+                                                test, source, field,
+                                            )
+                                        })
+                                    })
+                                })
+                    }
+                    _ => false,
+                },
+                ExportedMapperShape::Identity => sources.first().is_some_and(|source| {
+                    structured_relation_accepts_value_for_test(test, source, value)
+                }),
+                ExportedMapperShape::IntAffine { scale, offset } => match value {
+                    BridgedAikenValue::Int(actual) if sources.len() == 1 => {
+                        let offset = BigInt::parse_bytes(offset.as_bytes(), 10).unwrap();
+                        let candidate = match scale {
+                            0 => offset.clone(),
+                            1 => actual - &offset,
+                            -1 => &offset - actual,
+                            _ => return true,
+                        };
+                        structured_relation_accepts_value_for_test(
+                            test,
+                            &sources[0],
+                            &BridgedAikenValue::Int(candidate),
+                        )
+                    }
+                    _ => false,
+                },
+                ExportedMapperShape::ExactValue { value: exact } => {
+                    bridged_value_matches_exact(value, exact)
+                }
+                ExportedMapperShape::FiniteScalar { values } => values
+                    .iter()
+                    .any(|exact| bridged_value_matches_exact(value, exact)),
+                _ => true,
+            }
+        }
+        DomainRel::Choice { branches, .. } => branches
+            .iter()
+            .any(|branch| structured_relation_accepts_value_for_test(test, branch, value)),
+        DomainRel::Filter {
+            source, impossible, ..
+        } => !impossible && structured_relation_accepts_value_for_test(test, source, value),
+        _ => compact_relation_accepts_value(relation, value),
     }
 }
 
@@ -2575,6 +2708,7 @@ fn make_test_with_type(
         fuzzer_output_type,
         constraint,
         semantics,
+        fuzzer_structure: None,
         fuzzer_data_schema: None,
         inner_data_schemas: Default::default(),
         transition_prop_lean: None,
@@ -8827,6 +8961,124 @@ fn exported_primitive_test<'a>(
         })
 }
 
+fn write_verify_composed_lowering_fixture(root: &Path) {
+    fs::create_dir_all(root.join("validators")).unwrap();
+
+    fs::write(
+        root.join("aiken.toml"),
+        r#"
+name = "test/verify_composed_lowering_fixture"
+version = "0.0.0"
+plutusVersion = "v3"
+description = "verify composed lowering fixture"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "main"
+source = "github"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("validators/tests.ak"),
+        r#"
+use aiken/fuzz
+
+type PairData {
+  PairData {
+    owner: ByteArray,
+    amount: Int,
+  }
+}
+
+fn keep_true(flag: Bool) -> Bool {
+  flag
+}
+
+fn impossible(flag: Bool) -> Bool {
+  False
+}
+
+fn mk_pair(owner: ByteArray, amount: Int) -> PairData {
+  PairData { owner, amount }
+}
+
+fn increment(n: Int) -> Int {
+  n + 1
+}
+
+test prop_list_between(xs via fuzz.list_between(fuzz.int_between(0, 3), 1, 3)) {
+  True
+}
+
+test prop_tuple_product(pair via fuzz.both(fuzz.int_between(0, 2), fuzz.int_between(4, 5))) {
+  True
+}
+
+test prop_one_of_values(flag via fuzz.one_of([True, False])) {
+  True
+}
+
+test prop_map_single(x via fuzz.map(fuzz.int_between(0, 3), increment)) {
+  True
+}
+
+test prop_map2_record(datum via fuzz.map2(fuzz.bytearray_fixed(4), fuzz.int_between(0, 10), mk_pair)) {
+  True
+}
+
+test prop_option_small(opt via fuzz.option(fuzz.int_between(0, 3))) {
+  True
+}
+
+test prop_filtered_bool(flag via fuzz.such_that(fuzz.bool(), keep_true)) {
+  True
+}
+
+test prop_impossible_such_that(flag via fuzz.such_that(fuzz.bool(), impossible)) {
+  True
+}
+
+test prop_set_too_large(xs via fuzz.set_between(fuzz.bool(), 3, 3)) {
+  True
+}
+"#,
+    )
+    .unwrap();
+}
+
+fn export_verify_composed_lowering_fixture() -> (tempfile::TempDir, crate::export::ExportedTests) {
+    let tmp = tempfile::tempdir().unwrap();
+    write_verify_composed_lowering_fixture(tmp.path());
+
+    let mut project = Project::new(tmp.path().to_path_buf(), EventTarget::default()).unwrap();
+    project.compile(Options::default()).unwrap();
+    let exported = project
+        .export_tests(None, false, Tracing::silent(), true)
+        .unwrap();
+
+    (tmp, exported)
+}
+
+fn exported_composed_test<'a>(
+    exported: &'a crate::export::ExportedTests,
+    suffix: &str,
+) -> &'a ExportedPropertyTest {
+    exported
+        .property_tests
+        .iter()
+        .find(|test| test.name.ends_with(suffix))
+        .unwrap_or_else(|| {
+            panic!("composed lowering fixture missing property test suffix '{suffix}'")
+        })
+}
+
 fn write_verify_export_cross_module_fixture(root: &Path) {
     fs::create_dir_all(root.join("validators")).unwrap();
 
@@ -10071,7 +10323,7 @@ fn primitive_filtered_bool_domain_is_not_exact() {
         domain
             .widenings
             .iter()
-            .any(|widening| widening.kind == "constraint"),
+            .any(|widening| widening.kind == "such_that"),
         "filtered bool domains must stay visibly over-approximated rather than exact"
     );
 }
@@ -10207,31 +10459,31 @@ fn primitive_fixture_hashes_are_pinned() {
     let expected = [
         (
             "prop_bool",
-            "a0ec4a731bddbca92163749a6cb7089b85a51a278368517da3757c413d21eacb",
+            "b565a114e13e04132f91bb5ff6e51fe3e1aa64434f348a343231a22461dad675",
         ),
         (
             "prop_bool_filtered",
-            "8469f346ed33e2adc9a7203c36d550f9b4809c61111bf5896647dd7b9651ad02",
+            "f874a8961aaed99b60e47e35baa1b035d642cf3ccb42d96a1e841ce414ebb9f7",
         ),
         (
             "prop_byte",
-            "d8971dbe0782470bbb422d613ce1c4ce069f35744342da048531a963b6c5489e",
+            "554b7c7aee76344fb19c45f4bc1ba96cc67b145f18d3da035351136da41a0622",
         ),
         (
             "prop_int",
-            "caedc27614c201fdabaf332ceca3b428df1c5efa7a71524227142576b53a03e3",
+            "6008481371cab4531b123ba723a3afca2515c2f8210c3782a2684eec6779d07c",
         ),
         (
             "prop_int_at_least",
-            "f9eb4c219d03bbdcf3d851a2825471eab901386cdfa489cf52e7f2f8dd4a2d4f",
+            "2e9bd88bd32d4dea26e3373cc359f3addc6cbac1a60db64c9f7373c9f08287f2",
         ),
         (
             "prop_int_between",
-            "9b9893d7c98f493f0a9176984af4701193f79cdb2f92a4dd3670967c1cce20f8",
+            "22b102934476889e6a12d4a8e639a70fd7b6069b65f748e2ebba8551ec6c684c",
         ),
         (
             "prop_bytearray_fixed",
-            "b8f48d8f15616d16d8306e0e148d72d5f86e3247de0e478bf60020e311dc3061",
+            "86585f2be314c0220121afa83b14d148b42b6ef50745c46c4e260acb8d9b8551",
         ),
     ];
 
@@ -10243,6 +10495,316 @@ fn primitive_fixture_hashes_are_pinned() {
             "unexpected model hash drift for {suffix}"
         );
     }
+}
+
+#[test]
+fn composed_list_and_tuple_domains_are_readable_and_accept_real_samples() {
+    let (_tmp, exported) = export_verify_composed_lowering_fixture();
+
+    let list_test = exported_composed_test(&exported, "prop_list_between");
+    let list_domain = lowered_domain_for_test(
+        list_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &list_domain.relation {
+        DomainRel::List {
+            min_len,
+            max_len,
+            unique,
+            ..
+        } => {
+            assert_eq!(*min_len, Some(1));
+            assert_eq!(*max_len, Some(3));
+            assert!(!unique);
+        }
+        other => panic!("expected list relation, got {other:?}"),
+    }
+    assert_eq!(list_domain.precision, DomainPrecision::Exact);
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(list_test, seed);
+        let decoded = decode_bridged_sample(list_test, &sample);
+        assert!(
+            structured_relation_accepts_value_for_test(list_test, &list_domain.relation, &decoded),
+            "list_between sample for seed {seed} should satisfy the readable relation: {decoded:?}",
+        );
+    }
+
+    let tuple_test = exported_composed_test(&exported, "prop_tuple_product");
+    let tuple_domain = lowered_domain_for_test(
+        tuple_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    assert!(matches!(tuple_domain.relation, DomainRel::Product { .. }));
+    assert_eq!(tuple_domain.precision, DomainPrecision::Exact);
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(tuple_test, seed);
+        let decoded = decode_bridged_sample(tuple_test, &sample);
+        assert!(
+            structured_relation_accepts_value_for_test(
+                tuple_test,
+                &tuple_domain.relation,
+                &decoded
+            ),
+            "tuple product sample for seed {seed} should satisfy the readable relation: {decoded:?}",
+        );
+    }
+}
+
+#[test]
+fn composed_one_of_and_filter_domains_are_visible_and_accept_real_samples() {
+    let (_tmp, exported) = export_verify_composed_lowering_fixture();
+
+    let one_of_test = exported_composed_test(&exported, "prop_one_of_values");
+    let one_of_domain = lowered_domain_for_test(
+        one_of_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &one_of_domain.relation {
+        DomainRel::Choice {
+            branches,
+            may_fail,
+            non_empty_required,
+            ..
+        } => {
+            assert_eq!(branches.len(), 2);
+            assert!(!may_fail);
+            assert!(*non_empty_required);
+        }
+        other => panic!("expected one_of choice relation, got {other:?}"),
+    }
+    assert_eq!(one_of_domain.precision, DomainPrecision::Exact);
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(one_of_test, seed);
+        let decoded = decode_bridged_sample(one_of_test, &sample);
+        assert!(
+            structured_relation_accepts_value_for_test(
+                one_of_test,
+                &one_of_domain.relation,
+                &decoded,
+            ),
+            "one_of sample for seed {seed} should satisfy the readable relation: {decoded:?}",
+        );
+    }
+
+    let filter_test = exported_composed_test(&exported, "prop_filtered_bool");
+    let filter_domain = lowered_domain_for_test(
+        filter_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &filter_domain.relation {
+        DomainRel::Filter {
+            impossible,
+            max_tries,
+            ..
+        } => {
+            assert!(!impossible);
+            assert_eq!(*max_tries, Some(100));
+        }
+        other => panic!("expected filter relation, got {other:?}"),
+    }
+    assert_eq!(filter_domain.precision, DomainPrecision::OverApprox);
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(filter_test, seed);
+        let decoded = decode_bridged_sample(filter_test, &sample);
+        assert!(
+            structured_relation_accepts_value_for_test(
+                filter_test,
+                &filter_domain.relation,
+                &decoded,
+            ),
+            "such_that sample for seed {seed} should satisfy the base/filter relation: {decoded:?}",
+        );
+    }
+}
+
+#[test]
+fn composed_map_and_mapn_domains_preserve_existential_sources() {
+    let (_tmp, exported) = export_verify_composed_lowering_fixture();
+
+    let map_test = exported_composed_test(&exported, "prop_map_single");
+    let map_domain = lowered_domain_for_test(
+        map_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &map_domain.relation {
+        DomainRel::Image {
+            sources,
+            mapper_shape,
+            ..
+        } => {
+            assert_eq!(sources.len(), 1);
+            assert!(matches!(
+                mapper_shape,
+                ExportedMapperShape::IntAffine { scale: 1, offset } if offset == "1"
+            ));
+        }
+        other => panic!("expected unary image relation, got {other:?}"),
+    }
+    assert_eq!(map_domain.precision, DomainPrecision::Exact);
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(map_test, seed);
+        let decoded = decode_bridged_sample(map_test, &sample);
+        assert!(
+            structured_relation_accepts_value_for_test(map_test, &map_domain.relation, &decoded),
+            "map sample for seed {seed} should satisfy the existential image relation: {decoded:?}",
+        );
+    }
+
+    let mapn_test = exported_composed_test(&exported, "prop_map2_record");
+    let mapn_domain = lowered_domain_for_test(
+        mapn_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &mapn_domain.relation {
+        DomainRel::Image {
+            sources,
+            mapper_shape,
+            ..
+        } => {
+            assert_eq!(sources.len(), 2);
+            assert!(matches!(
+                mapper_shape,
+                ExportedMapperShape::ConstructorApply { constructor, arg_order, .. }
+                    if constructor == "PairData" && arg_order == &vec![0, 1]
+            ));
+        }
+        other => panic!("expected mapN image relation, got {other:?}"),
+    }
+    assert_eq!(mapn_domain.precision, DomainPrecision::OverApprox);
+    for seed in [0_u32, 1, 42, 1337] {
+        let sample = sample_fuzzer_value(mapn_test, seed);
+        let decoded = decode_bridged_sample(mapn_test, &sample);
+        assert!(
+            structured_relation_accepts_value_for_test(mapn_test, &mapn_domain.relation, &decoded,),
+            "mapN sample for seed {seed} should satisfy the existential image relation: {decoded:?}",
+        );
+    }
+}
+
+#[test]
+fn option_and_failure_prone_composed_domains_do_not_report_solver_validated() {
+    let (_tmp, exported) = export_verify_composed_lowering_fixture();
+
+    let option_test = exported_composed_test(&exported, "prop_option_small");
+    let option_domain = lowered_domain_for_test(
+        option_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &option_domain.relation {
+        DomainRel::Choice { branches, .. } => assert_eq!(branches.len(), 2),
+        other => panic!("expected option choice relation, got {other:?}"),
+    }
+    assert_eq!(option_domain.precision, DomainPrecision::OverApprox);
+
+    let impossible_test = exported_composed_test(&exported, "prop_impossible_such_that");
+    let impossible_domain = lowered_domain_for_test(
+        impossible_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    let impossible_result = TheoremResult::new_with_domain(
+        impossible_test.name.clone(),
+        impossible_test.name.clone(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        impossible_domain,
+        Some(input_bridge_for_test(impossible_test)),
+        Some(ManifestTestMode::Normal),
+        Some(impossible_test.return_mode.clone()),
+    );
+    assert_eq!(impossible_result.status, VerificationStatus::Partial);
+
+    let set_test = exported_composed_test(&exported, "prop_set_too_large");
+    let set_domain = lowered_domain_for_test(
+        set_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    assert!(matches!(
+        set_domain.relation,
+        DomainRel::List { unique: true, .. }
+    ));
+    assert_eq!(set_domain.precision, DomainPrecision::Unknown);
+    let set_result = TheoremResult::new_with_domain(
+        set_test.name.clone(),
+        set_test.name.clone(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        set_domain,
+        Some(input_bridge_for_test(set_test)),
+        Some(ManifestTestMode::Normal),
+        Some(set_test.return_mode.clone()),
+    );
+    assert_eq!(set_result.status, VerificationStatus::Partial);
+
+    let mut empty_one_of = make_test("composed", "prop_empty_one_of");
+    empty_one_of.fuzzer_output_type = FuzzerOutputType::Bool;
+    empty_one_of.fuzzer_type = "Fuzzer<Bool>".to_string();
+    empty_one_of.constraint = FuzzerConstraint::Unsupported {
+        reason: "one_of([]) always fails".to_string(),
+    };
+    empty_one_of.fuzzer_structure = Some(ExportedFuzzerStructure::Choice {
+        output_type: FuzzerOutputType::Bool,
+        branches: Vec::new(),
+        may_fail: true,
+        non_empty_required: true,
+    });
+    let empty_domain = lowered_domain_for_test(
+        &empty_one_of,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    let empty_result = TheoremResult::new_with_domain(
+        empty_one_of.name.clone(),
+        empty_one_of.name.clone(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        empty_domain,
+        Some(input_bridge_for_test(&empty_one_of)),
+        Some(ManifestTestMode::Normal),
+        Some(empty_one_of.return_mode.clone()),
+    );
+    assert_eq!(empty_result.status, VerificationStatus::Partial);
 }
 
 #[test]

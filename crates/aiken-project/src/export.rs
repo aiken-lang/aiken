@@ -336,6 +336,102 @@ impl std::fmt::Display for FuzzerSemantics {
 
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ExportedMapperShape {
+    Identity,
+    ExactValue {
+        value: FuzzerExactValue,
+    },
+    FiniteScalar {
+        values: Vec<FuzzerExactValue>,
+    },
+    IntAffine {
+        scale: i8,
+        offset: String,
+    },
+    NullaryConstructorMap {
+        mapping: BTreeMap<String, String>,
+    },
+    ConstructorWrap {
+        constructor: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        type_name: Option<String>,
+    },
+    ConstructorApply {
+        constructor: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        type_name: Option<String>,
+        arg_order: Vec<usize>,
+    },
+    Unknown,
+}
+
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ExportedFuzzerStructure {
+    Opaque {
+        reason: String,
+    },
+    Primitive {
+        output_type: FuzzerOutputType,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        known_constraint: Option<FuzzerConstraint>,
+    },
+    Map {
+        source: Box<ExportedFuzzerStructure>,
+        source_output_type: FuzzerOutputType,
+        output_type: FuzzerOutputType,
+        mapper_shape: ExportedMapperShape,
+    },
+    MapN {
+        sources: Vec<ExportedFuzzerStructure>,
+        output_type: FuzzerOutputType,
+        mapper_shape: ExportedMapperShape,
+    },
+    Bind {
+        source: Box<ExportedFuzzerStructure>,
+        result: Box<ExportedFuzzerStructure>,
+    },
+    Product {
+        elements: Vec<ExportedFuzzerStructure>,
+    },
+    List {
+        element: Box<ExportedFuzzerStructure>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        min_len: Option<usize>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_len: Option<usize>,
+        #[serde(default)]
+        unique: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry_limit: Option<usize>,
+    },
+    Choice {
+        output_type: FuzzerOutputType,
+        branches: Vec<ExportedFuzzerStructure>,
+        #[serde(default)]
+        may_fail: bool,
+        #[serde(default)]
+        non_empty_required: bool,
+    },
+    Filter {
+        output_type: FuzzerOutputType,
+        source: Box<ExportedFuzzerStructure>,
+        predicate_summary: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_tries: Option<usize>,
+        #[serde(default)]
+        impossible: bool,
+    },
+    StateMachineTrace {
+        acceptance: StateMachineAcceptance,
+        output_type: FuzzerOutputType,
+    },
+}
+
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StateMachineAcceptance {
     AcceptsSuccess,
@@ -364,7 +460,9 @@ pub struct StateMachineTransitionSemantics {
 /// Computed at export time (see `aiken_project::lib::convert_semantics`)
 /// because the aiken-lang `TransitionProp` tree is not serializable
 /// (it holds `FuzzerSemantics` in existential domains).
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TransitionWideningKind {
     Relation,
@@ -611,6 +709,9 @@ pub struct ExportedPropertyTest {
     pub fuzzer_output_type: FuzzerOutputType,
     pub constraint: FuzzerConstraint,
     pub semantics: FuzzerSemantics,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub fuzzer_structure: Option<ExportedFuzzerStructure>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub fuzzer_data_schema: Option<ExportedDataSchema>,

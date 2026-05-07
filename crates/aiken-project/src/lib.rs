@@ -48,18 +48,20 @@ use aiken_lang::{
     line_numbers::LineNumbers,
     test_framework::{
         AnalyzedPropertyTest, FuzzerConstraint as LangFuzzerConstraint,
-        FuzzerSemantics as LangFuzzerSemantics, PropertyTest, RunnableKind,
+        FuzzerSemantics as LangFuzzerSemantics, NaryMapperShape as LangNaryMapperShape,
+        NormalizedFuzzer as LangNormalizedFuzzer, PropertyTest, RunnableKind,
         SemanticType as LangSemanticType, StateMachineAcceptance as LangStateMachineAcceptance,
         StateMachineTransitionSemantics as LangStateMachineTransitionSemantics, Test, TestResult,
+        UnaryMapperShape as LangUnaryMapperShape,
     },
     tipo::{self, ModuleValueConstructor, Type, TypeInfo, ValueConstructorVariant},
     utils,
 };
 use export::{
-    Export, ExportedDataSchema, ExportedProgram, ExportedPropertyTest, ExportedTests,
-    FuzzerConstraint, FuzzerExactValue, FuzzerSemantics, StateMachineAcceptance,
-    StateMachineTransitionSemantics, TestReturnMode, ValidatorTarget, VerificationTargetKind,
-    fuzzer_output_type_from,
+    Export, ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedProgram,
+    ExportedPropertyTest, ExportedTests, FuzzerConstraint, FuzzerExactValue, FuzzerSemantics,
+    StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode, ValidatorTarget,
+    VerificationTargetKind, fuzzer_output_type_from,
 };
 use indexmap::IndexMap;
 use miette::NamedSource;
@@ -286,6 +288,152 @@ fn convert_semantics(lang: &LangFuzzerSemantics) -> FuzzerSemantics {
     }
 }
 
+fn convert_mapper_shape(lang: &LangUnaryMapperShape) -> ExportedMapperShape {
+    match lang {
+        LangUnaryMapperShape::Identity => ExportedMapperShape::Identity,
+        LangUnaryMapperShape::ConstBool(value) => ExportedMapperShape::ExactValue {
+            value: FuzzerExactValue::Bool(*value),
+        },
+        LangUnaryMapperShape::ConstByteArray(bytes) => ExportedMapperShape::ExactValue {
+            value: FuzzerExactValue::ByteArray(bytes.clone()),
+        },
+        LangUnaryMapperShape::ConstString(value) => ExportedMapperShape::ExactValue {
+            value: FuzzerExactValue::String(value.clone()),
+        },
+        LangUnaryMapperShape::FiniteScalar(values) => ExportedMapperShape::FiniteScalar {
+            values: values.iter().map(convert_exact_value).collect(),
+        },
+        LangUnaryMapperShape::ConstInt(value) => ExportedMapperShape::IntAffine {
+            scale: 0,
+            offset: value.clone(),
+        },
+        LangUnaryMapperShape::IntAffine { scale, offset } => ExportedMapperShape::IntAffine {
+            scale: *scale,
+            offset: offset.clone(),
+        },
+        LangUnaryMapperShape::ConstructorMap(mapping) => {
+            ExportedMapperShape::NullaryConstructorMap {
+                mapping: mapping.clone(),
+            }
+        }
+        LangUnaryMapperShape::ConstructorWrap {
+            constructor,
+            type_name,
+        } => ExportedMapperShape::ConstructorWrap {
+            constructor: constructor.clone(),
+            type_name: type_name.clone(),
+        },
+        LangUnaryMapperShape::Unknown => ExportedMapperShape::Unknown,
+        _ => ExportedMapperShape::Unknown,
+    }
+}
+
+fn convert_nary_mapper_shape(lang: &LangNaryMapperShape) -> ExportedMapperShape {
+    match lang {
+        LangNaryMapperShape::ConstructorApply {
+            constructor,
+            type_name,
+            arg_order,
+        } => ExportedMapperShape::ConstructorApply {
+            constructor: constructor.clone(),
+            type_name: type_name.clone(),
+            arg_order: arg_order.clone(),
+        },
+        LangNaryMapperShape::Unknown => ExportedMapperShape::Unknown,
+        _ => ExportedMapperShape::Unknown,
+    }
+}
+
+fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStructure {
+    match lang {
+        LangNormalizedFuzzer::Opaque { reason, .. } => ExportedFuzzerStructure::Opaque {
+            reason: reason.clone(),
+        },
+        LangNormalizedFuzzer::Primitive {
+            output_type,
+            known_constraint,
+        } => ExportedFuzzerStructure::Primitive {
+            output_type: fuzzer_output_type_from(output_type),
+            known_constraint: known_constraint.as_ref().map(convert_constraint),
+        },
+        LangNormalizedFuzzer::Map {
+            source,
+            source_output_type,
+            output_type,
+            mapper_shape,
+        } => ExportedFuzzerStructure::Map {
+            source: Box::new(convert_fuzzer_structure(source)),
+            source_output_type: fuzzer_output_type_from(source_output_type),
+            output_type: fuzzer_output_type_from(output_type),
+            mapper_shape: convert_mapper_shape(mapper_shape),
+        },
+        LangNormalizedFuzzer::MapN {
+            sources,
+            output_type,
+            mapper_shape,
+        } => ExportedFuzzerStructure::MapN {
+            sources: sources.iter().map(convert_fuzzer_structure).collect(),
+            output_type: fuzzer_output_type_from(output_type),
+            mapper_shape: convert_nary_mapper_shape(mapper_shape),
+        },
+        LangNormalizedFuzzer::Bind { source, result } => ExportedFuzzerStructure::Bind {
+            source: Box::new(convert_fuzzer_structure(source)),
+            result: Box::new(convert_fuzzer_structure(result)),
+        },
+        LangNormalizedFuzzer::Product { elements } => ExportedFuzzerStructure::Product {
+            elements: elements.iter().map(convert_fuzzer_structure).collect(),
+        },
+        LangNormalizedFuzzer::List {
+            element,
+            min_len,
+            max_len,
+            unique,
+            retry_limit,
+        } => ExportedFuzzerStructure::List {
+            element: Box::new(convert_fuzzer_structure(element)),
+            min_len: *min_len,
+            max_len: *max_len,
+            unique: *unique,
+            retry_limit: *retry_limit,
+        },
+        LangNormalizedFuzzer::Choice {
+            output_type,
+            branches,
+            may_fail,
+            non_empty_required,
+        } => ExportedFuzzerStructure::Choice {
+            output_type: fuzzer_output_type_from(output_type),
+            branches: branches.iter().map(convert_fuzzer_structure).collect(),
+            may_fail: *may_fail,
+            non_empty_required: *non_empty_required,
+        },
+        LangNormalizedFuzzer::Filter {
+            output_type,
+            source,
+            predicate_summary,
+            max_tries,
+            impossible,
+        } => ExportedFuzzerStructure::Filter {
+            output_type: fuzzer_output_type_from(output_type),
+            source: Box::new(convert_fuzzer_structure(source)),
+            predicate_summary: predicate_summary.clone(),
+            max_tries: *max_tries,
+            impossible: *impossible,
+        },
+        LangNormalizedFuzzer::StateMachineTrace {
+            acceptance,
+            output_type,
+            ..
+        } => ExportedFuzzerStructure::StateMachineTrace {
+            acceptance: convert_state_machine_acceptance(acceptance),
+            output_type: fuzzer_output_type_from(output_type),
+        },
+        _ => ExportedFuzzerStructure::Opaque {
+            reason: "unsupported future normalized fuzzer variant".to_string(),
+        },
+    }
+}
+
 /// Recursively walk a `FuzzerSemantics` tree and collect every qualified
 /// `type_name` appearing in a `DataWithSchema` leaf. These are the types for
 /// which `verify.rs` wants a structural predicate rather than the default
@@ -396,13 +544,16 @@ fn collect_schema_reference_keys_from_declaration(
 ) {
     match declaration {
         BlueprintSchemaDeclaration::Referenced(reference) => out.push(reference.as_key()),
-        BlueprintSchemaDeclaration::Inline(data) => collect_schema_reference_keys_from_data(data, out),
+        BlueprintSchemaDeclaration::Inline(data) => {
+            collect_schema_reference_keys_from_data(data, out)
+        }
     }
 }
 
 fn collect_schema_reference_keys_from_data(data: &BlueprintSchemaData, out: &mut Vec<String>) {
     match data {
-        BlueprintSchemaData::Integer | BlueprintSchemaData::Bytes | BlueprintSchemaData::Opaque => {}
+        BlueprintSchemaData::Integer | BlueprintSchemaData::Bytes | BlueprintSchemaData::Opaque => {
+        }
         BlueprintSchemaData::List(BlueprintSchemaItems::One(item)) => {
             collect_schema_reference_keys_from_declaration(item, out);
         }
@@ -525,7 +676,7 @@ fn collect_inner_data_schemas(
     data_types: &IndexMap<DataTypeKey, TypedDataType>,
     semantics: &FuzzerSemantics,
     test_name: &str,
- ) -> Result<BTreeMap<String, ExportedDataSchema>, Error> {
+) -> Result<BTreeMap<String, ExportedDataSchema>, Error> {
     let mut inner_data_schemas = BTreeMap::new();
 
     for type_name in collect_data_with_schema_type_names(semantics) {
@@ -2780,6 +2931,7 @@ where
         }
 
         let semantics = convert_semantics(&analysis.fuzzer.semantics);
+        let fuzzer_structure = Some(convert_fuzzer_structure(&analysis.fuzzer.normalized));
         let fuzzer_data_schema = export_data_schema(
             &self.checked_modules,
             &self.data_types,
@@ -2820,32 +2972,34 @@ where
         // aiken-lang `TransitionProp` while the non-serializable tree is
         // still in scope. `verify.rs` consumes the resulting string at
         // proof-file generation time.
-        let transition_prop_lean: Option<crate::export::ExportedTransitionProp> =
-            match &analysis.fuzzer.semantics {
-                LangFuzzerSemantics::StateMachineTrace {
-                    transition_prop: Some(prop),
-                    initial_state_shallow_ir,
-                    ..
-                } => {
-                    extend_inner_data_schemas_from_transition_prop(
-                        &self.checked_modules,
-                        &self.data_types,
+        let transition_prop_lean: Option<crate::export::ExportedTransitionProp> = match &analysis
+            .fuzzer
+            .semantics
+        {
+            LangFuzzerSemantics::StateMachineTrace {
+                transition_prop: Some(prop),
+                initial_state_shallow_ir,
+                ..
+            } => {
+                extend_inner_data_schemas_from_transition_prop(
+                    &self.checked_modules,
+                    &self.data_types,
+                    prop,
+                    &test_qualified_name,
+                    &mut inner_data_schemas,
+                )?;
+                // Use a placeholder function name; `verify.rs`
+                // rewrites `__FN__` into the actual prefixed name at
+                // proof-file generation time (the prefix depends on
+                // `lean_test_name`, which is sanitised there).
+                let (def, widenings, sub_gens, s0002_marker) =
+                    crate::verify::emit_is_valid_transition_details_for_export_with_schemas(
+                        "__FN__",
                         prop,
-                        &test_qualified_name,
-                        &mut inner_data_schemas,
-                    )?;
-                    // Use a placeholder function name; `verify.rs`
-                    // rewrites `__FN__` into the actual prefixed name at
-                    // proof-file generation time (the prefix depends on
-                    // `lean_test_name`, which is sanitised there).
-                    let (def, widenings, sub_gens, s0002_marker) =
-                        crate::verify::emit_is_valid_transition_details_for_export_with_schemas(
-                            "__FN__",
-                            prop,
-                            &test.name,
-                            &inner_data_schemas,
-                        );
-                    let (initial_state_lean, helper_widenings) = initial_state_shallow_ir
+                        &test.name,
+                        &inner_data_schemas,
+                    );
+                let (initial_state_lean, helper_widenings) = initial_state_shallow_ir
                         .as_ref()
                         .map(|ir| {
                             let (body, existentials, mut helper_widenings) =
@@ -2867,32 +3021,31 @@ where
                             }
                         })
                         .unwrap_or_else(|| (None, Vec::new()));
-                    let unsupported_log =
-                        transition_unsupported_log(&widenings, &helper_widenings);
+                let unsupported_log = transition_unsupported_log(&widenings, &helper_widenings);
 
-                    // M3: pre-compute structural vacuity from the source
-                    // AST.  The rendered Lean text we ship in
-                    // `is_valid_transition_def` is opaque to the
-                    // dispatcher (it would otherwise have to re-parse it
-                    // via fragile string surgery — exactly the drift
-                    // class M3 eliminates).  Doing the check here once
-                    // keeps the `TransitionProp` AST and the verdict
-                    // tightly coupled at the only site where both are
-                    // in scope at the same time.
-                    let is_vacuous = aiken_lang::test_framework::transition_prop_is_vacuous(prop);
-                    Some(crate::export::ExportedTransitionProp {
-                        is_valid_transition_def: def,
-                        initial_state_lean,
-                        helper_widenings,
-                        widenings,
-                        unsupported_log,
-                        opaque_sub_generators: sub_gens,
-                        s0002_marker,
-                        is_vacuous,
-                    })
-                }
-                _ => None,
-            };
+                // M3: pre-compute structural vacuity from the source
+                // AST.  The rendered Lean text we ship in
+                // `is_valid_transition_def` is opaque to the
+                // dispatcher (it would otherwise have to re-parse it
+                // via fragile string surgery — exactly the drift
+                // class M3 eliminates).  Doing the check here once
+                // keeps the `TransitionProp` AST and the verdict
+                // tightly coupled at the only site where both are
+                // in scope at the same time.
+                let is_vacuous = aiken_lang::test_framework::transition_prop_is_vacuous(prop);
+                Some(crate::export::ExportedTransitionProp {
+                    is_valid_transition_def: def,
+                    initial_state_lean,
+                    helper_widenings,
+                    widenings,
+                    unsupported_log,
+                    opaque_sub_generators: sub_gens,
+                    s0002_marker,
+                    is_vacuous,
+                })
+            }
+            _ => None,
+        };
 
         let concrete_halt_witnesses = maybe_compute_concrete_halt_witnesses(
             &test_for_witnesses,
@@ -2927,6 +3080,7 @@ where
             fuzzer_output_type,
             constraint,
             semantics,
+            fuzzer_structure,
             fuzzer_data_schema,
             inner_data_schemas,
             transition_prop_lean,

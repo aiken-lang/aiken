@@ -2713,8 +2713,26 @@ pub enum UnaryMapperShape {
     ConstString(String),
     FiniteScalar(Vec<FuzzerExactValue>),
     ConstInt(String),
-    IntAffine { scale: i8, offset: String },
+    IntAffine {
+        scale: i8,
+        offset: String,
+    },
     ConstructorMap(BTreeMap<String, String>),
+    ConstructorWrap {
+        constructor: String,
+        type_name: Option<String>,
+    },
+    Unknown,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NaryMapperShape {
+    ConstructorApply {
+        constructor: String,
+        type_name: Option<String>,
+        arg_order: Vec<usize>,
+    },
     Unknown,
 }
 
@@ -2908,6 +2926,11 @@ pub enum NormalizedFuzzer {
         output_type: Rc<Type>,
         mapper_shape: UnaryMapperShape,
     },
+    MapN {
+        sources: Vec<NormalizedFuzzer>,
+        output_type: Rc<Type>,
+        mapper_shape: NaryMapperShape,
+    },
     Bind {
         source: Box<NormalizedFuzzer>,
         result: Box<NormalizedFuzzer>,
@@ -2919,6 +2942,21 @@ pub enum NormalizedFuzzer {
         element: Box<NormalizedFuzzer>,
         min_len: Option<usize>,
         max_len: Option<usize>,
+        unique: bool,
+        retry_limit: Option<usize>,
+    },
+    Choice {
+        output_type: Rc<Type>,
+        branches: Vec<NormalizedFuzzer>,
+        may_fail: bool,
+        non_empty_required: bool,
+    },
+    Filter {
+        output_type: Rc<Type>,
+        source: Box<NormalizedFuzzer>,
+        predicate_summary: String,
+        max_tries: Option<usize>,
+        impossible: bool,
     },
     StateMachineTrace {
         acceptance: StateMachineAcceptance,
@@ -3436,12 +3474,9 @@ fn normalize_fuzzer_from_call(
                         .filter(|arg| expression_has_fuzzer_type(&arg.value))
                         .collect();
                     if fuzzer_args.len() == 1 {
-                        let (min_len, max_len) = try_extract_list_length_bounds(
-                            expr,
-                            args,
-                            constant_index,
-                            local_values,
-                        );
+                        let (unique, min_len, max_len, retry_limit) =
+                            stdlib_collection_info(expr, args, constant_index, local_values)
+                                .unwrap_or((false, None, None, None));
                         return NormalizedFuzzer::List {
                             element: Box::new(normalize_fuzzer_from_expr(
                                 &fuzzer_args[0].value,
@@ -3453,6 +3488,8 @@ fn normalize_fuzzer_from_call(
                             )),
                             min_len,
                             max_len,
+                            unique,
+                            retry_limit,
                         };
                     }
                 }
@@ -3461,31 +3498,37 @@ fn normalize_fuzzer_from_call(
     }
 
     // STDLIB FILTER SHORTCUT: `fuzz.such_that(source, predicate)` keeps the
-    // source generator's support but adds a semantic filter and bounded retry
-    // behavior that the current compact domain IR does not represent exactly.
-    // Preserve the source domain while carrying an explicit unsupported gap so
-    // downstream verification treats the result as conservative rather than
-    // exact. This avoids silently promoting filtered generators (for example
-    // `such_that(bool(), keep_true)`) to proof-grade full-support domains.
+    // source generator's support but adds bounded retry behavior. Preserve it
+    // as a dedicated filter node so downstream verification can classify it
+    // conservatively instead of silently promoting the base domain to exactness.
     if let Some((module, fn_name)) = extract_module_fn_identity(fun)
         && module == STDLIB_FUZZ_MODULE
         && fn_name == "such_that"
-        && let [source_arg, _predicate_arg] = args
+        && let [source_arg, predicate_arg] = args
         && expression_has_fuzzer_type(&source_arg.value)
+        && let Some(output_type) = extract_fuzzer_payload_type(expr.tipo().as_ref())
     {
-        return NormalizedFuzzer::Bind {
-            source: Box::new(normalize_fuzzer_from_expr(
-                &source_arg.value,
-                current_module,
-                function_index,
-                constant_index,
-                local_values,
-                visiting_functions,
-            )),
-            result: Box::new(opaque_normalized_fuzzer(
-                expr,
-                "such_that predicate/refinement is not yet reflected in compact domain extraction",
-            )),
+        let source = normalize_fuzzer_from_expr(
+            &source_arg.value,
+            current_module,
+            function_index,
+            constant_index,
+            local_values,
+            visiting_functions,
+        );
+        let (predicate_summary, impossible) = summarize_filter_predicate(
+            &predicate_arg.value,
+            source_arg.value.tipo().as_ref(),
+            current_module,
+            function_index,
+            local_values,
+        );
+        return NormalizedFuzzer::Filter {
+            output_type,
+            source: Box::new(source),
+            predicate_summary,
+            max_tries: Some(100),
+            impossible,
         };
     }
 
@@ -3985,30 +4028,13 @@ fn semantics_from_known_constraint(
     }
 }
 
-/// Try to extract list length bounds structurally, without matching on
-/// function names.
-///
-/// A list-shaped fuzzer call (return type `Fuzzer<List<T>>` with exactly one
-/// Fuzzer argument) *may* accept scalar length bounds, but we cannot know
-/// from the call alone that the non-Fuzzer scalar arguments are interpreted
-/// as lengths. The user's constraint is that name matching (e.g. gating on
-/// `list_between`/`list_at_least`/`list_at_most`) is not permitted, so the
-/// safe and sound default is to return no length bounds: downstream
-/// verification then quantifies universally over all list lengths, which
-/// widens the proof obligation without under-approximating any domain.
-///
-/// Kept as a function (rather than inlined) so it remains an extension
-/// point: a future version may structurally inspect the callee's body to
-/// prove that particular scalar args constrain the output list's length.
+/// Try to extract collection length bounds structurally for stdlib list/set fuzzers.
 fn try_extract_list_length_bounds(
     expr: &TypedExpr,
     args: &[CallArg<TypedExpr>],
     constant_index: &ConstantIndex<'_>,
     local_values: &BTreeMap<String, TypedExpr>,
 ) -> (Option<usize>, Option<usize>) {
-    // Name-gated extraction: only trust literal length arguments when the
-    // callee is a stdlib `aiken/fuzz` list constructor. Unknown wrappers
-    // fall through to `(None, None)` so the verifier over-approximates.
     let TypedExpr::Call { fun, .. } = expr else {
         return (None, None);
     };
@@ -4020,32 +4046,117 @@ fn try_extract_list_length_bounds(
     }
 
     let extract_len = |arg: &CallArg<TypedExpr>| -> Option<usize> {
-        let n = try_extract_int_literal(&arg.value, constant_index, local_values)?;
-        // List lengths must be non-negative and fit in usize.
-        if n.sign() == num_bigint::Sign::Minus {
-            return None;
-        }
-        let (_, digits) = n.to_u64_digits();
-        if digits.len() > 1 || digits.first().is_some_and(|&d| d > usize::MAX as u64) {
-            return None;
-        }
-        digits.first().map(|&d| d as usize).or(Some(0))
+        extract_bytearray_len(&arg.value, constant_index, local_values)
     };
 
     match (fn_name.as_str(), args) {
-        ("list_between", [_elem, min_arg, max_arg]) => {
+        ("list", [_elem]) | ("set", [_elem]) => (Some(0), Some(20)),
+        ("list_between", [_elem, min_arg, max_arg])
+        | ("set_between", [_elem, min_arg, max_arg]) => {
             let min = extract_len(min_arg);
             let max = extract_len(max_arg);
-            // Normalize swapped args so min ≤ max.
             match (min, max) {
                 (Some(a), Some(b)) if a > b => (Some(b), Some(a)),
                 _ => (min, max),
             }
         }
-        ("list_at_least", [_elem, min_arg]) => (extract_len(min_arg), None),
-        ("list_at_most", [_elem, max_arg]) => (None, extract_len(max_arg)),
+        ("list_at_least", [_elem, min_arg]) | ("set_at_least", [_elem, min_arg]) => {
+            let min = extract_len(min_arg);
+            let max = min.and_then(|min| min.checked_add(20));
+            (min, max)
+        }
+        ("list_at_most", [_elem, max_arg]) | ("set_at_most", [_elem, max_arg]) => {
+            (Some(0), extract_len(max_arg))
+        }
         _ => (None, None),
     }
+}
+
+fn stdlib_collection_info(
+    expr: &TypedExpr,
+    args: &[CallArg<TypedExpr>],
+    constant_index: &ConstantIndex<'_>,
+    local_values: &BTreeMap<String, TypedExpr>,
+) -> Option<(bool, Option<usize>, Option<usize>, Option<usize>)> {
+    let TypedExpr::Call { fun, .. } = expr else {
+        return None;
+    };
+    let (module, fn_name) = extract_module_fn_identity(fun)?;
+    if module != STDLIB_FUZZ_MODULE {
+        return None;
+    }
+
+    let (min_len, max_len) =
+        try_extract_list_length_bounds(expr, args, constant_index, local_values);
+    match fn_name.as_str() {
+        "list" | "list_between" | "list_at_least" | "list_at_most" => {
+            Some((false, min_len, max_len, None))
+        }
+        "set" | "set_between" | "set_at_least" | "set_at_most" => {
+            Some((true, min_len, max_len, Some(100)))
+        }
+        _ => None,
+    }
+}
+
+fn normalize_choice_branches(
+    args: &[CallArg<TypedExpr>],
+    current_module: &str,
+    function_index: &FunctionIndex<'_>,
+    constant_index: &ConstantIndex<'_>,
+    local_values: &BTreeMap<String, TypedExpr>,
+    visiting_functions: &mut BTreeSet<(String, String)>,
+) -> Vec<NormalizedFuzzer> {
+    args.iter()
+        .map(|arg| {
+            normalize_fuzzer_from_expr(
+                &arg.value,
+                current_module,
+                function_index,
+                constant_index,
+                local_values,
+                visiting_functions,
+            )
+        })
+        .collect()
+}
+
+fn choice_exact_scalar_branch(output_type: &Type, expr: &TypedExpr) -> Option<NormalizedFuzzer> {
+    let exact = try_extract_exact_scalar(expr)?;
+    Some(NormalizedFuzzer::Primitive {
+        output_type: Rc::new(output_type.clone()),
+        known_constraint: Some(FuzzerConstraint::Exact(exact)),
+    })
+}
+
+fn summarize_filter_predicate(
+    predicate: &TypedExpr,
+    source_output_type: &Type,
+    current_module: &str,
+    function_index: &FunctionIndex<'_>,
+    local_values: &BTreeMap<String, TypedExpr>,
+) -> (String, bool) {
+    let output_type = extract_fuzzer_payload_type(source_output_type)
+        .unwrap_or_else(|| Rc::new(source_output_type.clone()));
+    match summarize_unary_mapper_shape(predicate, current_module, function_index, local_values) {
+        UnaryMapperShape::ConstBool(true) => return ("always_true".to_string(), false),
+        UnaryMapperShape::ConstBool(false) => return ("always_false".to_string(), true),
+        UnaryMapperShape::Identity => {
+            return (
+                format!(
+                    "predicate preserves {} truthiness",
+                    pretty_print_type(output_type.as_ref())
+                ),
+                false,
+            );
+        }
+        _ => {}
+    }
+
+    (
+        "predicate not lowered; relation records only the base domain".to_string(),
+        false,
+    )
 }
 
 fn normalize_structural_fuzzer_call(
@@ -4057,6 +4168,138 @@ fn normalize_structural_fuzzer_call(
     local_values: &BTreeMap<String, TypedExpr>,
     visiting_functions: &mut BTreeSet<(String, String)>,
 ) -> Option<NormalizedFuzzer> {
+    let stdlib_call = match expr {
+        TypedExpr::Call { fun, .. } => extract_module_fn_identity(fun.as_ref()),
+        _ => None,
+    };
+
+    if let Some((module, fn_name)) = stdlib_call.as_ref()
+        && module == STDLIB_FUZZ_MODULE
+    {
+        match fn_name.as_str() {
+            "such_that" if args.len() == 2 => {
+                let source_arg = &args[0];
+                let predicate_arg = &args[1];
+                if expression_has_fuzzer_type(&source_arg.value) {
+                    let source = normalize_fuzzer_from_expr(
+                        &source_arg.value,
+                        current_module,
+                        function_index,
+                        constant_index,
+                        local_values,
+                        visiting_functions,
+                    );
+                    let output_type = extract_fuzzer_payload_type(expr.tipo().as_ref())?;
+                    let (predicate_summary, impossible) = summarize_filter_predicate(
+                        &predicate_arg.value,
+                        source_arg.value.tipo().as_ref(),
+                        current_module,
+                        function_index,
+                        local_values,
+                    );
+                    return Some(NormalizedFuzzer::Filter {
+                        output_type,
+                        source: Box::new(source),
+                        predicate_summary,
+                        max_tries: Some(100),
+                        impossible,
+                    });
+                }
+            }
+            "option" if args.len() == 1 => {
+                let source_arg = &args[0];
+                if expression_has_fuzzer_type(&source_arg.value) {
+                    let source_output_type =
+                        extract_fuzzer_payload_type(source_arg.value.tipo().as_ref())?;
+                    let output_type = extract_fuzzer_payload_type(expr.tipo().as_ref())?;
+                    let some_branch = NormalizedFuzzer::Map {
+                        source: Box::new(normalize_fuzzer_from_expr(
+                            &source_arg.value,
+                            current_module,
+                            function_index,
+                            constant_index,
+                            local_values,
+                            visiting_functions,
+                        )),
+                        source_output_type,
+                        output_type: output_type.clone(),
+                        mapper_shape: UnaryMapperShape::ConstructorWrap {
+                            constructor: "Some".to_string(),
+                            type_name: data_with_schema_type_name(output_type.as_ref()),
+                        },
+                    };
+                    let none_branch = NormalizedFuzzer::Primitive {
+                        output_type: output_type.clone(),
+                        known_constraint: None,
+                    };
+                    return Some(NormalizedFuzzer::Choice {
+                        output_type,
+                        branches: vec![some_branch, none_branch],
+                        may_fail: false,
+                        non_empty_required: false,
+                    });
+                }
+            }
+            "either" | "either3" | "either4" | "either5" | "either6" | "either7" | "either8"
+            | "either9"
+                if args
+                    .iter()
+                    .all(|arg| expression_has_fuzzer_type(&arg.value)) =>
+            {
+                let output_type = extract_fuzzer_payload_type(expr.tipo().as_ref())?;
+                return Some(NormalizedFuzzer::Choice {
+                    output_type,
+                    branches: normalize_choice_branches(
+                        args,
+                        current_module,
+                        function_index,
+                        constant_index,
+                        local_values,
+                        visiting_functions,
+                    ),
+                    may_fail: false,
+                    non_empty_required: false,
+                });
+            }
+            "one_of" if args.len() == 1 => {
+                let output_type = extract_fuzzer_payload_type(expr.tipo().as_ref())?;
+                if let TypedExpr::List { elements, .. } = terminal_expression(&args[0].value) {
+                    if elements.is_empty() {
+                        return Some(NormalizedFuzzer::Choice {
+                            output_type,
+                            branches: Vec::new(),
+                            may_fail: true,
+                            non_empty_required: true,
+                        });
+                    }
+
+                    let mut branches = Vec::new();
+                    let mut all_exact = true;
+                    for element in elements {
+                        if let Some(branch) =
+                            choice_exact_scalar_branch(output_type.as_ref(), element)
+                        {
+                            branches.push(branch);
+                        } else {
+                            all_exact = false;
+                            break;
+                        }
+                    }
+
+                    if all_exact {
+                        return Some(NormalizedFuzzer::Choice {
+                            output_type,
+                            branches,
+                            may_fail: false,
+                            non_empty_required: true,
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     if let [source, mapper] = args {
         if expression_has_fuzzer_type(&source.value) {
             if expression_is_bind_continuation(&mapper.value) {
@@ -4083,9 +4326,8 @@ fn normalize_structural_fuzzer_call(
             if expression_is_pure_mapper(&mapper.value) {
                 let source_output_type = extract_fuzzer_payload_type(source.value.tipo().as_ref())?;
                 let output_type = extract_fuzzer_payload_type(expr.tipo().as_ref())?;
-                let source_expr = &source.value;
                 let source = normalize_fuzzer_from_expr(
-                    source_expr,
+                    &source.value,
                     current_module,
                     function_index,
                     constant_index,
@@ -4109,29 +4351,6 @@ fn normalize_structural_fuzzer_call(
                     mapper_shape = finite_shape;
                 }
 
-                let mapper_returns_bool =
-                    function_return_type(&mapper.value).is_some_and(|(_, ret)| ret.is_bool());
-                let is_such_that_filter = match expr {
-                    TypedExpr::Call { fun, .. } => extract_module_fn_identity(fun.as_ref()),
-                    _ => None,
-                }
-                .is_some_and(|(module, fn_name)| {
-                    module == STDLIB_FUZZ_MODULE && fn_name == "such_that"
-                });
-
-                if is_such_that_filter
-                    && mapper_returns_bool
-                    && types_semantically_equal(source_output_type.as_ref(), output_type.as_ref())
-                {
-                    return Some(NormalizedFuzzer::Bind {
-                        source: Box::new(source),
-                        result: Box::new(opaque_normalized_fuzzer(
-                            expr,
-                            "such_that predicate/refinement is not yet reflected in compact domain extraction",
-                        )),
-                    });
-                }
-
                 if mapper_shape == UnaryMapperShape::Identity {
                     return Some(source);
                 }
@@ -4146,9 +4365,6 @@ fn normalize_structural_fuzzer_call(
         }
     }
 
-    // Only classify as Product when the output type is actually a tuple or pair.
-    // This prevents custom helpers with cross-element invariants from being modeled
-    // as cartesian products.
     let output_is_product = extract_fuzzer_payload_type(expr.tipo().as_ref())
         .is_some_and(|t| t.is_tuple() || t.is_pair());
 
@@ -4173,6 +4389,44 @@ fn normalize_structural_fuzzer_call(
                 })
                 .collect(),
         });
+    }
+
+    if args.len() >= 3 {
+        let arity = args.len() - 1;
+        let sources = &args[..arity];
+        let mapper = &args[arity].value;
+
+        if let Some((module, fn_name)) = stdlib_call.as_ref()
+            && module == STDLIB_FUZZ_MODULE
+            && matches!(
+                fn_name.as_str(),
+                "map2" | "map3" | "map4" | "map5" | "map6" | "map7" | "map8" | "map9"
+            )
+            && sources
+                .iter()
+                .all(|arg| expression_has_fuzzer_type(&arg.value))
+            && let Some(mapper_shape) = summarize_nary_mapper_shape(
+                mapper,
+                arity,
+                current_module,
+                function_index,
+                local_values,
+            )
+        {
+            let output_type = extract_fuzzer_payload_type(expr.tipo().as_ref())?;
+            return Some(NormalizedFuzzer::MapN {
+                sources: normalize_choice_branches(
+                    sources,
+                    current_module,
+                    function_index,
+                    constant_index,
+                    local_values,
+                    visiting_functions,
+                ),
+                output_type,
+                mapper_shape,
+            });
+        }
     }
 
     if output_is_product && args.len() >= 3 {
@@ -4210,6 +4464,7 @@ fn normalize_structural_fuzzer_call(
             return Some(NormalizedFuzzer::Product { elements: ordered });
         }
     }
+
     if let Some(output_type) = extract_fuzzer_payload_type(expr.tipo().as_ref()) {
         if output_type.is_list() {
             let inner_types = output_type.get_inner_types();
@@ -4221,30 +4476,28 @@ fn normalize_structural_fuzzer_call(
             if inner_types.len() == 1 && fuzzer_args.len() == 1 && args.len() <= 3 {
                 if let Some(source_output_type) =
                     extract_fuzzer_payload_type(fuzzer_args[0].value.tipo().as_ref())
-                {
-                    if types_semantically_equal(
+                    && types_semantically_equal(
                         source_output_type.as_ref(),
                         inner_types[0].as_ref(),
-                    ) {
-                        let (min_len, max_len) = try_extract_list_length_bounds(
-                            expr,
-                            args,
+                    )
+                {
+                    let (unique, min_len, max_len, retry_limit) =
+                        stdlib_collection_info(expr, args, constant_index, local_values)
+                            .unwrap_or((false, None, None, None));
+                    return Some(NormalizedFuzzer::List {
+                        element: Box::new(normalize_fuzzer_from_expr(
+                            &fuzzer_args[0].value,
+                            current_module,
+                            function_index,
                             constant_index,
                             local_values,
-                        );
-                        return Some(NormalizedFuzzer::List {
-                            element: Box::new(normalize_fuzzer_from_expr(
-                                &fuzzer_args[0].value,
-                                current_module,
-                                function_index,
-                                constant_index,
-                                local_values,
-                                visiting_functions,
-                            )),
-                            min_len,
-                            max_len,
-                        });
-                    }
+                            visiting_functions,
+                        )),
+                        min_len,
+                        max_len,
+                        unique,
+                        retry_limit,
+                    });
                 }
             }
         }
@@ -4599,6 +4852,16 @@ fn summarize_unary_mapper_body(
     }
 
     let mut visiting_local_aliases = BTreeSet::new();
+    if let Some((constructor, type_name)) =
+        resolve_unary_constructor_wrap(body, arg_name, local_values, &mut visiting_local_aliases)
+    {
+        return UnaryMapperShape::ConstructorWrap {
+            constructor,
+            type_name,
+        };
+    }
+
+    let mut visiting_local_aliases = BTreeSet::new();
     if resolve_identity_mapper(body, arg_name, local_values, &mut visiting_local_aliases) {
         return UnaryMapperShape::Identity;
     }
@@ -4692,6 +4955,7 @@ fn resolve_exact_constant_mapper(
             visiting_local_aliases.remove(name);
             resolved
         }
+
         TypedExpr::Var {
             name, constructor, ..
         } if constructor.tipo.is_bool() => match &constructor.variant {
@@ -4710,6 +4974,49 @@ fn resolve_exact_constant_mapper(
         TypedExpr::ByteArray { bytes, .. } => Some(UnaryMapperShape::ConstByteArray(bytes.clone())),
         _ => None,
     }
+}
+
+fn resolve_unary_constructor_wrap(
+    expr: &TypedExpr,
+    arg_name: &str,
+    local_values: &BTreeMap<String, TypedExpr>,
+    visiting_local_aliases: &mut BTreeSet<String>,
+) -> Option<(String, Option<String>)> {
+    let TypedExpr::Call { fun, args, .. } = terminal_expression(expr) else {
+        return None;
+    };
+    let [arg] = args.as_slice() else {
+        return None;
+    };
+    if !expression_resolves_to_local_name(
+        &arg.value,
+        arg_name,
+        local_values,
+        visiting_local_aliases,
+    ) {
+        return None;
+    }
+
+    let constructor = match terminal_expression(fun.as_ref()) {
+        TypedExpr::Var {
+            name, constructor, ..
+        } => match &constructor.variant {
+            ValueConstructorVariant::Record { arity, .. } if *arity == 1 => Some(name.clone()),
+            _ => None,
+        },
+        TypedExpr::ModuleSelect {
+            label, constructor, ..
+        } => match constructor {
+            ModuleValueConstructor::Record { arity, .. } if *arity == 1 => Some(label.clone()),
+            _ => None,
+        },
+        _ => None,
+    }?;
+
+    Some((
+        constructor,
+        data_with_schema_type_name(expr.tipo().as_ref()),
+    ))
 }
 
 fn resolve_tautological_bool_mapper(
@@ -5544,6 +5851,182 @@ fn canonicalize_finite_scalar_domain(
     }
 }
 
+fn merge_choice_constraints(
+    output_type: &Type,
+    constraints: &[FuzzerConstraint],
+) -> Option<FuzzerConstraint> {
+    if constraints.is_empty() {
+        return None;
+    }
+
+    let mut scalar_values = Vec::new();
+    let mut all_scalar = true;
+    for constraint in constraints {
+        match constraint {
+            FuzzerConstraint::Exact(value) => scalar_values.push(value.clone()),
+            FuzzerConstraint::OneOf(values) => scalar_values.extend(values.clone()),
+            _ => {
+                all_scalar = false;
+                break;
+            }
+        }
+    }
+    if all_scalar {
+        return match canonicalize_finite_scalar_domain(output_type, scalar_values).ok()? {
+            CanonicalFiniteScalarDomain::Exact(value) => Some(FuzzerConstraint::Exact(value)),
+            CanonicalFiniteScalarDomain::OneOf(values) => Some(FuzzerConstraint::OneOf(values)),
+        };
+    }
+
+    let mut constructor_tags = Vec::new();
+    let mut all_constructors = true;
+    for constraint in constraints {
+        match constraint {
+            FuzzerConstraint::DataConstructorTags { tags } => {
+                constructor_tags.extend(tags.iter().copied())
+            }
+            _ => {
+                all_constructors = false;
+                break;
+            }
+        }
+    }
+    if all_constructors {
+        constructor_tags.sort_unstable();
+        constructor_tags.dedup();
+        return Some(FuzzerConstraint::DataConstructorTags {
+            tags: constructor_tags,
+        });
+    }
+
+    None
+}
+
+fn merge_choice_semantics(
+    output_type: &Type,
+    semantics: &[FuzzerSemantics],
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Option<FuzzerSemantics> {
+    if semantics.is_empty() {
+        return None;
+    }
+
+    let mut scalar_values = Vec::new();
+    let mut all_scalar = true;
+    for semantic in semantics {
+        match semantic {
+            FuzzerSemantics::Exact(value) => scalar_values.push(value.clone()),
+            FuzzerSemantics::OneOf(values) => scalar_values.extend(values.clone()),
+            _ => {
+                all_scalar = false;
+                break;
+            }
+        }
+    }
+    if all_scalar {
+        return match canonicalize_finite_scalar_domain(output_type, scalar_values).ok()? {
+            CanonicalFiniteScalarDomain::Exact(value) => Some(FuzzerSemantics::Exact(value)),
+            CanonicalFiniteScalarDomain::OneOf(values) => Some(FuzzerSemantics::OneOf(values)),
+        };
+    }
+
+    let mut constructor_tags = Vec::new();
+    let mut all_constructors = true;
+    for semantic in semantics {
+        match semantic {
+            FuzzerSemantics::Constructors { tags } => constructor_tags.extend(tags.iter().copied()),
+            _ => {
+                all_constructors = false;
+                break;
+            }
+        }
+    }
+    if all_constructors {
+        constructor_tags.sort_unstable();
+        constructor_tags.dedup();
+        return Some(FuzzerSemantics::Constructors {
+            tags: constructor_tags,
+        });
+    }
+
+    if output_type.is_bool() {
+        return Some(FuzzerSemantics::Bool);
+    }
+    if output_type.is_int() {
+        return Some(FuzzerSemantics::IntRange {
+            min: None,
+            max: None,
+        });
+    }
+    if output_type.is_bytearray() {
+        return Some(FuzzerSemantics::ByteArrayRange {
+            min_len: None,
+            max_len: None,
+        });
+    }
+    if output_type.is_string() {
+        return Some(FuzzerSemantics::String);
+    }
+    if output_type.is_list()
+        || output_type.is_tuple()
+        || output_type.is_pair()
+        || output_type.is_data()
+    {
+        return Some(default_semantics_for_type(output_type, data_types));
+    }
+    data_with_schema_type_name(output_type)
+        .map(|type_name| FuzzerSemantics::DataWithSchema { type_name })
+}
+
+fn merge_choice_semantics_lightweight(
+    output_type: &Type,
+    semantics: &[FuzzerSemantics],
+) -> Option<FuzzerSemantics> {
+    if semantics.is_empty() {
+        return None;
+    }
+
+    let mut scalar_values = Vec::new();
+    let mut all_scalar = true;
+    for semantic in semantics {
+        match semantic {
+            FuzzerSemantics::Exact(value) => scalar_values.push(value.clone()),
+            FuzzerSemantics::OneOf(values) => scalar_values.extend(values.clone()),
+            _ => {
+                all_scalar = false;
+                break;
+            }
+        }
+    }
+    if all_scalar {
+        return match canonicalize_finite_scalar_domain(output_type, scalar_values).ok()? {
+            CanonicalFiniteScalarDomain::Exact(value) => Some(FuzzerSemantics::Exact(value)),
+            CanonicalFiniteScalarDomain::OneOf(values) => Some(FuzzerSemantics::OneOf(values)),
+        };
+    }
+
+    let mut constructor_tags = Vec::new();
+    let mut all_constructors = true;
+    for semantic in semantics {
+        match semantic {
+            FuzzerSemantics::Constructors { tags } => constructor_tags.extend(tags.iter().copied()),
+            _ => {
+                all_constructors = false;
+                break;
+            }
+        }
+    }
+    if all_constructors {
+        constructor_tags.sort_unstable();
+        constructor_tags.dedup();
+        return Some(FuzzerSemantics::Constructors {
+            tags: constructor_tags,
+        });
+    }
+
+    None
+}
+
 fn apply_unary_map_constraint_precision(
     mapper_shape: &UnaryMapperShape,
     source_constraint: FuzzerConstraint,
@@ -5597,7 +6080,9 @@ fn apply_unary_map_constraint_precision(
 
             FuzzerConstraint::Map(Box::new(source_constraint))
         }
-        UnaryMapperShape::Unknown => FuzzerConstraint::Map(Box::new(source_constraint)),
+        UnaryMapperShape::ConstructorWrap { .. } | UnaryMapperShape::Unknown => {
+            FuzzerConstraint::Map(Box::new(source_constraint))
+        }
     }
 }
 
@@ -5682,15 +6167,11 @@ fn apply_unary_map_semantics_precision(
                 }
             }
 
-            // Sound over-approximation: unknown constructor map from an
-            // unconstrained source yields the default (unconstrained)
-            // semantics for the output type.
             default_semantics_for_type(output_type, data_types)
         }
-        // A mapper whose shape we do not understand still produces values
-        // of the output type. Over-approximate to the unconstrained domain
-        // for that type rather than failing to emit a theorem at all.
-        UnaryMapperShape::Unknown => default_semantics_for_type(output_type, data_types),
+        UnaryMapperShape::ConstructorWrap { .. } | UnaryMapperShape::Unknown => {
+            default_semantics_for_type(output_type, data_types)
+        }
     }
 }
 
@@ -5780,6 +6261,7 @@ fn normalized_fuzzer_constraint(
                 data_types,
             )
         }
+        NormalizedFuzzer::MapN { .. } => FuzzerConstraint::Any,
         NormalizedFuzzer::Bind { source, result } => {
             let result_constraint = normalized_fuzzer_constraint(
                 result,
@@ -5821,6 +6303,7 @@ fn normalized_fuzzer_constraint(
             element,
             min_len,
             max_len,
+            ..
         } => FuzzerConstraint::List {
             elem: Box::new(normalized_fuzzer_constraint(
                 element,
@@ -5834,6 +6317,63 @@ fn normalized_fuzzer_constraint(
             min_len: *min_len,
             max_len: *max_len,
         },
+        NormalizedFuzzer::Choice {
+            output_type,
+            branches,
+            may_fail,
+            non_empty_required,
+        } => {
+            if branches.is_empty() && *non_empty_required {
+                FuzzerConstraint::Unsupported {
+                    reason: "choice combinator has no branches and therefore always fails"
+                        .to_string(),
+                }
+            } else {
+                let constraints = branches
+                    .iter()
+                    .map(|branch| {
+                        normalized_fuzzer_constraint(
+                            branch,
+                            current_module,
+                            function_index,
+                            constant_index,
+                            data_types,
+                            local_values,
+                            visiting_functions,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                merge_choice_constraints(output_type.as_ref(), &constraints).unwrap_or_else(|| {
+                    if *may_fail {
+                        FuzzerConstraint::Unsupported {
+                            reason: "choice combinator may fail and the current constraint IR cannot model its exact support".to_string(),
+                        }
+                    } else {
+                        FuzzerConstraint::Any
+                    }
+                })
+            }
+        }
+        NormalizedFuzzer::Filter {
+            source, impossible, ..
+        } => {
+            if *impossible {
+                FuzzerConstraint::Unsupported {
+                    reason: "such_that predicate is impossible for all generated values"
+                        .to_string(),
+                }
+            } else {
+                normalized_fuzzer_constraint(
+                    source,
+                    current_module,
+                    function_index,
+                    constant_index,
+                    data_types,
+                    local_values,
+                    visiting_functions,
+                )
+            }
+        }
         NormalizedFuzzer::StateMachineTrace {
             output_type,
             initial_state,
@@ -5986,6 +6526,9 @@ fn normalized_fuzzer_semantics(
                 data_types,
             )
         }
+        NormalizedFuzzer::MapN { output_type, .. } => {
+            default_semantics_for_type(output_type.as_ref(), data_types)
+        }
         NormalizedFuzzer::Bind { source, result } => {
             let result_semantics = normalized_fuzzer_semantics(
                 result,
@@ -6053,6 +6596,7 @@ fn normalized_fuzzer_semantics(
             element,
             min_len,
             max_len,
+            ..
         } => {
             let inner_types = output_type.get_inner_types();
             if !(output_type.is_list() && inner_types.len() == 1) {
@@ -6083,6 +6627,63 @@ fn normalized_fuzzer_semantics(
                 ),
                 min_len: *min_len,
                 max_len: *max_len,
+            }
+        }
+        NormalizedFuzzer::Choice {
+            output_type,
+            branches,
+            may_fail,
+            non_empty_required,
+        } => {
+            if branches.is_empty() && *non_empty_required {
+                opaque_semantics("choice combinator has no branches and therefore always fails")
+            } else {
+                let branch_semantics = branches
+                    .iter()
+                    .map(|branch| {
+                        normalized_fuzzer_semantics(
+                            branch,
+                            current_module,
+                            function_index,
+                            constant_index,
+                            data_types,
+                            output_type.as_ref(),
+                            local_values,
+                            visiting_functions,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                merge_choice_semantics(output_type.as_ref(), &branch_semantics, data_types)
+                    .unwrap_or_else(|| {
+                        if *may_fail {
+                            opaque_semantics(
+                                "choice combinator may fail and the current semantic export is conservative",
+                            )
+                        } else {
+                            default_semantics_for_type(output_type.as_ref(), data_types)
+                        }
+                    })
+            }
+        }
+        NormalizedFuzzer::Filter {
+            output_type,
+            source,
+            impossible,
+            ..
+        } => {
+            if *impossible {
+                opaque_semantics("such_that predicate is impossible for all generated values")
+            } else {
+                normalized_fuzzer_semantics(
+                    source,
+                    current_module,
+                    function_index,
+                    constant_index,
+                    data_types,
+                    output_type.as_ref(),
+                    local_values,
+                    visiting_functions,
+                )
             }
         }
         NormalizedFuzzer::StateMachineTrace {
@@ -7162,12 +7763,6 @@ pub fn normalized_fuzzer_to_transition_prop(normalized: &NormalizedFuzzer) -> Tr
             }
         }
         NormalizedFuzzer::Map { source, .. } => {
-            // A map `fuzz.map(f, g)` denotes `{ g v | v ∈ ⟦f⟧ }`. Without
-            // lowering `g` we cannot assert `transition = g(v)` precisely,
-            // so we fall back to the source domain as an existential and
-            // mark the body as unsupported. Preserving the source is
-            // important: the source domain is a sound (never-widening)
-            // over-approximation of what the map can produce.
             let domain = fuzzer_semantics_of_normalized(source);
             TransitionProp::Exists {
                 binder: "_map".to_string(),
@@ -7179,6 +7774,21 @@ pub fn normalized_fuzzer_to_transition_prop(normalized: &NormalizedFuzzer) -> Tr
                 }),
             }
         }
+        NormalizedFuzzer::MapN { sources, .. } => TransitionProp::And(
+            sources
+                .iter()
+                .enumerate()
+                .map(|(index, source)| TransitionProp::Exists {
+                    binder: format!("_map{index}"),
+                    ty: ShallowIrType::Data,
+                    domain: Box::new(fuzzer_semantics_of_normalized(source)),
+                    body: Box::new(TransitionProp::Unsupported {
+                        reason: "mapN mapper body is not yet lowered to a proposition".to_string(),
+                        source_location: None,
+                    }),
+                })
+                .collect(),
+        ),
         NormalizedFuzzer::Product { .. } => TransitionProp::Unsupported {
             reason: "product-shaped fuzzer is not a valid step-function body".to_string(),
             source_location: None,
@@ -7186,6 +7796,36 @@ pub fn normalized_fuzzer_to_transition_prop(normalized: &NormalizedFuzzer) -> Tr
         NormalizedFuzzer::List { .. } => TransitionProp::Unsupported {
             reason: "list-shaped fuzzer is not a valid step-function body".to_string(),
             source_location: None,
+        },
+        NormalizedFuzzer::Choice { branches, .. } => {
+            if branches.is_empty() {
+                TransitionProp::Unsupported {
+                    reason: "choice-shaped fuzzer has no branches".to_string(),
+                    source_location: None,
+                }
+            } else {
+                TransitionProp::Or(
+                    branches
+                        .iter()
+                        .map(normalized_fuzzer_to_transition_prop)
+                        .collect(),
+                )
+            }
+        }
+        NormalizedFuzzer::Filter {
+            source,
+            predicate_summary,
+            ..
+        } => TransitionProp::Exists {
+            binder: "_filter".to_string(),
+            ty: ShallowIrType::Data,
+            domain: Box::new(fuzzer_semantics_of_normalized(source)),
+            body: Box::new(TransitionProp::Unsupported {
+                reason: format!(
+                    "such_that predicate is not yet lowered to a proposition: {predicate_summary}",
+                ),
+                source_location: None,
+            }),
         },
         NormalizedFuzzer::StateMachineTrace { .. } => TransitionProp::Unsupported {
             reason: "nested state-machine trace inside a step-function body is not supported"
@@ -7228,7 +7868,72 @@ fn fuzzer_semantics_of_normalized(normalized: &NormalizedFuzzer) -> FuzzerSemant
             }
             _ => FuzzerSemantics::Data,
         },
-        NormalizedFuzzer::Map { .. } => FuzzerSemantics::Data,
+        NormalizedFuzzer::Map { output_type, .. } => {
+            if output_type.is_bool() {
+                FuzzerSemantics::Bool
+            } else if output_type.is_int() {
+                FuzzerSemantics::IntRange {
+                    min: None,
+                    max: None,
+                }
+            } else if output_type.is_bytearray() {
+                FuzzerSemantics::ByteArrayRange {
+                    min_len: None,
+                    max_len: None,
+                }
+            } else if output_type.is_string() {
+                FuzzerSemantics::String
+            } else if output_type.is_list() {
+                FuzzerSemantics::List {
+                    element: Box::new(FuzzerSemantics::Data),
+                    min_len: None,
+                    max_len: None,
+                }
+            } else if output_type.is_tuple() || output_type.is_pair() {
+                FuzzerSemantics::Product(
+                    output_type
+                        .get_inner_types()
+                        .iter()
+                        .map(|_| FuzzerSemantics::Data)
+                        .collect(),
+                )
+            } else {
+                FuzzerSemantics::Data
+            }
+        }
+        NormalizedFuzzer::MapN { output_type, .. } => {
+            if output_type.is_bool() {
+                FuzzerSemantics::Bool
+            } else if output_type.is_int() {
+                FuzzerSemantics::IntRange {
+                    min: None,
+                    max: None,
+                }
+            } else if output_type.is_bytearray() {
+                FuzzerSemantics::ByteArrayRange {
+                    min_len: None,
+                    max_len: None,
+                }
+            } else if output_type.is_string() {
+                FuzzerSemantics::String
+            } else if output_type.is_list() {
+                FuzzerSemantics::List {
+                    element: Box::new(FuzzerSemantics::Data),
+                    min_len: None,
+                    max_len: None,
+                }
+            } else if output_type.is_tuple() || output_type.is_pair() {
+                FuzzerSemantics::Product(
+                    output_type
+                        .get_inner_types()
+                        .iter()
+                        .map(|_| FuzzerSemantics::Data)
+                        .collect(),
+                )
+            } else {
+                FuzzerSemantics::Data
+            }
+        }
         NormalizedFuzzer::Bind { result, .. } => fuzzer_semantics_of_normalized(result),
         NormalizedFuzzer::Product { elements } => FuzzerSemantics::Product(
             elements
@@ -7240,11 +7945,52 @@ fn fuzzer_semantics_of_normalized(normalized: &NormalizedFuzzer) -> FuzzerSemant
             element,
             min_len,
             max_len,
+            ..
         } => FuzzerSemantics::List {
             element: Box::new(fuzzer_semantics_of_normalized(element)),
             min_len: *min_len,
             max_len: *max_len,
         },
+        NormalizedFuzzer::Choice {
+            output_type,
+            branches,
+            may_fail,
+            non_empty_required,
+        } => {
+            if branches.is_empty() && *non_empty_required {
+                FuzzerSemantics::Opaque {
+                    reason: "choice combinator has no branches and therefore always fails"
+                        .to_string(),
+                }
+            } else {
+                let branch_semantics = branches
+                    .iter()
+                    .map(fuzzer_semantics_of_normalized)
+                    .collect::<Vec<_>>();
+                merge_choice_semantics_lightweight(output_type.as_ref(), &branch_semantics)
+                    .unwrap_or_else(|| {
+                        if *may_fail {
+                            FuzzerSemantics::Opaque {
+                                reason: "choice combinator may fail and the current lightweight semantics fallback is conservative".to_string(),
+                            }
+                        } else {
+                            FuzzerSemantics::Data
+                        }
+                    })
+            }
+        }
+        NormalizedFuzzer::Filter {
+            source, impossible, ..
+        } => {
+            if *impossible {
+                FuzzerSemantics::Opaque {
+                    reason: "such_that predicate is impossible for all generated values"
+                        .to_string(),
+                }
+            } else {
+                fuzzer_semantics_of_normalized(source)
+            }
+        }
         NormalizedFuzzer::StateMachineTrace { .. } => FuzzerSemantics::Opaque {
             reason: "nested state-machine trace cannot appear as a sub-fuzzer domain".to_string(),
         },
@@ -10688,6 +11434,133 @@ fn mapn_tuple_arg_order(
     Some(order)
 }
 
+fn summarize_nary_mapper_shape(
+    mapper: &TypedExpr,
+    arity: usize,
+    current_module: &str,
+    function_index: &FunctionIndex<'_>,
+    local_values: &BTreeMap<String, TypedExpr>,
+) -> Option<NaryMapperShape> {
+    if arity < 2 {
+        return None;
+    }
+
+    let mut mapper_expr = terminal_expression(mapper).clone();
+    let mut mapper_module = current_module.to_string();
+    let mut mapper_locals = local_values.clone();
+    let mut visiting_functions = BTreeSet::new();
+
+    loop {
+        let mapper = terminal_expression(&mapper_expr);
+        match mapper {
+            TypedExpr::Fn { args, body, .. } => {
+                return summarize_nary_mapper_body(args, body, arity, &mapper_locals);
+            }
+            _ => {
+                let (resolved, resolved_locals, applied_arg_count) =
+                    resolve_function_with_applied_args(
+                        mapper,
+                        &mapper_module,
+                        function_index,
+                        &mapper_locals,
+                    )?;
+                let key = (resolved.module_name.clone(), resolved.function_name.clone());
+                if !visiting_functions.insert(key) {
+                    return None;
+                }
+
+                let remaining_args = resolved
+                    .function
+                    .arguments
+                    .len()
+                    .saturating_sub(applied_arg_count);
+
+                if remaining_args == arity {
+                    return summarize_nary_mapper_body(
+                        &resolved.function.arguments[applied_arg_count..],
+                        &resolved.function.body,
+                        arity,
+                        &resolved_locals,
+                    );
+                }
+
+                if remaining_args == 0 {
+                    mapper_expr = resolved.function.body.clone();
+                    mapper_module = resolved.module_name;
+                    mapper_locals = resolved_locals;
+                    continue;
+                }
+
+                return None;
+            }
+        }
+    }
+}
+
+fn summarize_nary_mapper_body(
+    args: &[TypedArg],
+    body: &TypedExpr,
+    arity: usize,
+    local_values: &BTreeMap<String, TypedExpr>,
+) -> Option<NaryMapperShape> {
+    if args.len() != arity {
+        return None;
+    }
+    let arg_names: Vec<String> = args
+        .iter()
+        .map(|arg| arg.get_variable_name().map(|name| name.to_string()))
+        .collect::<Option<Vec<_>>>()?;
+
+    let TypedExpr::Call {
+        fun,
+        args: call_args,
+        ..
+    } = terminal_expression(body)
+    else {
+        return None;
+    };
+    if call_args.len() != arity {
+        return None;
+    }
+
+    let mut seen = vec![false; arity];
+    let mut arg_order = Vec::with_capacity(arity);
+    for arg in call_args {
+        let index = tuple_elem_arg_index_by_names(&arg.value, &arg_names, local_values)?;
+        if seen[index] {
+            return None;
+        }
+        seen[index] = true;
+        arg_order.push(index);
+    }
+
+    let constructor = match terminal_expression(fun.as_ref()) {
+        TypedExpr::Var {
+            name, constructor, ..
+        } => match &constructor.variant {
+            ValueConstructorVariant::Record {
+                arity: ctor_arity, ..
+            } if usize::from(*ctor_arity) == arity => Some(name.clone()),
+            _ => None,
+        },
+        TypedExpr::ModuleSelect {
+            label, constructor, ..
+        } => match constructor {
+            ModuleValueConstructor::Record {
+                arity: ctor_arity, ..
+            } if usize::from(*ctor_arity) == arity => Some(label.clone()),
+            _ => None,
+        },
+        _ => None,
+    }?;
+
+    Some(NaryMapperShape::ConstructorApply {
+        constructor,
+        type_name: data_with_schema_type_name(body.tipo().as_ref()),
+        arg_order,
+    })
+}
+
 fn tuple_elem_arg_index_by_names(
     elem: &TypedExpr,
     arg_names: &[String],
@@ -13353,10 +14226,14 @@ mod test {
                 element,
                 min_len,
                 max_len,
+                unique,
+                retry_limit,
             } => {
                 assert_normalized_leaf(*element);
                 assert_eq!(min_len, None);
                 assert_eq!(max_len, None);
+                assert!(!unique);
+                assert_eq!(retry_limit, None);
             }
             other => panic!("expected list normalization, got {other:?}"),
         }
