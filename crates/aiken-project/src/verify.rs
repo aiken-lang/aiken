@@ -919,127 +919,6 @@ impl TrustProfile {
     fn allows_only_under(self, minimum: TrustProfile) -> bool {
         self.rank() >= minimum.rank()
     }
-
-    fn universal_success_blocker(
-        self,
-        domain: &LoweredDomain,
-        test_mode: Option<ManifestTestMode>,
-    ) -> Option<String> {
-        if matches!(self, TrustProfile::UnsafeDev) {
-            return Some(
-                "unsafe-dev runs may inspect unchecked placeholders, but they can never report a verified universal result.".to_string(),
-            );
-        }
-
-        if let Some(reason) = domain.trust_limited_reason(self) {
-            return Some(reason);
-        }
-
-        if !domain.obligations_open.is_empty() {
-            return Some(format!(
-                "open domain obligations remain: {}",
-                render_domain_obligations(&domain.obligations_open),
-            ));
-        }
-
-        match self {
-            TrustProfile::Strict => {
-                if domain.precision != DomainPrecision::Exact
-                    || domain.certificate != DomainCertificate::LeanProved
-                {
-                    return Some(
-                        "strict trust requires Exact precision and LeanProved domain certificates."
-                            .to_string(),
-                    );
-                }
-            }
-            TrustProfile::Production => {
-                if !domain.production_allowed {
-                    return Some(domain.diagnostics.first().cloned().unwrap_or_else(|| {
-                        "domain metadata is not accepted under the production trust profile."
-                            .to_string()
-                    }));
-                }
-
-                if matches!(
-                    domain.precision,
-                    DomainPrecision::WitnessOnly | DomainPrecision::Unknown
-                ) {
-                    return Some(
-                        "production trust does not accept witness-only or unknown universal domains."
-                            .to_string(),
-                    );
-                }
-                if matches!(
-                    domain.certificate,
-                    DomainCertificate::WitnessReplay
-                        | DomainCertificate::DifferentialTestedOnly
-                        | DomainCertificate::Unchecked
-                ) {
-                    return Some(
-                        "production trust does not accept witness-only, differential-only, or unchecked universal domain certificates.".to_string(),
-                    );
-                }
-                if matches!(domain.precision, DomainPrecision::OverApprox)
-                    && !matches!(
-                        test_mode,
-                        Some(ManifestTestMode::Normal | ManifestTestMode::Fail)
-                    )
-                {
-                    return Some(
-                        "OverApprox domains are only production-safe for normal/fail universal theorems.".to_string(),
-                    );
-                }
-                if matches!(domain.precision, DomainPrecision::UnderApprox)
-                    && !matches!(test_mode, Some(ManifestTestMode::FailOnce))
-                {
-                    return Some(
-                        "UnderApprox domains are only production-safe for fail_once theorems."
-                            .to_string(),
-                    );
-                }
-            }
-            TrustProfile::Experimental => {
-                if domain.precision == DomainPrecision::Unknown {
-                    return Some("experimental trust still rejects unknown domains.".to_string());
-                }
-                if domain.certificate == DomainCertificate::Unchecked {
-                    return Some("experimental trust still rejects unchecked domains.".to_string());
-                }
-            }
-            TrustProfile::UnsafeDev => unreachable!(),
-        }
-
-        None
-    }
-
-    fn witness_success_blocker(self, domain: &LoweredDomain) -> Option<String> {
-        if matches!(self, TrustProfile::UnsafeDev) {
-            return Some(
-                "unsafe-dev runs may inspect unchecked placeholders, but they can never report a verified witness result.".to_string(),
-            );
-        }
-
-        if let Some(reason) = domain.trust_limited_reason(self) {
-            return Some(reason);
-        }
-
-        if !domain.obligations_open.is_empty() {
-            return Some("open domain obligations remain on the witness path.".to_string());
-        }
-        if domain.precision == DomainPrecision::Unknown {
-            return Some(
-                "witness results still require a non-unknown domain relation under the selected trust profile.".to_string(),
-            );
-        }
-        if domain.certificate == DomainCertificate::Unchecked {
-            return Some(
-                "witness results still reject unchecked domain metadata under the selected trust profile.".to_string(),
-            );
-        }
-
-        None
-    }
 }
 /// Structured verification summary
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -1265,6 +1144,39 @@ pub struct Widening {
     pub allowed_only_under: Option<TrustProfile>,
 }
 
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompatibilityMode {
+    UniversalSuccess,
+    UniversalFailure,
+    SemanticExistential,
+    WitnessCheck,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DomainDiagnosticSeverity {
+    Note,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct DomainDiagnostic {
+    pub code: String,
+    pub severity: DomainDiagnosticSeverity,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<CompatibilityMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust_profile: Option<TrustProfile>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub obligations: Vec<DomainObligation>,
+}
+
 fn render_domain_obligations(obligations: &[DomainObligation]) -> String {
     obligations
         .iter()
@@ -1358,6 +1270,8 @@ pub struct LoweredDomain {
     pub widenings: Vec<Widening>,
     #[serde(default)]
     pub production_allowed: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_diagnostics: Vec<DomainDiagnostic>,
     #[serde(default)]
     pub diagnostics: Vec<String>,
 }
@@ -1382,6 +1296,7 @@ impl LoweredDomain {
             lowering_path: vec!["legacy_result".to_string()],
             widenings: Vec::new(),
             production_allowed: false,
+            compatibility_diagnostics: Vec::new(),
             diagnostics: vec![reason],
         }
     }
@@ -1399,10 +1314,35 @@ impl LoweredDomain {
             lowering_path: vec!["unsupported_generation".to_string()],
             widenings: Vec::new(),
             production_allowed: false,
+            compatibility_diagnostics: Vec::new(),
             diagnostics: vec![reason],
         }
     }
+}
 
+fn witness_replay_domain_from_values(witnesses: Vec<String>) -> LoweredDomain {
+    LoweredDomain {
+        relation: DomainRel::Witness {
+            encoded_values: witnesses,
+        },
+        precision: DomainPrecision::WitnessOnly,
+        certificate: DomainCertificate::WitnessReplay,
+        obligations_open: Vec::new(),
+        obligations_discharged: vec![
+            DomainObligation::WitnessReplaysThroughFuzzer,
+            DomainObligation::WitnessSatisfiesDomain,
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+        lowering_path: vec!["witness_replay".to_string()],
+        widenings: Vec::new(),
+        production_allowed: true,
+        compatibility_diagnostics: Vec::new(),
+        diagnostics: Vec::new(),
+    }
+}
+
+impl LoweredDomain {
     fn trust_limited_reason(&self, trust_profile: TrustProfile) -> Option<String> {
         if let Some(minimum) = self.relation.allowed_only_under()
             && !trust_profile.allows_only_under(minimum)
@@ -1466,29 +1406,424 @@ enum TheoremStatusWire {
     Legacy(ProofStatus),
 }
 
-fn domain_success_blocker_note(
-    trust_profile: TrustProfile,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SuccessChannel {
+    SolverTheorem,
+    WitnessReplay,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CompatibilityAssessment {
+    block_reason: Option<String>,
+    success_note: Option<String>,
+    diagnostics: Vec<DomainDiagnostic>,
+}
+
+fn render_optional_return_mode(return_mode: Option<TestReturnMode>) -> &'static str {
+    match return_mode {
+        Some(TestReturnMode::Bool) => "bool",
+        Some(TestReturnMode::Void) => "void",
+        None => "legacy-unknown",
+    }
+}
+
+fn compatibility_mode_label(
+    mode: CompatibilityMode,
+    return_mode: Option<TestReturnMode>,
+) -> String {
+    let return_mode = render_optional_return_mode(return_mode);
+    match mode {
+        CompatibilityMode::UniversalSuccess => {
+            format!("normal {return_mode} universal theorem")
+        }
+        CompatibilityMode::UniversalFailure => {
+            format!("fail {return_mode} universal theorem")
+        }
+        CompatibilityMode::SemanticExistential => {
+            format!("fail_once {return_mode} existential theorem")
+        }
+        CompatibilityMode::WitnessCheck => format!("{return_mode} witness check"),
+    }
+}
+
+fn domain_has_open_obligation(domain: &LoweredDomain, obligation: DomainObligation) -> bool {
+    domain.obligations_open.contains(&obligation)
+}
+
+fn domain_has_discharged_obligation(
     domain: &LoweredDomain,
+    obligation: DomainObligation,
+    alternative: Option<DomainObligation>,
+) -> bool {
+    domain.obligations_discharged.contains(&obligation)
+        || alternative.is_some_and(|other| domain.obligations_discharged.contains(&other))
+}
+
+fn domain_diagnostic(
+    code: &str,
+    severity: DomainDiagnosticSeverity,
+    message: impl Into<String>,
+    mode: CompatibilityMode,
+    trust_profile: TrustProfile,
+    obligations: Vec<DomainObligation>,
+) -> DomainDiagnostic {
+    DomainDiagnostic {
+        code: code.to_string(),
+        severity,
+        message: message.into(),
+        mode: Some(mode),
+        trust_profile: Some(trust_profile),
+        obligations,
+    }
+}
+
+fn first_domain_diagnostic_message(domain: &LoweredDomain) -> Option<String> {
+    domain
+        .compatibility_diagnostics
+        .first()
+        .map(|diagnostic| diagnostic.message.clone())
+        .or_else(|| domain.diagnostics.first().cloned())
+}
+
+fn state_machine_has_step_ir(test: &ExportedPropertyTest) -> bool {
+    matches!(
+        &test.semantics,
+        FuzzerSemantics::StateMachineTrace {
+            step_function_ir: Some(_),
+            ..
+        }
+    )
+}
+
+fn compatibility_mode_for_generation(
+    test: &ExportedPropertyTest,
+    _existential_mode: ExistentialMode,
+    proof_caveat: Option<&ProofCaveat>,
+) -> CompatibilityMode {
+    if proof_caveat.is_some_and(|caveat| matches!(caveat, ProofCaveat::Witness(_))) {
+        return CompatibilityMode::WitnessCheck;
+    }
+
+    if is_state_machine_trace_error_test(test) && !test.concrete_error_witnesses.is_empty() {
+        return CompatibilityMode::WitnessCheck;
+    }
+
+    if is_state_machine_trace_halt_test(test)
+        && !state_machine_has_step_ir(test)
+        && !test.concrete_halt_witnesses.is_empty()
+    {
+        return CompatibilityMode::WitnessCheck;
+    }
+
+    match ManifestTestMode::from_on_test_failure(&test.on_test_failure) {
+        ManifestTestMode::Normal => CompatibilityMode::UniversalSuccess,
+        ManifestTestMode::Fail => CompatibilityMode::UniversalFailure,
+        ManifestTestMode::FailOnce => CompatibilityMode::SemanticExistential,
+    }
+}
+
+fn compatibility_mode_for_success(
     proof_status: &ProofStatus,
     test_mode: Option<ManifestTestMode>,
-) -> Option<String> {
-    let detail = match proof_status {
-        ProofStatus::Proved => trust_profile.universal_success_blocker(domain, test_mode),
-        ProofStatus::WitnessProved { .. } => trust_profile.witness_success_blocker(domain),
+) -> Option<(CompatibilityMode, SuccessChannel)> {
+    match proof_status {
+        ProofStatus::Proved => Some((
+            match test_mode.unwrap_or(ManifestTestMode::Normal) {
+                ManifestTestMode::Normal => CompatibilityMode::UniversalSuccess,
+                ManifestTestMode::Fail => CompatibilityMode::UniversalFailure,
+                ManifestTestMode::FailOnce => CompatibilityMode::SemanticExistential,
+            },
+            SuccessChannel::SolverTheorem,
+        )),
+        ProofStatus::WitnessProved { .. } => Some((
+            CompatibilityMode::WitnessCheck,
+            SuccessChannel::WitnessReplay,
+        )),
         ProofStatus::Partial { .. }
         | ProofStatus::Failed { .. }
         | ProofStatus::TimedOut { .. }
         | ProofStatus::Unknown => None,
-    }?;
+    }
+}
 
+fn assess_domain_compatibility(
+    mode: CompatibilityMode,
+    return_mode: Option<TestReturnMode>,
+    trust_profile: TrustProfile,
+    domain: &LoweredDomain,
+    success_channel: SuccessChannel,
+) -> CompatibilityAssessment {
+    let mut assessment = CompatibilityAssessment::default();
+    let mode_label = compatibility_mode_label(mode, return_mode);
+
+    let mut record_block = |code: &str, message: String, obligations: Vec<DomainObligation>| {
+        if assessment.block_reason.is_none() {
+            assessment.block_reason = Some(message.clone());
+        }
+
+        assessment.diagnostics.push(domain_diagnostic(
+            code,
+            DomainDiagnosticSeverity::Error,
+            message,
+            mode,
+            trust_profile,
+            obligations,
+        ));
+    };
+
+    if let Some(reason) = domain.trust_limited_reason(trust_profile) {
+        record_block("trust_profile_widening_block", reason, Vec::new());
+    }
+
+    match mode {
+        CompatibilityMode::UniversalSuccess | CompatibilityMode::UniversalFailure => {
+            if !matches!(
+                domain.precision,
+                DomainPrecision::Exact | DomainPrecision::OverApprox
+            ) {
+                record_block(
+                    "mode_domain_universal_precision",
+                    format!(
+                        "{mode_label} requires Exact or OverApprox domain precision; current precision is {}.",
+                        domain.precision
+                    ),
+                    vec![DomainObligation::FuzzerReturnsImpliesDomain],
+                );
+            }
+
+            if domain_has_open_obligation(domain, DomainObligation::FuzzerReturnsImpliesDomain)
+                || !domain_has_discharged_obligation(
+                    domain,
+                    DomainObligation::FuzzerReturnsImpliesDomain,
+                    Some(DomainObligation::DomainIffFuzzerReturns),
+                )
+            {
+                record_block(
+                    "mode_domain_universal_coverage",
+                    format!(
+                        "{mode_label} requires discharged FuzzerReturnsImpliesDomain coverage over generated inputs.",
+                    ),
+                    vec![DomainObligation::FuzzerReturnsImpliesDomain],
+                );
+            }
+        }
+        CompatibilityMode::SemanticExistential => match domain.precision {
+            DomainPrecision::Exact | DomainPrecision::UnderApprox => {
+                if domain_has_open_obligation(domain, DomainObligation::DomainImpliesFuzzerReturns)
+                    || !domain_has_discharged_obligation(
+                        domain,
+                        DomainObligation::DomainImpliesFuzzerReturns,
+                        Some(DomainObligation::DomainIffFuzzerReturns),
+                    )
+                {
+                    record_block(
+                        "mode_domain_existential_coverage",
+                        format!(
+                            "{mode_label} requires discharged DomainImpliesFuzzerReturns or DomainIffFuzzerReturns coverage.",
+                        ),
+                        vec![
+                            DomainObligation::DomainImpliesFuzzerReturns,
+                            DomainObligation::DomainIffFuzzerReturns,
+                        ],
+                    );
+                }
+            }
+            DomainPrecision::WitnessOnly => {
+                if domain.certificate != DomainCertificate::WitnessReplay
+                    || domain_has_open_obligation(
+                        domain,
+                        DomainObligation::WitnessReplaysThroughFuzzer,
+                    )
+                    || !domain_has_discharged_obligation(
+                        domain,
+                        DomainObligation::WitnessReplaysThroughFuzzer,
+                        None,
+                    )
+                {
+                    record_block(
+                        "mode_domain_existential_witness_replay",
+                        format!(
+                            "{mode_label} can use WitnessOnly domains only when the witness is replay-validated through the real fuzzer path.",
+                        ),
+                        vec![
+                            DomainObligation::WitnessReplaysThroughFuzzer,
+                            DomainObligation::WitnessSatisfiesDomain,
+                        ],
+                    );
+                }
+            }
+            DomainPrecision::OverApprox | DomainPrecision::Unknown => {
+                record_block(
+                    "mode_domain_existential_precision",
+                    format!(
+                        "{mode_label} requires Exact, UnderApprox, or WitnessOnly precision; current precision is {}.",
+                        domain.precision
+                    ),
+                    vec![DomainObligation::DomainImpliesFuzzerReturns],
+                );
+            }
+        },
+        CompatibilityMode::WitnessCheck => {
+            if domain.precision != DomainPrecision::WitnessOnly {
+                record_block(
+                    "mode_domain_witness_precision",
+                    format!(
+                        "{mode_label} requires WitnessOnly precision backed by concrete replay validation; current precision is {}.",
+                        domain.precision
+                    ),
+                    vec![
+                        DomainObligation::WitnessReplaysThroughFuzzer,
+                        DomainObligation::WitnessSatisfiesDomain,
+                    ],
+                );
+            }
+
+            if domain.certificate != DomainCertificate::WitnessReplay {
+                record_block(
+                    "mode_domain_witness_certificate",
+                    format!(
+                        "{mode_label} requires WitnessReplay certification; current certificate is {}.",
+                        domain.certificate
+                    ),
+                    vec![DomainObligation::WitnessReplaysThroughFuzzer],
+                );
+            }
+
+            if domain_has_open_obligation(domain, DomainObligation::WitnessReplaysThroughFuzzer)
+                || !domain_has_discharged_obligation(
+                    domain,
+                    DomainObligation::WitnessReplaysThroughFuzzer,
+                    None,
+                )
+                || !domain_has_discharged_obligation(
+                    domain,
+                    DomainObligation::WitnessSatisfiesDomain,
+                    None,
+                )
+            {
+                record_block(
+                    "mode_domain_witness_replay",
+                    format!(
+                        "{mode_label} requires discharged concrete replay obligations through the real fuzzer/property path.",
+                    ),
+                    vec![
+                        DomainObligation::WitnessReplaysThroughFuzzer,
+                        DomainObligation::WitnessSatisfiesDomain,
+                    ],
+                );
+            }
+        }
+    }
+
+    if !domain.obligations_open.is_empty() {
+        record_block(
+            "open_domain_obligations",
+            format!(
+                "{mode_label} still has open domain obligations: {}.",
+                render_domain_obligations(&domain.obligations_open)
+            ),
+            domain.obligations_open.clone(),
+        );
+    }
+
+    match trust_profile {
+        TrustProfile::Strict => match success_channel {
+            SuccessChannel::SolverTheorem => {
+                record_block(
+                    "trust_profile_strict_requires_lean_certified",
+                    "strict trust accepts only LeanCertified theorem results; the current pre-Lean pipeline yields solver validation, not Lean kernel certification.".to_string(),
+                    Vec::new(),
+                );
+            }
+            SuccessChannel::WitnessReplay => {
+                if domain.certificate != DomainCertificate::WitnessReplay {
+                    record_block(
+                        "trust_profile_strict_requires_witness_replay",
+                        "strict trust accepts witness checks only when they are backed by concrete WitnessReplay certification.".to_string(),
+                        vec![DomainObligation::WitnessReplaysThroughFuzzer],
+                    );
+                }
+            }
+        },
+        TrustProfile::Production => {
+            if matches!(
+                domain.certificate,
+                DomainCertificate::DifferentialTestedOnly | DomainCertificate::Unchecked
+            ) {
+                record_block(
+                    "trust_profile_production_certificate",
+                    format!(
+                        "production trust rejects {} domain certificates for successful verification claims.",
+                        domain.certificate
+                    ),
+                    Vec::new(),
+                );
+            }
+        }
+        TrustProfile::Experimental => {
+            if domain.certificate == DomainCertificate::Unchecked {
+                record_block(
+                    "trust_profile_experimental_unchecked",
+                    "experimental trust still rejects Unchecked domain certificates.".to_string(),
+                    Vec::new(),
+                );
+            } else if domain.certificate == DomainCertificate::DifferentialTestedOnly {
+                let warning = "Accepted only under the experimental trust profile because the domain certificate is DifferentialTestedOnly; this is not a production verification claim.".to_string();
+                assessment.success_note = Some(warning.clone());
+                assessment.diagnostics.push(domain_diagnostic(
+                    "trust_profile_experimental_warning",
+                    DomainDiagnosticSeverity::Warning,
+                    warning,
+                    mode,
+                    trust_profile,
+                    Vec::new(),
+                ));
+            }
+        }
+        TrustProfile::UnsafeDev => {
+            record_block(
+                "trust_profile_unsafe_dev_not_verified",
+                "unsafe-dev experiments may run, but this trust profile can never print a verified result.".to_string(),
+                Vec::new(),
+            );
+        }
+    }
+
+    assessment
+}
+
+fn domain_success_assessment(
+    trust_profile: TrustProfile,
+    domain: &LoweredDomain,
+    proof_status: &ProofStatus,
+    test_mode: Option<ManifestTestMode>,
+    return_mode: Option<TestReturnMode>,
+) -> Option<CompatibilityAssessment> {
+    let (mode, success_channel) = compatibility_mode_for_success(proof_status, test_mode)?;
+    Some(assess_domain_compatibility(
+        mode,
+        return_mode,
+        trust_profile,
+        domain,
+        success_channel,
+    ))
+}
+
+fn blocked_success_note(
+    trust_profile: TrustProfile,
+    detail: &str,
+    domain: &LoweredDomain,
+) -> String {
     let mut note = format!("Domain metadata blocks {trust_profile} success: {detail}");
-    if !domain.diagnostics.is_empty() {
-        note.push_str(&format!(" Diagnostics: {}", domain.diagnostics.join(" | ")));
+    if let Some(primary) = first_domain_diagnostic_message(domain)
+        && primary != detail
+    {
+        note.push_str(&format!(" Primary diagnostic: {primary}"));
     }
     if let Some(widening) = domain.widenings.first() {
         note.push_str(&format!(" First widening: {}", widening.message));
     }
-    Some(note)
+    note
 }
 
 /// Per-theorem result
@@ -1680,20 +2015,44 @@ impl TheoremResult {
         trust_profile: TrustProfile,
         domain: LoweredDomain,
         test_mode: Option<ManifestTestMode>,
+        return_mode: Option<TestReturnMode>,
     ) -> Self {
-        let proof_status =
-            domain_success_blocker_note(trust_profile, &domain, &proof_status, test_mode)
-                .map(|note| ProofStatus::Partial { note })
-                .unwrap_or(proof_status);
+        let assessment = domain_success_assessment(
+            trust_profile,
+            &domain,
+            &proof_status,
+            test_mode,
+            return_mode,
+        );
+        let proof_status = assessment
+            .as_ref()
+            .and_then(|assessment| assessment.block_reason.as_deref())
+            .map(|detail| ProofStatus::Partial {
+                note: blocked_success_note(trust_profile, detail, &domain),
+            })
+            .unwrap_or(proof_status);
 
-        Self::from_parts(
+        let mut result = Self::from_parts(
             test_name,
             theorem_name,
             proof_status,
             over_approximations,
             trust_profile,
             domain,
-        )
+        );
+
+        if matches!(
+            result.proof_status,
+            ProofStatus::Proved | ProofStatus::WitnessProved { .. }
+        ) && let Some(note) = assessment.and_then(|assessment| assessment.success_note)
+        {
+            result.explanation = Some(match result.explanation.take() {
+                Some(existing) => format!("{existing}\n{note}"),
+                None => note,
+            });
+        }
+
+        result
     }
 
     pub fn from_manifest_entry(
@@ -1703,17 +2062,35 @@ impl TheoremResult {
         proof_status: ProofStatus,
         over_approximations: usize,
     ) -> Self {
+        let domain = match &proof_status {
+            ProofStatus::WitnessProved { witnesses, .. } => {
+                let existing = entry
+                    .domain
+                    .clone()
+                    .unwrap_or_else(LoweredDomain::legacy_placeholder);
+                if existing.precision == DomainPrecision::WitnessOnly
+                    && existing.certificate == DomainCertificate::WitnessReplay
+                {
+                    existing
+                } else {
+                    witness_replay_domain_from_values(witnesses.clone())
+                }
+            }
+            _ => entry
+                .domain
+                .clone()
+                .unwrap_or_else(LoweredDomain::legacy_placeholder),
+        };
+
         Self::new_with_domain(
             test_name,
             theorem_name,
             proof_status,
             over_approximations,
             default_trust_profile(),
-            entry
-                .domain
-                .clone()
-                .unwrap_or_else(LoweredDomain::legacy_placeholder),
+            domain,
             entry.test_mode,
+            entry.return_mode.clone(),
         )
     }
 
@@ -2194,6 +2571,23 @@ fn apply_soundness_lint_to_caveat(caveat: ProofCaveat, proof_content: &str) -> P
             .map(ProofCaveat::Partial)
             .unwrap_or(ProofCaveat::None),
         other => other,
+    }
+}
+
+fn append_partial_caveat_note(caveat: ProofCaveat, note: impl Into<String>) -> ProofCaveat {
+    let note = note.into();
+    match caveat {
+        ProofCaveat::None => ProofCaveat::Partial(note),
+        ProofCaveat::Partial(existing) => {
+            if existing.contains(&note) {
+                ProofCaveat::Partial(existing)
+            } else {
+                ProofCaveat::Partial(format!("{note}; {existing}"))
+            }
+        }
+        ProofCaveat::Witness(existing) => {
+            ProofCaveat::Partial(format!("{note}; witness-only detail: {}", existing.note))
+        }
     }
 }
 
@@ -2788,14 +3182,30 @@ fn constraint_is_unsupported(constraint: &FuzzerConstraint) -> bool {
     }
 }
 
+fn witness_values_for_mode(
+    test: &ExportedPropertyTest,
+    proof_caveat: Option<&ProofCaveat>,
+) -> Vec<String> {
+    if let Some(ProofCaveat::Witness(note)) = proof_caveat {
+        return note.witnesses.clone();
+    }
+
+    if !test.concrete_error_witnesses.is_empty() {
+        return test.concrete_error_witnesses.clone();
+    }
+
+    test.concrete_halt_witnesses.clone()
+}
+
 fn relation_from_current_bridge(
     test: &ExportedPropertyTest,
-    proof_caveat: &ProofCaveat,
+    mode: CompatibilityMode,
+    proof_caveat: Option<&ProofCaveat>,
     placeholder_widenings: &[Widening],
 ) -> DomainRel {
-    if let ProofCaveat::Witness(note) = proof_caveat {
+    if matches!(mode, CompatibilityMode::WitnessCheck) {
         return DomainRel::Witness {
-            encoded_values: note.witnesses.clone(),
+            encoded_values: witness_values_for_mode(test, proof_caveat),
         };
     }
 
@@ -2837,8 +3247,9 @@ fn relation_from_current_bridge(
 
 fn lowered_domain_for_test(
     test: &ExportedPropertyTest,
-    proof_content: &str,
-    proof_caveat: &ProofCaveat,
+    mode: CompatibilityMode,
+    proof_content: Option<&str>,
+    proof_caveat: Option<&ProofCaveat>,
 ) -> LoweredDomain {
     let mut lowering_path = Vec::new();
     if !matches!(test.constraint, FuzzerConstraint::Any) {
@@ -2859,12 +3270,14 @@ fn lowered_domain_for_test(
     if test.transition_prop_lean.is_some() {
         push_lowering_step(&mut lowering_path, "transition_relation");
     }
-    if matches!(proof_caveat, ProofCaveat::Witness(_)) {
+    if matches!(mode, CompatibilityMode::WitnessCheck) {
         push_lowering_step(&mut lowering_path, "witness_replay");
     }
 
     let mut widenings = transition_prop_domain_widenings(test);
-    let placeholder_widenings = placeholder_domain_widenings(proof_content);
+    let placeholder_widenings = proof_content
+        .map(placeholder_domain_widenings)
+        .unwrap_or_default();
     if !placeholder_widenings.is_empty() {
         push_lowering_step(&mut lowering_path, "placeholder_scan");
     }
@@ -2879,10 +3292,10 @@ fn lowered_domain_for_test(
     widenings.extend(placeholder_widenings.iter().cloned());
 
     let mut diagnostics = Vec::new();
-    if let ProofCaveat::Partial(note) = proof_caveat {
+    if let Some(ProofCaveat::Partial(note)) = proof_caveat {
         diagnostics.push(note.clone());
     }
-    if semantics_is_opaque(&test.semantics) {
+    if semantics_is_opaque(&test.semantics) && !matches!(mode, CompatibilityMode::WitnessCheck) {
         diagnostics
             .push("Current bridge cannot yet certify opaque/custom fuzzer semantics.".to_string());
     }
@@ -2897,53 +3310,59 @@ fn lowered_domain_for_test(
                 .to_string(),
         );
     }
+    if matches!(mode, CompatibilityMode::SemanticExistential) {
+        diagnostics.push(
+            "Current bridge does not yet prove DomainImpliesFuzzerReturns for fail_once theorems; production success is downgraded to Partial.".to_string(),
+        );
+    }
 
-    let relation = relation_from_current_bridge(test, proof_caveat, &placeholder_widenings);
+    let relation = relation_from_current_bridge(test, mode, proof_caveat, &placeholder_widenings);
     let mut obligations_discharged = vec![
         DomainObligation::FuzzerModelHashMatches,
         DomainObligation::PropertyHarnessMatchesExportedUPLC,
     ];
 
-    let (precision, certificate, obligations_open, production_allowed) = match proof_caveat {
-        ProofCaveat::Witness(_) => {
+    let (precision, certificate, obligations_open) =
+        if matches!(mode, CompatibilityMode::WitnessCheck) {
             obligations_discharged.push(DomainObligation::WitnessReplaysThroughFuzzer);
             obligations_discharged.push(DomainObligation::WitnessSatisfiesDomain);
             (
                 DomainPrecision::WitnessOnly,
                 DomainCertificate::WitnessReplay,
                 Vec::new(),
-                true,
             )
-        }
-        _ if !placeholder_widenings.is_empty() || semantics_is_opaque(&test.semantics) => (
-            DomainPrecision::Unknown,
-            DomainCertificate::Unchecked,
-            vec![DomainObligation::FuzzerReturnsImpliesDomain],
-            false,
-        ),
-        _ if matches!(test.on_test_failure, OnTestFailure::SucceedImmediately) => {
-            diagnostics.push(
-                "Current bridge does not yet prove DomainImpliesFuzzerReturns for fail_once theorems; production success is downgraded to Partial.".to_string(),
-            );
+        } else if !placeholder_widenings.is_empty() || semantics_is_opaque(&test.semantics) {
+            (
+                DomainPrecision::Unknown,
+                DomainCertificate::Unchecked,
+                vec![match mode {
+                    CompatibilityMode::UniversalSuccess | CompatibilityMode::UniversalFailure => {
+                        DomainObligation::FuzzerReturnsImpliesDomain
+                    }
+                    CompatibilityMode::SemanticExistential => {
+                        DomainObligation::DomainImpliesFuzzerReturns
+                    }
+                    CompatibilityMode::WitnessCheck => {
+                        DomainObligation::WitnessReplaysThroughFuzzer
+                    }
+                }],
+            )
+        } else if matches!(mode, CompatibilityMode::SemanticExistential) {
             (
                 DomainPrecision::Unknown,
                 DomainCertificate::TrustedVersionedModel,
                 vec![DomainObligation::DomainImpliesFuzzerReturns],
-                false,
             )
-        }
-        _ => {
+        } else {
             obligations_discharged.push(DomainObligation::FuzzerReturnsImpliesDomain);
             (
                 DomainPrecision::OverApprox,
                 DomainCertificate::TrustedVersionedModel,
                 Vec::new(),
-                true,
             )
-        }
-    };
+        };
 
-    LoweredDomain {
+    let mut domain = LoweredDomain {
         relation,
         precision,
         certificate,
@@ -2951,9 +3370,27 @@ fn lowered_domain_for_test(
         obligations_discharged,
         lowering_path,
         widenings,
-        production_allowed,
+        production_allowed: false,
+        compatibility_diagnostics: Vec::new(),
         diagnostics,
-    }
+    };
+
+    let production_assessment = assess_domain_compatibility(
+        mode,
+        Some(test.return_mode.clone()),
+        TrustProfile::Production,
+        &domain,
+        match mode {
+            CompatibilityMode::WitnessCheck => SuccessChannel::WitnessReplay,
+            CompatibilityMode::UniversalSuccess
+            | CompatibilityMode::UniversalFailure
+            | CompatibilityMode::SemanticExistential => SuccessChannel::SolverTheorem,
+        },
+    );
+    domain.production_allowed = production_assessment.block_reason.is_none();
+    domain.compatibility_diagnostics = production_assessment.diagnostics;
+
+    domain
 }
 /// Sanitize an Aiken identifier to a valid Lean identifier.
 ///
@@ -4618,6 +5055,21 @@ pub fn generate_lean_workspace(
         //     (today: two-phase halt Phase 2). Surfaces as `Partial`.
         //   - `ProofCaveat::Witness(_)` — witness-only proof (commit 5 wires
         //     this in). Surfaces as `WitnessProved`.
+        let preflight_mode = compatibility_mode_for_generation(test, config.existential_mode, None);
+        let preflight_domain = lowered_domain_for_test(test, preflight_mode, None, None);
+        let preflight_block_note = assess_domain_compatibility(
+            preflight_mode,
+            Some(test.return_mode.clone()),
+            TrustProfile::Production,
+            &preflight_domain,
+            match preflight_mode {
+                CompatibilityMode::WitnessCheck => SuccessChannel::WitnessReplay,
+                CompatibilityMode::UniversalSuccess
+                | CompatibilityMode::UniversalFailure
+                | CompatibilityMode::SemanticExistential => SuccessChannel::SolverTheorem,
+            },
+        )
+        .block_reason;
         let (proof_content, proof_caveat) = match generate_proof_file(
             test,
             &id,
@@ -4627,10 +5079,14 @@ pub fn generate_lean_workspace(
             &config.target,
             config.allow_vacuous_subgenerators,
         ) {
-            Ok((proof_content, proof_caveat)) => (
-                proof_content.clone(),
-                apply_soundness_lint_to_caveat(proof_caveat, &proof_content),
-            ),
+            Ok((proof_content, proof_caveat)) => {
+                let proof_caveat = apply_soundness_lint_to_caveat(proof_caveat, &proof_content);
+                let proof_caveat = match preflight_block_note.clone() {
+                    Some(note) => append_partial_caveat_note(proof_caveat, note),
+                    None => proof_caveat,
+                };
+                (proof_content.clone(), proof_caveat)
+            }
             Err(e) if is_skippable_generation_error(&e, skip_policy) => {
                 let reason = if let Some(generation_error) = e.downcast_ref::<GenerationError>() {
                     generation_error.code.map_or_else(
@@ -4731,7 +5187,10 @@ pub fn generate_lean_workspace(
             0
         };
 
-        let domain = lowered_domain_for_test(test, &proof_content, &proof_caveat);
+        let final_mode =
+            compatibility_mode_for_generation(test, config.existential_mode, Some(&proof_caveat));
+        let domain =
+            lowered_domain_for_test(test, final_mode, Some(&proof_content), Some(&proof_caveat));
 
         prepared_entries.push(PreparedManifestEntry {
             id,

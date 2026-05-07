@@ -1594,8 +1594,9 @@ fn exec_run_with_project(
                 {
                     ProofStatus::Proved => {
                         let mut label = format!(
-                            "SOLVER VALIDATED [{}]",
-                            certification_label(t.certification)
+                            "SOLVER VALIDATED [{}]{}",
+                            certification_label(t.certification),
+                            trust_profile_suffix(t.trust_profile)
                         );
                         if t.over_approximations > 0 {
                             label.push_str(&format!(
@@ -1607,7 +1608,9 @@ fn exec_run_with_project(
                         (
                             "PASS".if_supports_color(Stderr, |s| s.green()).to_string(),
                             label,
-                            None,
+                            t.explanation
+                                .as_deref()
+                                .and_then(render_status_explanation_block),
                         )
                     }
                     ProofStatus::Partial { note } => {
@@ -1652,8 +1655,9 @@ fn exec_run_with_project(
                         // `--accept-witness` flag opts in to passing CI on
                         // these existential proofs.
                         let mut headline = format!(
-                            "WITNESS VALIDATED [{}] ({} instance{})",
+                            "WITNESS VALIDATED [{}]{} ({} instance{})",
                             certification_label(t.certification),
+                            trust_profile_suffix(t.trust_profile),
                             instances,
                             if *instances == 1 { "" } else { "s" }
                         );
@@ -1664,7 +1668,7 @@ fn exec_run_with_project(
                                 if t.over_approximations == 1 { "" } else { "s" }
                             ));
                         }
-                        let block = format!(
+                        let mut block = format!(
                             "       This is an existential proof, not a universal one.\n\
                                  \x20      Lean verified that the property holds on {instances} concrete fuzzer-generated\n\
                                  \x20      input(s) via native_decide; it did NOT prove the property holds for\n\
@@ -1674,6 +1678,14 @@ fn exec_run_with_project(
                                  \x20      Re-run with --accept-witness to allow CI to pass on witness-only proofs.\n\
                                  \x20      Note: {note}"
                         );
+                        if let Some(extra) = t
+                            .explanation
+                            .as_deref()
+                            .and_then(render_status_explanation_block)
+                        {
+                            block.push('\n');
+                            block.push_str(&extra);
+                        }
                         (
                             "WITN".if_supports_color(Stderr, |s| s.yellow()).to_string(),
                             headline,
@@ -2046,6 +2058,13 @@ fn certification_label(certification: verify::Certification) -> &'static str {
         verify::Certification::Timeout => "timeout",
         verify::Certification::Unknown => "unknown",
         _ => "unknown",
+    }
+}
+
+fn trust_profile_suffix(trust_profile: verify::TrustProfile) -> String {
+    match trust_profile {
+        verify::TrustProfile::Production => String::new(),
+        _ => format!(" [{} trust]", trust_profile),
     }
 }
 
@@ -3032,6 +3051,7 @@ members = [1, 2]
                 verify::TrustProfile::Production,
                 trusted_domain(),
                 Some(verify::ManifestTestMode::Normal),
+                Some(aiken_project::export::TestReturnMode::Bool),
             ),
             verify::TheoremResult::new_with_domain(
                 "example.test_witness".to_string(),
@@ -3045,6 +3065,7 @@ members = [1, 2]
                 verify::TrustProfile::Production,
                 witness_domain(&["00", "01"]),
                 Some(verify::ManifestTestMode::FailOnce),
+                Some(aiken_project::export::TestReturnMode::Bool),
             ),
             verify::TheoremResult::new_with_domain(
                 "example.test_partial".to_string(),
@@ -3056,6 +3077,7 @@ members = [1, 2]
                 verify::TrustProfile::Production,
                 partial_domain("partial proof"),
                 Some(verify::ManifestTestMode::Normal),
+                Some(aiken_project::export::TestReturnMode::Bool),
             ),
             verify::TheoremResult::new_with_domain(
                 "example.test_failed".to_string(),
@@ -3068,6 +3090,7 @@ members = [1, 2]
                 verify::TrustProfile::Production,
                 trusted_domain(),
                 Some(verify::ManifestTestMode::Normal),
+                Some(aiken_project::export::TestReturnMode::Bool),
             ),
             verify::TheoremResult::new_with_domain(
                 "example.test_timed_out".to_string(),
@@ -3079,6 +3102,7 @@ members = [1, 2]
                 verify::TrustProfile::Production,
                 trusted_domain(),
                 Some(verify::ManifestTestMode::Normal),
+                Some(aiken_project::export::TestReturnMode::Bool),
             ),
             verify::TheoremResult::new_with_domain(
                 "example.test_unknown".to_string(),
@@ -3088,6 +3112,7 @@ members = [1, 2]
                 verify::TrustProfile::Production,
                 trusted_domain(),
                 Some(verify::ManifestTestMode::Normal),
+                Some(aiken_project::export::TestReturnMode::Bool),
             ),
         ];
         let mut artifacts = verify::VerificationArtifacts::default();

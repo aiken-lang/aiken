@@ -4471,6 +4471,7 @@ fn trusted_overapprox_domain() -> LoweredDomain {
         lowering_path: vec!["constraint_ir".to_string(), "known_combinator".to_string()],
         widenings: Vec::new(),
         production_allowed: true,
+        compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
 }
@@ -4492,6 +4493,7 @@ fn witness_only_domain(witnesses: &[&str]) -> LoweredDomain {
         lowering_path: vec!["witness_replay".to_string()],
         widenings: Vec::new(),
         production_allowed: true,
+        compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
 }
@@ -4516,8 +4518,103 @@ fn placeholder_domain(reason: &str) -> LoweredDomain {
             allowed_only_under: Some(TrustProfile::UnsafeDev),
         }],
         production_allowed: false,
+        compatibility_diagnostics: Vec::new(),
         diagnostics: vec![reason.to_string()],
     }
+}
+
+fn domain_fixture(
+    precision: DomainPrecision,
+    certificate: DomainCertificate,
+    obligations_open: Vec<DomainObligation>,
+    obligations_discharged: Vec<DomainObligation>,
+) -> LoweredDomain {
+    let relation = match precision {
+        DomainPrecision::WitnessOnly => DomainRel::Witness {
+            encoded_values: vec!["00".to_string()],
+        },
+        _ => DomainRel::And {
+            items: vec![
+                DomainRel::Constraint {
+                    constraint: FuzzerConstraint::IntRange {
+                        min: "0".to_string(),
+                        max: "10".to_string(),
+                    },
+                },
+                DomainRel::Semantics {
+                    semantics: FuzzerSemantics::IntRange {
+                        min: Some("0".to_string()),
+                        max: Some("10".to_string()),
+                    },
+                },
+            ],
+        },
+    };
+
+    LoweredDomain {
+        relation,
+        precision,
+        certificate,
+        obligations_open,
+        obligations_discharged,
+        lowering_path: vec!["test_fixture".to_string()],
+        widenings: Vec::new(),
+        production_allowed: false,
+        compatibility_diagnostics: Vec::new(),
+        diagnostics: Vec::new(),
+    }
+}
+
+fn differential_overapprox_domain() -> LoweredDomain {
+    domain_fixture(
+        DomainPrecision::OverApprox,
+        DomainCertificate::DifferentialTestedOnly,
+        Vec::new(),
+        vec![
+            DomainObligation::FuzzerReturnsImpliesDomain,
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+    )
+}
+
+fn exact_solver_domain() -> LoweredDomain {
+    domain_fixture(
+        DomainPrecision::Exact,
+        DomainCertificate::LeanProved,
+        Vec::new(),
+        vec![
+            DomainObligation::DomainIffFuzzerReturns,
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+    )
+}
+
+fn underapprox_existential_domain() -> LoweredDomain {
+    domain_fixture(
+        DomainPrecision::UnderApprox,
+        DomainCertificate::LeanProved,
+        Vec::new(),
+        vec![
+            DomainObligation::DomainImpliesFuzzerReturns,
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+    )
+}
+
+fn unchecked_exact_domain() -> LoweredDomain {
+    domain_fixture(
+        DomainPrecision::Exact,
+        DomainCertificate::Unchecked,
+        Vec::new(),
+        vec![
+            DomainObligation::DomainIffFuzzerReturns,
+            DomainObligation::FuzzerModelHashMatches,
+            DomainObligation::PropertyHarnessMatchesExportedUPLC,
+        ],
+    )
 }
 
 fn make_manifest(entries: Vec<(&str, &str, &str)>) -> GeneratedManifest {
@@ -5351,6 +5448,7 @@ fn theorem_result_serializes_new_status_and_certification() {
         TrustProfile::Production,
         trusted_overapprox_domain(),
         Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
     );
     let value = serde_json::to_value(&result).expect("TheoremResult should serialize");
 
@@ -5472,11 +5570,195 @@ fn unknown_or_unchecked_domain_cannot_report_solver_validated_under_production()
         TrustProfile::Production,
         placeholder_domain("placeholder widened to True"),
         Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
     );
 
     assert_eq!(result.status, VerificationStatus::Partial);
     assert_eq!(result.certification, Certification::OpenObligations);
     assert_ne!(result.status, VerificationStatus::SolverValidated);
+    assert!(matches!(result.proof_status, ProofStatus::Partial { .. }));
+}
+
+#[test]
+fn compatibility_validator_accepts_overapprox_universal_normal_bool() {
+    let assessment = assess_domain_compatibility(
+        CompatibilityMode::UniversalSuccess,
+        Some(TestReturnMode::Bool),
+        TrustProfile::Production,
+        &trusted_overapprox_domain(),
+        SuccessChannel::SolverTheorem,
+    );
+
+    assert!(
+        assessment.block_reason.is_none(),
+        "normal universal bool theorem should accept trusted OverApprox domains: {assessment:?}",
+    );
+    assert!(assessment.diagnostics.is_empty());
+}
+
+#[test]
+fn compatibility_validator_accepts_overapprox_universal_fail_void() {
+    let assessment = assess_domain_compatibility(
+        CompatibilityMode::UniversalFailure,
+        Some(TestReturnMode::Void),
+        TrustProfile::Production,
+        &trusted_overapprox_domain(),
+        SuccessChannel::SolverTheorem,
+    );
+
+    assert!(
+        assessment.block_reason.is_none(),
+        "fail universal void theorem should accept trusted OverApprox domains: {assessment:?}",
+    );
+    assert!(assessment.diagnostics.is_empty());
+}
+
+#[test]
+fn compatibility_validator_blocks_overapprox_semantic_existential_bool() {
+    let assessment = assess_domain_compatibility(
+        CompatibilityMode::SemanticExistential,
+        Some(TestReturnMode::Bool),
+        TrustProfile::Production,
+        &trusted_overapprox_domain(),
+        SuccessChannel::SolverTheorem,
+    );
+
+    assert!(
+        assessment
+            .block_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("Exact, UnderApprox, or WitnessOnly")),
+        "semantic existential theorem must reject OverApprox domains: {assessment:?}",
+    );
+    assert_eq!(
+        assessment.diagnostics[0].code,
+        "mode_domain_existential_precision"
+    );
+}
+
+#[test]
+fn compatibility_validator_blocks_underapprox_universal_void() {
+    let assessment = assess_domain_compatibility(
+        CompatibilityMode::UniversalFailure,
+        Some(TestReturnMode::Void),
+        TrustProfile::Production,
+        &underapprox_existential_domain(),
+        SuccessChannel::SolverTheorem,
+    );
+
+    assert!(
+        assessment
+            .block_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("Exact or OverApprox")),
+        "universal void theorem must reject UnderApprox domains: {assessment:?}",
+    );
+    assert_eq!(
+        assessment.diagnostics[0].code,
+        "mode_domain_universal_precision"
+    );
+}
+
+#[test]
+fn witness_checks_require_concrete_replay_validation() {
+    let domain = domain_fixture(
+        DomainPrecision::WitnessOnly,
+        DomainCertificate::TrustedVersionedModel,
+        Vec::new(),
+        vec![DomainObligation::WitnessSatisfiesDomain],
+    );
+    let assessment = assess_domain_compatibility(
+        CompatibilityMode::WitnessCheck,
+        Some(TestReturnMode::Bool),
+        TrustProfile::Production,
+        &domain,
+        SuccessChannel::WitnessReplay,
+    );
+
+    assert!(
+        assessment.block_reason.is_some(),
+        "witness checks must require replay validation: {assessment:?}",
+    );
+    assert!(
+        assessment
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "mode_domain_witness_certificate"),
+        "witness check diagnostics should explain missing replay certification: {assessment:?}",
+    );
+}
+
+#[test]
+fn differential_only_domain_cannot_report_solver_validated_under_production() {
+    let result = TheoremResult::new_with_domain(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        differential_overapprox_domain(),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
+    );
+
+    assert_eq!(result.status, VerificationStatus::Partial);
+    assert!(matches!(result.proof_status, ProofStatus::Partial { .. }));
+}
+
+#[test]
+fn unchecked_domain_cannot_report_solver_validated_under_production() {
+    let result = TheoremResult::new_with_domain(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        unchecked_exact_domain(),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
+    );
+
+    assert_eq!(result.status, VerificationStatus::Partial);
+    assert!(matches!(result.proof_status, ProofStatus::Partial { .. }));
+}
+
+#[test]
+fn experimental_differential_only_success_is_labeled() {
+    let result = TheoremResult::new_with_domain(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Experimental,
+        differential_overapprox_domain(),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
+    );
+
+    assert_eq!(result.status, VerificationStatus::SolverValidated);
+    assert!(
+        result
+            .explanation
+            .as_deref()
+            .is_some_and(|message| message.contains("experimental trust profile")),
+        "experimental-only acceptance must be labeled: {result:?}",
+    );
+}
+
+#[test]
+fn unsafe_dev_never_reports_verified_success() {
+    let result = TheoremResult::new_with_domain(
+        "mod.test".to_string(),
+        "test".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::UnsafeDev,
+        exact_solver_domain(),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Bool),
+    );
+
+    assert_eq!(result.status, VerificationStatus::Partial);
     assert!(matches!(result.proof_status, ProofStatus::Partial { .. }));
 }
 
