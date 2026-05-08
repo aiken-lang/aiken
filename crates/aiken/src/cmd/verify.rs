@@ -1106,6 +1106,50 @@ fn extract_counterexample_display(reason: &str) -> Option<String> {
     )
 }
 
+fn solver_counterexample_label(theorem: &verify::TheoremResult, reason: &str) -> String {
+    if let Some(counterexample) = theorem.counterexample.as_ref() {
+        return match counterexample.classification {
+            verify::CounterexampleClassification::ConfirmedByReplay => counterexample
+                .input_source_value
+                .as_deref()
+                .map(|value| {
+                    format!(
+                        "SOLVER FALSIFIED [{}]: {value}",
+                        certification_label(theorem.certification)
+                    )
+                })
+                .unwrap_or_else(|| {
+                    format!(
+                        "SOLVER FALSIFIED [{}]",
+                        certification_label(theorem.certification)
+                    )
+                }),
+            verify::CounterexampleClassification::Potential => format!(
+                "SOLVER FALSIFIED [{}]: potential counterexample",
+                certification_label(theorem.certification)
+            ),
+            verify::CounterexampleClassification::SmtModelOnly | _ => format!(
+                "SOLVER FALSIFIED [{}]: SMT model only",
+                certification_label(theorem.certification)
+            ),
+        };
+    }
+
+    extract_counterexample_display(reason)
+        .map(|value| {
+            format!(
+                "SOLVER FALSIFIED [{}]: {value}",
+                certification_label(theorem.certification)
+            )
+        })
+        .unwrap_or_else(|| {
+            format!(
+                "SOLVER FALSIFIED [{}]",
+                certification_label(theorem.certification)
+            )
+        })
+}
+
 fn sanitize_stderr_for_display(stderr: &str) -> String {
     stderr
         .lines()
@@ -1734,26 +1778,13 @@ fn exec_run_with_project(
                         )
                     }
                     ProofStatus::Failed { category, reason } => match category {
-                        FailureCategory::Counterexample => {
-                            let label = extract_counterexample_display(reason)
-                                .map(|value| {
-                                    format!(
-                                        "SOLVER FALSIFIED [{}]: {value}",
-                                        certification_label(t.certification)
-                                    )
-                                })
-                                .unwrap_or_else(|| {
-                                    format!(
-                                        "SOLVER FALSIFIED [{}]",
-                                        certification_label(t.certification)
-                                    )
-                                });
-                            (
-                                "FAIL".if_supports_color(Stderr, |s| s.red()).to_string(),
-                                label,
-                                None,
-                            )
-                        }
+                        FailureCategory::Counterexample => (
+                            "FAIL".if_supports_color(Stderr, |s| s.red()).to_string(),
+                            solver_counterexample_label(t, reason),
+                            t.explanation
+                                .as_deref()
+                                .and_then(render_status_explanation_block),
+                        ),
                         _ => {
                             let cat = match category {
                                 FailureCategory::Counterexample => "counterexample",
@@ -3466,6 +3497,63 @@ error: Foo.lean:1:1: Tactic `blaster` failed";
         assert_eq!(
             extract_counterexample_display(reason),
             Some("x = 1, y = True".to_string())
+        );
+    }
+
+    #[test]
+    fn solver_counterexample_label_prefers_replay_confirmed_input() {
+        let reason = "error: Foo.lean:1:1: Counterexample: x = 42";
+        let mut theorem = verify::TheoremResult::new(
+            "example.test".to_string(),
+            "example_theorem".to_string(),
+            verify::ProofStatus::Failed {
+                category: verify::FailureCategory::Counterexample,
+                reason: reason.to_string(),
+            },
+            0,
+        );
+        theorem.counterexample = Some(
+            serde_json::from_value(serde_json::json!({
+                "classification": "confirmed_by_replay",
+                "replay_status": "confirmed",
+                "input_source_value": "41",
+                "raw_model_text": reason,
+                "property_outcome": "returns_false",
+                "replay_note": "confirmed replay"
+            }))
+            .unwrap(),
+        );
+        assert_eq!(
+            solver_counterexample_label(&theorem, reason),
+            "SOLVER FALSIFIED [smt_valid_no_proof_reconstruction]: 41"
+        );
+    }
+
+    #[test]
+    fn solver_counterexample_label_marks_potential_models() {
+        let reason = "error: Foo.lean:1:1: Counterexample: x = 42";
+        let mut theorem = verify::TheoremResult::new(
+            "example.test".to_string(),
+            "example_theorem".to_string(),
+            verify::ProofStatus::Failed {
+                category: verify::FailureCategory::Counterexample,
+                reason: reason.to_string(),
+            },
+            0,
+        );
+        theorem.counterexample = Some(
+            serde_json::from_value(serde_json::json!({
+                "classification": "potential",
+                "replay_status": "not_attempted",
+                "input_source_value": "41",
+                "raw_model_text": reason,
+                "replay_note": "potential replay"
+            }))
+            .unwrap(),
+        );
+        assert_eq!(
+            solver_counterexample_label(&theorem, reason),
+            "SOLVER FALSIFIED [smt_valid_no_proof_reconstruction]: potential counterexample"
         );
     }
 

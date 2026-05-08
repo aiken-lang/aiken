@@ -136,6 +136,28 @@ fn exported_replay_witness(
     }
 }
 
+fn constant_bool_property_flat_hex(value: bool) -> String {
+    let program = uplc::ast::Program {
+        version: (1, 0, 0),
+        term: uplc::ast::Term::<uplc::ast::Name>::bool(value).lambda("x"),
+    };
+    let debruijn = program
+        .to_debruijn()
+        .expect("test property program should convert to DeBruijn");
+    hex::encode(
+        debruijn
+            .to_flat()
+            .expect("test property program should flat-encode"),
+    )
+}
+
+fn write_counterexample_property_program(out_dir: &Path, name: &str, value: bool) -> String {
+    let rel = format!("cbor/{name}.cbor");
+    fs::create_dir_all(out_dir.join("cbor")).unwrap();
+    fs::write(out_dir.join(&rel), constant_bool_property_flat_hex(value)).unwrap();
+    rel
+}
+
 fn make_bridge_test(
     name: &str,
     output_type: FuzzerOutputType,
@@ -6201,6 +6223,216 @@ fn theorem_result_serializes_new_status_and_certification() {
     assert_eq!(value["input_type"]["aiken_type"], serde_json::json!("Int"));
     assert!(value["input_type"]["schema_hash"].as_str().is_some());
     assert_eq!(value["proof_status"], serde_json::json!({"kind": "proved"}));
+}
+
+#[test]
+fn exact_solver_counterexample_replays_to_confirmed_aiken_input() {
+    let tmp = tempfile::tempdir().unwrap();
+    let rel = write_counterexample_property_program(tmp.path(), "exact_counterexample", false);
+    let mut manifest = make_manifest(vec![(
+        "example",
+        "counterexample_prop",
+        "counterexample_prop",
+    )]);
+    manifest.tests[0].flat_file = rel;
+    manifest.tests[0].domain = Some(exact_solver_domain());
+    manifest.tests[0].input_type = Some(default_input_bridge());
+    manifest.tests[0].test_mode = Some(ManifestTestMode::Normal);
+    manifest.tests[0].return_mode = Some(TestReturnMode::Bool);
+
+    let result = TheoremResult::from_manifest_entry_with_replay(
+        "example.counterexample_prop".to_string(),
+        manifest.tests[0].lean_theorem.clone(),
+        &manifest.tests[0],
+        ProofStatus::Failed {
+            category: FailureCategory::Counterexample,
+            reason: "error: Foo.lean:1:1: Counterexample: x = 41\nerror: Foo.lean:1:1: Tactic `blaster` failed: Goal was falsified".to_string(),
+        },
+        0,
+        &manifest,
+        tmp.path(),
+    );
+
+    assert_eq!(result.status, VerificationStatus::SolverFalsified);
+    let counterexample = result
+        .counterexample
+        .as_ref()
+        .expect("counterexample report should be attached");
+    assert_eq!(
+        counterexample.classification,
+        CounterexampleClassification::ConfirmedByReplay
+    );
+    assert_eq!(
+        counterexample.replay_status,
+        CounterexampleReplayStatus::Confirmed
+    );
+    assert_eq!(counterexample.input_source_value.as_deref(), Some("41"));
+    assert_eq!(
+        counterexample.property_outcome,
+        Some(CounterexamplePropertyOutcome::ReturnsFalse)
+    );
+    let json = serde_json::to_value(&result).expect("result should serialize");
+    assert_eq!(
+        json["counterexample"]["replay_status"],
+        serde_json::json!("confirmed")
+    );
+    assert_eq!(
+        json["counterexample"]["input_source_value"],
+        serde_json::json!("41")
+    );
+}
+
+#[test]
+fn overapprox_solver_counterexample_without_replay_stays_potential() {
+    let mut manifest = make_manifest(vec![(
+        "example",
+        "potential_counterexample",
+        "potential_counterexample",
+    )]);
+    manifest.tests[0].domain = Some(trusted_overapprox_domain());
+    manifest.tests[0].input_type = Some(default_input_bridge());
+    manifest.tests[0].test_mode = Some(ManifestTestMode::Normal);
+    manifest.tests[0].return_mode = Some(TestReturnMode::Bool);
+
+    let result = TheoremResult::from_manifest_entry(
+        "example.potential_counterexample".to_string(),
+        manifest.tests[0].lean_theorem.clone(),
+        &manifest.tests[0],
+        ProofStatus::Failed {
+            category: FailureCategory::Counterexample,
+            reason: "error: Foo.lean:1:1: Counterexample: x = 41".to_string(),
+        },
+        0,
+    );
+
+    let counterexample = result
+        .counterexample
+        .as_ref()
+        .expect("counterexample report should be attached");
+    assert_eq!(
+        counterexample.classification,
+        CounterexampleClassification::Potential
+    );
+    assert_eq!(
+        counterexample.replay_status,
+        CounterexampleReplayStatus::NotAttempted
+    );
+    assert_eq!(counterexample.input_source_value.as_deref(), Some("41"));
+    let json = serde_json::to_value(&result).expect("result should serialize");
+    assert_eq!(
+        json["counterexample"]["classification"],
+        serde_json::json!("potential")
+    );
+    assert_eq!(
+        json["counterexample"]["replay_status"],
+        serde_json::json!("not_attempted")
+    );
+}
+
+#[test]
+fn solver_counterexample_keeps_raw_model_when_decode_is_partial() {
+    let mut manifest = make_manifest(vec![(
+        "example",
+        "raw_model_counterexample",
+        "raw_model_counterexample",
+    )]);
+    manifest.tests[0].domain = Some(exact_solver_domain());
+    manifest.tests[0].input_type = Some(default_input_bridge());
+    manifest.tests[0].test_mode = Some(ManifestTestMode::Normal);
+    manifest.tests[0].return_mode = Some(TestReturnMode::Bool);
+
+    let result = TheoremResult::from_manifest_entry(
+        "example.raw_model_counterexample".to_string(),
+        manifest.tests[0].lean_theorem.clone(),
+        &manifest.tests[0],
+        ProofStatus::Failed {
+            category: FailureCategory::Counterexample,
+            reason: "error: Foo.lean:1:1: Counterexample: x = mystery_term".to_string(),
+        },
+        0,
+    );
+
+    let counterexample = result
+        .counterexample
+        .as_ref()
+        .expect("counterexample report should be attached");
+    assert_eq!(
+        counterexample.classification,
+        CounterexampleClassification::SmtModelOnly
+    );
+    assert_eq!(
+        counterexample.replay_status,
+        CounterexampleReplayStatus::DecodeFailed
+    );
+    assert_eq!(
+        counterexample.bindings,
+        vec![CounterexampleBinding {
+            name: Some("x".to_string()),
+            raw_model: "mystery_term".to_string(),
+            source_value: None,
+        }]
+    );
+    assert!(
+        counterexample
+            .raw_model_text
+            .as_deref()
+            .is_some_and(|raw| raw.contains("mystery_term"))
+    );
+    let json = serde_json::to_value(&result).expect("result should serialize");
+    assert_eq!(
+        json["counterexample"]["bindings"][0]["raw_model"],
+        serde_json::json!("mystery_term")
+    );
+}
+
+#[test]
+fn witness_backed_solver_counterexample_emits_seed_and_replays() {
+    let tmp = tempfile::tempdir().unwrap();
+    let rel = write_counterexample_property_program(tmp.path(), "witness_counterexample", false);
+    let mut manifest = make_manifest(vec![(
+        "example",
+        "witness_counterexample",
+        "witness_counterexample",
+    )]);
+    manifest.tests[0].flat_file = rel;
+    manifest.tests[0].domain = Some(witness_only_domain(&["aa"]));
+    manifest.tests[0].input_type = Some(default_input_bridge());
+    manifest.tests[0].test_mode = Some(ManifestTestMode::Normal);
+    manifest.tests[0].return_mode = Some(TestReturnMode::Bool);
+
+    let result = TheoremResult::from_manifest_entry_with_replay(
+        "example.witness_counterexample".to_string(),
+        manifest.tests[0].lean_theorem.clone(),
+        &manifest.tests[0],
+        ProofStatus::Failed {
+            category: FailureCategory::Counterexample,
+            reason: "error: Foo.lean:1:1: Counterexample: x = 41".to_string(),
+        },
+        0,
+        &manifest,
+        tmp.path(),
+    );
+
+    let counterexample = result
+        .counterexample
+        .as_ref()
+        .expect("counterexample report should be attached");
+    assert_eq!(
+        counterexample.classification,
+        CounterexampleClassification::ConfirmedByReplay
+    );
+    assert_eq!(
+        counterexample.replay_status,
+        CounterexampleReplayStatus::Confirmed
+    );
+    assert_eq!(
+        counterexample.generation_seed,
+        Some(CONCRETE_WITNESS_BASE_SEED)
+    );
+    assert_eq!(
+        counterexample.property_outcome,
+        Some(CounterexamplePropertyOutcome::ReturnsFalse)
+    );
 }
 
 #[test]

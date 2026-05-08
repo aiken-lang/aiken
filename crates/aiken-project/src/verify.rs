@@ -77,7 +77,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 use uplc::{
     BoundedBytes, Constr, MaybeIndefArray, PlutusData,
+    ast::{Constant as UplcConstant, DeBruijn, Program, Term},
     machine::{
+        cost_model::ExBudget,
         runtime::{convert_constr_to_tag, convert_tag_to_constr},
         value::{Value as UplcRuntimeValue, to_pallas_bigint},
     },
@@ -889,6 +891,98 @@ impl Certification {
             VerificationStatus::Unsupported => Certification::Unsupported,
         }
     }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CounterexampleClassification {
+    ConfirmedByReplay,
+    Potential,
+    SmtModelOnly,
+}
+
+impl std::fmt::Display for CounterexampleClassification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CounterexampleClassification::ConfirmedByReplay => "confirmed_by_replay",
+            CounterexampleClassification::Potential => "potential",
+            CounterexampleClassification::SmtModelOnly => "smt_model_only",
+        })
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CounterexampleReplayStatus {
+    Confirmed,
+    ReplayFailed,
+    DecodeFailed,
+    NotAttempted,
+}
+
+impl std::fmt::Display for CounterexampleReplayStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CounterexampleReplayStatus::Confirmed => "confirmed",
+            CounterexampleReplayStatus::ReplayFailed => "replay_failed",
+            CounterexampleReplayStatus::DecodeFailed => "decode_failed",
+            CounterexampleReplayStatus::NotAttempted => "not_attempted",
+        })
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CounterexamplePropertyOutcome {
+    ReturnsTrue,
+    ReturnsFalse,
+    ReturnsVoid,
+    EvalError,
+}
+
+impl std::fmt::Display for CounterexamplePropertyOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CounterexamplePropertyOutcome::ReturnsTrue => "returns_true",
+            CounterexamplePropertyOutcome::ReturnsFalse => "returns_false",
+            CounterexamplePropertyOutcome::ReturnsVoid => "returns_void",
+            CounterexamplePropertyOutcome::EvalError => "eval_error",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct CounterexampleBinding {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub raw_model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_value: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct SolverCounterexample {
+    pub classification: CounterexampleClassification,
+    pub replay_status: CounterexampleReplayStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_source_value: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bindings: Vec<CounterexampleBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_model_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_outcome: Option<CounterexamplePropertyOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_seed: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_choices_hex: Option<String>,
 }
 
 #[non_exhaustive]
@@ -2485,6 +2579,8 @@ pub struct TheoremResult {
     pub input_type: Option<InputValueBridge>,
     pub proof_status: ProofStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub counterexample: Option<SolverCounterexample>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
     /// Number of constraints dropped or widened during TransitionProp lowering.
     /// Non-zero only for two-phase trace theorems.
@@ -2601,6 +2697,8 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
             #[serde(default)]
             proof_status: Option<ProofStatus>,
             #[serde(default)]
+            counterexample: Option<SolverCounterexample>,
+            #[serde(default)]
             explanation: Option<String>,
             #[serde(default)]
             over_approximations: usize,
@@ -2627,22 +2725,28 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
         let domain = wire
             .domain
             .unwrap_or_else(LoweredDomain::legacy_placeholder);
-        let explanation = wire
-            .explanation
-            .or_else(|| theorem_result_explanation(status, &proof_status));
-
-        Ok(TheoremResult {
+        let input_type = wire.input_type;
+        let counterexample = wire.counterexample.or_else(|| {
+            build_solver_counterexample(&proof_status, &domain, input_type.as_ref(), None)
+        });
+        let mut result = TheoremResult {
             test_name: wire.test_name,
             theorem_name: wire.theorem_name,
             status,
             certification,
             trust_profile,
             domain,
-            input_type: wire.input_type,
+            input_type,
             proof_status,
-            explanation,
+            counterexample,
+            explanation: wire.explanation,
             over_approximations: wire.over_approximations,
-        })
+        };
+        if result.explanation.is_none() {
+            result.rebuild_explanation();
+        }
+
+        Ok(result)
     }
 }
 
@@ -2659,6 +2763,28 @@ fn default_result_domain() -> LoweredDomain {
 }
 
 impl TheoremResult {
+    fn rebuild_explanation(&mut self) {
+        self.explanation = theorem_result_explanation(self.status, &self.proof_status);
+        append_explanation_line(
+            &mut self.explanation,
+            counterexample_result_explanation(self.counterexample.as_ref()),
+        );
+        append_explanation_line(
+            &mut self.explanation,
+            domain_result_explanation(&self.domain),
+        );
+    }
+
+    fn refresh_counterexample(&mut self, replay_context: Option<CounterexampleReplayContext<'_>>) {
+        self.counterexample = build_solver_counterexample(
+            &self.proof_status,
+            &self.domain,
+            self.input_type.as_ref(),
+            replay_context,
+        );
+        self.rebuild_explanation();
+    }
+
     fn from_parts(
         test_name: String,
         theorem_name: String,
@@ -2670,8 +2796,7 @@ impl TheoremResult {
     ) -> Self {
         let status = VerificationStatus::from_proof_status(&proof_status);
         let certification = Certification::from_proof_status(&proof_status);
-        let explanation = theorem_result_explanation(status, &proof_status);
-        Self {
+        let mut result = Self {
             test_name,
             theorem_name,
             status,
@@ -2680,9 +2805,12 @@ impl TheoremResult {
             domain,
             input_type,
             proof_status,
-            explanation,
+            counterexample: None,
+            explanation: None,
             over_approximations,
-        }
+        };
+        result.refresh_counterexample(None);
+        result
     }
 
     pub fn new(
@@ -2744,16 +2872,7 @@ impl TheoremResult {
             ProofStatus::Proved | ProofStatus::WitnessProved { .. }
         ) && let Some(note) = assessment.and_then(|assessment| assessment.success_note)
         {
-            result.explanation = Some(match result.explanation.take() {
-                Some(existing) => format!("{existing}\n{note}"),
-                None => note,
-            });
-        }
-        if let Some(note) = domain_result_explanation(&result.domain) {
-            result.explanation = Some(match result.explanation.take() {
-                Some(existing) => format!("{existing}\n{note}"),
-                None => note,
-            });
+            append_explanation_line(&mut result.explanation, Some(note));
         }
 
         result
@@ -2799,11 +2918,38 @@ impl TheoremResult {
         )
     }
 
+    pub fn from_manifest_entry_with_replay(
+        test_name: String,
+        theorem_name: String,
+        entry: &ManifestEntry,
+        proof_status: ProofStatus,
+        over_approximations: usize,
+        _manifest: &GeneratedManifest,
+        out_dir: &Path,
+    ) -> Self {
+        let mut result = Self::from_manifest_entry(
+            test_name,
+            theorem_name.clone(),
+            entry,
+            proof_status,
+            over_approximations,
+        );
+        if theorem_name == entry.lean_theorem {
+            result.refresh_counterexample(Some(CounterexampleReplayContext {
+                flat_file: &entry.flat_file,
+                out_dir,
+                test_mode: entry.test_mode,
+                return_mode: entry.return_mode.clone(),
+            }));
+        }
+        result
+    }
+
     pub fn set_proof_status(&mut self, proof_status: ProofStatus) {
         self.status = VerificationStatus::from_proof_status(&proof_status);
         self.certification = Certification::from_proof_status(&proof_status);
-        self.explanation = theorem_result_explanation(self.status, &proof_status);
         self.proof_status = proof_status;
+        self.refresh_counterexample(None);
     }
 }
 
@@ -6096,6 +6242,8 @@ pub fn run_proofs(
         fallback_from_sibling_explicit_failure: bool,
         over_approximations: usize,
         caveat: ProofCaveat,
+        manifest: &GeneratedManifest,
+        out_dir: &Path,
     ) -> TheoremResult {
         let status = if timed_out {
             ProofStatus::TimedOut {
@@ -6169,12 +6317,14 @@ pub fn run_proofs(
         } else {
             0
         };
-        TheoremResult::from_manifest_entry(
+        TheoremResult::from_manifest_entry_with_replay(
             test_name,
             theorem_name.to_string(),
             entry,
             status,
             over_approx,
+            manifest,
+            out_dir,
         )
     }
 
@@ -6398,6 +6548,8 @@ pub fn run_proofs(
             false,
             entry.over_approximations,
             correctness_caveat,
+            manifest,
+            out_dir,
         ));
         if let Some(term_theorem_name) = term_theorem_name {
             theorem_results.push(theorem_status_from_module_build(
@@ -6413,6 +6565,8 @@ pub fn run_proofs(
                 correctness_failed || equivalence_failed,
                 0,                 // termination theorem is not a two-phase proof
                 ProofCaveat::None, // termination companion always fully proved when present
+                manifest,
+                out_dir,
             ));
         }
         if let Some(equivalence_theorem_name) = equivalence_theorem_name {
@@ -6429,6 +6583,8 @@ pub fn run_proofs(
                 correctness_failed || termination_failed,
                 0,                 // equivalence theorem is not a two-phase proof
                 ProofCaveat::None, // equivalence companion always fully proved when present
+                manifest,
+                out_dir,
             ));
         }
 
@@ -8524,6 +8680,143 @@ impl InputTypeSchema {
             )),
         }
     }
+
+    fn to_source_value(&self, value: &BridgedAikenValue) -> Result<String, String> {
+        match (self, value) {
+            (InputTypeSchema::Bool, BridgedAikenValue::Bool(value)) => Ok(if *value {
+                "True".to_string()
+            } else {
+                "False".to_string()
+            }),
+            (InputTypeSchema::Int, BridgedAikenValue::Int(value)) => Ok(value.to_string()),
+            (InputTypeSchema::ByteArray, BridgedAikenValue::ByteArray(bytes)) => {
+                Ok(aiken_bytearray_literal(bytes))
+            }
+            (InputTypeSchema::String, BridgedAikenValue::String(value)) => Ok(format!("{value:?}")),
+            (InputTypeSchema::List { element }, BridgedAikenValue::List(values)) => values
+                .iter()
+                .map(|value| element.to_source_value(value))
+                .collect::<Result<Vec<_>, _>>()
+                .map(|items| format!("[{}]", items.join(", "))),
+            (InputTypeSchema::Pair { first, second }, BridgedAikenValue::Tuple(values)) => {
+                if values.len() != 2 {
+                    return Err(format!(
+                        "expected pair bridge value with 2 items, got {}",
+                        values.len()
+                    ));
+                }
+                Ok(format!(
+                    "({}, {})",
+                    first.to_source_value(&values[0])?,
+                    second.to_source_value(&values[1])?
+                ))
+            }
+            (InputTypeSchema::Tuple { elements }, BridgedAikenValue::Tuple(values)) => {
+                if elements.len() != values.len() {
+                    return Err(format!(
+                        "expected tuple bridge value with {} items, got {}",
+                        elements.len(),
+                        values.len()
+                    ));
+                }
+                let items = elements
+                    .iter()
+                    .zip(values.iter())
+                    .map(|(schema, value)| schema.to_source_value(value))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(lean_tuple_literal(&items))
+            }
+            (
+                InputTypeSchema::ConstructorTagged { constructors, .. },
+                BridgedAikenValue::Constructor { tag, fields },
+            ) => {
+                let constructor = constructors
+                    .iter()
+                    .find(|candidate| candidate.tag == *tag)
+                    .ok_or_else(|| format!("unknown constructor tag {tag}"))?;
+                if constructor.fields.len() != fields.len() {
+                    return Err(format!(
+                        "constructor tag {tag} expects {} field(s), got {}",
+                        constructor.fields.len(),
+                        fields.len()
+                    ));
+                }
+                let rendered_fields = constructor
+                    .fields
+                    .iter()
+                    .zip(fields.iter())
+                    .map(|(field, value)| {
+                        field
+                            .schema
+                            .to_source_value(value)
+                            .map(|rendered| (field.name.clone(), rendered))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let name = constructor
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Constr{}", constructor.tag));
+                if rendered_fields.is_empty() {
+                    Ok(name)
+                } else if rendered_fields.iter().all(|(field, _)| field.is_some()) {
+                    let fields = rendered_fields
+                        .iter()
+                        .map(|(field, rendered)| {
+                            format!("{}: {rendered}", field.as_deref().unwrap_or("field"))
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    Ok(format!("{name} {{{fields}}}"))
+                } else {
+                    let fields = rendered_fields
+                        .iter()
+                        .map(|(_, rendered)| rendered.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    Ok(format!("{name}({fields})"))
+                }
+            }
+            (InputTypeSchema::Data, _) | (InputTypeSchema::RawDataFallback { .. }, _) => {
+                Err("source-level rendering is unavailable for raw Data values".to_string())
+            }
+            _ => Err(format!(
+                "value {value:?} does not match input schema {self:?}"
+            )),
+        }
+    }
+
+    fn decode_counterexample_expr(&self, expr: &str) -> Result<BridgedAikenValue, String> {
+        match self {
+            InputTypeSchema::Bool => parse_counterexample_bool(expr)
+                .map(BridgedAikenValue::Bool)
+                .or_else(|_| {
+                    parse_inline_plutus_data(expr).and_then(|data| self.decode_plutus_data(&data))
+                }),
+            InputTypeSchema::Int => parse_counterexample_int(expr)
+                .map(BridgedAikenValue::Int)
+                .or_else(|_| {
+                    parse_inline_plutus_data(expr).and_then(|data| self.decode_plutus_data(&data))
+                }),
+            InputTypeSchema::ByteArray => parse_counterexample_bytearray(expr)
+                .map(BridgedAikenValue::ByteArray)
+                .or_else(|_| {
+                    parse_inline_plutus_data(expr).and_then(|data| self.decode_plutus_data(&data))
+                }),
+            InputTypeSchema::String => parse_counterexample_string(expr)
+                .map(BridgedAikenValue::String)
+                .or_else(|_| {
+                    parse_inline_plutus_data(expr).and_then(|data| self.decode_plutus_data(&data))
+                }),
+            InputTypeSchema::Data
+            | InputTypeSchema::List { .. }
+            | InputTypeSchema::Pair { .. }
+            | InputTypeSchema::Tuple { .. }
+            | InputTypeSchema::ConstructorTagged { .. }
+            | InputTypeSchema::RawDataFallback { .. } => {
+                parse_inline_plutus_data(expr).and_then(|data| self.decode_plutus_data(&data))
+            }
+        }
+    }
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -8568,6 +8861,700 @@ impl InputValueBridge {
             .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
         schema.to_lean_literal(value)
     }
+
+    fn to_source_value(&self, value: &BridgedAikenValue) -> Result<String, String> {
+        let schema = self
+            .schema
+            .as_ref()
+            .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
+        schema.to_source_value(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedCounterexampleItem {
+    name: Option<String>,
+    raw_model: String,
+}
+
+#[derive(Debug, Clone)]
+struct CounterexampleReplayContext<'a> {
+    flat_file: &'a str,
+    out_dir: &'a Path,
+    test_mode: Option<ManifestTestMode>,
+    return_mode: Option<TestReturnMode>,
+}
+
+fn counterexample_identifier(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+}
+
+fn extract_first_double_quoted_fragment(text: &str) -> Option<String> {
+    let start = text.find('"')?;
+    let rest = &text[start..];
+    let mut escaped = false;
+    for (offset, ch) in rest.char_indices().skip(1) {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '"' => return Some(rest[..=offset].to_string()),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn trim_counterexample_integer_annotation(expr: &str) -> &str {
+    let expr = expr.trim();
+    if let Some(inner) = expr
+        .strip_prefix('(')
+        .and_then(|value| value.strip_suffix(')'))
+        && let Some((value, ty)) = inner.rsplit_once(':')
+        && ty.trim() == "Integer"
+    {
+        value.trim()
+    } else {
+        expr
+    }
+}
+
+fn parse_counterexample_bool(expr: &str) -> Result<bool, String> {
+    match expr.trim() {
+        "True" | "true" => Ok(true),
+        "False" | "false" => Ok(false),
+        other => Err(format!("expected Bool counterexample, got {other}")),
+    }
+}
+
+fn parse_counterexample_int(expr: &str) -> Result<BigInt, String> {
+    let trimmed = trim_counterexample_integer_annotation(expr);
+    BigInt::parse_bytes(trimmed.as_bytes(), 10)
+        .ok_or_else(|| format!("expected Integer counterexample, got {expr}"))
+}
+
+fn parse_counterexample_string(expr: &str) -> Result<String, String> {
+    let quoted = extract_first_double_quoted_fragment(expr)
+        .ok_or_else(|| format!("expected quoted string counterexample, got {expr}"))?;
+    serde_json::from_str(&quoted)
+        .map_err(|error| format!("failed to decode quoted string counterexample {quoted}: {error}"))
+}
+
+fn parse_lean_bytestring(expr: &str) -> Result<Vec<u8>, String> {
+    let trimmed = expr.trim();
+    if trimmed == "PlutusCore.ByteString.emptyByteString" {
+        return Ok(Vec::new());
+    }
+    if let Some(rest) = trimmed.strip_prefix("PlutusCore.ByteString.consByteStringV1 ") {
+        let mut parts = rest.splitn(2, ' ');
+        let head = parts
+            .next()
+            .ok_or_else(|| format!("missing byte head in {expr}"))?;
+        let tail = parts
+            .next()
+            .ok_or_else(|| format!("missing byte tail in {expr}"))?;
+        let byte = head
+            .parse::<u8>()
+            .map_err(|error| format!("invalid byte {head} in {expr}: {error}"))?;
+        let tail = tail.trim();
+        let tail = tail
+            .strip_prefix('(')
+            .and_then(|value| value.strip_suffix(')'))
+            .unwrap_or(tail);
+        let mut bytes = vec![byte];
+        bytes.extend(parse_lean_bytestring(tail)?);
+        return Ok(bytes);
+    }
+    parse_counterexample_string(trimmed).map(|text| text.into_bytes())
+}
+
+fn parse_counterexample_bytearray(expr: &str) -> Result<Vec<u8>, String> {
+    let trimmed = expr.trim();
+    if let Some(hex) = trimmed
+        .strip_prefix("#\"")
+        .and_then(|value| value.strip_suffix('"'))
+    {
+        return hex::decode(hex)
+            .map_err(|error| format!("failed to decode ByteArray literal {trimmed}: {error}"));
+    }
+    if trimmed.starts_with("PlutusCore.ByteString") {
+        return parse_lean_bytestring(trimmed);
+    }
+    parse_counterexample_string(trimmed).map(|text| text.into_bytes())
+}
+
+fn strip_bracketed_list(expr: &str) -> Option<&str> {
+    let trimmed = expr.trim();
+    trimmed
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+}
+
+fn split_top_level_list_items(expr: &str) -> Vec<&str> {
+    let mut items = Vec::new();
+    let mut depth_paren = 0usize;
+    let mut depth_bracket = 0usize;
+    let mut start = 0usize;
+    for (idx, ch) in expr.char_indices() {
+        match ch {
+            '(' => depth_paren = depth_paren.saturating_add(1),
+            ')' => depth_paren = depth_paren.saturating_sub(1),
+            '[' => depth_bracket = depth_bracket.saturating_add(1),
+            ']' => depth_bracket = depth_bracket.saturating_sub(1),
+            ',' if depth_paren == 0 && depth_bracket == 0 => {
+                let item = expr[start..idx].trim();
+                if !item.is_empty() {
+                    items.push(item);
+                }
+                start = idx + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    let tail = expr[start..].trim();
+    if !tail.is_empty() {
+        items.push(tail);
+    }
+    items
+}
+
+fn parse_inline_plutus_data(expr: &str) -> Result<PlutusData, String> {
+    let trimmed = expr.trim();
+    if let Some(rest) = trimmed.strip_prefix("Data.I") {
+        return parse_counterexample_int(rest)
+            .map(|value| PlutusData::BigInt(to_pallas_bigint(&value)));
+    }
+    if let Some(rest) = trimmed.strip_prefix("Data.B") {
+        return parse_counterexample_bytearray(rest)
+            .map(|bytes| PlutusData::BoundedBytes(BoundedBytes::from(bytes)));
+    }
+    if let Some(rest) = trimmed.strip_prefix("Data.List") {
+        let inner = strip_bracketed_list(rest)
+            .ok_or_else(|| format!("expected Data.List [...], got {trimmed}"))?;
+        let items = split_top_level_list_items(inner)
+            .into_iter()
+            .map(parse_inline_plutus_data)
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(PlutusData::Array(MaybeIndefArray::Def(items)));
+    }
+    if let Some(rest) = trimmed.strip_prefix("Data.Constr") {
+        let rest = rest.trim();
+        let fields_start = rest
+            .find('[')
+            .ok_or_else(|| format!("expected constructor fields in {trimmed}"))?;
+        let tag = parse_counterexample_int(rest[..fields_start].trim())?;
+        let fields_src = strip_bracketed_list(&rest[fields_start..])
+            .ok_or_else(|| format!("expected constructor field list in {trimmed}"))?;
+        let fields = split_top_level_list_items(fields_src)
+            .into_iter()
+            .map(parse_inline_plutus_data)
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(plutus_constructor_data(
+            tag.clone()
+                .try_into()
+                .map_err(|_| format!("constructor tag {tag} does not fit into u64"))?,
+            fields,
+        ));
+    }
+    Err(format!(
+        "unsupported inline Plutus Data counterexample {trimmed}"
+    ))
+}
+
+fn aiken_bytearray_literal(bytes: &[u8]) -> String {
+    format!("#\"{}\"", hex::encode(bytes))
+}
+
+fn extract_counterexample_items(reason: &str) -> Vec<ParsedCounterexampleItem> {
+    let mut in_counterexample_block = false;
+    let mut items = Vec::new();
+    let mut current_item: Option<String> = None;
+
+    for line in reason.lines() {
+        if !in_counterexample_block {
+            if let Some(idx) = line.find("Counterexample:") {
+                let tail = line[idx + "Counterexample:".len()..].trim();
+                if !tail.is_empty() {
+                    if let Some((name, value)) = tail.split_once('=')
+                        && counterexample_identifier(name.trim())
+                    {
+                        return vec![ParsedCounterexampleItem {
+                            name: Some(name.trim().to_string()),
+                            raw_model: value.trim().to_string(),
+                        }];
+                    }
+                    return vec![ParsedCounterexampleItem {
+                        name: None,
+                        raw_model: tail.to_string(),
+                    }];
+                }
+                in_counterexample_block = true;
+            }
+            continue;
+        }
+
+        if line.contains("Tactic `blaster` failed")
+            || line.contains("❌ Falsified")
+            || line.contains("unsolved goals")
+        {
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some(idx) = line.find("- ") {
+            if let Some(item) = current_item.take() {
+                items.push(item);
+            }
+            let item = line[idx + 2..].trim();
+            if !item.is_empty() {
+                current_item = Some(item.to_string());
+            }
+            continue;
+        }
+
+        if let Some(item) = &mut current_item {
+            item.push(' ');
+            item.push_str(trimmed);
+        }
+    }
+
+    if let Some(item) = current_item {
+        items.push(item);
+    }
+
+    items
+        .into_iter()
+        .map(|item| {
+            if let Some((name, value)) = item.split_once(':')
+                && counterexample_identifier(name.trim())
+            {
+                ParsedCounterexampleItem {
+                    name: Some(name.trim().to_string()),
+                    raw_model: value.trim().to_string(),
+                }
+            } else {
+                ParsedCounterexampleItem {
+                    name: None,
+                    raw_model: item.trim().to_string(),
+                }
+            }
+        })
+        .collect()
+}
+
+fn counterexample_field_schemas<'a>(
+    schema: &'a InputTypeSchema,
+) -> Option<Vec<&'a InputTypeSchema>> {
+    match schema {
+        InputTypeSchema::Pair { first, second } => Some(vec![first.as_ref(), second.as_ref()]),
+        InputTypeSchema::Tuple { elements } => Some(elements.iter().collect()),
+        InputTypeSchema::ConstructorTagged { constructors, .. } if constructors.len() == 1 => Some(
+            constructors[0]
+                .fields
+                .iter()
+                .map(|field| &field.schema)
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+fn reconstruct_counterexample_value(
+    bridge: &InputValueBridge,
+    items: &[ParsedCounterexampleItem],
+) -> Result<(BridgedAikenValue, Vec<CounterexampleBinding>), String> {
+    let schema = bridge
+        .schema
+        .as_ref()
+        .ok_or_else(|| "input bridge is missing schema metadata".to_string())?;
+
+    if items.is_empty() {
+        return Err("counterexample model did not include any bindings".to_string());
+    }
+
+    if items.len() == 1 {
+        let value = schema.decode_counterexample_expr(&items[0].raw_model)?;
+        let source_value = schema.to_source_value(&value).ok();
+        return Ok((
+            value,
+            vec![CounterexampleBinding {
+                name: items[0].name.clone(),
+                raw_model: items[0].raw_model.clone(),
+                source_value,
+            }],
+        ));
+    }
+
+    let field_schemas = counterexample_field_schemas(schema).ok_or_else(|| {
+        format!(
+            "cannot map {} counterexample bindings onto schema {schema:?}",
+            items.len()
+        )
+    })?;
+    if field_schemas.len() != items.len() {
+        return Err(format!(
+            "counterexample provided {} bindings, but schema expects {}",
+            items.len(),
+            field_schemas.len()
+        ));
+    }
+
+    let mut rendered_bindings = Vec::with_capacity(items.len());
+    let decoded_fields = field_schemas
+        .iter()
+        .zip(items.iter())
+        .map(|(field_schema, item)| {
+            let value = field_schema.decode_counterexample_expr(&item.raw_model)?;
+            rendered_bindings.push(CounterexampleBinding {
+                name: item.name.clone(),
+                raw_model: item.raw_model.clone(),
+                source_value: field_schema.to_source_value(&value).ok(),
+            });
+            Ok(value)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    let full_value = match schema {
+        InputTypeSchema::Pair { .. } | InputTypeSchema::Tuple { .. } => {
+            BridgedAikenValue::Tuple(decoded_fields)
+        }
+        InputTypeSchema::ConstructorTagged { constructors, .. } => BridgedAikenValue::Constructor {
+            tag: constructors[0].tag,
+            fields: decoded_fields,
+        },
+        _ => unreachable!("non-composite schema should have used the single-binding path"),
+    };
+
+    Ok((full_value, rendered_bindings))
+}
+
+fn property_replay_outcome(
+    return_mode: TestReturnMode,
+    eval_result: Result<Term<uplc::ast::NamedDeBruijn>, uplc::machine::Error>,
+) -> CounterexamplePropertyOutcome {
+    match (return_mode, eval_result) {
+        (TestReturnMode::Bool, Ok(Term::Constant(constant))) => match constant.as_ref() {
+            UplcConstant::Bool(true) => CounterexamplePropertyOutcome::ReturnsTrue,
+            UplcConstant::Bool(false) => CounterexamplePropertyOutcome::ReturnsFalse,
+            _ => CounterexamplePropertyOutcome::EvalError,
+        },
+        (TestReturnMode::Void, Ok(_)) => CounterexamplePropertyOutcome::ReturnsVoid,
+        (_, Err(_)) | (_, Ok(_)) => CounterexamplePropertyOutcome::EvalError,
+    }
+}
+
+fn replay_refutes_theorem(
+    test_mode: ManifestTestMode,
+    return_mode: TestReturnMode,
+    outcome: CounterexamplePropertyOutcome,
+) -> Option<bool> {
+    match test_mode {
+        ManifestTestMode::Normal => Some(match (return_mode, outcome) {
+            (TestReturnMode::Bool, CounterexamplePropertyOutcome::ReturnsTrue) => false,
+            (TestReturnMode::Void, CounterexamplePropertyOutcome::ReturnsVoid) => false,
+            _ => true,
+        }),
+        ManifestTestMode::Fail => Some(match (return_mode, outcome) {
+            (TestReturnMode::Bool, CounterexamplePropertyOutcome::ReturnsFalse) => false,
+            (TestReturnMode::Void, CounterexamplePropertyOutcome::EvalError) => false,
+            _ => true,
+        }),
+        ManifestTestMode::FailOnce => None,
+    }
+}
+
+fn replay_counterexample_through_property(
+    flat_path: &Path,
+    input_data: &PlutusData,
+    return_mode: TestReturnMode,
+) -> Result<CounterexamplePropertyOutcome, String> {
+    let flat_hex = fs::read_to_string(flat_path).map_err(|error| {
+        format!(
+            "failed to read property flat file {}: {error}",
+            flat_path.display()
+        )
+    })?;
+    let bytes = flat_hex_bytes("property counterexample replay", flat_hex.trim())
+        .map_err(|error| error.to_string())?;
+    let program = Program::<DeBruijn>::from_flat(&bytes).map_err(|error| {
+        format!(
+            "failed to decode property flat file {}: {error}",
+            flat_path.display()
+        )
+    })?;
+    let eval_result = program
+        .apply_data(input_data.clone())
+        .eval(ExBudget::default());
+    Ok(property_replay_outcome(return_mode, eval_result.result()))
+}
+
+fn counterexample_note(
+    classification: CounterexampleClassification,
+    replay_status: CounterexampleReplayStatus,
+    test_mode: Option<ManifestTestMode>,
+    return_mode: Option<TestReturnMode>,
+    property_outcome: Option<CounterexamplePropertyOutcome>,
+    domain_precision: DomainPrecision,
+    replay_attempted: bool,
+    has_decoded_input: bool,
+) -> String {
+    match classification {
+        CounterexampleClassification::ConfirmedByReplay => {
+            let theorem = match (test_mode, return_mode) {
+                (Some(mode), Some(return_mode)) => format!(
+                    "{} {} theorem",
+                    match mode {
+                        ManifestTestMode::Normal => "normal",
+                        ManifestTestMode::Fail => "fail",
+                        ManifestTestMode::FailOnce => "fail_once",
+                    },
+                    match return_mode {
+                        TestReturnMode::Bool => "bool",
+                        TestReturnMode::Void => "void",
+                    }
+                ),
+                _ => "generated theorem".to_string(),
+            };
+            let outcome = property_outcome
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            format!(
+                "Confirmed by replay through the exported property harness: observed {outcome}, which refutes the {theorem}. This is a confirmed replayed Aiken counterexample."
+            )
+        }
+        CounterexampleClassification::Potential => {
+            if replay_attempted {
+                format!(
+                    "SMT falsified the generated theorem over an {} domain, but replay did not confirm the model through the exported property harness. This remains a potential counterexample rather than a confirmed generated Aiken input.",
+                    domain_precision
+                )
+            } else {
+                format!(
+                    "SMT falsified the generated theorem over an {} domain. Replay has {} completed yet, so this remains a potential counterexample rather than a confirmed generated Aiken input.",
+                    domain_precision,
+                    if replay_status == CounterexampleReplayStatus::NotAttempted {
+                        "not"
+                    } else {
+                        "not successfully"
+                    }
+                )
+            }
+        }
+        CounterexampleClassification::SmtModelOnly => {
+            if !has_decoded_input {
+                "Solver model retained, but the counterexample could not be decoded into a replayable Aiken input. Raw solver/model data is preserved below.".to_string()
+            } else {
+                "Solver model decoded to an input candidate, but replay did not produce a confirmed theorem-refuting Aiken execution. Raw solver/model data is preserved below.".to_string()
+            }
+        }
+    }
+}
+
+fn build_solver_counterexample(
+    proof_status: &ProofStatus,
+    domain: &LoweredDomain,
+    input_type: Option<&InputValueBridge>,
+    replay_context: Option<CounterexampleReplayContext<'_>>,
+) -> Option<SolverCounterexample> {
+    let ProofStatus::Failed {
+        category: FailureCategory::Counterexample,
+        reason,
+    } = proof_status
+    else {
+        return None;
+    };
+
+    let raw_model_text = (!reason.trim().is_empty()).then(|| reason.trim().to_string());
+    let items = extract_counterexample_items(reason);
+    let mut bindings = items
+        .iter()
+        .map(|item| CounterexampleBinding {
+            name: item.name.clone(),
+            raw_model: item.raw_model.clone(),
+            source_value: None,
+        })
+        .collect::<Vec<_>>();
+    let mut decoded_input = None;
+    let mut input_source_value = None;
+    let mut replay_status = CounterexampleReplayStatus::NotAttempted;
+    let mut property_outcome = None;
+    let replay_attempted = replay_context.is_some();
+
+    if let Some(input_type) = input_type {
+        match reconstruct_counterexample_value(input_type, &items) {
+            Ok((value, rendered_bindings)) => {
+                input_source_value = input_type.to_source_value(&value).ok();
+                decoded_input = Some(value);
+                bindings = rendered_bindings;
+            }
+            Err(_) if !items.is_empty() => {
+                replay_status = CounterexampleReplayStatus::DecodeFailed;
+            }
+            Err(_) => {}
+        }
+    }
+
+    if let Some(context) = replay_context.as_ref()
+        && let Some(decoded_input) = decoded_input.as_ref()
+        && let Some(test_mode) = context.test_mode
+        && let Some(return_mode) = context.return_mode.clone()
+        && matches!(test_mode, ManifestTestMode::Normal | ManifestTestMode::Fail)
+    {
+        let replay_data =
+            match input_type.and_then(|bridge| bridge.encode_plutus_data(decoded_input).ok()) {
+                Some(data) => data,
+                None => {
+                    replay_status = CounterexampleReplayStatus::DecodeFailed;
+                    let classification = if domain.precision == DomainPrecision::OverApprox {
+                        CounterexampleClassification::Potential
+                    } else {
+                        CounterexampleClassification::SmtModelOnly
+                    };
+                    return Some(SolverCounterexample {
+                        classification,
+                        replay_status,
+                        input_source_value,
+                        bindings,
+                        raw_model_text,
+                        property_outcome: None,
+                        replay_note: Some(counterexample_note(
+                            classification,
+                            replay_status,
+                            context.test_mode,
+                            context.return_mode.clone(),
+                            None,
+                            domain.precision,
+                            true,
+                            false,
+                        )),
+                        generation_seed: domain
+                            .sampler
+                            .as_ref()
+                            .and_then(|sampler| sampler.generation_seed),
+                        replay_choices_hex: domain
+                            .sampler
+                            .as_ref()
+                            .and_then(|sampler| sampler.replay_choices_hex.clone()),
+                    });
+                }
+            };
+        let flat_path = context.out_dir.join(context.flat_file);
+        match replay_counterexample_through_property(&flat_path, &replay_data, return_mode.clone())
+        {
+            Ok(outcome) => {
+                property_outcome = Some(outcome);
+                replay_status = match replay_refutes_theorem(test_mode, return_mode, outcome) {
+                    Some(true) => CounterexampleReplayStatus::Confirmed,
+                    Some(false) | None => CounterexampleReplayStatus::ReplayFailed,
+                };
+            }
+            Err(_) => {
+                replay_status = CounterexampleReplayStatus::ReplayFailed;
+            }
+        }
+    }
+
+    let classification = if replay_status == CounterexampleReplayStatus::Confirmed {
+        CounterexampleClassification::ConfirmedByReplay
+    } else if domain.precision == DomainPrecision::OverApprox {
+        CounterexampleClassification::Potential
+    } else {
+        CounterexampleClassification::SmtModelOnly
+    };
+
+    let replay_note = Some(counterexample_note(
+        classification,
+        replay_status,
+        replay_context
+            .as_ref()
+            .and_then(|context| context.test_mode),
+        replay_context
+            .as_ref()
+            .and_then(|context| context.return_mode.clone()),
+        property_outcome,
+        domain.precision,
+        replay_attempted,
+        input_source_value.is_some(),
+    ));
+
+    Some(SolverCounterexample {
+        classification,
+        replay_status,
+        input_source_value,
+        bindings,
+        raw_model_text,
+        property_outcome,
+        replay_note,
+        generation_seed: domain
+            .sampler
+            .as_ref()
+            .and_then(|sampler| sampler.generation_seed),
+        replay_choices_hex: domain
+            .sampler
+            .as_ref()
+            .and_then(|sampler| sampler.replay_choices_hex.clone()),
+    })
+}
+
+fn append_explanation_line(target: &mut Option<String>, addition: Option<String>) {
+    let Some(addition) = addition.filter(|text| !text.trim().is_empty()) else {
+        return;
+    };
+    *target = Some(match target.take() {
+        Some(existing) => format!("{existing}\n{addition}"),
+        None => addition,
+    });
+}
+
+fn counterexample_result_explanation(
+    counterexample: Option<&SolverCounterexample>,
+) -> Option<String> {
+    let counterexample = counterexample?;
+    let mut lines = Vec::new();
+    if let Some(value) = &counterexample.input_source_value {
+        lines.push(format!("counterexample input: {value}"));
+    }
+    for binding in &counterexample.bindings {
+        match (&binding.name, &binding.source_value) {
+            (Some(name), Some(source)) => lines.push(format!("binding {name} = {source}")),
+            (None, Some(source)) => lines.push(format!("binding = {source}")),
+            (Some(name), None) => {
+                lines.push(format!("binding {name} raw model = {}", binding.raw_model))
+            }
+            (None, None) => lines.push(format!("binding raw model = {}", binding.raw_model)),
+        }
+    }
+    if counterexample.bindings.is_empty()
+        && let Some(raw_model) = &counterexample.raw_model_text
+    {
+        lines.push(format!("raw model: {raw_model}"));
+    }
+    lines.push(format!(
+        "counterexample classification: {} (replay={})",
+        counterexample.classification, counterexample.replay_status
+    ));
+    if let Some(outcome) = counterexample.property_outcome {
+        lines.push(format!("replay outcome: {outcome}"));
+    }
+    if let Some(seed) = counterexample.generation_seed {
+        lines.push(format!("fuzzer seed: {seed}"));
+    }
+    if let Some(choices) = &counterexample.replay_choices_hex {
+        lines.push(format!("replay choices: {choices}"));
+    }
+    if let Some(note) = &counterexample.replay_note {
+        lines.push(note.clone());
+    }
+    Some(lines.join("\n"))
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
