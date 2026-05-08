@@ -168,6 +168,18 @@ pub struct RunArgs {
     #[clap(long, default_value = "proof")]
     existential_mode: ExistentialMode,
 
+    /// Stable solver-operation profile.
+    /// One of: finite, symbolic (default), symbolic-heavy, sampler, witness,
+    /// scenario-bmc, scenario-kind, strict-cert.
+    #[clap(long, default_value = "symbolic")]
+    solver_profile: verify::SolverProfile,
+
+    /// Trust profile controlling which domain certificates count as accepted
+    /// verification claims.
+    /// One of: strict, production (default), experimental, unsafe-dev.
+    #[clap(long, default_value = "production")]
+    trust_profile: verify::TrustProfile,
+
     /// HIDDEN DEBUG FLAG. Allow the legacy unsound emission of
     /// `opaque {pred} : Data → Data → Prop` predicates for sub-generators
     /// whose bodies cannot be statically inlined, replacing `opaque` with
@@ -364,6 +376,9 @@ struct RunCommandOptions {
     raw_output_bytes: usize,
     accept_partial: bool,
     accept_witness: bool,
+    solver_profile: verify::SolverProfile,
+    trust_profile: verify::TrustProfile,
+
     allow_vacuous_subgenerators: bool,
 }
 
@@ -639,6 +654,23 @@ struct CommandBranchResult {
     exit_code: i32,
 }
 
+fn render_availability_line(label: &str, availability: &verify::CapabilityAvailability) -> String {
+    let status = if availability.available {
+        "available"
+            .if_supports_color(Stderr, |s| s.green())
+            .to_string()
+    } else {
+        "unavailable"
+            .if_supports_color(Stderr, |s| s.red())
+            .to_string()
+    };
+    let mut line = format!("  {label}: {status}");
+    if let Some(note) = &availability.note {
+        line.push_str(&format!(" — {note}"));
+    }
+    line
+}
+
 fn format_doctor_output(report: &verify::DoctorReport, json: bool) -> miette::Result<String> {
     if json {
         let output = serde_json::to_string_pretty(report)
@@ -705,6 +737,42 @@ fn format_doctor_output(report: &verify::DoctorReport, json: bool) -> miette::Re
     lines.push(String::new());
     lines.push(format!("  Blaster revision: {}", report.blaster_rev));
     lines.push(format!("  PlutusCore revision: {}", report.plutus_core_rev));
+    lines.push(String::new());
+    lines.push("Backends:".to_string());
+    lines.push(render_availability_line(
+        "Blaster",
+        &report.backends.blaster,
+    ));
+    lines.push(render_availability_line(
+        "Solver backend (Z3)",
+        &report.backends.solver_backend,
+    ));
+    lines.push(render_availability_line(
+        "PlutusCoreBlaster",
+        &report.backends.plutus_core_blaster,
+    ));
+    lines.push(render_availability_line(
+        "CardanoLedgerApiBlaster",
+        &report.backends.cardano_ledger_api_blaster,
+    ));
+    lines.push(String::new());
+    lines.push("Certification:".to_string());
+    lines.push(render_availability_line(
+        "SolverValidated support",
+        &report.certification.solver_validated,
+    ));
+    lines.push(render_availability_line(
+        "LeanCertified support",
+        &report.certification.lean_certified,
+    ));
+    lines.push(render_availability_line(
+        "Proof reconstruction",
+        &report.certification.proof_reconstruction,
+    ));
+    lines.push(render_availability_line(
+        "strict-cert profile",
+        &report.certification.strict_cert_profile,
+    ));
     lines.push(String::new());
 
     if report.all_ok {
@@ -931,6 +999,53 @@ fn format_capabilities_output(
     for m in &caps.existential_modes {
         lines.push(format!("  - {m}"));
     }
+
+    lines.push(String::new());
+    lines.push("Solver profiles:".to_string());
+    for profile in &caps.solver_profiles {
+        lines.push(format!("  - {profile}"));
+    }
+
+    lines.push(String::new());
+    lines.push("Trust profiles:".to_string());
+    for profile in &caps.trust_profiles {
+        lines.push(format!("  - {profile}"));
+    }
+
+    lines.push(String::new());
+    lines.push("Backends:".to_string());
+    lines.push(render_availability_line("Blaster", &caps.backends.blaster));
+    lines.push(render_availability_line(
+        "Solver backend (Z3)",
+        &caps.backends.solver_backend,
+    ));
+    lines.push(render_availability_line(
+        "PlutusCoreBlaster",
+        &caps.backends.plutus_core_blaster,
+    ));
+    lines.push(render_availability_line(
+        "CardanoLedgerApiBlaster",
+        &caps.backends.cardano_ledger_api_blaster,
+    ));
+
+    lines.push(String::new());
+    lines.push("Certification:".to_string());
+    lines.push(render_availability_line(
+        "SolverValidated support",
+        &caps.certification.solver_validated,
+    ));
+    lines.push(render_availability_line(
+        "LeanCertified support",
+        &caps.certification.lean_certified,
+    ));
+    lines.push(render_availability_line(
+        "Proof reconstruction",
+        &caps.certification.proof_reconstruction,
+    ));
+    lines.push(render_availability_line(
+        "strict-cert profile",
+        &caps.certification.strict_cert_profile,
+    ));
 
     lines.push(String::new());
     lines.push(format!("Max test arity: {}", caps.max_test_arity));
@@ -1258,6 +1373,8 @@ fn exec_run(
         allow_skips,
         blaster_rev,
         existential_mode,
+        solver_profile,
+        trust_profile,
         target,
         plutus_core_rev,
         plutus_core_dir,
@@ -1327,6 +1444,8 @@ fn exec_run(
         blaster_rev,
         plutus_core_rev,
         existential_mode,
+        solver_profile,
+        trust_profile,
         target,
         plutus_core_dir,
         raw_output_bytes,
@@ -1460,14 +1579,17 @@ fn exec_run_with_project(
         run_options.allow_vacuous_subgenerators,
     );
 
-    let manifest =
-        verify::generate_lean_workspace(property_tests, &config, &run_options.skip_policy)
-            .map_err(|e| {
-                let (message, code, help, url) = verify::generation_error_metadata(&e);
-                vec![aiken_project::error::Error::verify_generation(
-                    message, code, help, url,
-                )]
-            })?;
+    let (manifest, cache_report) = verify::generate_lean_workspace_with_cache(
+        property_tests,
+        &config,
+        &run_options.skip_policy,
+    )
+    .map_err(|e| {
+        let (message, code, help, url) = verify::generation_error_metadata(&e);
+        vec![aiken_project::error::Error::verify_generation(
+            message, code, help, url,
+        )]
+    })?;
 
     let skipped_without_allow =
         skips_require_failure(manifest.skipped.len(), run_options.allow_skips);
@@ -1615,37 +1737,59 @@ fn exec_run_with_project(
             run_options.jobs_override,
             &manifest,
             run_options.raw_output_bytes,
+            run_options.trust_profile,
         )
         .map_err(|e| {
             vec![aiken_project::error::Error::StandardIo(
                 std::io::Error::other(e.to_string()),
             )]
         })?;
+        let had_theorem_results = result.theorem_results.is_some();
         let elapsed = start.elapsed();
 
         let mut summary = verify::parse_verify_results(result, &manifest);
+        if !had_theorem_results {
+            verify::reapply_manifest_trust_profile(
+                &mut summary,
+                &manifest,
+                run_options.trust_profile,
+            );
+        }
         summary.elapsed_ms = Some(elapsed.as_millis() as u64);
-        // Provenance: stamp the resolved Blaster / PlutusCore revs onto the
-        // summary so JSON consumers can audit which dependency snapshot the
-        // proofs were verified against. These flow from the
-        // `RunCommandOptions` (CLI flags / defaults) through the same
-        // plumbing that feeds `VerifyConfig` for workspace generation.
+        summary.run_settings = Some(verify::VerificationRunSettings::new(
+            run_options.solver_profile,
+            run_options.trust_profile,
+            run_options.timeout,
+            run_options.cek_budget,
+        ));
+        summary.cache = Some(cache_report.clone());
         summary.blaster_rev.clone_from(&run_options.blaster_rev);
         summary
             .plutus_core_rev
             .clone_from(&run_options.plutus_core_rev);
         summary.allow_vacuous_subgenerators = run_options.allow_vacuous_subgenerators;
         summary.two_phase_disabled = two_phase_disabled_from_env();
-        // Incorporate skip-induced failure into command_success so JSON
-        // consumers see the true exit status without checking the process code.
+        for skipped in &mut summary.skipped {
+            skipped.trust_profile = run_options.trust_profile;
+        }
         if skipped_without_allow {
             summary.command_success = false;
         }
-        // Partial / WitnessProved by default cause command failure; the
-        // `--accept-partial` / `--accept-witness` flags opt in to passing.
         if summary.command_success
             && ((summary.partial > 0 && !run_options.accept_partial)
                 || (summary.witness > 0 && !run_options.accept_witness))
+        {
+            summary.command_success = false;
+        }
+        if summary.command_success
+            && matches!(
+                run_options.solver_profile,
+                verify::SolverProfile::StrictCert
+            )
+            && summary
+                .theorems
+                .iter()
+                .any(|theorem| theorem.status != verify::VerificationStatus::LeanCertified)
         {
             summary.command_success = false;
         }
@@ -1673,6 +1817,14 @@ fn exec_run_with_project(
             println!("{output}");
         } else {
             println!();
+            if summary.run_settings.as_ref().is_some_and(|settings| {
+                matches!(settings.solver_profile, verify::SolverProfile::StrictCert)
+            }) {
+                println!(
+                    "Selected solver profile strict-cert requires LeanCertified results; any SolverValidated output below is informational and still causes a non-zero result."
+                );
+                println!();
+            }
             for t in &summary.theorems {
                 let (icon, label, trailing_block): (String, String, Option<String>) = match &t
                     .proof_status
@@ -2095,6 +2247,9 @@ fn proofs_succeeded(
     accept_partial: bool,
     accept_witness: bool,
 ) -> bool {
+    if !summary.command_success {
+        return false;
+    }
     if summary.failed > 0 || summary.timed_out > 0 || summary.unknown > 0 {
         return false;
     }
@@ -2377,6 +2532,8 @@ test unit_smoke() {
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
             plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
+            solver_profile: verify::SolverProfile::default(),
+            trust_profile: verify::TrustProfile::default(),
             target,
             plutus_core_dir: None,
             raw_output_bytes: 65536,
@@ -2391,6 +2548,7 @@ test unit_smoke() {
         blaster_rev: &str,
         plutus_core_rev: &str,
     ) -> verify::DoctorReport {
+        let capabilities = verify::capabilities();
         verify::DoctorReport::new(
             verify::DOCTOR_REPORT_VERSION.to_string(),
             vec![
@@ -2423,7 +2581,9 @@ test unit_smoke() {
             blaster_rev.to_string(),
             plutus_core_rev.to_string(),
             all_ok,
-            verify::capabilities(),
+            capabilities.backends.clone(),
+            capabilities.certification.clone(),
+            capabilities,
         )
     }
 
@@ -3131,6 +3291,12 @@ members = [1, 2]
             text_result.output.contains("Max test arity: 1"),
             "capabilities text output should include max arity"
         );
+        assert!(
+            text_result.output.contains("Solver profiles:")
+                && text_result.output.contains("strict-cert")
+                && text_result.output.contains("LeanCertified support"),
+            "capabilities text output should surface solver/certification sections"
+        );
 
         let json_result = run_capabilities_command(CapabilitiesArgs { json: true })
             .expect("capabilities JSON output should render");
@@ -3140,6 +3306,18 @@ members = [1, 2]
         assert_eq!(value["version"], verify::VERIFICATION_CAPABILITIES_VERSION);
         assert_eq!(value["max_test_arity"], 1);
         assert_eq!(value["supported"][0], "property");
+        assert!(value["solver_profiles"].as_array().is_some());
+        assert_eq!(value["solver_profiles"][7], "strict-cert");
+        assert_eq!(value["trust_profiles"][1], "production");
+        assert_eq!(
+            value["certification"]["solver_validated"]["available"],
+            true
+        );
+        assert_eq!(value["certification"]["lean_certified"]["available"], false);
+        assert_eq!(
+            value["backends"]["cardano_ledger_api_blaster"]["available"],
+            false
+        );
     }
 
     #[test]
@@ -3267,12 +3445,38 @@ members = [1, 2]
             ),
             artifacts,
             Some(3210),
+            None,
+            None,
             false,
             "abc123".to_string(),
             "pc456".to_string(),
             true,
             true,
         );
+        summary.run_settings = Some(verify::VerificationRunSettings::new(
+            verify::SolverProfile::Symbolic,
+            verify::TrustProfile::Production,
+            300,
+            200_000,
+        ));
+        let mut cache = verify::WorkspaceCacheReport::new(true);
+        cache.generated_lean = verify::WorkspaceCacheCounters::new(
+            4,
+            1,
+            Some("generated Lean files reused across reruns".to_string()),
+        );
+        cache.compiled_uplc = verify::WorkspaceCacheCounters::new(
+            2,
+            0,
+            Some("compiled UPLC payloads reused across reruns".to_string()),
+        );
+        cache.dependency_builds_preserved = true;
+        cache.dependency_builds_note =
+            Some("Lake dependency builds were preserved under .lake/build.".to_string());
+        cache.solver_artifacts_preserved = true;
+        cache.solver_artifacts_note =
+            Some("Existing SMT/log artifacts were preserved for reuse and inspection.".to_string());
+        summary.cache = Some(cache);
 
         normalize_summary_artifact_paths(&mut summary, Path::new("/workspace"), true);
 
@@ -3294,6 +3498,12 @@ members = [1, 2]
             json["raw_output"]["stderr"]["log_path"],
             "build/verify/logs/lake_build.stderr.log"
         );
+        assert_eq!(json["run_settings"]["solver_profile"], "symbolic");
+        assert_eq!(json["run_settings"]["trust_profile"], "production");
+        assert_eq!(json["run_settings"]["timeout_secs"], 300);
+        assert_eq!(json["run_settings"]["cek_fuel"], 200000);
+        assert_eq!(json["cache"]["generated_lean"]["reused_files"], 4);
+        assert_eq!(json["cache"]["compiled_uplc"]["reused_files"], 2);
         insta::assert_json_snapshot!("verify_summary_json_contract", &summary);
     }
 
@@ -3338,6 +3548,8 @@ members = [1, 2]
                 Some(vec![]),
             ),
             artifacts,
+            None,
+            None,
             None,
             true,
             String::new(),
@@ -4246,6 +4458,13 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
     }
 
     #[test]
+    fn proofs_succeeded_respects_command_success_false() {
+        let mut summary = fixture_summary(1, 0, 0, 0, 0, 0);
+        summary.command_success = false;
+        assert!(!proofs_succeeded(&summary, false, false));
+    }
+
+    #[test]
     fn silent_cli_error_message_is_only_emitted_in_silent_mode() {
         let report = ExitFailure::with_message("unknown module");
         assert_eq!(
@@ -4291,6 +4510,8 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
                 None,
             ),
             verify::VerificationArtifacts::default(),
+            None,
+            None,
             None,
             true,
             verify::DEFAULT_BLASTER_REV.to_string(),
@@ -4434,6 +4655,34 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
     }
 
     #[test]
+    fn run_args_solver_and_trust_profiles_parse() {
+        #[derive(Parser)]
+        struct VerifyCli {
+            #[command(subcommand)]
+            cmd: Cmd,
+        }
+
+        let parsed = VerifyCli::try_parse_from([
+            "aiken-verify",
+            "run",
+            "--solver-profile",
+            "strict-cert",
+            "--trust-profile",
+            "experimental",
+            "--generate-only",
+        ])
+        .expect(
+            "`verify run --solver-profile strict-cert --trust-profile experimental` should parse",
+        );
+
+        let Cmd::Run(args) = parsed.cmd else {
+            panic!("expected `run` subcommand")
+        };
+        assert_eq!(args.solver_profile, verify::SolverProfile::StrictCert);
+        assert_eq!(args.trust_profile, verify::TrustProfile::Experimental);
+    }
+
+    #[test]
     fn run_args_allow_vacuous_subgenerators_hidden_flag_parses() {
         // Commit 18 (folds C12 #3): the `--allow-vacuous-subgenerators` flag
         // is `#[arg(hide = true)]` so it does not appear in `--help`, but it
@@ -4525,6 +4774,8 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
             plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
+            solver_profile: verify::SolverProfile::default(),
+            trust_profile: verify::TrustProfile::default(),
             target: VerificationTargetKind::PropertyWrapper,
             plutus_core_dir: None,
             raw_output_bytes: 65536,
@@ -4566,6 +4817,8 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
             plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
+            solver_profile: verify::SolverProfile::default(),
+            trust_profile: verify::TrustProfile::default(),
             target: VerificationTargetKind::PropertyWrapper,
             plutus_core_dir: None,
             raw_output_bytes: 17_000_000,

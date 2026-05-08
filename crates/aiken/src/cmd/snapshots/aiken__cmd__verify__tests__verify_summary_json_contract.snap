@@ -809,6 +809,29 @@ expression: "&summary"
     ]
   },
   "elapsed_ms": 3210,
+  "run_settings": {
+    "solver_profile": "symbolic",
+    "trust_profile": "production",
+    "timeout_secs": 300,
+    "cek_fuel": 200000
+  },
+  "cache": {
+    "workspace_preexisting": true,
+    "generated_lean": {
+      "reused_files": 4,
+      "rewritten_files": 1,
+      "note": "generated Lean files reused across reruns"
+    },
+    "compiled_uplc": {
+      "reused_files": 2,
+      "rewritten_files": 0,
+      "note": "compiled UPLC payloads reused across reruns"
+    },
+    "dependency_builds_preserved": true,
+    "dependency_builds_note": "Lake dependency builds were preserved under .lake/build.",
+    "solver_artifacts_preserved": true,
+    "solver_artifacts_note": "Existing SMT/log artifacts were preserved for reuse and inspection."
+  },
   "command_success": false,
   "blaster_rev": "abc123",
   "plutus_core_rev": "pc456",

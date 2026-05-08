@@ -3,7 +3,7 @@ source: crates/aiken/src/cmd/verify.rs
 expression: "&report"
 ---
 {
-  "version": "1",
+  "version": "2",
   "tools": [
     {
       "tool": "lean",
@@ -39,8 +39,44 @@ expression: "&report"
   "blaster_rev": "abc123",
   "plutus_core_rev": "pc456",
   "all_ok": true,
+  "backends": {
+    "blaster": {
+      "available": true,
+      "note": "Available via the generated Lake workspace; the verifier fetches Lean-blaster as a dependency rather than invoking a separate Blaster binary."
+    },
+    "solver_backend": {
+      "available": true,
+      "note": "Requires Z3 >= 4.8.0 on PATH at proof time."
+    },
+    "plutus_core_blaster": {
+      "available": true,
+      "note": "Available through the configured PlutusCoreBlaster dependency (local checkout or pinned git revision)."
+    },
+    "cardano_ledger_api_blaster": {
+      "available": false,
+      "note": "CardanoLedgerApiBlaster is not yet integrated into the current verification/scenario pipeline."
+    }
+  },
+  "certification": {
+    "solver_validated": {
+      "available": true,
+      "note": "Blaster/Z3-valid results are reported as SolverValidated when proof reconstruction is unavailable."
+    },
+    "lean_certified": {
+      "available": false,
+      "note": "LeanCertified reporting is reserved for kernel-checked proof reconstruction, which the current pipeline does not emit."
+    },
+    "proof_reconstruction": {
+      "available": false,
+      "note": "Proof reconstruction from Blaster/Z3 into Lean kernel-checked certificates is not wired through yet."
+    },
+    "strict_cert_profile": {
+      "available": false,
+      "note": "The strict-cert solver profile currently rejects SolverValidated results because Lean proof reconstruction support is unavailable."
+    }
+  },
   "capabilities": {
-    "version": "3",
+    "version": "4",
     "supported_test_kinds": [
       "property"
     ],
@@ -85,6 +121,58 @@ expression: "&report"
       "witness",
       "proof"
     ],
+    "solver_profiles": [
+      "finite",
+      "symbolic",
+      "symbolic-heavy",
+      "sampler",
+      "witness",
+      "scenario-bmc",
+      "scenario-kind",
+      "strict-cert"
+    ],
+    "trust_profiles": [
+      "strict",
+      "production",
+      "experimental",
+      "unsafe-dev"
+    ],
+    "backends": {
+      "blaster": {
+        "available": true,
+        "note": "Available via the generated Lake workspace; the verifier fetches Lean-blaster as a dependency rather than invoking a separate Blaster binary."
+      },
+      "solver_backend": {
+        "available": true,
+        "note": "Requires Z3 >= 4.8.0 on PATH at proof time."
+      },
+      "plutus_core_blaster": {
+        "available": true,
+        "note": "Available through the configured PlutusCoreBlaster dependency (local checkout or pinned git revision)."
+      },
+      "cardano_ledger_api_blaster": {
+        "available": false,
+        "note": "CardanoLedgerApiBlaster is not yet integrated into the current verification/scenario pipeline."
+      }
+    },
+    "certification": {
+      "solver_validated": {
+        "available": true,
+        "note": "Blaster/Z3-valid results are reported as SolverValidated when proof reconstruction is unavailable."
+      },
+      "lean_certified": {
+        "available": false,
+        "note": "LeanCertified reporting is reserved for kernel-checked proof reconstruction, which the current pipeline does not emit."
+      },
+      "proof_reconstruction": {
+        "available": false,
+        "note": "Proof reconstruction from Blaster/Z3 into Lean kernel-checked certificates is not wired through yet."
+      },
+      "strict_cert_profile": {
+        "available": false,
+        "note": "The strict-cert solver profile currently rejects SolverValidated results because Lean proof reconstruction support is unavailable."
+      }
+    },
     "max_test_arity": 1,
     "supported": [
       "property"

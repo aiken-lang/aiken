@@ -91,6 +91,8 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
             raw_output: raw,
             artifacts: VerificationArtifacts::default(),
             elapsed_ms: None,
+            run_settings: None,
+            cache: None,
             command_success: proofs_ok,
             // Provenance fields are populated by the CLI layer after parsing
             // (it owns the `RunCommandOptions`/`VerifyConfig` that carry the
@@ -361,6 +363,8 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
         raw_output: raw,
         artifacts: VerificationArtifacts::default(),
         elapsed_ms: None,
+        run_settings: None,
+        cache: None,
         command_success: proofs_ok,
         // Provenance fields are populated by the CLI layer after parsing
         // (it owns the `RunCommandOptions`/`VerifyConfig` that carry the

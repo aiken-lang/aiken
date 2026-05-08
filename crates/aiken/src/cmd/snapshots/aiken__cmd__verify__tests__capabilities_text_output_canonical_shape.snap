@@ -41,6 +41,34 @@ Existential modes:
   - witness
   - proof
 
+Solver profiles:
+  - finite
+  - symbolic
+  - symbolic-heavy
+  - sampler
+  - witness
+  - scenario-bmc
+  - scenario-kind
+  - strict-cert
+
+Trust profiles:
+  - strict
+  - production
+  - experimental
+  - unsafe-dev
+
+Backends:
+  Blaster: available — Available via the generated Lake workspace; the verifier fetches Lean-blaster as a dependency rather than invoking a separate Blaster binary.
+  Solver backend (Z3): available — Requires Z3 >= 4.8.0 on PATH at proof time.
+  PlutusCoreBlaster: available — Available through the configured PlutusCoreBlaster dependency (local checkout or pinned git revision).
+  CardanoLedgerApiBlaster: unavailable — CardanoLedgerApiBlaster is not yet integrated into the current verification/scenario pipeline.
+
+Certification:
+  SolverValidated support: available — Blaster/Z3-valid results are reported as SolverValidated when proof reconstruction is unavailable.
+  LeanCertified support: unavailable — LeanCertified reporting is reserved for kernel-checked proof reconstruction, which the current pipeline does not emit.
+  Proof reconstruction: unavailable — Proof reconstruction from Blaster/Z3 into Lean kernel-checked certificates is not wired through yet.
+  strict-cert profile: unavailable — The strict-cert solver profile currently rejects SolverValidated results because Lean proof reconstruction support is unavailable.
+
 Max test arity: 1
 
 Error catalogue:

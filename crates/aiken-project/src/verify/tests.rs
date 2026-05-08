@@ -2013,7 +2013,7 @@ fn generate_workspace_clears_stale_generated_files_but_keeps_static_cache() {
         allow_vacuous_subgenerators: false,
     };
 
-    let manifest = generate_lean_workspace(
+    let (manifest, cache_report) = generate_lean_workspace_with_cache(
         &[make_test("my_module", "test_roundtrip")],
         &config,
         &SkipPolicy::None,
@@ -2021,11 +2021,15 @@ fn generate_workspace_clears_stale_generated_files_but_keeps_static_cache() {
     .unwrap();
     let id = &manifest.tests[0].id;
 
+    assert!(cache_report.workspace_preexisting);
+    assert!(cache_report.dependency_builds_preserved);
+    assert!(cache_report.solver_artifacts_preserved);
+
     assert!(!out_dir.join("AikenVerify/Proofs/Stale/old.lean").exists());
     assert!(!out_dir.join("cbor/stale.cbor").exists());
-    assert!(!out_dir.join("logs/stale.log").exists());
+    assert!(out_dir.join("logs/stale.log").exists());
     assert!(
-        !out_dir
+        out_dir
             .join(".lake/build/lib/AikenVerify/Stale/stale.olean")
             .exists()
     );
@@ -2044,6 +2048,41 @@ fn generate_workspace_clears_stale_generated_files_but_keeps_static_cache() {
             .exists()
     );
     assert!(out_dir.join(format!("cbor/{id}.cbor")).exists());
+}
+
+#[test]
+fn generate_workspace_with_cache_reuses_unchanged_generated_files_on_second_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path().to_path_buf();
+    let config = VerifyConfig {
+        out_dir: out_dir.clone(),
+        cek_budget: 20000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
+        existential_mode: ExistentialMode::default(),
+        target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
+        plutus_core_dir: None,
+        raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
+        allow_vacuous_subgenerators: false,
+    };
+    let tests = [make_test("my_module", "test_roundtrip")];
+
+    let (_first_manifest, first_cache) =
+        generate_lean_workspace_with_cache(&tests, &config, &SkipPolicy::None).unwrap();
+    assert_eq!(first_cache.generated_lean.reused_files, 0);
+    assert_eq!(first_cache.compiled_uplc.reused_files, 0);
+    assert!(first_cache.generated_lean.rewritten_files > 0);
+    assert!(first_cache.compiled_uplc.rewritten_files > 0);
+
+    let (_second_manifest, second_cache) =
+        generate_lean_workspace_with_cache(&tests, &config, &SkipPolicy::None).unwrap();
+    assert!(second_cache.workspace_preexisting);
+    assert!(second_cache.generated_lean.reused_files > 0);
+    assert!(second_cache.compiled_uplc.reused_files > 0);
+    assert_eq!(second_cache.generated_lean.rewritten_files, 0);
+    assert_eq!(second_cache.compiled_uplc.rewritten_files, 0);
 }
 
 #[test]
@@ -8989,6 +9028,7 @@ fn check_plutus_core_detailed_valid() {
 
 #[test]
 fn doctor_report_serializes_to_json() {
+    let caps = capabilities();
     let report = DoctorReport {
         version: DOCTOR_REPORT_VERSION.to_string(),
         tools: vec![ToolCheck {
@@ -9008,7 +9048,9 @@ fn doctor_report_serializes_to_json() {
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
         plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         all_ok: true,
-        capabilities: capabilities(),
+        backends: caps.backends.clone(),
+        certification: caps.certification.clone(),
+        capabilities: caps,
     };
     let json = serde_json::to_string(&report).unwrap();
     assert!(json.contains("\"all_ok\":true"));

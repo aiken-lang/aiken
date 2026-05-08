@@ -622,21 +622,57 @@ pub fn collect_verification_artifacts(out_dir: &Path) -> VerificationArtifacts {
     }
 }
 /// Schema version for `aiken verify capabilities --json` output.
-pub const VERIFICATION_CAPABILITIES_VERSION: &str = "3";
+pub const VERIFICATION_CAPABILITIES_VERSION: &str = "4";
 pub(crate) const MAX_FINITE_THEOREM_INSTANCES_PER_TEST: usize = 64;
 
 /// Schema version for `aiken verify doctor --json` output.
-pub const DOCTOR_REPORT_VERSION: &str = "1";
+pub const DOCTOR_REPORT_VERSION: &str = "2";
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
+pub struct CapabilityAvailability {
+    pub available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl CapabilityAvailability {
+    fn available(note: impl Into<String>) -> Self {
+        Self {
+            available: true,
+            note: Some(note.into()),
+        }
+    }
+
+    fn unavailable(note: impl Into<String>) -> Self {
+        Self {
+            available: false,
+            note: Some(note.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
+pub struct VerificationBackendSupport {
+    pub blaster: CapabilityAvailability,
+    pub solver_backend: CapabilityAvailability,
+    pub plutus_core_blaster: CapabilityAvailability,
+    pub cardano_ledger_api_blaster: CapabilityAvailability,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
+pub struct CertificationCapabilitySupport {
+    pub solver_validated: CapabilityAvailability,
+    pub lean_certified: CapabilityAvailability,
+    pub proof_reconstruction: CapabilityAvailability,
+    pub strict_cert_profile: CapabilityAvailability,
+}
 
 /// Verification capabilities report: documents what the integration does and
 /// does not support. Surfaced via `aiken verify doctor --json` and
 /// `aiken verify capabilities --json` so that no limitation remains implicit.
-///
-/// The first six fields document the legacy doctor surface (test kinds,
-/// fuzzer types, target/existential modes). The trailing `supported` /
-/// `unsupported` fields mirror the catalogue-driven shape published by
-/// `aiken verify capabilities` and are kept additive so doctor JSON consumers
-/// keep working.
 #[derive(Debug, Clone, serde::Serialize)]
 #[non_exhaustive]
 pub struct VerificationCapabilities {
@@ -654,6 +690,16 @@ pub struct VerificationCapabilities {
     pub unsupported_fuzzer_types: Vec<String>,
     /// Supported existential modes
     pub existential_modes: Vec<String>,
+    /// Stable named solver profiles exposed on the CLI.
+    #[serde(default)]
+    pub solver_profiles: Vec<String>,
+    /// Stable trust profiles exposed on the CLI.
+    #[serde(default)]
+    pub trust_profiles: Vec<String>,
+    /// Backend/runtime surface for the current integration.
+    pub backends: VerificationBackendSupport,
+    /// Certification/result-strength surface for the current integration.
+    pub certification: CertificationCapabilitySupport,
     /// Max test arity (number of fuzzer arguments)
     pub max_test_arity: usize,
     /// High-level supported test kinds, matching the
@@ -664,9 +710,7 @@ pub struct VerificationCapabilities {
     pub supported: Vec<String>,
     /// Catalogue-driven listing of the stable error and caveat codes currently
     /// surfaced by `aiken verify`, projected into the JSON-stable
-    /// [`error_catalogue::CatalogueCode`] shape. Version 2 narrows this field
-    /// to the subset the verifier can actually emit at runtime today; dormant
-    /// catalogue entries stay internal.
+    /// [`error_catalogue::CatalogueCode`] shape.
     #[serde(default)]
     pub unsupported: Vec<error_catalogue::CatalogueCode>,
 }
@@ -680,65 +724,114 @@ pub struct CapabilityNote {
     pub reason: String,
 }
 
+fn supported_solver_profiles() -> Vec<String> {
+    vec![
+        SolverProfile::Finite.to_string(),
+        SolverProfile::Symbolic.to_string(),
+        SolverProfile::SymbolicHeavy.to_string(),
+        SolverProfile::Sampler.to_string(),
+        SolverProfile::Witness.to_string(),
+        SolverProfile::ScenarioBmc.to_string(),
+        SolverProfile::ScenarioKind.to_string(),
+        SolverProfile::StrictCert.to_string(),
+    ]
+}
+
+fn supported_trust_profiles() -> Vec<String> {
+    vec![
+        TrustProfile::Strict.to_string(),
+        TrustProfile::Production.to_string(),
+        TrustProfile::Experimental.to_string(),
+        TrustProfile::UnsafeDev.to_string(),
+    ]
+}
+
+fn static_backend_support() -> VerificationBackendSupport {
+    VerificationBackendSupport {
+        blaster: CapabilityAvailability::available(
+            "Available via the generated Lake workspace; the verifier fetches Lean-blaster as a dependency rather than invoking a separate Blaster binary.",
+        ),
+        solver_backend: CapabilityAvailability::available(format!(
+            "Requires Z3 >= {}.{}.{} on PATH at proof time.",
+            MIN_Z3_VERSION.0, MIN_Z3_VERSION.1, MIN_Z3_VERSION.2
+        )),
+        plutus_core_blaster: CapabilityAvailability::available(
+            "Available through the configured PlutusCoreBlaster dependency (local checkout or pinned git revision).",
+        ),
+        cardano_ledger_api_blaster: CapabilityAvailability::unavailable(
+            "CardanoLedgerApiBlaster is not yet integrated into the current verification/scenario pipeline.",
+        ),
+    }
+}
+
+fn static_certification_support() -> CertificationCapabilitySupport {
+    CertificationCapabilitySupport {
+        solver_validated: CapabilityAvailability::available(
+            "Blaster/Z3-valid results are reported as SolverValidated when proof reconstruction is unavailable.",
+        ),
+        lean_certified: CapabilityAvailability::unavailable(
+            "LeanCertified reporting is reserved for kernel-checked proof reconstruction, which the current pipeline does not emit.",
+        ),
+        proof_reconstruction: CapabilityAvailability::unavailable(
+            "Proof reconstruction from Blaster/Z3 into Lean kernel-checked certificates is not wired through yet.",
+        ),
+        strict_cert_profile: CapabilityAvailability::unavailable(
+            "The strict-cert solver profile currently rejects SolverValidated results because Lean proof reconstruction support is unavailable.",
+        ),
+    }
+}
+
 /// Return the current verification capabilities.
-///
-/// The `supported` / `unsupported` fields are derived from the static
-/// verifier catalogue, filtered to the codes the current runtime can actually
-/// surface. This filtering is the version-2 contract for the JSON payload.
 pub fn capabilities() -> VerificationCapabilities {
     VerificationCapabilities {
-        version: VERIFICATION_CAPABILITIES_VERSION.to_string(),
-        supported_test_kinds: vec!["property".to_string()],
-        unsupported_test_kinds: vec![
-            CapabilityNote {
-                kind: "unit".to_string(),
-                status: "intentional".to_string(),
-                reason: "Unit tests have no fuzzer input domain; formal verification \
-                         requires universally quantified properties."
-                    .to_string(),
-            },
-            CapabilityNote {
-                kind: "benchmark".to_string(),
-                status: "intentional".to_string(),
-                reason: "Benchmarks measure performance, not correctness; they have \
-                         no boolean property to verify."
-                    .to_string(),
-            },
-        ],
-        target_modes: vec![
-            "property".to_string(),
-            "validator (requires validator metadata)".to_string(),
-            "equivalence (requires validator metadata)".to_string(),
-        ],
-        supported_fuzzer_types: vec![
-            "Int".to_string(),
-            "Bool".to_string(),
-            "ByteArray".to_string(),
-            "String".to_string(),
-            "Data".to_string(),
-            "List<T>".to_string(),
-            "Tuple(T, ...)".to_string(),
-            "Pair(T, T)".to_string(),
-            "Finite literal String domains (Exact/OneOf)".to_string(),
-            "Bounded top-level List<Bool> domains within finite enumeration cap".to_string(),
-            "Bounded scalar ByteArray length ranges".to_string(),
-            "Finite nullary ADT constructor domains (Data.Constr tag [])".to_string(),
-        ],
-        unsupported_fuzzer_types: vec![
-            "Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)"
-                .to_string(),
-            "Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded."
-                .to_string(),
-            "General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements."
-                .to_string(),
-            "Unbounded String/ByteArray content and finite literal ByteArray domains remain unsupported."
-                .to_string(),
-        ],
-        existential_modes: vec!["witness".to_string(), "proof".to_string()],
-        max_test_arity: 1,
-        supported: vec!["property".to_string()],
-        unsupported: error_catalogue::iter_catalogue().collect(),
-    }
+		version: VERIFICATION_CAPABILITIES_VERSION.to_string(),
+		supported_test_kinds: vec!["property".to_string()],
+		unsupported_test_kinds: vec![
+			CapabilityNote {
+				kind: "unit".to_string(),
+				status: "intentional".to_string(),
+				reason: "Unit tests have no fuzzer input domain; formal verification requires universally quantified properties.".to_string(),
+			},
+			CapabilityNote {
+				kind: "benchmark".to_string(),
+				status: "intentional".to_string(),
+				reason: "Benchmarks measure performance, not correctness; they have no boolean property to verify.".to_string(),
+			},
+		],
+		target_modes: vec![
+			"property".to_string(),
+			"validator (requires validator metadata)".to_string(),
+			"equivalence (requires validator metadata)".to_string(),
+		],
+		supported_fuzzer_types: vec![
+			"Int".to_string(),
+			"Bool".to_string(),
+			"ByteArray".to_string(),
+			"String".to_string(),
+			"Data".to_string(),
+			"List<T>".to_string(),
+			"Tuple(T, ...)".to_string(),
+			"Pair(T, T)".to_string(),
+			"Finite literal String domains (Exact/OneOf)".to_string(),
+			"Bounded top-level List<Bool> domains within finite enumeration cap".to_string(),
+			"Bounded scalar ByteArray length ranges".to_string(),
+			"Finite nullary ADT constructor domains (Data.Constr tag [])".to_string(),
+		],
+		unsupported_fuzzer_types: vec![
+			"Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)".to_string(),
+			"Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded.".to_string(),
+			"General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes require extractor improvements.".to_string(),
+			"Unbounded String/ByteArray content and finite literal ByteArray domains remain unsupported.".to_string(),
+		],
+		existential_modes: vec!["witness".to_string(), "proof".to_string()],
+		solver_profiles: supported_solver_profiles(),
+		trust_profiles: supported_trust_profiles(),
+		backends: static_backend_support(),
+		certification: static_certification_support(),
+		max_test_arity: 1,
+		supported: vec!["property".to_string()],
+		unsupported: error_catalogue::iter_catalogue().collect(),
+	}
 }
 
 /// Category of a proof failure, enabling structured diagnostics.
@@ -1007,6 +1100,22 @@ impl std::fmt::Display for TrustProfile {
     }
 }
 
+impl std::str::FromStr for TrustProfile {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "strict" => Ok(TrustProfile::Strict),
+            "production" => Ok(TrustProfile::Production),
+            "experimental" => Ok(TrustProfile::Experimental),
+            "unsafe-dev" => Ok(TrustProfile::UnsafeDev),
+            other => Err(format!(
+                "Unknown trust profile '{other}'; expected one of: strict, production, experimental, unsafe-dev"
+            )),
+        }
+    }
+}
+
 impl TrustProfile {
     fn rank(self) -> u8 {
         match self {
@@ -1019,6 +1128,177 @@ impl TrustProfile {
 
     fn allows_only_under(self, minimum: TrustProfile) -> bool {
         self.rank() >= minimum.rank()
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SolverProfile {
+    Finite,
+    #[default]
+    Symbolic,
+    SymbolicHeavy,
+    Sampler,
+    Witness,
+    ScenarioBmc,
+    ScenarioKind,
+    StrictCert,
+}
+
+impl std::fmt::Display for SolverProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            SolverProfile::Finite => "finite",
+            SolverProfile::Symbolic => "symbolic",
+            SolverProfile::SymbolicHeavy => "symbolic-heavy",
+            SolverProfile::Sampler => "sampler",
+            SolverProfile::Witness => "witness",
+            SolverProfile::ScenarioBmc => "scenario-bmc",
+            SolverProfile::ScenarioKind => "scenario-kind",
+            SolverProfile::StrictCert => "strict-cert",
+        })
+    }
+}
+
+impl std::str::FromStr for SolverProfile {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "finite" => Ok(SolverProfile::Finite),
+            "symbolic" => Ok(SolverProfile::Symbolic),
+            "symbolic-heavy" => Ok(SolverProfile::SymbolicHeavy),
+            "sampler" => Ok(SolverProfile::Sampler),
+            "witness" => Ok(SolverProfile::Witness),
+            "scenario-bmc" => Ok(SolverProfile::ScenarioBmc),
+            "scenario-kind" => Ok(SolverProfile::ScenarioKind),
+            "strict-cert" => Ok(SolverProfile::StrictCert),
+            other => Err(format!(
+                "Unknown solver profile '{other}'; expected one of: finite, symbolic, symbolic-heavy, sampler, witness, scenario-bmc, scenario-kind, strict-cert"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct VerificationRunSettings {
+    pub solver_profile: SolverProfile,
+    pub trust_profile: TrustProfile,
+    pub timeout_secs: u64,
+    pub cek_fuel: u64,
+}
+
+impl VerificationRunSettings {
+    pub fn new(
+        solver_profile: SolverProfile,
+        trust_profile: TrustProfile,
+        timeout_secs: u64,
+        cek_fuel: u64,
+    ) -> Self {
+        Self {
+            solver_profile,
+            trust_profile,
+            timeout_secs,
+            cek_fuel,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct WorkspaceCacheCounters {
+    #[serde(default)]
+    pub reused_files: usize,
+    #[serde(default)]
+    pub rewritten_files: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl WorkspaceCacheCounters {
+    pub fn new(reused_files: usize, rewritten_files: usize, note: Option<String>) -> Self {
+        Self {
+            reused_files,
+            rewritten_files,
+            note,
+        }
+    }
+
+    fn record_write(&mut self, reused: bool) {
+        if reused {
+            self.reused_files += 1;
+        } else {
+            self.rewritten_files += 1;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct WorkspaceCacheReport {
+    #[serde(default)]
+    pub workspace_preexisting: bool,
+    #[serde(default)]
+    pub generated_lean: WorkspaceCacheCounters,
+    #[serde(default)]
+    pub compiled_uplc: WorkspaceCacheCounters,
+    #[serde(default)]
+    pub dependency_builds_preserved: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_builds_note: Option<String>,
+    #[serde(default)]
+    pub solver_artifacts_preserved: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub solver_artifacts_note: Option<String>,
+}
+
+impl WorkspaceCacheReport {
+    pub fn new(workspace_preexisting: bool) -> Self {
+        Self {
+            workspace_preexisting,
+            generated_lean: WorkspaceCacheCounters::default(),
+            compiled_uplc: WorkspaceCacheCounters::default(),
+            dependency_builds_preserved: false,
+            dependency_builds_note: None,
+            solver_artifacts_preserved: false,
+            solver_artifacts_note: None,
+        }
+    }
+
+    fn from_workspace(out_dir: &Path) -> Self {
+        let workspace_preexisting = out_dir.exists();
+        let dependency_builds_preserved =
+            workspace_preexisting && out_dir.join(".lake/build").exists();
+        let solver_artifacts_preserved = workspace_preexisting
+            && (!collect_smt2_artifacts(out_dir).is_empty() || out_dir.join("logs").exists());
+
+        Self {
+            workspace_preexisting,
+            generated_lean: WorkspaceCacheCounters::default(),
+            compiled_uplc: WorkspaceCacheCounters::default(),
+            dependency_builds_preserved,
+            dependency_builds_note: if dependency_builds_preserved {
+                Some(
+					"Preserved the existing .lake/build directory so Lake can reuse prior dependency and generated-module build outputs when inputs stay unchanged.".to_string()
+				)
+            } else {
+                Some(
+					"No prior .lake/build directory was found under the verification workspace; dependency builds will start cold.".to_string()
+				)
+            },
+            solver_artifacts_preserved,
+            solver_artifacts_note: if solver_artifacts_preserved {
+                Some(
+					"Preserved prior logs/SMT artifacts under the verification workspace so identical reruns can inspect or reuse the same generated theorem inputs.".to_string()
+				)
+            } else {
+                Some(
+					"No prior logs or SMT artifacts were found under the verification workspace; solver artifact reuse starts cold.".to_string()
+				)
+            },
+        }
     }
 }
 /// Structured verification summary
@@ -1049,6 +1329,12 @@ pub struct VerifySummary {
     /// Wall-clock milliseconds spent running proofs (dependency sync + lake build).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elapsed_ms: Option<u64>,
+    /// Selected run-time solver/trust profile and configured timeout/fuel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_settings: Option<VerificationRunSettings>,
+    /// Cache reuse report for generated Lean, compiled UPLC, and preserved build artifacts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<WorkspaceCacheReport>,
     /// Final command success status. Reflects both proof results and skip-induced
     /// failures so that JSON consumers can determine the exit status without
     /// inspecting the process exit code.
@@ -1102,6 +1388,8 @@ impl VerifySummary {
             ),
             VerificationArtifacts::default(),
             None,
+            None,
+            None,
             !skipped_without_allow,
             blaster_rev.to_string(),
             plutus_core_rev.to_string(),
@@ -1124,6 +1412,8 @@ impl VerifySummary {
         raw_output: VerifyResult,
         artifacts: VerificationArtifacts,
         elapsed_ms: Option<u64>,
+        run_settings: Option<VerificationRunSettings>,
+        cache: Option<WorkspaceCacheReport>,
         command_success: bool,
         blaster_rev: String,
         plutus_core_rev: String,
@@ -1143,6 +1433,8 @@ impl VerifySummary {
             raw_output,
             artifacts,
             elapsed_ms,
+            run_settings,
+            cache,
             command_success,
             blaster_rev,
             plutus_core_rev,
@@ -2565,6 +2857,130 @@ fn normalize_sampler_proof_status(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct FormulaSizeMetrics {
+    pub lean_file_chars: usize,
+    pub lean_file_lines: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct DomainComplexityMetrics {
+    pub relation_nodes: usize,
+    pub relation_depth: usize,
+    pub widening_count: usize,
+    pub open_obligations: usize,
+    pub discharged_obligations: usize,
+    pub compatibility_diagnostics: usize,
+    pub has_sampler_relation: bool,
+    pub has_scenario_trace: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct TheoremMetrics {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wall_ms: Option<u64>,
+    pub timeout_secs: u64,
+    pub formula_size: FormulaSizeMetrics,
+    pub domain_complexity: DomainComplexityMetrics,
+}
+
+fn domain_relation_node_count(relation: &DomainRel) -> usize {
+    match relation {
+        DomainRel::Constraint { .. }
+        | DomainRel::Semantics { .. }
+        | DomainRel::Witness { .. }
+        | DomainRel::SamplerReturns { .. }
+        | DomainRel::TrueWithExplicitWidening { .. }
+        | DomainRel::Unknown { .. } => 1,
+        DomainRel::Image { sources, .. }
+        | DomainRel::And { items: sources }
+        | DomainRel::Or { items: sources }
+        | DomainRel::Product { elements: sources }
+        | DomainRel::Choice {
+            branches: sources, ..
+        } => {
+            1 + sources
+                .iter()
+                .map(domain_relation_node_count)
+                .sum::<usize>()
+        }
+        DomainRel::Bind { source, result } => {
+            1 + domain_relation_node_count(source) + domain_relation_node_count(result)
+        }
+        DomainRel::List { element, .. }
+        | DomainRel::Filter {
+            source: element, ..
+        }
+        | DomainRel::Exists { body: element, .. }
+        | DomainRel::Not { body: element } => 1 + domain_relation_node_count(element),
+    }
+}
+
+fn domain_relation_depth(relation: &DomainRel) -> usize {
+    match relation {
+        DomainRel::Constraint { .. }
+        | DomainRel::Semantics { .. }
+        | DomainRel::Witness { .. }
+        | DomainRel::SamplerReturns { .. }
+        | DomainRel::TrueWithExplicitWidening { .. }
+        | DomainRel::Unknown { .. } => 1,
+        DomainRel::Image { sources, .. }
+        | DomainRel::And { items: sources }
+        | DomainRel::Or { items: sources }
+        | DomainRel::Product { elements: sources }
+        | DomainRel::Choice {
+            branches: sources, ..
+        } => 1 + sources.iter().map(domain_relation_depth).max().unwrap_or(0),
+        DomainRel::Bind { source, result } => {
+            1 + domain_relation_depth(source).max(domain_relation_depth(result))
+        }
+        DomainRel::List { element, .. }
+        | DomainRel::Filter {
+            source: element, ..
+        }
+        | DomainRel::Exists { body: element, .. }
+        | DomainRel::Not { body: element } => 1 + domain_relation_depth(element),
+    }
+}
+
+fn domain_complexity_metrics(domain: &LoweredDomain) -> DomainComplexityMetrics {
+    DomainComplexityMetrics {
+        relation_nodes: domain_relation_node_count(&domain.relation),
+        relation_depth: domain_relation_depth(&domain.relation),
+        widening_count: domain.widenings.len(),
+        open_obligations: domain.obligations_open.len(),
+        discharged_obligations: domain.obligations_discharged.len(),
+        compatibility_diagnostics: domain.compatibility_diagnostics.len(),
+        has_sampler_relation: matches!(domain.relation, DomainRel::SamplerReturns { .. }),
+        has_scenario_trace: domain.scenario_trace.is_some(),
+    }
+}
+
+fn formula_size_metrics_for_file(path: &Path) -> Option<FormulaSizeMetrics> {
+    let content = fs::read_to_string(path).ok()?;
+    Some(FormulaSizeMetrics {
+        lean_file_chars: content.chars().count(),
+        lean_file_lines: content.lines().count(),
+    })
+}
+
+fn theorem_metrics_for_path(
+    path: &Path,
+    domain: &LoweredDomain,
+    wall_ms: Option<u64>,
+    timeout_secs: u64,
+) -> Option<TheoremMetrics> {
+    Some(TheoremMetrics {
+        wall_ms,
+        timeout_secs,
+        formula_size: formula_size_metrics_for_file(path)?,
+        domain_complexity: domain_complexity_metrics(domain),
+    })
+}
+
 /// Per-theorem result
 #[derive(Debug, Clone, serde::Serialize)]
 #[non_exhaustive]
@@ -2582,6 +2998,8 @@ pub struct TheoremResult {
     pub counterexample: Option<SolverCounterexample>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<TheoremMetrics>,
     /// Number of constraints dropped or widened during TransitionProp lowering.
     /// Non-zero only for two-phase trace theorems.
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -2701,6 +3119,8 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
             #[serde(default)]
             explanation: Option<String>,
             #[serde(default)]
+            metrics: Option<TheoremMetrics>,
+            #[serde(default)]
             over_approximations: usize,
         }
 
@@ -2740,6 +3160,7 @@ impl<'de> serde::Deserialize<'de> for TheoremResult {
             proof_status,
             counterexample,
             explanation: wire.explanation,
+            metrics: wire.metrics,
             over_approximations: wire.over_approximations,
         };
         if result.explanation.is_none() {
@@ -2785,6 +3206,10 @@ impl TheoremResult {
         self.rebuild_explanation();
     }
 
+    fn attach_metrics(&mut self, metrics: TheoremMetrics) {
+        self.metrics = Some(metrics);
+    }
+
     fn from_parts(
         test_name: String,
         theorem_name: String,
@@ -2807,6 +3232,7 @@ impl TheoremResult {
             proof_status,
             counterexample: None,
             explanation: None,
+            metrics: None,
             over_approximations,
         };
         result.refresh_counterexample(None);
@@ -2885,6 +3311,24 @@ impl TheoremResult {
         proof_status: ProofStatus,
         over_approximations: usize,
     ) -> Self {
+        Self::from_manifest_entry_with_profile(
+            test_name,
+            theorem_name,
+            entry,
+            proof_status,
+            over_approximations,
+            default_trust_profile(),
+        )
+    }
+
+    pub fn from_manifest_entry_with_profile(
+        test_name: String,
+        theorem_name: String,
+        entry: &ManifestEntry,
+        proof_status: ProofStatus,
+        over_approximations: usize,
+        trust_profile: TrustProfile,
+    ) -> Self {
         let domain = match &proof_status {
             ProofStatus::WitnessProved { witnesses, .. } => {
                 let existing = entry
@@ -2910,7 +3354,7 @@ impl TheoremResult {
             theorem_name,
             proof_status,
             over_approximations,
-            default_trust_profile(),
+            trust_profile,
             domain,
             entry.input_type.clone(),
             entry.test_mode,
@@ -2924,15 +3368,38 @@ impl TheoremResult {
         entry: &ManifestEntry,
         proof_status: ProofStatus,
         over_approximations: usize,
+        manifest: &GeneratedManifest,
+        out_dir: &Path,
+    ) -> Self {
+        Self::from_manifest_entry_with_replay_and_profile(
+            test_name,
+            theorem_name,
+            entry,
+            proof_status,
+            over_approximations,
+            default_trust_profile(),
+            manifest,
+            out_dir,
+        )
+    }
+
+    pub fn from_manifest_entry_with_replay_and_profile(
+        test_name: String,
+        theorem_name: String,
+        entry: &ManifestEntry,
+        proof_status: ProofStatus,
+        over_approximations: usize,
+        trust_profile: TrustProfile,
         _manifest: &GeneratedManifest,
         out_dir: &Path,
     ) -> Self {
-        let mut result = Self::from_manifest_entry(
+        let mut result = Self::from_manifest_entry_with_profile(
             test_name,
             theorem_name.clone(),
             entry,
             proof_status,
             over_approximations,
+            trust_profile,
         );
         if theorem_name == entry.lean_theorem {
             result.refresh_counterexample(Some(CounterexampleReplayContext {
@@ -2950,6 +3417,38 @@ impl TheoremResult {
         self.certification = Certification::from_proof_status(&proof_status);
         self.proof_status = proof_status;
         self.refresh_counterexample(None);
+    }
+}
+
+pub fn reapply_manifest_trust_profile(
+    summary: &mut VerifySummary,
+    manifest: &GeneratedManifest,
+    trust_profile: TrustProfile,
+) {
+    for theorem in &mut summary.theorems {
+        if theorem.trust_profile == trust_profile {
+            continue;
+        }
+
+        let Some(entry) = manifest.tests.iter().find(|entry| {
+            let test_name = format!("{}.{}", entry.aiken_module, entry.aiken_name);
+            theorem.test_name == test_name
+                && (theorem.theorem_name == entry.lean_theorem
+                    || theorem.theorem_name == format!("{}_alwaysTerminating", entry.lean_theorem)
+                    || theorem.theorem_name == format!("{}_equivalence", entry.lean_theorem))
+        }) else {
+            theorem.trust_profile = trust_profile;
+            continue;
+        };
+
+        *theorem = TheoremResult::from_manifest_entry_with_profile(
+            theorem.test_name.clone(),
+            theorem.theorem_name.clone(),
+            entry,
+            theorem.proof_status.clone(),
+            theorem.over_approximations,
+            trust_profile,
+        );
     }
 }
 
@@ -3263,6 +3762,45 @@ pub fn clear_generated_workspace(out_dir: &Path) -> miette::Result<()> {
     })?;
 
     Ok(())
+}
+
+fn prepare_verify_workspace_for_generation(out_dir: &Path) -> miette::Result<()> {
+    if !out_dir.exists() {
+        return Ok(());
+    }
+
+    if looks_like_verify_workspace(out_dir) {
+        return Ok(());
+    }
+
+    let entries = fs::read_dir(out_dir).map_err(|e| {
+        miette::miette!(
+            "Failed to inspect verification workspace {}: {e}",
+            out_dir.display()
+        )
+    })?;
+    let entries = entries.collect::<Result<Vec<_>, _>>().map_err(|e| {
+        miette::miette!(
+            "Failed to inspect verification workspace {}: {e}",
+            out_dir.display()
+        )
+    })?;
+
+    if entries.is_empty() {
+        return Ok(());
+    }
+
+    let only_preserved_cache_entries = entries
+        .iter()
+        .all(|entry| entry.file_name().to_str() == Some(".lake"));
+    if only_preserved_cache_entries {
+        return Ok(());
+    }
+
+    Err(miette::miette!(
+        "Refusing to write verification artifacts into {} because it does not look like an Aiken verify workspace and contains non-cache files. Use `aiken verify clean` or choose a dedicated --out-dir.",
+        out_dir.display()
+    ))
 }
 
 /// Configuration for Lean workspace generation
@@ -5657,6 +6195,10 @@ pub struct DoctorReport {
     pub blaster_rev: String,
     pub plutus_core_rev: String,
     pub all_ok: bool,
+    /// Runtime backend availability for the current machine/configuration.
+    pub backends: VerificationBackendSupport,
+    /// Runtime certification availability for the current machine/configuration.
+    pub certification: CertificationCapabilitySupport,
     /// Documented verification capabilities (what is/isn't supported).
     pub capabilities: VerificationCapabilities,
 }
@@ -5699,6 +6241,8 @@ impl DoctorReport {
         blaster_rev: String,
         plutus_core_rev: String,
         all_ok: bool,
+        backends: VerificationBackendSupport,
+        certification: CertificationCapabilitySupport,
         capabilities: VerificationCapabilities,
     ) -> Self {
         Self {
@@ -5708,6 +6252,8 @@ impl DoctorReport {
             blaster_rev,
             plutus_core_rev,
             all_ok,
+            backends,
+            certification,
             capabilities,
         }
     }
@@ -6006,6 +6552,84 @@ pub fn check_plutus_core_detailed(
 }
 
 /// Run a full diagnostic check of the verify toolchain and dependencies.
+fn doctor_backend_support(
+    lean_check: &ToolCheck,
+    lake_check: &ToolCheck,
+    z3_check: &ToolCheck,
+    plutus_core: &PlutusCoreCheck,
+    blaster_rev: &str,
+    plutus_core_rev: &str,
+) -> VerificationBackendSupport {
+    let blaster_available = lean_check.found && lean_check.meets_minimum && lake_check.found;
+    let solver_backend_available = z3_check.found && z3_check.meets_minimum;
+    let plutus_core_available = plutus_core.found && plutus_core.has_lakefile;
+
+    VerificationBackendSupport {
+        blaster: if blaster_available {
+            CapabilityAvailability::available(format!(
+                "Lean/Lake are available; Lake can fetch Lean-blaster at rev {blaster_rev}."
+            ))
+        } else {
+            CapabilityAvailability::unavailable(
+                "Lean/Lake are not ready, so the generated workspace cannot build the Lean-blaster dependency.",
+            )
+        },
+        solver_backend: if solver_backend_available {
+            CapabilityAvailability::available(format!(
+                "Z3 {} satisfies the configured solver backend requirement.",
+                z3_check.version.as_deref().unwrap_or("unknown")
+            ))
+        } else {
+            CapabilityAvailability::unavailable(format!(
+                "Z3 >= {}.{}.{} is required on PATH for SolverValidated runs.",
+                MIN_Z3_VERSION.0, MIN_Z3_VERSION.1, MIN_Z3_VERSION.2
+            ))
+        },
+        plutus_core_blaster: if plutus_core_available {
+            CapabilityAvailability::available(format!(
+                "PlutusCoreBlaster dependency is configured via {} (rev {plutus_core_rev}).",
+                plutus_core.path
+            ))
+        } else {
+            CapabilityAvailability::unavailable(
+                "PlutusCoreBlaster is not ready because the configured PlutusCore checkout is missing or incomplete.",
+            )
+        },
+        cardano_ledger_api_blaster: CapabilityAvailability::unavailable(
+            "CardanoLedgerApiBlaster is not yet integrated into the current verification/scenario pipeline.",
+        ),
+    }
+}
+
+fn doctor_certification_support(
+    backends: &VerificationBackendSupport,
+) -> CertificationCapabilitySupport {
+    let solver_validated_available = backends.blaster.available
+        && backends.solver_backend.available
+        && backends.plutus_core_blaster.available;
+
+    CertificationCapabilitySupport {
+        solver_validated: if solver_validated_available {
+            CapabilityAvailability::available(
+                "SolverValidated results are available on this machine when the generated theorem is within Blaster's supported fragment.",
+            )
+        } else {
+            CapabilityAvailability::unavailable(
+                "SolverValidated results are unavailable until Blaster, Z3, and PlutusCoreBlaster prerequisites are all ready.",
+            )
+        },
+        lean_certified: CapabilityAvailability::unavailable(
+            "LeanCertified results require proof reconstruction into a kernel-checked Lean proof, which this pipeline does not emit yet.",
+        ),
+        proof_reconstruction: CapabilityAvailability::unavailable(
+            "Proof reconstruction support is not wired through from Blaster/Z3 into Lean kernel certificates yet.",
+        ),
+        strict_cert_profile: CapabilityAvailability::unavailable(
+            "The strict-cert solver profile currently rejects SolverValidated results because LeanCertified proof reconstruction is unavailable.",
+        ),
+    }
+}
+
 /// Returns a structured report suitable for JSON serialization and human display.
 pub fn run_doctor(blaster_rev: &str, plutus_core_rev: &str) -> DoctorReport {
     let lean_check = check_tool_version("lean", MIN_LEAN_VERSION);
@@ -6014,6 +6638,15 @@ pub fn run_doctor(blaster_rev: &str, plutus_core_rev: &str) -> DoctorReport {
     let plutus_core = check_plutus_core_detailed(None, plutus_core_rev);
 
     let all_ok = doctor_all_ok(&lean_check, &lake_check, &z3_check, &plutus_core);
+    let backends = doctor_backend_support(
+        &lean_check,
+        &lake_check,
+        &z3_check,
+        &plutus_core,
+        blaster_rev,
+        plutus_core_rev,
+    );
+    let certification = doctor_certification_support(&backends);
 
     DoctorReport {
         version: DOCTOR_REPORT_VERSION.to_string(),
@@ -6022,6 +6655,8 @@ pub fn run_doctor(blaster_rev: &str, plutus_core_rev: &str) -> DoctorReport {
         blaster_rev: blaster_rev.to_string(),
         plutus_core_rev: plutus_core_rev.to_string(),
         all_ok,
+        backends,
+        certification,
         capabilities: capabilities(),
     }
 }
@@ -6113,6 +6748,7 @@ pub fn run_proofs(
     max_jobs: Option<usize>,
     manifest: &GeneratedManifest,
     raw_output_bytes: usize,
+    trust_profile: TrustProfile,
 ) -> miette::Result<VerifyResult> {
     struct CommandRunResult {
         stdout: String,
@@ -6237,10 +6873,12 @@ pub fn run_proofs(
         timed_out: bool,
         build_exit_code: Option<i32>,
         timeout_secs: u64,
+        module_wall_ms: Option<u64>,
         module: &str,
         fallback_to_module_failure: bool,
         fallback_from_sibling_explicit_failure: bool,
         over_approximations: usize,
+        trust_profile: TrustProfile,
         caveat: ProofCaveat,
         manifest: &GeneratedManifest,
         out_dir: &Path,
@@ -6253,12 +6891,6 @@ pub fn run_proofs(
                 ),
             }
         } else if build_exit_code == Some(0) {
-            // A successful build of a file containing `sorry` (or any other
-            // open obligation flagged at generation time) must NOT be reported
-            // as `Proved`. Surface as `Partial` so users see the open
-            // sub-obligation rather than a misleading verdict. Likewise,
-            // witness-only proofs must surface as `WitnessProved` rather than
-            // a misleading universal `Proved`.
             match caveat {
                 ProofCaveat::None => ProofStatus::Proved,
                 ProofCaveat::Partial(note) => ProofStatus::Partial { note },
@@ -6304,11 +6936,6 @@ pub fn run_proofs(
             }
         };
 
-        // Only carry over_approximations when the proof was actually produced
-        // (`Proved`, `Partial`, or `WitnessProved`). Two-phase halt proofs are
-        // reported as `Partial` even when the build succeeds, and witness-only
-        // proofs as `WitnessProved`; the over-approximation count is still
-        // meaningful audit data on both and must be preserved.
         let over_approx = if matches!(
             status,
             ProofStatus::Proved | ProofStatus::Partial { .. } | ProofStatus::WitnessProved { .. }
@@ -6317,15 +6944,23 @@ pub fn run_proofs(
         } else {
             0
         };
-        TheoremResult::from_manifest_entry_with_replay(
+        let mut result = TheoremResult::from_manifest_entry_with_replay_and_profile(
             test_name,
             theorem_name.to_string(),
             entry,
             status,
             over_approx,
+            trust_profile,
             manifest,
             out_dir,
-        )
+        );
+        let theorem_path = out_dir.join(&entry.lean_file);
+        if let Some(metrics) =
+            theorem_metrics_for_path(&theorem_path, &result.domain, module_wall_ms, timeout_secs)
+        {
+            result.attach_metrics(metrics);
+        }
+        result
     }
 
     let logs_dir = out_dir.join("logs");
@@ -6395,7 +7030,7 @@ pub fn run_proofs(
                 theorem_names
                     .into_iter()
                     .map(|theorem_name| {
-                        TheoremResult::from_manifest_entry(
+                        TheoremResult::from_manifest_entry_with_profile(
                             test_name.clone(),
                             theorem_name,
                             entry,
@@ -6403,6 +7038,7 @@ pub fn run_proofs(
                                 reason: timeout_reason.clone(),
                             },
                             0,
+                            trust_profile,
                         )
                     })
                     .collect::<Vec<_>>()
@@ -6460,6 +7096,8 @@ pub fn run_proofs(
     let mut first_failure_exit_code: Option<i32> = None;
 
     for entry in &manifest.tests {
+        let module_start = Instant::now();
+
         let mut build_cmd = Command::new("lake");
         build_cmd.arg("build").current_dir(out_dir);
         if let Some(jobs) = jobs_override {
@@ -6489,6 +7127,8 @@ pub fn run_proofs(
             build_command_used = lake_build_module_command_for_jobs(&entry.lean_module, None);
             build_result = run_command_with_timeout(fallback_cmd, timeout_secs)?;
         }
+
+        let module_wall_ms = Some(module_start.elapsed().as_millis() as u64);
 
         let module_stdout = build_result.stdout;
         let module_stderr = build_result.stderr;
@@ -6543,10 +7183,12 @@ pub fn run_proofs(
             module_timed_out,
             module_exit_code,
             timeout_secs,
+            module_wall_ms,
             &entry.lean_module,
             correctness_fallback_to_module_failure,
             false,
             entry.over_approximations,
+            trust_profile,
             correctness_caveat,
             manifest,
             out_dir,
@@ -6560,10 +7202,12 @@ pub fn run_proofs(
                 module_timed_out,
                 module_exit_code,
                 timeout_secs,
+                module_wall_ms,
                 &entry.lean_module,
                 termination_fallback_to_module_failure,
                 correctness_failed || equivalence_failed,
-                0,                 // termination theorem is not a two-phase proof
+                0, // termination theorem is not a two-phase proof
+                trust_profile,
                 ProofCaveat::None, // termination companion always fully proved when present
                 manifest,
                 out_dir,
@@ -6578,10 +7222,12 @@ pub fn run_proofs(
                 module_timed_out,
                 module_exit_code,
                 timeout_secs,
+                module_wall_ms,
                 &entry.lean_module,
                 equivalence_fallback_to_module_failure,
                 correctness_failed || termination_failed,
-                0,                 // equivalence theorem is not a two-phase proof
+                0, // equivalence theorem is not a two-phase proof
+                trust_profile,
                 ProofCaveat::None, // equivalence companion always fully proved when present
                 manifest,
                 out_dir,
@@ -7055,6 +7701,14 @@ pub fn generate_lean_workspace(
     config: &VerifyConfig,
     skip_policy: &SkipPolicy,
 ) -> miette::Result<GeneratedManifest> {
+    generate_lean_workspace_with_cache(tests, config, skip_policy).map(|(manifest, _)| manifest)
+}
+
+pub fn generate_lean_workspace_with_cache(
+    tests: &[ExportedPropertyTest],
+    config: &VerifyConfig,
+    skip_policy: &SkipPolicy,
+) -> miette::Result<(GeneratedManifest, WorkspaceCacheReport)> {
     validate_git_rev(&config.blaster_rev, "blaster-rev")?;
     validate_git_rev(&config.plutus_core_rev, "plutus-core-rev")?;
     check_plutus_core(config.plutus_core_dir.as_deref())?;
@@ -7098,7 +7752,8 @@ pub fn generate_lean_workspace(
     }
 
     let out = &config.out_dir;
-    clear_generated_workspace(out)?;
+    prepare_verify_workspace_for_generation(out)?;
+    let mut cache_report = WorkspaceCacheReport::from_workspace(out);
 
     // Create directory structure
     fs::create_dir_all(out.join("AikenVerify/Proofs"))
@@ -7107,23 +7762,31 @@ pub fn generate_lean_workspace(
         .map_err(|e| miette::miette!("Failed to create cbor directory: {e}"))?;
 
     // Write lakefile.lean
-    write_file(
-        &out.join("lakefile.lean"),
+    let lakefile_path = out.join("lakefile.lean");
+    let lakefile_reused = write_file_if_changed(
+        &lakefile_path,
         &generate_lakefile(
             &config.blaster_rev,
             &config.plutus_core_rev,
             config.plutus_core_dir.as_deref(),
         ),
     )?;
+    record_cache_write(&mut cache_report, &lakefile_path, lakefile_reused);
 
     // Write lean-toolchain
-    write_file(&out.join("lean-toolchain"), LEAN_TOOLCHAIN_LITERAL)?;
+    let lean_toolchain_path = out.join("lean-toolchain");
+    let lean_toolchain_reused =
+        write_file_if_changed(&lean_toolchain_path, LEAN_TOOLCHAIN_LITERAL)?;
+    record_cache_write(
+        &mut cache_report,
+        &lean_toolchain_path,
+        lean_toolchain_reused,
+    );
 
     // Write Utils.lean
-    write_file(
-        &out.join("AikenVerify/Utils.lean"),
-        &generate_utils(config.cek_budget),
-    )?;
+    let utils_path = out.join("AikenVerify/Utils.lean");
+    let utils_reused = write_file_if_changed(&utils_path, &generate_utils(config.cek_budget))?;
+    record_cache_write(&mut cache_report, &utils_path, utils_reused);
 
     let (aiken_metadata, mut compatibility_limitations) = manifest_aiken_metadata(config)?;
     let (execution_metadata, execution_limitations) = manifest_execution_metadata(config);
@@ -7140,6 +7803,13 @@ pub fn generate_lean_workspace(
     let mut manifest_entries = Vec::new();
     // Track module directories we need to create and their imports
     let mut module_dirs: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut expected_generated_paths: BTreeSet<PathBuf> = BTreeSet::from([
+        lakefile_path.clone(),
+        lean_toolchain_path.clone(),
+        utils_path.clone(),
+        out.join("AikenVerify.lean"),
+        out.join("manifest.json"),
+    ]);
 
     for test in tests {
         let full_name = &test.name; // e.g. "my_module.test_something"
@@ -7363,15 +8033,31 @@ pub fn generate_lean_workspace(
             .join(&entry.lean_module_segment);
         fs::create_dir_all(&proof_dir)
             .map_err(|e| miette::miette!("Failed to create proof directory: {e}"))?;
-        write_file(&out.join(&entry.lean_file), &entry.proof_content)?;
+        let proof_path = out.join(&entry.lean_file);
+        let proof_reused = write_file_if_changed(&proof_path, &entry.proof_content)?;
+        record_cache_write(&mut cache_report, &proof_path, proof_reused);
+        expected_generated_paths.insert(proof_path);
 
         let cbor_file_rel = format!("cbor/{}.cbor", entry.id);
-        write_file(&out.join(&cbor_file_rel), &entry.flat_content)?;
+        let cbor_path = out.join(&cbor_file_rel);
+        let cbor_reused = write_file_if_changed(&cbor_path, &entry.flat_content)?;
+        record_cache_write(&mut cache_report, &cbor_path, cbor_reused);
+        expected_generated_paths.insert(cbor_path);
+
         let fuzzer_cbor_rel = format!("cbor/{}_fuzzer.cbor", entry.id);
-        write_file(&out.join(&fuzzer_cbor_rel), &entry.fuzzer_flat_content)?;
+        let fuzzer_cbor_path = out.join(&fuzzer_cbor_rel);
+        let fuzzer_cbor_reused =
+            write_file_if_changed(&fuzzer_cbor_path, &entry.fuzzer_flat_content)?;
+        record_cache_write(&mut cache_report, &fuzzer_cbor_path, fuzzer_cbor_reused);
+        expected_generated_paths.insert(fuzzer_cbor_path);
+
         if let Some(handler_flat_content) = entry.handler_flat_content.as_deref() {
             let handler_cbor_rel = format!("cbor/{}_handler.cbor", entry.id);
-            write_file(&out.join(&handler_cbor_rel), handler_flat_content)?;
+            let handler_cbor_path = out.join(&handler_cbor_rel);
+            let handler_cbor_reused =
+                write_file_if_changed(&handler_cbor_path, handler_flat_content)?;
+            record_cache_write(&mut cache_report, &handler_cbor_path, handler_cbor_reused);
+            expected_generated_paths.insert(handler_cbor_path);
         }
 
         module_dirs
@@ -7417,10 +8103,11 @@ pub fn generate_lean_workspace(
     }
 
     // Write root AikenVerify.lean
-    write_file(
-        &out.join("AikenVerify.lean"),
-        &generate_root_import(&module_dirs),
-    )?;
+    let root_import_path = out.join("AikenVerify.lean");
+    let root_import_reused =
+        write_file_if_changed(&root_import_path, &generate_root_import(&module_dirs))?;
+    record_cache_write(&mut cache_report, &root_import_path, root_import_reused);
+    expected_generated_paths.insert(root_import_path);
 
     // Write manifest.json
     let manifest = GeneratedManifest {
@@ -7435,13 +8122,108 @@ pub fn generate_lean_workspace(
 
     let manifest_json = serde_json::to_string_pretty(&manifest)
         .map_err(|e| miette::miette!("Failed to serialize manifest: {e}"))?;
-    write_file(&out.join("manifest.json"), &manifest_json)?;
+    let manifest_path = out.join("manifest.json");
+    let _manifest_reused = write_file_if_changed(&manifest_path, &manifest_json)?;
+    expected_generated_paths.insert(manifest_path);
+    remove_stale_generated_files(out, &expected_generated_paths)?;
 
-    Ok(manifest)
+    Ok((manifest, cache_report))
 }
 
-fn write_file(path: &Path, content: &str) -> miette::Result<()> {
-    fs::write(path, content).map_err(|e| miette::miette!("Failed to write {}: {e}", path.display()))
+fn record_cache_write(cache_report: &mut WorkspaceCacheReport, path: &Path, reused: bool) {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some("lean") => cache_report.generated_lean.record_write(reused),
+        Some("cbor") => cache_report.compiled_uplc.record_write(reused),
+        _ => {}
+    }
+}
+
+fn write_file_if_changed(path: &Path, content: &str) -> miette::Result<bool> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| miette::miette!("Failed to create {}: {e}", parent.display()))?;
+    }
+
+    let bytes = content.as_bytes();
+    if let Ok(existing) = fs::read(path)
+        && existing == bytes
+    {
+        return Ok(true);
+    }
+
+    fs::write(path, bytes)
+        .map_err(|e| miette::miette!("Failed to write {}: {e}", path.display()))?;
+    Ok(false)
+}
+
+fn remove_stale_generated_files(
+    out_dir: &Path,
+    expected_generated_paths: &BTreeSet<PathBuf>,
+) -> miette::Result<()> {
+    for root in [out_dir.join("AikenVerify/Proofs"), out_dir.join("cbor")] {
+        if !root.exists() {
+            continue;
+        }
+
+        for entry in WalkDir::new(&root).into_iter() {
+            let entry =
+                entry.map_err(|err| miette::miette!("Failed to walk {}: {err}", root.display()))?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+
+            let path = entry.into_path();
+            if expected_generated_paths.contains(&path) {
+                continue;
+            }
+
+            fs::remove_file(&path).map_err(|e| {
+                miette::miette!(
+                    "Failed to remove stale generated file {}: {e}",
+                    path.display()
+                )
+            })?;
+        }
+    }
+
+    prune_empty_generated_dirs(&out_dir.join("AikenVerify/Proofs"))?;
+    Ok(())
+}
+
+fn prune_empty_generated_dirs(root: &Path) -> miette::Result<()> {
+    if !root.exists() {
+        return Ok(());
+    }
+
+    let mut dirs = WalkDir::new(root)
+        .min_depth(1)
+        .into_iter()
+        .map(|entry| {
+            entry.map_err(|err| miette::miette!("Failed to walk {}: {err}", root.display()))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|entry| entry.file_type().is_dir())
+        .map(|entry| entry.into_path())
+        .collect::<Vec<_>>();
+    dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+
+    for dir in dirs {
+        if fs::read_dir(&dir)
+            .map_err(|e| miette::miette!("Failed to inspect {}: {e}", dir.display()))?
+            .next()
+            .is_none()
+        {
+            fs::remove_dir(&dir).map_err(|e| {
+                miette::miette!(
+                    "Failed to remove stale generated directory {}: {e}",
+                    dir.display()
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Escape a filesystem path for embedding in a Lean string literal.
