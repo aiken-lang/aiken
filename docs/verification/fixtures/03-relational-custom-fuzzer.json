@@ -1,0 +1,203 @@
+{
+  "name": "relational-custom-fuzzer",
+  "description": "Readable relational lowering for a custom helper fuzzer built through map2/mapN-style composition. The relation keeps intermediate structure instead of collapsing to an unconstrained output predicate.",
+  "manifest_entry": {
+    "id": "docs_relational_custom_fuzzer",
+    "aiken_module": "docs",
+    "aiken_name": "relational_custom_fuzzer",
+    "lean_module": "AikenVerify.Proofs.Docs.relational_custom_fuzzer",
+    "lean_theorem": "docs_relational_custom_fuzzer",
+    "lean_file": "AikenVerify/Proofs/Docs/relational_custom_fuzzer.lean",
+    "flat_file": "cbor/docs_relational_custom_fuzzer.cbor",
+    "fuzzer_flat_file": "cbor/docs_relational_custom_fuzzer_fuzzer.cbor",
+    "return_mode": "bool",
+    "test_mode": "normal",
+    "on_test_failure": "fail_immediately",
+    "property_uplc_hash": "a333333333333333333333333333333333333333333333333333333333333333",
+    "property_harness_hash": "a4444444444444444444444444444444444444444444444444444444",
+    "fuzzer_uplc_hash": "a555555555555555555555555555555555555555555555555555555555555555",
+    "fuzzer_harness_hash": "a6666666666666666666666666666666666666666666666666666666",
+    "fuzzer_model_hash": "a777777777777777777777777777777777777777777777777777777777777777",
+    "domain": {
+      "relation": {
+        "kind": "image",
+        "output_type": {
+          "unsupported": "docs.PairData"
+        },
+        "mapper_shape": {
+          "kind": "constructor_apply",
+          "constructor": "PairData",
+          "type_name": "docs.PairData",
+          "arg_order": [0, 1]
+        },
+        "sources": [
+          {
+            "kind": "constraint",
+            "constraint": {
+              "byte_string_len_range": {
+                "min_len": 4,
+                "max_len": 4
+              }
+            }
+          },
+          {
+            "kind": "constraint",
+            "constraint": {
+              "int_range": {
+                "min": "0",
+                "max": "10"
+              }
+            }
+          }
+        ]
+      },
+      "precision": "OverApprox",
+      "certificate": "TrustedVersionedModel",
+      "obligations_open": [],
+      "obligations_discharged": [
+        "FuzzerReturnsImpliesDomain",
+        "FuzzerModelHashMatches",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "typed_fuzzer_ast",
+        "map2",
+        "constructor_apply"
+      ],
+      "widenings": [],
+      "production_allowed": true,
+      "diagnostics": []
+    },
+    "input_type": {
+      "aiken_type": "docs.PairData",
+      "runtime_encoding": "constructor_value",
+      "data_encoding": "constructor_tagged",
+      "lean_encoding": "data",
+      "schema_hash": "a888888888888888888888888888888888888888888888888888888888888888",
+      "schema": {
+        "kind": "constructor_tagged",
+        "type_name": "docs.PairData",
+        "constructors": [
+          {
+            "name": "PairData",
+            "tag": 0,
+            "fields": [
+              {
+                "name": "payload",
+                "schema": {
+                  "kind": "byte_array"
+                }
+              },
+              {
+                "name": "count",
+                "schema": {
+                  "kind": "int"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "has_termination_theorem": true,
+    "has_equivalence_theorem": false
+  },
+  "theorem_result": {
+    "test_name": "docs.relational_custom_fuzzer",
+    "theorem_name": "AikenVerify.Proofs.Docs.relational_custom_fuzzer",
+    "status": "SolverValidated",
+    "certification": "smt_valid_no_proof_reconstruction",
+    "trust_profile": "production",
+    "domain": {
+      "relation": {
+        "kind": "image",
+        "output_type": {
+          "unsupported": "docs.PairData"
+        },
+        "mapper_shape": {
+          "kind": "constructor_apply",
+          "constructor": "PairData",
+          "type_name": "docs.PairData",
+          "arg_order": [0, 1]
+        },
+        "sources": [
+          {
+            "kind": "constraint",
+            "constraint": {
+              "byte_string_len_range": {
+                "min_len": 4,
+                "max_len": 4
+              }
+            }
+          },
+          {
+            "kind": "constraint",
+            "constraint": {
+              "int_range": {
+                "min": "0",
+                "max": "10"
+              }
+            }
+          }
+        ]
+      },
+      "precision": "OverApprox",
+      "certificate": "TrustedVersionedModel",
+      "obligations_open": [],
+      "obligations_discharged": [
+        "FuzzerReturnsImpliesDomain",
+        "FuzzerModelHashMatches",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "typed_fuzzer_ast",
+        "map2",
+        "constructor_apply"
+      ],
+      "widenings": [],
+      "production_allowed": true,
+      "diagnostics": []
+    },
+    "input_type": {
+      "aiken_type": "docs.PairData",
+      "runtime_encoding": "constructor_value",
+      "data_encoding": "constructor_tagged",
+      "lean_encoding": "data",
+      "schema_hash": "a888888888888888888888888888888888888888888888888888888888888888",
+      "schema": {
+        "kind": "constructor_tagged",
+        "type_name": "docs.PairData",
+        "constructors": [
+          {
+            "name": "PairData",
+            "tag": 0,
+            "fields": [
+              {
+                "name": "payload",
+                "schema": {
+                  "kind": "byte_array"
+                }
+              },
+              {
+                "name": "count",
+                "schema": {
+                  "kind": "int"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "proof_status": {
+      "kind": "proved"
+    },
+    "explanation": "input domain: OverApprox (TrustedVersionedModel)\nlowering: typed_fuzzer_ast -> map2 -> constructor_apply"
+  }
+}

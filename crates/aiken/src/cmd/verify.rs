@@ -2781,6 +2781,221 @@ test unit_smoke() {
         .expect("generated manifest JSON should deserialize")
     }
 
+    #[derive(Debug)]
+    struct DocsGoldenFixture {
+        name: String,
+        description: String,
+        manifest_entry: verify::ManifestEntry,
+        theorem_result: verify::TheoremResult,
+    }
+
+    fn docs_fixture_path(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/verification/fixtures")
+            .join(name)
+    }
+
+    fn read_docs_fixture(name: &str) -> DocsGoldenFixture {
+        let path = docs_fixture_path(name);
+        let content = fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+        let value: serde_json::Value = serde_json::from_str(&content)
+            .unwrap_or_else(|err| panic!("failed to parse {}: {err}", path.display()));
+        let name = value
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("{} is missing string field 'name'", path.display()))
+            .to_string();
+        let description = value
+            .get("description")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("{} is missing string field 'description'", path.display()))
+            .to_string();
+        let manifest_entry =
+            serde_json::from_value(value.get("manifest_entry").cloned().unwrap_or_else(|| {
+                panic!(
+                    "{} is missing object field 'manifest_entry'",
+                    path.display()
+                )
+            }))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "failed to parse manifest_entry in {}: {err}",
+                    path.display()
+                )
+            });
+        let theorem_result =
+            serde_json::from_value(value.get("theorem_result").cloned().unwrap_or_else(|| {
+                panic!(
+                    "{} is missing object field 'theorem_result'",
+                    path.display()
+                )
+            }))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "failed to parse theorem_result in {}: {err}",
+                    path.display()
+                )
+            });
+
+        DocsGoldenFixture {
+            name,
+            description,
+            manifest_entry,
+            theorem_result,
+        }
+    }
+
+    #[test]
+    fn docs_readme_links_verification_guides() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../README.md");
+        let readme = fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+        assert!(readme.contains("docs/verification/README.md"));
+        assert!(readme.contains("docs/verification/developer-guide.md"));
+        assert!(readme.contains("docs/verification/schema-migration.md"));
+        assert!(readme.contains("docs/verification/fixtures/README.md"));
+    }
+
+    #[test]
+    fn docs_fixture_primitive_normal_bool_is_current() {
+        let fixture = read_docs_fixture("01-primitive-normal-bool.json");
+        assert_eq!(fixture.name, "primitive-normal-bool");
+        assert!(!fixture.description.is_empty());
+        assert_eq!(
+            fixture.manifest_entry.return_mode,
+            Some(aiken_project::export::TestReturnMode::Bool)
+        );
+        assert_eq!(
+            fixture.manifest_entry.test_mode,
+            Some(verify::ManifestTestMode::Normal)
+        );
+        assert_eq!(
+            fixture.theorem_result.status,
+            verify::VerificationStatus::SolverValidated
+        );
+        assert_eq!(
+            fixture.theorem_result.domain.precision,
+            verify::DomainPrecision::Exact
+        );
+        assert_eq!(
+            fixture.theorem_result.domain.certificate,
+            verify::DomainCertificate::TrustedVersionedModel
+        );
+    }
+
+    #[test]
+    fn docs_fixture_primitive_fail_void_is_current() {
+        let fixture = read_docs_fixture("02-primitive-fail-void.json");
+        assert_eq!(fixture.name, "primitive-fail-void");
+        assert_eq!(
+            fixture.manifest_entry.return_mode,
+            Some(aiken_project::export::TestReturnMode::Void)
+        );
+        assert_eq!(
+            fixture.manifest_entry.test_mode,
+            Some(verify::ManifestTestMode::Fail)
+        );
+        assert_eq!(
+            fixture.theorem_result.status,
+            verify::VerificationStatus::SolverValidated
+        );
+        assert_eq!(
+            fixture.theorem_result.domain.precision,
+            verify::DomainPrecision::OverApprox
+        );
+    }
+
+    #[test]
+    fn docs_fixture_relational_custom_fuzzer_is_current() {
+        let fixture = read_docs_fixture("03-relational-custom-fuzzer.json");
+        assert_eq!(fixture.name, "relational-custom-fuzzer");
+        assert!(matches!(
+            fixture.theorem_result.domain.relation,
+            verify::DomainRel::Image { .. }
+        ));
+        match &fixture.theorem_result.domain.relation {
+            verify::DomainRel::Image { sources, .. } => assert_eq!(sources.len(), 2),
+            other => panic!("expected image relation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn docs_fixture_fail_once_witness_is_current() {
+        let fixture = read_docs_fixture("04-fail-once-witness.json");
+        assert_eq!(fixture.name, "fail-once-witness");
+        assert_eq!(
+            fixture.manifest_entry.test_mode,
+            Some(verify::ManifestTestMode::FailOnce)
+        );
+        assert_eq!(
+            fixture.theorem_result.status,
+            verify::VerificationStatus::WitnessValidated
+        );
+        assert_eq!(
+            fixture.theorem_result.domain.precision,
+            verify::DomainPrecision::WitnessOnly
+        );
+        assert!(matches!(
+            fixture
+                .theorem_result
+                .domain
+                .sampler
+                .as_ref()
+                .map(|s| s.run_kind),
+            Some(verify::SamplerRunKind::WitnessReplay)
+        ));
+        assert!(matches!(
+            fixture.theorem_result.proof_status,
+            verify::ProofStatus::WitnessProved { .. }
+        ));
+    }
+
+    #[test]
+    fn docs_fixture_sampler_fallback_partial_is_current() {
+        let fixture = read_docs_fixture("05-sampler-fallback-partial.json");
+        assert_eq!(fixture.name, "sampler-fallback-partial");
+        assert_eq!(
+            fixture.theorem_result.status,
+            verify::VerificationStatus::Partial
+        );
+        assert!(matches!(
+            fixture.theorem_result.domain.relation,
+            verify::DomainRel::SamplerReturns { .. }
+        ));
+        assert!(!fixture.theorem_result.domain.production_allowed);
+        assert!(
+            fixture
+                .theorem_result
+                .domain
+                .obligations_open
+                .contains(&verify::DomainObligation::ValueDecoderRoundTrip)
+        );
+    }
+
+    #[test]
+    fn docs_fixture_scenario_trace_partial_is_current() {
+        let fixture = read_docs_fixture("06-scenario-trace-partial.json");
+        assert_eq!(fixture.name, "scenario-trace-partial");
+        assert_eq!(
+            fixture.theorem_result.status,
+            verify::VerificationStatus::Partial
+        );
+        let trace = fixture
+            .theorem_result
+            .domain
+            .scenario_trace
+            .as_ref()
+            .expect("scenario fixture should carry scenario trace metadata");
+        assert_eq!(
+            trace.symbolic_encoding,
+            verify::ScenarioSymbolicEncoding::BoundedBooleanChecker
+        );
+        assert!(trace.uses_global_reachability_over_approx);
+        assert_eq!(trace.trace_length.min, 2);
+        assert_eq!(trace.trace_length.max, Some(4));
+    }
+
     fn skipped_only_manifest() -> verify::GeneratedManifest {
         serde_json::from_value(serde_json::json!({
             "schema_version": verify::GENERATED_MANIFEST_SCHEMA_VERSION,

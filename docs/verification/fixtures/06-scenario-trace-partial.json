@@ -1,0 +1,192 @@
+{
+  "name": "scenario-trace-partial",
+  "description": "Bounded scenario/state-machine trace result. The attempt is Partial because it still depends on an acknowledged global reachability over-approximation and open ledger/script-context obligations.",
+  "manifest_entry": {
+    "id": "docs_scenario_trace_partial",
+    "aiken_module": "docs",
+    "aiken_name": "scenario_trace_partial",
+    "lean_module": "AikenVerify.Proofs.Docs.scenario_trace_partial",
+    "lean_theorem": "docs_scenario_trace_partial",
+    "lean_file": "AikenVerify/Proofs/Docs/scenario_trace_partial.lean",
+    "flat_file": "cbor/docs_scenario_trace_partial.cbor",
+    "fuzzer_flat_file": "cbor/docs_scenario_trace_partial_fuzzer.cbor",
+    "return_mode": "void",
+    "test_mode": "normal",
+    "on_test_failure": "fail_immediately",
+    "property_uplc_hash": "d333333333333333333333333333333333333333333333333333333333333333",
+    "property_harness_hash": "d4444444444444444444444444444444444444444444444444444444",
+    "fuzzer_uplc_hash": "d555555555555555555555555555555555555555555555555555555555555555",
+    "fuzzer_harness_hash": "d666666666666666666666666666666666666666666666666666666666666666",
+    "fuzzer_model_hash": "d777777777777777777777777777777777777777777777777777777777777777",
+    "domain": {
+      "relation": {
+        "kind": "unknown",
+        "reason": "bounded state-machine trace domain still has open soundness obligations"
+      },
+      "precision": "Unknown",
+      "certificate": "Unchecked",
+      "obligations_open": [
+        "FuzzerReturnsImpliesDomain"
+      ],
+      "obligations_discharged": [
+        "FuzzerModelHashMatches",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "scenario_trace",
+        "bounded_boolean_checker"
+      ],
+      "widenings": [
+        {
+          "kind": "global_reachability",
+          "message": "Global reachable-state approximation is still wider than the exact transition relation."
+        }
+      ],
+      "production_allowed": false,
+      "scenario_trace": {
+        "acceptance": "accepts_success",
+        "trace_length": {
+          "min": 2,
+          "max": 4
+        },
+        "step_depth": {
+          "min": 1,
+          "max": 3
+        },
+        "symbolic_encoding": "bounded_boolean_checker",
+        "initial_state_anchored": true,
+        "has_transition_prop": true,
+        "has_step_function_ir": true,
+        "transition_relation_exact": false,
+        "uses_global_reachability_over_approx": true,
+        "witness_replay_available": true,
+        "script_context_predicate": "open_obligation",
+        "ledger_validity_predicate": "open_obligation",
+        "open_obligations": [
+          "script-context predicate not yet integrated for bounded scenario proof",
+          "ledger-validity predicate not yet integrated for bounded scenario proof"
+        ],
+        "blockers": [
+          "global reachable-state approximation is still wider than the exact transition relation"
+        ]
+      },
+      "compatibility_diagnostics": [
+        {
+          "code": "scenario_global_reachability_overapprox",
+          "severity": "warning",
+          "message": "Scenario proof path is blocked from production success because the reachable-state predicate is still an acknowledged over-approximation.",
+          "mode": "universal_success",
+          "trust_profile": "production"
+        }
+      ],
+      "diagnostics": [
+        "bounded scenario trace still has open soundness obligations"
+      ]
+    },
+    "input_type": {
+      "aiken_type": "List<Data>",
+      "runtime_encoding": "data_constant",
+      "data_encoding": "list",
+      "lean_encoding": "list",
+      "schema": {
+        "kind": "list",
+        "element": {
+          "kind": "data"
+        }
+      }
+    },
+    "has_termination_theorem": false,
+    "has_equivalence_theorem": false,
+    "over_approximations": 2,
+    "partial_proof_note": "bounded scenario trace still relies on global reachability over-approximation and open ledger/script-context obligations"
+  },
+  "theorem_result": {
+    "test_name": "docs.scenario_trace_partial",
+    "theorem_name": "AikenVerify.Proofs.Docs.scenario_trace_partial",
+    "status": "Partial",
+    "certification": "open_obligations",
+    "trust_profile": "production",
+    "domain": {
+      "relation": {
+        "kind": "unknown",
+        "reason": "bounded state-machine trace domain still has open soundness obligations"
+      },
+      "precision": "Unknown",
+      "certificate": "Unchecked",
+      "obligations_open": [
+        "FuzzerReturnsImpliesDomain"
+      ],
+      "obligations_discharged": [
+        "FuzzerModelHashMatches",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "scenario_trace",
+        "bounded_boolean_checker"
+      ],
+      "widenings": [
+        {
+          "kind": "global_reachability",
+          "message": "Global reachable-state approximation is still wider than the exact transition relation."
+        }
+      ],
+      "production_allowed": false,
+      "scenario_trace": {
+        "acceptance": "accepts_success",
+        "trace_length": {
+          "min": 2,
+          "max": 4
+        },
+        "step_depth": {
+          "min": 1,
+          "max": 3
+        },
+        "symbolic_encoding": "bounded_boolean_checker",
+        "initial_state_anchored": true,
+        "has_transition_prop": true,
+        "has_step_function_ir": true,
+        "transition_relation_exact": false,
+        "uses_global_reachability_over_approx": true,
+        "witness_replay_available": true,
+        "script_context_predicate": "open_obligation",
+        "ledger_validity_predicate": "open_obligation",
+        "open_obligations": [
+          "script-context predicate not yet integrated for bounded scenario proof",
+          "ledger-validity predicate not yet integrated for bounded scenario proof"
+        ],
+        "blockers": [
+          "global reachable-state approximation is still wider than the exact transition relation"
+        ]
+      },
+      "compatibility_diagnostics": [
+        {
+          "code": "scenario_global_reachability_overapprox",
+          "severity": "warning",
+          "message": "Scenario proof path is blocked from production success because the reachable-state predicate is still an acknowledged over-approximation.",
+          "mode": "universal_success",
+          "trust_profile": "production"
+        }
+      ],
+      "diagnostics": [
+        "bounded scenario trace still has open soundness obligations"
+      ]
+    },
+    "input_type": {
+      "aiken_type": "List<Data>",
+      "runtime_encoding": "data_constant",
+      "data_encoding": "list",
+      "lean_encoding": "list",
+      "schema": {
+        "kind": "list",
+        "element": {
+          "kind": "data"
+        }
+      }
+    },
+    "proof_status": {
+      "kind": "partial",
+      "note": "bounded scenario trace still relies on global reachability over-approximation and open ledger/script-context obligations"
+    },
+    "explanation": "bounded scenario trace still relies on global reachability over-approximation and open ledger/script-context obligations\ninput domain: Unknown (Unchecked)\nlowering: scenario_trace -> bounded_boolean_checker\nscenario trace: BoundedBooleanChecker, trace length 2..=4, step depth 1..=3\nscenario predicates: script_context=open_obligation, ledger_validity=open_obligation\nscenario obligations: script-context predicate not yet integrated for bounded scenario proof, ledger-validity predicate not yet integrated for bounded scenario proof\nscenario blocker: global reachable-state approximation is still wider than the exact transition relation\nwidening: Global reachable-state approximation is still wider than the exact transition relation."
+  }
+}

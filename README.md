@@ -37,6 +37,12 @@ Treat the verify CLI and JSON as preview-grade automation surfaces: usable for C
 
 Start with `aiken verify doctor` to confirm the Lean/Z3/PlutusCore prerequisites on the current machine. Then use `aiken verify capabilities`, `aiken verify capabilities --json`, and `aiken verify run --help` to discover the supported proof shapes, surfaced `unsupported` catalogue codes, and operational flags before wiring proofs into CI.
 
+For the current result vocabulary and trust model, see:
+- [`docs/verification/README.md`](./docs/verification/README.md) — user guide for statuses, trust profiles, obligations, replay, counterexamples, and artifacts
+- [`docs/verification/developer-guide.md`](./docs/verification/developer-guide.md) — maintainer guide for adding new lowerings and certificates
+- [`docs/verification/schema-migration.md`](./docs/verification/schema-migration.md) — migration notes for older preview JSON consumers
+- [`docs/verification/fixtures/README.md`](./docs/verification/fixtures/README.md) — stable example fixtures for normal, fail, fail_once, custom, sampler, and scenario outputs
+
 ## Contributing
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.

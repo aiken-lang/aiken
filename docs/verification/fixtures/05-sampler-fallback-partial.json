@@ -1,0 +1,174 @@
+{
+  "name": "sampler-fallback-partial",
+  "description": "Local sampler fallback for an opaque child/custom sampler path. The result is Partial because the relation is still conservative and open obligations remain.",
+  "manifest_entry": {
+    "id": "docs_sampler_fallback_partial",
+    "aiken_module": "docs",
+    "aiken_name": "sampler_fallback_partial",
+    "lean_module": "AikenVerify.Proofs.Docs.sampler_fallback_partial",
+    "lean_theorem": "docs_sampler_fallback_partial",
+    "lean_file": "AikenVerify/Proofs/Docs/sampler_fallback_partial.lean",
+    "flat_file": "cbor/docs_sampler_fallback_partial.cbor",
+    "fuzzer_flat_file": "cbor/docs_sampler_fallback_partial_fuzzer.cbor",
+    "return_mode": "bool",
+    "test_mode": "normal",
+    "on_test_failure": "fail_immediately",
+    "property_uplc_hash": "c333333333333333333333333333333333333333333333333333333333333333",
+    "property_harness_hash": "c4444444444444444444444444444444444444444444444444444444",
+    "fuzzer_uplc_hash": "c555555555555555555555555555555555555555555555555555555555555555",
+    "fuzzer_harness_hash": "c666666666666666666666666666666666666666666666666666666666666666",
+    "fuzzer_model_hash": "c777777777777777777777777777777777777777777777777777777777777777",
+    "domain": {
+      "relation": {
+        "kind": "sampler_returns",
+        "summary": "opaque helper child lowered through the local sampler harness ABI"
+      },
+      "precision": "Unknown",
+      "certificate": "Unchecked",
+      "obligations_open": [
+        "FuzzerReturnsImpliesDomain",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput"
+      ],
+      "obligations_discharged": [
+        "FuzzerModelHashMatches",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "typed_fuzzer_ast",
+        "local_sampler_fallback"
+      ],
+      "widenings": [
+        {
+          "kind": "sampler_fallback",
+          "message": "opaque child lowered through sampler semantics instead of a compact exact relation"
+        }
+      ],
+      "production_allowed": false,
+      "sampler": {
+        "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+        "run_kind": "seeded_generation",
+        "prng_mode": "seeded",
+        "generation_seed": 7,
+        "decode_policy": "decode_error_is_test_failure"
+      },
+      "compatibility_diagnostics": [
+        {
+          "code": "local_sampler_fallback",
+          "severity": "warning",
+          "message": "Opaque child expression required local sampler fallback.",
+          "source_path": "lib/tests.ak",
+          "source_span": {
+            "start": 112,
+            "end": 147
+          }
+        }
+      ],
+      "diagnostics": [
+        "opaque child expression required local sampler fallback"
+      ]
+    },
+    "input_type": {
+      "aiken_type": "docs.OpaqueInput",
+      "runtime_encoding": "data_constant",
+      "data_encoding": "raw_data",
+      "lean_encoding": "data",
+      "schema": {
+        "kind": "raw_data_fallback",
+        "type_name": "docs.OpaqueInput",
+        "reason": "No trusted schema is available for the opaque child path."
+      },
+      "diagnostics": [
+        "Schema-less fallback to raw Data is an explicit widening."
+      ]
+    },
+    "sampler": {
+      "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+      "run_kind": "seeded_generation",
+      "prng_mode": "seeded",
+      "generation_seed": 7,
+      "decode_policy": "decode_error_is_test_failure"
+    },
+    "has_termination_theorem": true,
+    "has_equivalence_theorem": false,
+    "partial_proof_note": "sampler fallback still depends on open decoder/domain obligations"
+  },
+  "theorem_result": {
+    "test_name": "docs.sampler_fallback_partial",
+    "theorem_name": "AikenVerify.Proofs.Docs.sampler_fallback_partial",
+    "status": "Partial",
+    "certification": "open_obligations",
+    "trust_profile": "production",
+    "domain": {
+      "relation": {
+        "kind": "sampler_returns",
+        "summary": "opaque helper child lowered through the local sampler harness ABI"
+      },
+      "precision": "Unknown",
+      "certificate": "Unchecked",
+      "obligations_open": [
+        "FuzzerReturnsImpliesDomain",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput"
+      ],
+      "obligations_discharged": [
+        "FuzzerModelHashMatches",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "typed_fuzzer_ast",
+        "local_sampler_fallback"
+      ],
+      "widenings": [
+        {
+          "kind": "sampler_fallback",
+          "message": "opaque child lowered through sampler semantics instead of a compact exact relation"
+        }
+      ],
+      "production_allowed": false,
+      "sampler": {
+        "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+        "run_kind": "seeded_generation",
+        "prng_mode": "seeded",
+        "generation_seed": 7,
+        "decode_policy": "decode_error_is_test_failure"
+      },
+      "compatibility_diagnostics": [
+        {
+          "code": "local_sampler_fallback",
+          "severity": "warning",
+          "message": "Opaque child expression required local sampler fallback.",
+          "source_path": "lib/tests.ak",
+          "source_span": {
+            "start": 112,
+            "end": 147
+          }
+        }
+      ],
+      "diagnostics": [
+        "opaque child expression required local sampler fallback"
+      ]
+    },
+    "input_type": {
+      "aiken_type": "docs.OpaqueInput",
+      "runtime_encoding": "data_constant",
+      "data_encoding": "raw_data",
+      "lean_encoding": "data",
+      "schema": {
+        "kind": "raw_data_fallback",
+        "type_name": "docs.OpaqueInput",
+        "reason": "No trusted schema is available for the opaque child path."
+      },
+      "diagnostics": [
+        "Schema-less fallback to raw Data is an explicit widening."
+      ]
+    },
+    "proof_status": {
+      "kind": "partial",
+      "note": "sampler fallback still depends on open decoder/domain obligations"
+    },
+    "explanation": "sampler fallback still depends on open decoder/domain obligations\ninput domain: Unknown (Unchecked)\nlowering: typed_fuzzer_ast -> local_sampler_fallback\nwidening: opaque child lowered through sampler semantics instead of a compact exact relation"
+  }
+}
