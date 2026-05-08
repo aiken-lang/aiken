@@ -59,9 +59,10 @@ use aiken_lang::{
 };
 use export::{
     Export, ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedProgram,
-    ExportedPropertyTest, ExportedReplayWitness, ExportedTests, FuzzerConstraint, FuzzerExactValue,
-    FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode,
-    ValidatorTarget, VerificationTargetKind, fuzzer_output_type_from,
+    ExportedPropertyTest, ExportedReplayWitness, ExportedSourceSpan, ExportedTests,
+    FuzzerConstraint, FuzzerExactValue, FuzzerSemantics, StateMachineAcceptance,
+    StateMachineTransitionSemantics, TestReturnMode, ValidatorTarget, VerificationTargetKind,
+    fuzzer_output_type_from,
 };
 use indexmap::IndexMap;
 use miette::NamedSource;
@@ -344,10 +345,18 @@ fn convert_nary_mapper_shape(lang: &LangNaryMapperShape) -> ExportedMapperShape 
     }
 }
 
+fn convert_source_span(span: aiken_lang::ast::Span) -> ExportedSourceSpan {
+    ExportedSourceSpan {
+        start: span.start,
+        end: span.end,
+    }
+}
+
 fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStructure {
     match lang {
-        LangNormalizedFuzzer::Opaque { reason, .. } => ExportedFuzzerStructure::Opaque {
+        LangNormalizedFuzzer::Opaque { expr, reason } => ExportedFuzzerStructure::Opaque {
             reason: reason.clone(),
+            source_span: Some(convert_source_span(expr.location())),
         },
         LangNormalizedFuzzer::Primitive {
             output_type,
@@ -355,6 +364,7 @@ fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStruct
         } => ExportedFuzzerStructure::Primitive {
             output_type: fuzzer_output_type_from(output_type),
             known_constraint: known_constraint.as_ref().map(convert_constraint),
+            source_span: None,
         },
         LangNormalizedFuzzer::Map {
             source,
@@ -366,6 +376,7 @@ fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStruct
             source_output_type: fuzzer_output_type_from(source_output_type),
             output_type: fuzzer_output_type_from(output_type),
             mapper_shape: convert_mapper_shape(mapper_shape),
+            source_span: None,
         },
         LangNormalizedFuzzer::MapN {
             sources,
@@ -375,13 +386,16 @@ fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStruct
             sources: sources.iter().map(convert_fuzzer_structure).collect(),
             output_type: fuzzer_output_type_from(output_type),
             mapper_shape: convert_nary_mapper_shape(mapper_shape),
+            source_span: None,
         },
         LangNormalizedFuzzer::Bind { source, result } => ExportedFuzzerStructure::Bind {
             source: Box::new(convert_fuzzer_structure(source)),
             result: Box::new(convert_fuzzer_structure(result)),
+            source_span: None,
         },
         LangNormalizedFuzzer::Product { elements } => ExportedFuzzerStructure::Product {
             elements: elements.iter().map(convert_fuzzer_structure).collect(),
+            source_span: None,
         },
         LangNormalizedFuzzer::List {
             element,
@@ -395,6 +409,7 @@ fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStruct
             max_len: *max_len,
             unique: *unique,
             retry_limit: *retry_limit,
+            source_span: None,
         },
         LangNormalizedFuzzer::Choice {
             output_type,
@@ -406,6 +421,7 @@ fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStruct
             branches: branches.iter().map(convert_fuzzer_structure).collect(),
             may_fail: *may_fail,
             non_empty_required: *non_empty_required,
+            source_span: None,
         },
         LangNormalizedFuzzer::Filter {
             output_type,
@@ -419,6 +435,7 @@ fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStruct
             predicate_summary: predicate_summary.clone(),
             max_tries: *max_tries,
             impossible: *impossible,
+            source_span: None,
         },
         LangNormalizedFuzzer::StateMachineTrace {
             acceptance,
@@ -427,9 +444,11 @@ fn convert_fuzzer_structure(lang: &LangNormalizedFuzzer) -> ExportedFuzzerStruct
         } => ExportedFuzzerStructure::StateMachineTrace {
             acceptance: convert_state_machine_acceptance(acceptance),
             output_type: fuzzer_output_type_from(output_type),
+            source_span: None,
         },
         _ => ExportedFuzzerStructure::Opaque {
             reason: "unsupported future normalized fuzzer variant".to_string(),
+            source_span: None,
         },
     }
 }
@@ -2973,6 +2992,7 @@ where
 
         let semantics = convert_semantics(&analysis.fuzzer.semantics);
         let fuzzer_structure = Some(convert_fuzzer_structure(&analysis.fuzzer.normalized));
+        let fuzzer_source_span = Some(convert_source_span(analysis.fuzzer.source_span));
         let fuzzer_data_schema = export_data_schema(
             &self.checked_modules,
             &self.data_types,
@@ -3128,6 +3148,7 @@ where
             constraint,
             semantics,
             fuzzer_structure,
+            fuzzer_source_span,
             fuzzer_data_schema,
             inner_data_schemas,
             transition_prop_lean,
@@ -3567,6 +3588,10 @@ where
         let matched_any_tests = !scripts.is_empty();
 
         let mut generator = self.new_generator(tracing);
+        let known_functions = self.functions.iter().collect::<IndexMap<_, _>>();
+        let known_constants = self.constants.iter().collect::<IndexMap<_, _>>();
+        let known_data_types = self.data_types.iter().collect::<IndexMap<_, _>>();
+
         let mut tests = Vec::new();
 
         for (input_path, module_name, test) in scripts.into_iter() {
@@ -3581,11 +3606,14 @@ where
                 })
             }
 
-            tests.push(PropertyTest::from_function_definition(
+            tests.push(PropertyTest::from_function_definition_with_context(
                 &mut generator,
                 test,
                 module_name,
                 input_path,
+                &known_functions,
+                &known_constants,
+                &known_data_types,
             ));
         }
 

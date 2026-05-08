@@ -367,34 +367,53 @@ pub enum ExportedMapperShape {
 }
 
 #[non_exhaustive]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct ExportedSourceSpan {
+    pub start: usize,
+    pub end: usize,
+}
+
+#[non_exhaustive]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExportedFuzzerStructure {
     Opaque {
         reason: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     Primitive {
         output_type: FuzzerOutputType,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         known_constraint: Option<FuzzerConstraint>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     Map {
         source: Box<ExportedFuzzerStructure>,
         source_output_type: FuzzerOutputType,
         output_type: FuzzerOutputType,
         mapper_shape: ExportedMapperShape,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     MapN {
         sources: Vec<ExportedFuzzerStructure>,
         output_type: FuzzerOutputType,
         mapper_shape: ExportedMapperShape,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     Bind {
         source: Box<ExportedFuzzerStructure>,
         result: Box<ExportedFuzzerStructure>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     Product {
         elements: Vec<ExportedFuzzerStructure>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     List {
         element: Box<ExportedFuzzerStructure>,
@@ -406,6 +425,8 @@ pub enum ExportedFuzzerStructure {
         unique: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry_limit: Option<usize>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     Choice {
         output_type: FuzzerOutputType,
@@ -414,6 +435,8 @@ pub enum ExportedFuzzerStructure {
         may_fail: bool,
         #[serde(default)]
         non_empty_required: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     Filter {
         output_type: FuzzerOutputType,
@@ -423,11 +446,120 @@ pub enum ExportedFuzzerStructure {
         max_tries: Option<usize>,
         #[serde(default)]
         impossible: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
     StateMachineTrace {
         acceptance: StateMachineAcceptance,
         output_type: FuzzerOutputType,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_span: Option<ExportedSourceSpan>,
     },
+}
+
+impl ExportedFuzzerStructure {
+    pub fn without_source_spans(&self) -> Self {
+        match self {
+            Self::Opaque { reason, .. } => Self::Opaque {
+                reason: reason.clone(),
+                source_span: None,
+            },
+            Self::Primitive {
+                output_type,
+                known_constraint,
+                ..
+            } => Self::Primitive {
+                output_type: output_type.clone(),
+                known_constraint: known_constraint.clone(),
+                source_span: None,
+            },
+            Self::Map {
+                source,
+                source_output_type,
+                output_type,
+                mapper_shape,
+                ..
+            } => Self::Map {
+                source: Box::new(source.without_source_spans()),
+                source_output_type: source_output_type.clone(),
+                output_type: output_type.clone(),
+                mapper_shape: mapper_shape.clone(),
+                source_span: None,
+            },
+            Self::MapN {
+                sources,
+                output_type,
+                mapper_shape,
+                ..
+            } => Self::MapN {
+                sources: sources.iter().map(Self::without_source_spans).collect(),
+                output_type: output_type.clone(),
+                mapper_shape: mapper_shape.clone(),
+                source_span: None,
+            },
+            Self::Bind { source, result, .. } => Self::Bind {
+                source: Box::new(source.without_source_spans()),
+                result: Box::new(result.without_source_spans()),
+                source_span: None,
+            },
+            Self::Product { elements, .. } => Self::Product {
+                elements: elements.iter().map(Self::without_source_spans).collect(),
+                source_span: None,
+            },
+            Self::List {
+                element,
+                min_len,
+                max_len,
+                unique,
+                retry_limit,
+                ..
+            } => Self::List {
+                element: Box::new(element.without_source_spans()),
+                min_len: *min_len,
+                max_len: *max_len,
+                unique: *unique,
+                retry_limit: *retry_limit,
+                source_span: None,
+            },
+            Self::Choice {
+                output_type,
+                branches,
+                may_fail,
+                non_empty_required,
+                ..
+            } => Self::Choice {
+                output_type: output_type.clone(),
+                branches: branches.iter().map(Self::without_source_spans).collect(),
+                may_fail: *may_fail,
+                non_empty_required: *non_empty_required,
+                source_span: None,
+            },
+            Self::Filter {
+                output_type,
+                source,
+                predicate_summary,
+                max_tries,
+                impossible,
+                ..
+            } => Self::Filter {
+                output_type: output_type.clone(),
+                source: Box::new(source.without_source_spans()),
+                predicate_summary: predicate_summary.clone(),
+                max_tries: *max_tries,
+                impossible: *impossible,
+                source_span: None,
+            },
+            Self::StateMachineTrace {
+                acceptance,
+                output_type,
+                ..
+            } => Self::StateMachineTrace {
+                acceptance: acceptance.clone(),
+                output_type: output_type.clone(),
+                source_span: None,
+            },
+        }
+    }
 }
 
 #[non_exhaustive]
@@ -722,6 +854,9 @@ pub struct ExportedPropertyTest {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub fuzzer_structure: Option<ExportedFuzzerStructure>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub fuzzer_source_span: Option<ExportedSourceSpan>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub fuzzer_data_schema: Option<ExportedDataSchema>,

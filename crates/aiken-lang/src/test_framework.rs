@@ -2536,6 +2536,7 @@ pub struct FuzzerAnalysis {
     pub normalized: NormalizedFuzzer,
     pub constraint: FuzzerConstraint,
     pub semantics: FuzzerSemantics,
+    pub source_span: Span,
 }
 
 /// A property test plus the verifier/export metadata derived during compilation.
@@ -4565,6 +4566,26 @@ fn normalize_fuzzer_from_continuation(
     }
 }
 
+fn peel_bound_fuzzer_lambda_body<'a>(
+    body: &'a TypedExpr,
+    local_values: &BTreeMap<String, TypedExpr>,
+) -> &'a TypedExpr {
+    let mut current = body;
+    loop {
+        let TypedExpr::Fn { args, body, .. } = terminal_expression(current) else {
+            return current;
+        };
+        if args.is_empty()
+            || !args.iter().all(|arg| {
+                arg.get_variable_name()
+                    .is_some_and(|name| local_values.contains_key(name))
+            })
+        {
+            return current;
+        }
+        current = body.as_ref();
+    }
+}
 fn normalize_fuzzer_from_helper_call(
     fun: &TypedExpr,
     args: &[CallArg<TypedExpr>],
@@ -4574,16 +4595,10 @@ fn normalize_fuzzer_from_helper_call(
     local_values: &BTreeMap<String, TypedExpr>,
     visiting_functions: &mut BTreeSet<(String, String)>,
 ) -> Option<NormalizedFuzzer> {
-    let mut visiting_local_aliases = BTreeSet::new();
-    let resolved = resolve_function_from_expr(
-        fun,
-        current_module,
-        function_index,
-        local_values,
-        &mut visiting_local_aliases,
-    )?;
+    let (resolved, mut helper_locals, applied_arg_count) =
+        resolve_function_with_applied_args(fun, current_module, function_index, local_values)?;
 
-    if args.len() > resolved.function.arguments.len() {
+    if applied_arg_count + args.len() > resolved.function.arguments.len() {
         return None;
     }
 
@@ -4598,8 +4613,10 @@ fn normalize_fuzzer_from_helper_call(
         ));
     }
 
-    let mut helper_locals = local_values.clone();
-    for (param, arg) in resolved.function.arguments.iter().zip(args.iter()) {
+    for (param, arg) in resolved.function.arguments[applied_arg_count..]
+        .iter()
+        .zip(args.iter())
+    {
         if let Some(name) = param.get_variable_name() {
             let mut visiting_local_aliases = BTreeSet::new();
             let materialized = materialize_local_alias_argument(
@@ -4611,8 +4628,9 @@ fn normalize_fuzzer_from_helper_call(
         }
     }
 
+    let normalized_body = peel_bound_fuzzer_lambda_body(&resolved.function.body, &helper_locals);
     let result = normalize_fuzzer_from_expr(
-        &resolved.function.body,
+        normalized_body,
         &resolved.module_name,
         function_index,
         constant_index,
@@ -4654,8 +4672,9 @@ fn normalize_fuzzer_from_resolved_function(
         ));
     }
 
+    let normalized_body = peel_bound_fuzzer_lambda_body(&resolved.function.body, &resolved_locals);
     let result = normalize_fuzzer_from_expr(
-        &resolved.function.body,
+        normalized_body,
         &resolved.module_name,
         function_index,
         constant_index,
@@ -11566,6 +11585,19 @@ fn tuple_elem_arg_index_by_names(
     arg_names: &[String],
     local_values: &BTreeMap<String, TypedExpr>,
 ) -> Option<usize> {
+    let elem = terminal_expression(elem);
+    if let TypedExpr::Var {
+        name, constructor, ..
+    } = elem
+        && matches!(
+            constructor.variant,
+            ValueConstructorVariant::LocalVariable { .. }
+        )
+        && let Some(index) = arg_names.iter().position(|arg_name| arg_name == name)
+    {
+        return Some(index);
+    }
+
     let mut visiting_local_aliases = BTreeSet::new();
     let name =
         resolve_local_var_name_with_aliases(elem, local_values, &mut visiting_local_aliases)?;
@@ -11938,6 +11970,95 @@ impl PropertyTest {
                     normalized,
                     constraint,
                     semantics,
+                    source_span: via.location(),
+                },
+            },
+        }
+    }
+
+    pub fn from_function_definition_with_context(
+        generator: &mut CodeGenerator<'_>,
+        test: TypedTest,
+        module_name: String,
+        input_path: PathBuf,
+        known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+        known_constants: &IndexMap<&FunctionAccessKey, &TypedExpr>,
+        known_data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    ) -> AnalyzedPropertyTest {
+        let TypedTest {
+            name,
+            on_test_failure,
+            body,
+            arguments,
+            return_type,
+            ..
+        } = test;
+
+        let parameter = arguments
+            .first()
+            .expect("property tests must have at least one argument")
+            .to_owned();
+
+        let via = parameter.via.clone();
+        let normalized = normalize_fuzzer_from_via_with_constants(
+            &via,
+            module_name.as_str(),
+            known_functions,
+            known_constants,
+        );
+        let constraint = extract_constraint_from_via_with_constants_and_data_types(
+            &via,
+            module_name.as_str(),
+            known_functions,
+            known_constants,
+            known_data_types,
+        );
+        let type_info = parameter.arg.tipo.clone();
+
+        let stripped_type_info = convert_opaque_type(&type_info, known_data_types, true);
+        let semantics = extract_semantics_from_via_with_constants(
+            &via,
+            module_name.as_str(),
+            known_functions,
+            known_constants,
+            known_data_types,
+            stripped_type_info.as_ref(),
+        );
+
+        let program = generator.clone().generate_raw(
+            &body,
+            &[TypedArg {
+                tipo: stripped_type_info.clone(),
+                ..parameter.clone().into()
+            }],
+            &module_name,
+        );
+
+        // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
+        // argument is a Data constructor which needs not any conversion. So we can just safely
+        // apply onto it later.
+        let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
+
+        AnalyzedPropertyTest {
+            test: PropertyTest::new(
+                input_path,
+                module_name,
+                name,
+                on_test_failure,
+                program,
+                Fuzzer {
+                    program: generator_program,
+                    stripped_type_info,
+                    type_info,
+                },
+            ),
+            analysis: PropertyTestAnalysis {
+                return_type,
+                fuzzer: FuzzerAnalysis {
+                    normalized,
+                    constraint,
+                    semantics,
+                    source_span: via.location(),
                 },
             },
         }
@@ -16492,6 +16613,33 @@ mod test {
             extract_constraint_from_via(&via, "math", &functions),
             FuzzerConstraint::Unsupported { .. }
         ));
+    }
+
+    #[test]
+    fn tuple_elem_arg_index_prefers_mapper_binder_over_outer_local_alias() {
+        let arg_names = vec!["owner".to_string(), "amount".to_string()];
+        let mut local_values = BTreeMap::new();
+        local_values.insert("owner".to_string(), make_typed_bytearray_fixed_fuzzer("4"));
+        local_values.insert("amount".to_string(), make_int_between_via("0", "10"));
+
+        assert_eq!(
+            tuple_elem_arg_index_by_names(
+                &local_var("owner", Type::byte_array()),
+                &arg_names,
+                &local_values,
+            ),
+            Some(0),
+            "mapper parameter names must shadow outer local fuzzer aliases",
+        );
+        assert_eq!(
+            tuple_elem_arg_index_by_names(
+                &local_var("amount", Type::int()),
+                &arg_names,
+                &local_values
+            ),
+            Some(1),
+            "second mapper parameter must also resolve before outer alias substitution",
+        );
     }
 
     #[test]

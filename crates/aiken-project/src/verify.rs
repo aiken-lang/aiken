@@ -55,9 +55,9 @@ use crate::blueprint::{
 use crate::config::compiler_version;
 use crate::export::{
     ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedPropertyTest,
-    ExportedReplayWitness, FuzzerConstraint, FuzzerExactValue, FuzzerOutputType, FuzzerSemantics,
-    StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode, TransitionWidening,
-    TransitionWideningKind, VerificationTargetKind,
+    ExportedReplayWitness, ExportedSourceSpan, FuzzerConstraint, FuzzerExactValue,
+    FuzzerOutputType, FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics,
+    TestReturnMode, TransitionWidening, TransitionWideningKind, VerificationTargetKind,
 };
 use aiken_lang::{ast::OnTestFailure, plutus_version::PlutusVersion};
 use num_bigint::BigInt;
@@ -1318,6 +1318,10 @@ pub struct DomainDiagnostic {
     pub severity: DomainDiagnosticSeverity,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_span: Option<ExportedSourceSpan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<CompatibilityMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trust_profile: Option<TrustProfile>,
@@ -1683,10 +1687,46 @@ fn domain_diagnostic(
         code: code.to_string(),
         severity,
         message: message.into(),
+        source_path: None,
+        source_span: None,
         mode: Some(mode),
         trust_profile: Some(trust_profile),
         obligations,
     }
+}
+
+fn relational_profile_diagnostic(
+    code: &str,
+    severity: DomainDiagnosticSeverity,
+    message: impl Into<String>,
+    source_span: Option<ExportedSourceSpan>,
+) -> RelationalProfileDiagnostic {
+    RelationalProfileDiagnostic {
+        code: code.to_string(),
+        severity,
+        message: message.into(),
+        source_span,
+    }
+}
+
+fn lift_relational_profile_diagnostics(
+    source_path: &str,
+    fallback_span: Option<ExportedSourceSpan>,
+    diagnostics: &[RelationalProfileDiagnostic],
+) -> Vec<DomainDiagnostic> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| DomainDiagnostic {
+            code: diagnostic.code.clone(),
+            severity: diagnostic.severity,
+            message: diagnostic.message.clone(),
+            source_path: Some(source_path.to_string()),
+            source_span: diagnostic.source_span.or(fallback_span),
+            mode: None,
+            trust_profile: None,
+            obligations: Vec::new(),
+        })
+        .collect()
 }
 
 fn first_domain_diagnostic_message(domain: &LoweredDomain) -> Option<String> {
@@ -3446,12 +3486,16 @@ fn manifest_program_hashes(
 }
 
 fn fuzzer_model_hash_for_test(test: &ExportedPropertyTest) -> miette::Result<String> {
+    let structure_for_hash = test
+        .fuzzer_structure
+        .as_ref()
+        .map(ExportedFuzzerStructure::without_source_spans);
     let bytes = serde_json::to_vec(&serde_json::json!({
         "fuzzer_type": &test.fuzzer_type,
         "fuzzer_output_type": &test.fuzzer_output_type,
         "constraint": &test.constraint,
         "semantics": &test.semantics,
-        "fuzzer_structure": &test.fuzzer_structure,
+        "fuzzer_structure": &structure_for_hash,
         "fuzzer_data_schema": &test.fuzzer_data_schema,
         "inner_data_schemas": &test.inner_data_schemas,
     }))
@@ -3719,10 +3763,19 @@ fn compact_domain_profile(
 }
 
 #[derive(Debug, Clone)]
+struct RelationalProfileDiagnostic {
+    code: String,
+    severity: DomainDiagnosticSeverity,
+    message: String,
+    source_span: Option<ExportedSourceSpan>,
+}
+
+#[derive(Debug, Clone)]
 struct RelationalStructureProfile {
     relation: DomainRel,
     precision: DomainPrecision,
     diagnostics: Vec<String>,
+    source_diagnostics: Vec<RelationalProfileDiagnostic>,
     widenings: Vec<Widening>,
 }
 
@@ -3756,6 +3809,51 @@ fn default_exported_semantics(output_type: &FuzzerOutputType) -> FuzzerSemantics
 
 fn mapper_shape_is_exact(shape: &ExportedMapperShape) -> bool {
     !matches!(shape, ExportedMapperShape::Unknown)
+}
+
+fn structure_source_span(structure: &ExportedFuzzerStructure) -> Option<ExportedSourceSpan> {
+    match structure {
+        ExportedFuzzerStructure::Opaque { source_span, .. }
+        | ExportedFuzzerStructure::Primitive { source_span, .. }
+        | ExportedFuzzerStructure::Map { source_span, .. }
+        | ExportedFuzzerStructure::MapN { source_span, .. }
+        | ExportedFuzzerStructure::Bind { source_span, .. }
+        | ExportedFuzzerStructure::Product { source_span, .. }
+        | ExportedFuzzerStructure::List { source_span, .. }
+        | ExportedFuzzerStructure::Choice { source_span, .. }
+        | ExportedFuzzerStructure::Filter { source_span, .. }
+        | ExportedFuzzerStructure::StateMachineTrace { source_span, .. } => *source_span,
+    }
+}
+
+fn relation_contains_sampler_returns(relation: &DomainRel) -> bool {
+    match relation {
+        DomainRel::SamplerReturns { .. } => true,
+        DomainRel::Exists { body, .. } | DomainRel::Not { body } => {
+            relation_contains_sampler_returns(body)
+        }
+        DomainRel::Bind { source, result } => {
+            relation_contains_sampler_returns(source) || relation_contains_sampler_returns(result)
+        }
+        DomainRel::And { items }
+        | DomainRel::Or { items }
+        | DomainRel::Product { elements: items }
+        | DomainRel::Choice {
+            branches: items, ..
+        }
+        | DomainRel::Image { sources: items, .. } => {
+            items.iter().any(relation_contains_sampler_returns)
+        }
+        DomainRel::List { element, .. }
+        | DomainRel::Filter {
+            source: element, ..
+        } => relation_contains_sampler_returns(element),
+        DomainRel::Constraint { .. }
+        | DomainRel::Semantics { .. }
+        | DomainRel::Witness { .. }
+        | DomainRel::TrueWithExplicitWidening { .. }
+        | DomainRel::Unknown { .. } => false,
+    }
 }
 
 fn merge_structure_precision(children: &[RelationalStructureProfile]) -> DomainPrecision {
@@ -3833,6 +3931,7 @@ fn primitive_structure_profile(
                 diagnostics: vec![format!(
                     "Byte-array content is not fully modeled; only the exact length support [{min_len}, {max_len}] is captured.",
                 )],
+                source_diagnostics: Vec::new(),
                 widenings: vec![Widening {
                     kind: "bytearray_content".to_string(),
                     message: "ByteArray length is exact, but arbitrary content remains over-approximated until hash/content semantics are proved.".to_string(),
@@ -3846,6 +3945,7 @@ fn primitive_structure_profile(
             },
             precision: DomainPrecision::Exact,
             diagnostics: vec!["Compact primitive support is modeled exactly from the trusted fuzzer model.".to_string()],
+            source_diagnostics: Vec::new(),
             widenings: Vec::new(),
         },
         None => RelationalStructureProfile {
@@ -3854,16 +3954,34 @@ fn primitive_structure_profile(
             },
             precision: DomainPrecision::OverApprox,
             diagnostics: vec!["Primitive branch lacks an explicit compact constraint and falls back to a conservative output-type semantics.".to_string()],
+            source_diagnostics: Vec::new(),
             widenings: Vec::new(),
         },
     }
 }
 
+fn collect_profile_source_diagnostics(
+    children: &[RelationalStructureProfile],
+) -> Vec<RelationalProfileDiagnostic> {
+    children
+        .iter()
+        .flat_map(|child| child.source_diagnostics.clone())
+        .collect()
+}
+
 fn relational_profile_from_structure(
     structure: &ExportedFuzzerStructure,
 ) -> RelationalStructureProfile {
+    relational_profile_from_structure_with_context(structure, true)
+}
+
+fn relational_profile_from_structure_with_context(
+    structure: &ExportedFuzzerStructure,
+    is_root: bool,
+) -> RelationalStructureProfile {
+    let source_span = structure_source_span(structure);
     match structure {
-        ExportedFuzzerStructure::Opaque { reason } => RelationalStructureProfile {
+        ExportedFuzzerStructure::Opaque { reason, .. } if is_root => RelationalStructureProfile {
             relation: DomainRel::Unknown {
                 reason: reason.clone(),
             },
@@ -3871,11 +3989,44 @@ fn relational_profile_from_structure(
             diagnostics: vec![format!(
                 "Composed fuzzer subtree remains opaque to the relational lowerer: {reason}",
             )],
+            source_diagnostics: vec![relational_profile_diagnostic(
+                "relational_opaque_root",
+                DomainDiagnosticSeverity::Warning,
+                format!(
+                    "Source-level relational lowering could not inspect this top-level fuzzer expression: {reason}",
+                ),
+                source_span,
+            )],
             widenings: Vec::new(),
+        },
+        ExportedFuzzerStructure::Opaque { reason, .. } => RelationalStructureProfile {
+            relation: DomainRel::SamplerReturns {
+                summary: format!(
+                    "local sampler fallback for opaque child subtree: {reason}; exact child-specific harness replay is not exported yet",
+                ),
+            },
+            precision: DomainPrecision::Unknown,
+            diagnostics: vec![format!(
+                "Known parts of the composed fuzzer were lowered, but one child remains opaque and now uses a local sampler fallback placeholder: {reason}",
+            )],
+            source_diagnostics: vec![relational_profile_diagnostic(
+                "relational_local_sampler_fallback",
+                DomainDiagnosticSeverity::Warning,
+                format!(
+                    "Lowered the surrounding composed fuzzer, but this child remains opaque and was delegated to a local sampler fallback placeholder: {reason}",
+                ),
+                source_span,
+            )],
+            widenings: vec![Widening {
+                kind: "opaque_subterm".to_string(),
+                message: "An opaque child subtree was preserved via local sampler fallback; exact child-specific semantics are not yet exported.".to_string(),
+                allowed_only_under: None,
+            }],
         },
         ExportedFuzzerStructure::Primitive {
             output_type,
             known_constraint,
+            ..
         } => primitive_structure_profile(output_type, known_constraint.as_ref()),
         ExportedFuzzerStructure::Map {
             source,
@@ -3883,7 +4034,7 @@ fn relational_profile_from_structure(
             mapper_shape,
             ..
         } => {
-            let source_profile = relational_profile_from_structure(source);
+            let source_profile = relational_profile_from_structure_with_context(source, false);
             let precision = if source_profile.precision == DomainPrecision::Unknown {
                 DomainPrecision::Unknown
             } else if mapper_shape_is_exact(mapper_shape) {
@@ -3892,11 +4043,18 @@ fn relational_profile_from_structure(
                 DomainPrecision::OverApprox
             };
             let mut diagnostics = source_profile.diagnostics.clone();
+            let mut source_diagnostics = source_profile.source_diagnostics.clone();
             diagnostics.push("Relational image over one existential intermediate value.".to_string());
             if !mapper_shape_is_exact(mapper_shape) {
                 diagnostics.push(
                     "Mapper body is not yet certified for compact exactness; the output relation falls back to a conservative over-approximation around the existential source domain.".to_string(),
                 );
+                source_diagnostics.push(relational_profile_diagnostic(
+                    "relational_map_widened",
+                    DomainDiagnosticSeverity::Warning,
+                    "This map call keeps the existential source domain, but the mapper body is not yet certified for exact relational lowering.",
+                    source_span,
+                ));
             }
             RelationalStructureProfile {
                 relation: DomainRel::Image {
@@ -3906,6 +4064,7 @@ fn relational_profile_from_structure(
                 },
                 precision,
                 diagnostics,
+                source_diagnostics,
                 widenings: source_profile.widenings,
             }
         }
@@ -3913,15 +4072,17 @@ fn relational_profile_from_structure(
             sources,
             output_type,
             mapper_shape,
+            ..
         } => {
             let children = sources
                 .iter()
-                .map(relational_profile_from_structure)
+                .map(|source| relational_profile_from_structure_with_context(source, false))
                 .collect::<Vec<_>>();
             let mut diagnostics = children
                 .iter()
                 .flat_map(|child| child.diagnostics.clone())
                 .collect::<Vec<_>>();
+            let mut source_diagnostics = collect_profile_source_diagnostics(&children);
             diagnostics.push(format!(
                 "Relational image over {} existential intermediate value(s).",
                 children.len()
@@ -3952,6 +4113,12 @@ fn relational_profile_from_structure(
                     message: "mapN preserves existential intermediate sources, but the mapper body itself is not yet fully certified.".to_string(),
                     allowed_only_under: None,
                 });
+                source_diagnostics.push(relational_profile_diagnostic(
+                    "relational_mapn_widened",
+                    DomainDiagnosticSeverity::Warning,
+                    "This mapN call preserves existential intermediate sources, but its mapper body is not yet certified for exact relational lowering.",
+                    source_span,
+                ));
             }
             RelationalStructureProfile {
                 relation: DomainRel::Image {
@@ -3961,17 +4128,26 @@ fn relational_profile_from_structure(
                 },
                 precision,
                 diagnostics,
+                source_diagnostics,
                 widenings,
             }
         }
-        ExportedFuzzerStructure::Bind { source, result } => {
-            let source_profile = relational_profile_from_structure(source);
-            let result_profile = relational_profile_from_structure(result);
+        ExportedFuzzerStructure::Bind { source, result, .. } => {
+            let source_profile = relational_profile_from_structure_with_context(source, false);
+            let result_profile = relational_profile_from_structure_with_context(result, false);
             let mut diagnostics = source_profile.diagnostics.clone();
             diagnostics.extend(result_profile.diagnostics.clone());
             diagnostics.push(
                 "Dependent and_then relation preserves the source and result subdomains but does not yet certify the dependency between them.".to_string(),
             );
+            let mut source_diagnostics = source_profile.source_diagnostics.clone();
+            source_diagnostics.extend(result_profile.source_diagnostics.clone());
+            source_diagnostics.push(relational_profile_diagnostic(
+                "relational_bind_dependency",
+                DomainDiagnosticSeverity::Warning,
+                "This and_then lowering preserves the known source/result structure, but the dependency between them remains conservative.",
+                source_span,
+            ));
             let mut widenings = source_profile.widenings.clone();
             widenings.extend(result_profile.widenings.clone());
             widenings.push(Widening {
@@ -3986,19 +4162,21 @@ fn relational_profile_from_structure(
                 },
                 precision: DomainPrecision::OverApprox,
                 diagnostics,
+                source_diagnostics,
                 widenings,
             }
         }
-        ExportedFuzzerStructure::Product { elements } => {
+        ExportedFuzzerStructure::Product { elements, .. } => {
             let children = elements
                 .iter()
-                .map(relational_profile_from_structure)
+                .map(|element| relational_profile_from_structure_with_context(element, false))
                 .collect::<Vec<_>>();
             let precision = merge_structure_precision(&children);
             let mut diagnostics = children
                 .iter()
                 .flat_map(|child| child.diagnostics.clone())
                 .collect::<Vec<_>>();
+            let source_diagnostics = collect_profile_source_diagnostics(&children);
             diagnostics.push("Cartesian product of child domains.".to_string());
             let widenings = children
                 .iter()
@@ -4010,6 +4188,7 @@ fn relational_profile_from_structure(
                 },
                 precision,
                 diagnostics,
+                source_diagnostics,
                 widenings,
             }
         }
@@ -4019,9 +4198,11 @@ fn relational_profile_from_structure(
             max_len,
             unique,
             retry_limit,
+            ..
         } => {
-            let element_profile = relational_profile_from_structure(element);
+            let element_profile = relational_profile_from_structure_with_context(element, false);
             let mut diagnostics = element_profile.diagnostics.clone();
+            let mut source_diagnostics = element_profile.source_diagnostics.clone();
             let mut widenings = element_profile.widenings.clone();
             let precision = if *unique {
                 let insufficient_support = min_len
@@ -4031,6 +4212,12 @@ fn relational_profile_from_structure(
                     diagnostics.push(
                         "Unique-list/set generation can fail because the element support is smaller than the requested minimum cardinality.".to_string(),
                     );
+                    source_diagnostics.push(relational_profile_diagnostic(
+                        "relational_set_insufficient_support",
+                        DomainDiagnosticSeverity::Error,
+                        "This unique-list/set combinator can fail because the requested minimum cardinality exceeds the modeled element support.",
+                        source_span,
+                    ));
                     DomainPrecision::Unknown
                 } else {
                     diagnostics.push(
@@ -4041,6 +4228,12 @@ fn relational_profile_from_structure(
                         message: "Unique-list/set support is modeled conservatively because retry exhaustion and duplicate rejection are not fully captured.".to_string(),
                         allowed_only_under: None,
                     });
+                    source_diagnostics.push(relational_profile_diagnostic(
+                        "relational_set_retry",
+                        DomainDiagnosticSeverity::Warning,
+                        "This unique-list/set combinator keeps the known element relation, but retry exhaustion and duplicate rejection remain conservative.",
+                        source_span,
+                    ));
                     DomainPrecision::OverApprox
                 }
             } else if element_profile.precision == DomainPrecision::Exact {
@@ -4062,6 +4255,7 @@ fn relational_profile_from_structure(
                 },
                 precision,
                 diagnostics,
+                source_diagnostics,
                 widenings,
             }
         }
@@ -4070,15 +4264,17 @@ fn relational_profile_from_structure(
             branches,
             may_fail,
             non_empty_required,
+            ..
         } => {
             let children = branches
                 .iter()
-                .map(relational_profile_from_structure)
+                .map(|branch| relational_profile_from_structure_with_context(branch, false))
                 .collect::<Vec<_>>();
             let mut diagnostics = children
                 .iter()
                 .flat_map(|child| child.diagnostics.clone())
                 .collect::<Vec<_>>();
+            let mut source_diagnostics = collect_profile_source_diagnostics(&children);
             let widenings = children
                 .iter()
                 .flat_map(|child| child.widenings.clone())
@@ -4087,6 +4283,12 @@ fn relational_profile_from_structure(
                 diagnostics.push(
                     "The choice combinator has no branches, so the fuzzer always fails instead of generating a value.".to_string(),
                 );
+                source_diagnostics.push(relational_profile_diagnostic(
+                    "relational_choice_empty",
+                    DomainDiagnosticSeverity::Error,
+                    "This one_of/choice combinator has no branches, so it always fails instead of generating a value.",
+                    source_span,
+                ));
                 DomainPrecision::Unknown
             } else {
                 merge_choice_precision(&children, *may_fail)
@@ -4100,6 +4302,7 @@ fn relational_profile_from_structure(
                 },
                 precision,
                 diagnostics,
+                source_diagnostics,
                 widenings,
             }
         }
@@ -4109,14 +4312,22 @@ fn relational_profile_from_structure(
             predicate_summary,
             max_tries,
             impossible,
+            ..
         } => {
-            let source_profile = relational_profile_from_structure(source);
+            let source_profile = relational_profile_from_structure_with_context(source, false);
             let mut diagnostics = source_profile.diagnostics.clone();
+            let mut source_diagnostics = source_profile.source_diagnostics.clone();
             let mut widenings = source_profile.widenings.clone();
             let precision = if *impossible {
                 diagnostics.push(
                     "such_that predicate is impossible for the known generated support, so the fuzzer can fail without producing any value.".to_string(),
                 );
+                source_diagnostics.push(relational_profile_diagnostic(
+                    "relational_such_that_impossible",
+                    DomainDiagnosticSeverity::Error,
+                    "This such_that predicate is impossible for the currently modeled support, so the fuzzer can fail without producing any value.",
+                    source_span,
+                ));
                 DomainPrecision::Unknown
             } else {
                 widenings.push(Widening {
@@ -4124,6 +4335,14 @@ fn relational_profile_from_structure(
                     message: "such_that is modeled as the base domain plus a predicate summary; retry/failure semantics are still conservative.".to_string(),
                     allowed_only_under: None,
                 });
+                source_diagnostics.push(relational_profile_diagnostic(
+                    "relational_such_that_widened",
+                    DomainDiagnosticSeverity::Warning,
+                    format!(
+                        "This such_that lowering preserves the base domain but records only a first-order predicate summary (`{predicate_summary}`); retry/failure semantics remain conservative.",
+                    ),
+                    source_span,
+                ));
                 DomainPrecision::OverApprox
             };
             RelationalStructureProfile {
@@ -4136,6 +4355,7 @@ fn relational_profile_from_structure(
                 },
                 precision,
                 diagnostics,
+                source_diagnostics,
                 widenings,
             }
         }
@@ -4170,12 +4390,17 @@ fn relational_profile_from_structure(
             diagnostics: vec![
                 "State-machine traces continue to use the dedicated transition relation path; composed-fuzzer lowering does not override them.".to_string(),
             ],
+            source_diagnostics: Vec::new(),
             widenings: Vec::new(),
         },
     }
 }
 
 fn structured_profile_requires_block(profile: &RelationalStructureProfile) -> bool {
+    if relation_contains_sampler_returns(&profile.relation) {
+        return true;
+    }
+
     match &profile.relation {
         DomainRel::Choice {
             branches,
@@ -4703,7 +4928,15 @@ fn lowered_domain_for_test(
     );
     domain.production_allowed = production_assessment.block_reason.is_none();
     domain.compatibility_diagnostics = production_assessment.diagnostics;
-
+    if let Some(profile) = &structured_profile {
+        domain
+            .compatibility_diagnostics
+            .extend(lift_relational_profile_diagnostics(
+                &test.input_path,
+                test.fuzzer_source_span,
+                &profile.source_diagnostics,
+            ));
+    }
     domain
 }
 /// Sanitize an Aiken identifier to a valid Lean identifier.

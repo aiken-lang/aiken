@@ -58,9 +58,9 @@ fn generate_proof_file_with_vacuous_subgenerators(
 }
 use crate::export::{
     ExportedDataSchema, ExportedFuzzerStructure, ExportedMapperShape, ExportedProgram,
-    ExportedPropertyTest, ExportedReplayWitness, FuzzerConstraint, FuzzerOutputType,
-    FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics, TestReturnMode,
-    ValidatorTarget,
+    ExportedPropertyTest, ExportedReplayWitness, ExportedSourceSpan, FuzzerConstraint,
+    FuzzerOutputType, FuzzerSemantics, StateMachineAcceptance, StateMachineTransitionSemantics,
+    TestReturnMode, ValidatorTarget,
 };
 use crate::{Project, options::Options, telemetry::EventTarget};
 use aiken_lang::ast::{Definition, OnTestFailure, Tracing};
@@ -106,6 +106,7 @@ fn make_test_with_failure(
         constraint,
         semantics,
         fuzzer_structure: None,
+        fuzzer_source_span: None,
         fuzzer_data_schema: None,
         inner_data_schemas: Default::default(),
         transition_prop_lean: None,
@@ -920,6 +921,10 @@ fn make_small_record_schema() -> ExportedDataSchema {
     );
 
     ExportedDataSchema { root, definitions }
+}
+
+fn source_span(start: usize, end: usize) -> ExportedSourceSpan {
+    ExportedSourceSpan { start, end }
 }
 
 fn make_sampler_custom_test(
@@ -2762,6 +2767,7 @@ fn make_test_with_type(
         constraint,
         semantics,
         fuzzer_structure: None,
+        fuzzer_source_span: None,
         fuzzer_data_schema: None,
         inner_data_schemas: Default::default(),
         transition_prop_lean: None,
@@ -9141,6 +9147,11 @@ fn increment(n: Int) -> Int {
   n + 1
 }
 
+fn helper_pair_fuzzer(owner: Fuzzer<ByteArray>, amount: Fuzzer<Int>) -> Fuzzer<PairData> {
+  fuzz.map2(owner, amount, mk_pair)
+}
+
+
 test prop_list_between(xs via fuzz.list_between(fuzz.int_between(0, 3), 1, 3)) {
   True
 }
@@ -9160,6 +9171,13 @@ test prop_map_single(x via fuzz.map(fuzz.int_between(0, 3), increment)) {
 test prop_map2_record(datum via fuzz.map2(fuzz.bytearray_fixed(4), fuzz.int_between(0, 10), mk_pair)) {
   True
 }
+
+test prop_helper_pair_record(
+  datum via helper_pair_fuzzer(fuzz.bytearray_fixed(4), fuzz.int_between(0, 10)),
+) {
+  True
+}
+
 
 test prop_option_small(opt via fuzz.option(fuzz.int_between(0, 3))) {
   True
@@ -10834,6 +10852,227 @@ fn composed_map_and_mapn_domains_preserve_existential_sources() {
 }
 
 #[test]
+fn composed_record_mapn_generates_structural_lean_relation() {
+    let (_tmp, exported) = export_verify_composed_lowering_fixture();
+
+    let mapn_test = exported_composed_test(&exported, "prop_map2_record");
+    assert!(
+        mapn_test.fuzzer_source_span.is_some(),
+        "map2 record fixture should record the source span of the top-level via expression"
+    );
+    match mapn_test
+        .fuzzer_structure
+        .as_ref()
+        .expect("map2 record fixture should export a source-level fuzzer structure")
+    {
+        ExportedFuzzerStructure::MapN {
+            sources,
+            mapper_shape,
+            ..
+        } => {
+            assert_eq!(sources.len(), 2);
+            assert!(matches!(
+                mapper_shape,
+                ExportedMapperShape::ConstructorApply { constructor, arg_order, .. }
+                    if constructor == "PairData" && arg_order == &vec![0, 1]
+            ));
+        }
+        other => panic!("expected map2 record fixture to normalize to mapN, got {other:?}"),
+    }
+
+    let mapn_domain = lowered_domain_for_test(
+        mapn_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &mapn_domain.relation {
+        DomainRel::Image {
+            sources,
+            mapper_shape,
+            ..
+        } => {
+            assert_eq!(sources.len(), 2);
+            assert!(matches!(
+                mapper_shape,
+                ExportedMapperShape::ConstructorApply { constructor, arg_order, .. }
+                    if constructor == "PairData" && arg_order == &vec![0, 1]
+            ));
+        }
+        other => panic!("expected map2 record image relation, got {other:?}"),
+    }
+    assert_eq!(mapn_domain.precision, DomainPrecision::OverApprox);
+
+    let short_name = mapn_test
+        .name
+        .rsplit('.')
+        .next()
+        .expect("map2 record fixture name should contain a test suffix");
+    let id = test_id(&mapn_test.module, short_name);
+    let lean_name = sanitize_lean_name(short_name);
+    let lean_module = format!(
+        "AikenVerify.Proofs.{}.{}",
+        module_to_lean_segment(&mapn_test.module),
+        lean_name
+    );
+    let proof = generate_proof_file(
+        mapn_test,
+        &id,
+        &lean_name,
+        &lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::PropertyWrapper,
+    )
+    .expect("map2 record fixture should still generate a Lean proof file");
+    assert!(
+        proof.contains("-- compiler-exported structural domain predicate"),
+        "map2 record proof should include the generated structural Lean relation, got:\n{proof}"
+    );
+}
+
+#[test]
+fn composed_helper_record_fuzzer_exports_source_level_relation() {
+    let (_tmp, exported) = export_verify_composed_lowering_fixture();
+
+    let helper_test = exported_composed_test(&exported, "prop_helper_pair_record");
+    assert!(
+        helper_test.fuzzer_source_span.is_some(),
+        "helper fixture should record the source span of the top-level via expression"
+    );
+    match helper_test
+        .fuzzer_structure
+        .as_ref()
+        .expect("helper fixture should export a source-level fuzzer structure")
+    {
+        ExportedFuzzerStructure::MapN {
+            sources,
+            mapper_shape,
+            ..
+        } => {
+            assert_eq!(sources.len(), 2);
+            assert!(matches!(
+                mapper_shape,
+                ExportedMapperShape::ConstructorApply { constructor, arg_order, .. }
+                    if constructor == "PairData" && arg_order == &vec![0, 1]
+            ));
+        }
+        other => panic!("expected helper fuzzer to normalize to mapN, got {other:?}"),
+    }
+
+    let helper_domain = lowered_domain_for_test(
+        helper_test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &helper_domain.relation {
+        DomainRel::Image {
+            sources,
+            mapper_shape,
+            ..
+        } => {
+            assert_eq!(sources.len(), 2);
+            assert!(matches!(
+                mapper_shape,
+                ExportedMapperShape::ConstructorApply { constructor, arg_order, .. }
+                    if constructor == "PairData" && arg_order == &vec![0, 1]
+            ));
+        }
+        other => panic!("expected helper domain image relation, got {other:?}"),
+    }
+    assert_eq!(helper_domain.precision, DomainPrecision::OverApprox);
+}
+
+#[test]
+fn composed_local_sampler_fallback_preserves_known_parts_with_source_span() {
+    let mut test = make_test("custom", "prop_local_sampler_child");
+    test.input_path = "validators/tests.ak".to_string();
+    test.fuzzer_type = "Fuzzer<fixtures/MyDatum>".to_string();
+    test.fuzzer_output_type = FuzzerOutputType::Unsupported("fixtures/MyDatum".to_string());
+    test.constraint = FuzzerConstraint::Unsupported {
+        reason: "opaque child prevents compact extraction".to_string(),
+    };
+    test.semantics = FuzzerSemantics::DataWithSchema {
+        type_name: "fixtures/MyDatum".to_string(),
+    };
+    test.fuzzer_data_schema = Some(make_small_record_schema());
+    test.fuzzer_source_span = Some(source_span(10, 80));
+    test.fuzzer_structure = Some(ExportedFuzzerStructure::MapN {
+        sources: vec![
+            ExportedFuzzerStructure::Opaque {
+                reason: "helper child uses unsupported closure body".to_string(),
+                source_span: Some(source_span(28, 40)),
+            },
+            ExportedFuzzerStructure::Primitive {
+                output_type: FuzzerOutputType::Int,
+                known_constraint: Some(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "3".to_string(),
+                }),
+                source_span: Some(source_span(42, 50)),
+            },
+        ],
+        output_type: FuzzerOutputType::Unsupported("fixtures/MyDatum".to_string()),
+        mapper_shape: ExportedMapperShape::ConstructorApply {
+            constructor: "PairData".to_string(),
+            type_name: Some("fixtures/MyDatum".to_string()),
+            arg_order: vec![0, 1],
+        },
+        source_span: Some(source_span(20, 70)),
+    });
+
+    let domain = lowered_domain_for_test(
+        &test,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::PropertyWrapper,
+        ExistentialMode::default(),
+    );
+    match &domain.relation {
+        DomainRel::Image { sources, .. } => {
+            assert_eq!(sources.len(), 2);
+            assert!(matches!(
+                &sources[0],
+                DomainRel::SamplerReturns { summary }
+                    if summary.contains("opaque child subtree")
+            ));
+        }
+        other => panic!("expected image relation with local sampler fallback, got {other:?}"),
+    }
+    assert_eq!(domain.precision, DomainPrecision::Unknown);
+    assert!(
+        domain.compatibility_diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "relational_local_sampler_fallback"
+                && diagnostic.source_path.as_deref() == Some("validators/tests.ak")
+                && diagnostic.source_span == Some(source_span(28, 40))
+                && diagnostic
+                    .message
+                    .contains("helper child uses unsupported closure body")
+        }),
+        "expected source-span diagnostic for local sampler fallback, got {:?}",
+        domain.compatibility_diagnostics
+    );
+
+    let result = TheoremResult::new_with_domain(
+        test.name.clone(),
+        test.name.clone(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        domain,
+        Some(input_bridge_for_test(&test)),
+        Some(ManifestTestMode::Normal),
+        Some(test.return_mode.clone()),
+    );
+    assert_eq!(result.status, VerificationStatus::Partial);
+}
+
+#[test]
 fn option_and_failure_prone_composed_domains_do_not_report_solver_validated() {
     let (_tmp, exported) = export_verify_composed_lowering_fixture();
 
@@ -10912,6 +11151,7 @@ fn option_and_failure_prone_composed_domains_do_not_report_solver_validated() {
         branches: Vec::new(),
         may_fail: true,
         non_empty_required: true,
+        source_span: None,
     });
     let empty_domain = lowered_domain_for_test(
         &empty_one_of,
