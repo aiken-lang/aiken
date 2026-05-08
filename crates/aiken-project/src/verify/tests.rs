@@ -1079,6 +1079,58 @@ fn make_phase12_state_machine_test(
     }
 }
 
+fn make_bounded_symbolic_halt_scenario_test(name: &str) -> ExportedPropertyTest {
+    let mut test = make_phase12_state_machine_test(name, StateMachineAcceptance::AcceptsSuccess);
+    if let FuzzerSemantics::StateMachineTrace {
+        output_semantics, ..
+    } = &mut test.semantics
+        && let FuzzerSemantics::List { max_len, .. } = output_semantics.as_mut()
+    {
+        *max_len = Some(3);
+    }
+    test.transition_prop_lean = Some(crate::export::ExportedTransitionProp {
+        is_valid_transition_def: "def __FN__ (_state : Data) (_transition : Data) : Prop := True\n"
+            .to_string(),
+        initial_state_lean: Some("Data.Constr 0 []".to_string()),
+        helper_widenings: Vec::new(),
+        widenings: Vec::new(),
+        unsupported_log: Vec::new(),
+        opaque_sub_generators: Vec::new(),
+        s0002_marker: None,
+        is_vacuous: false,
+    });
+    test
+}
+
+fn make_error_witness_scenario_test(name: &str) -> ExportedPropertyTest {
+    let mut test = make_phase12_state_machine_test(name, StateMachineAcceptance::AcceptsFailure);
+    test.concrete_error_witnesses = vec!["80".to_string()];
+    test
+}
+
+fn success_trace_output_semantics() -> FuzzerSemantics {
+    FuzzerSemantics::List {
+        element: Box::new(FuzzerSemantics::Data),
+        min_len: Some(0),
+        max_len: Some(3),
+    }
+}
+
+fn failure_trace_output_semantics() -> FuzzerSemantics {
+    FuzzerSemantics::Product(vec![
+        FuzzerSemantics::List {
+            element: Box::new(FuzzerSemantics::String),
+            min_len: Some(1),
+            max_len: Some(3),
+        },
+        FuzzerSemantics::List {
+            element: Box::new(FuzzerSemantics::Data),
+            min_len: Some(1),
+            max_len: Some(3),
+        },
+    ])
+}
+
 /// Helper: returns the `GenerationErrorCategory` of a downcastable `GenerationError`,
 /// or `None` for anything else. Used by tests that need to distinguish between
 /// `FallbackRequired` and `UnsupportedShape` rather than relying on the coarse
@@ -5031,6 +5083,7 @@ fn trusted_overapprox_domain() -> LoweredDomain {
         widenings: Vec::new(),
         production_allowed: true,
         sampler: None,
+        scenario_trace: None,
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -5057,6 +5110,7 @@ fn witness_only_domain(witnesses: &[&str]) -> LoweredDomain {
         widenings: Vec::new(),
         production_allowed: true,
         sampler: Some(default_witness_sampler_metadata()),
+        scenario_trace: None,
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -5088,6 +5142,7 @@ fn placeholder_domain(reason: &str) -> LoweredDomain {
         }],
         production_allowed: false,
         sampler: None,
+        scenario_trace: None,
         compatibility_diagnostics: Vec::new(),
         diagnostics: vec![reason.to_string()],
     }
@@ -5144,6 +5199,7 @@ fn domain_fixture(
         production_allowed: false,
         sampler: matches!(precision, DomainPrecision::WitnessOnly)
             .then(default_witness_sampler_metadata),
+        scenario_trace: None,
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -13618,6 +13674,295 @@ fn phase12_benchmark_matrix_collects_fidelity_and_tractability_evidence() {
     );
 }
 
+#[test]
+fn scenario_symbolic_manifest_and_results_record_bounded_trace_metadata() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path().to_path_buf();
+    let test = make_bounded_symbolic_halt_scenario_test("prop_bounded_trace_ok");
+
+    let config = VerifyConfig {
+        out_dir: out_dir.clone(),
+        cek_budget: 20_000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
+        existential_mode: ExistentialMode::Proof,
+        target: VerificationTargetKind::default(),
+        plutus_version: aiken_lang::plutus_version::PlutusVersion::V3,
+        project_root: None,
+        plutus_core_dir: None,
+        raw_output_bytes: RAW_OUTPUT_TAIL_BYTES,
+        allow_vacuous_subgenerators: false,
+    };
+
+    let manifest = generate_lean_workspace(&[test.clone()], &config, &SkipPolicy::None).unwrap();
+    let entry = manifest.tests.first().expect("scenario entry");
+    let trace = entry
+        .domain
+        .as_ref()
+        .and_then(|domain| domain.scenario_trace.as_ref())
+        .expect("scenario trace metadata should be exported into the manifest domain");
+
+    assert_eq!(
+        trace.symbolic_encoding,
+        ScenarioSymbolicEncoding::BoundedBooleanChecker
+    );
+    assert_eq!(trace.trace_length.min, 1);
+    assert_eq!(trace.trace_length.max, Some(4));
+    assert_eq!(trace.step_depth.min, 0);
+    assert_eq!(trace.step_depth.max, Some(3));
+    assert!(trace.uses_global_reachability_over_approx);
+    assert!(
+        trace
+            .open_obligations
+            .contains(&"sound_reachability_relation".to_string())
+    );
+    assert!(
+        trace
+            .open_obligations
+            .contains(&"ledger_validity_predicate".to_string())
+    );
+    assert!(
+        trace
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("global over-approximated reachable predicate"))
+    );
+    assert!(
+        entry
+            .partial_proof_note
+            .as_ref()
+            .is_some_and(|note| note.contains("scenario trace"))
+    );
+
+    let raw = VerifyResult {
+        success: true,
+        stdout: CapturedOutput::small("Build completed successfully."),
+        stderr: CapturedOutput::small(""),
+        exit_code: Some(0),
+        theorem_results: None,
+    };
+    let summary = parse_verify_results(raw, &manifest);
+    let theorem = summary
+        .theorems
+        .iter()
+        .find(|theorem| theorem.test_name == test.name)
+        .expect("scenario theorem result present");
+
+    assert_eq!(theorem.status, VerificationStatus::Partial);
+    let result_trace = theorem
+        .domain
+        .scenario_trace
+        .as_ref()
+        .expect("scenario trace metadata should survive into theorem results");
+    assert_eq!(result_trace.trace_length.max, Some(4));
+    assert!(
+        theorem
+            .explanation
+            .as_ref()
+            .is_some_and(|explanation| explanation.contains("scenario trace"))
+    );
+}
+
+#[test]
+fn scenario_witness_trace_domain_records_replay_metadata() {
+    let test = make_error_witness_scenario_test("prop_error_replay_ok");
+    let mode = compatibility_mode_for_generation(&test, ExistentialMode::Proof, None);
+    assert_eq!(mode, CompatibilityMode::WitnessCheck);
+
+    let domain = lowered_domain_for_test(
+        &test,
+        mode,
+        None,
+        None,
+        &VerificationTargetKind::default(),
+        ExistentialMode::Proof,
+    );
+    let trace = domain
+        .scenario_trace
+        .as_ref()
+        .expect("witness-backed scenario should still record trace metadata");
+
+    assert_eq!(
+        trace.symbolic_encoding,
+        ScenarioSymbolicEncoding::WitnessReplayOnly
+    );
+    assert!(trace.witness_replay_available);
+    assert_eq!(
+        trace.ledger_validity_predicate,
+        ScenarioPredicateStatus::Available
+    );
+    assert_eq!(
+        trace.script_context_predicate,
+        ScenarioPredicateStatus::Available
+    );
+    assert_eq!(
+        domain
+            .sampler
+            .as_ref()
+            .and_then(|sampler| sampler.generation_seed),
+        Some(CONCRETE_WITNESS_BASE_SEED)
+    );
+    assert!(!domain.production_allowed);
+    assert!(
+        domain
+            .obligations_open
+            .contains(&DomainObligation::ValueDecoderRoundTrip)
+    );
+    assert!(
+        domain
+            .obligations_open
+            .contains(&DomainObligation::PropertyHarnessAcceptsDecodedInput)
+    );
+}
+
+#[test]
+fn bounded_two_phase_scenario_proof_emits_trace_bound_helpers() {
+    let test = make_bounded_symbolic_halt_scenario_test("prop_bounded_trace_helpers");
+    let id = test_id("permissions.test", "prop_bounded_trace_helpers");
+    let lean_name = sanitize_lean_name("prop_bounded_trace_helpers");
+    let lean_module = "AikenVerify.Proofs.PermissionsTest.prop_bounded_trace_helpers";
+
+    let (content, caveat) = super::generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+        false,
+    )
+    .expect("bounded scenario theorem should generate");
+
+    assert!(matches!(caveat, ProofCaveat::Partial(_)));
+    assert!(content.contains("traceWithinBounds"));
+    assert!(content.contains("traceDepthWithinBounds"));
+}
+
+#[test]
+fn phase12_scenario_matrix_collects_trace_status_and_blockers() {
+    #[derive(Debug)]
+    struct ScenarioMatrixRow {
+        name: &'static str,
+        exported: bool,
+        trace_ir: bool,
+        witness_replay: bool,
+        shape_proof: &'static str,
+        cek_proof: &'static str,
+        symbolic_status: VerificationStatus,
+        blockers: Vec<String>,
+    }
+
+    let symbolic = make_bounded_symbolic_halt_scenario_test("prop_phase12_symbolic");
+    let symbolic_domain = lowered_domain_for_test(
+        &symbolic,
+        CompatibilityMode::UniversalSuccess,
+        None,
+        None,
+        &VerificationTargetKind::default(),
+        ExistentialMode::Proof,
+    );
+    let symbolic_result = TheoremResult::new_with_domain(
+        symbolic.name.clone(),
+        "prop_phase12_symbolic".to_string(),
+        ProofStatus::Proved,
+        0,
+        TrustProfile::Production,
+        symbolic_domain.clone(),
+        Some(default_input_bridge()),
+        Some(ManifestTestMode::Normal),
+        Some(TestReturnMode::Void),
+    );
+
+    let witness = make_error_witness_scenario_test("prop_phase12_witness");
+    let witness_domain = lowered_domain_for_test(
+        &witness,
+        CompatibilityMode::WitnessCheck,
+        None,
+        None,
+        &VerificationTargetKind::default(),
+        ExistentialMode::Proof,
+    );
+    let witness_result = TheoremResult::new_with_domain(
+        witness.name.clone(),
+        "prop_phase12_witness".to_string(),
+        ProofStatus::WitnessProved {
+            instances: 1,
+            witnesses: vec!["80".to_string()],
+            note: "scenario witness replay".to_string(),
+        },
+        0,
+        TrustProfile::Production,
+        witness_domain.clone(),
+        Some(default_input_bridge()),
+        Some(ManifestTestMode::Fail),
+        Some(TestReturnMode::Void),
+    );
+
+    let rows = vec![
+        ScenarioMatrixRow {
+            name: "symbolic_halt",
+            exported: true,
+            trace_ir: symbolic_domain.scenario_trace.is_some(),
+            witness_replay: symbolic_domain
+                .scenario_trace
+                .as_ref()
+                .is_some_and(|trace| trace.witness_replay_available),
+            shape_proof: if symbolic_domain
+                .scenario_trace
+                .as_ref()
+                .is_some_and(|trace| trace.has_transition_prop)
+            {
+                "exported"
+            } else {
+                "missing"
+            },
+            cek_proof: "open_obligation",
+            symbolic_status: symbolic_result.status,
+            blockers: symbolic_domain
+                .scenario_trace
+                .as_ref()
+                .map(|trace| trace.blockers.clone())
+                .unwrap_or_default(),
+        },
+        ScenarioMatrixRow {
+            name: "witness_error",
+            exported: true,
+            trace_ir: witness_domain.scenario_trace.is_some(),
+            witness_replay: witness_domain
+                .scenario_trace
+                .as_ref()
+                .is_some_and(|trace| trace.witness_replay_available),
+            shape_proof: "replay_only",
+            cek_proof: "replay_only",
+            symbolic_status: witness_result.status,
+            blockers: witness_domain
+                .scenario_trace
+                .as_ref()
+                .map(|trace| trace.blockers.clone())
+                .unwrap_or_default(),
+        },
+    ];
+
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|row| row.exported && row.trace_ir));
+    assert_eq!(rows[0].name, "symbolic_halt");
+    assert_eq!(rows[0].shape_proof, "exported");
+    assert_eq!(rows[0].cek_proof, "open_obligation");
+    assert_eq!(rows[0].symbolic_status, VerificationStatus::Partial);
+    assert!(
+        rows[0]
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("global over-approximated reachable predicate"))
+    );
+    assert_eq!(rows[1].name, "witness_error");
+    assert_eq!(rows[1].shape_proof, "replay_only");
+    assert_eq!(rows[1].cek_proof, "replay_only");
+    assert!(rows[1].witness_replay);
+    assert_eq!(rows[1].symbolic_status, VerificationStatus::Partial);
+    assert!(rows[1].blockers.is_empty());
+}
+
 // --- Step 11.4: Intentional limitations register ---
 //
 // This test encodes the intentional limitations contract. Each entry is:
@@ -14137,12 +14482,14 @@ fn make_non_opaque_transition_semantics() -> StateMachineTransitionSemantics {
 #[test]
 fn accepts_failure_reachable_from_preserves_events() {
     let transition_semantics = make_non_opaque_transition_semantics();
+    let output_semantics = failure_trace_output_semantics();
 
     let mut shape_builder = LeanDataShapeBuilder::default();
     let (_reachable_output, definitions) = build_state_machine_trace_reachability_helpers(
         "failure_events_test",
         "failure_events_test",
         &StateMachineAcceptance::AcceptsFailure,
+        &output_semantics,
         &transition_semantics,
         &Default::default(),
         &mut shape_builder,
@@ -14168,12 +14515,14 @@ fn accepts_failure_reachable_from_preserves_events() {
 #[test]
 fn accepts_success_reachable_from_also_preserves_events() {
     let transition_semantics = make_non_opaque_transition_semantics();
+    let output_semantics = success_trace_output_semantics();
 
     let mut shape_builder = LeanDataShapeBuilder::default();
     let (_reachable_output, definitions) = build_state_machine_trace_reachability_helpers(
         "success_events_test",
         "success_events_test",
         &StateMachineAcceptance::AcceptsSuccess,
+        &output_semantics,
         &transition_semantics,
         &Default::default(),
         &mut shape_builder,
@@ -16879,10 +17228,12 @@ fn m6_inner_data_schema_lookup_failure_propagates_e0015() {
     let test_name = "my_module.test_inner_schema_lookup_fails";
 
     let mut shape_builder = LeanDataShapeBuilder::default();
+    let output_semantics = success_trace_output_semantics();
     let result = build_state_machine_trace_reachability_helpers(
         test_name,
         "inner_schema_test",
         &StateMachineAcceptance::AcceptsSuccess,
+        &output_semantics,
         &transition_semantics,
         &inner_data_schemas,
         &mut shape_builder,
@@ -17567,6 +17918,7 @@ fn step_fn_sound_via_reachability_helpers_emits_s0002_for_unresolved_tag() {
         "step_sound_test",
         "step_sound_test",
         &StateMachineAcceptance::AcceptsSuccess,
+        &success_trace_output_semantics(),
         &transition_semantics,
         &Default::default(),
         &mut shape_builder,
@@ -17660,6 +18012,7 @@ fn step_fn_sound_dispatch_walks_into_construct_fields_for_s0002() {
         "nested_s0002_test",
         "nested_s0002_test",
         &StateMachineAcceptance::AcceptsSuccess,
+        &success_trace_output_semantics(),
         &transition_semantics,
         &Default::default(),
         &mut shape_builder,
@@ -18616,6 +18969,7 @@ fn step_fn_sound_via_reachability_helpers_emits_theorem() {
         "step_sound_test",
         "step_sound_test",
         &StateMachineAcceptance::AcceptsSuccess,
+        &success_trace_output_semantics(),
         &transition_semantics,
         &Default::default(),
         &mut shape_builder,
@@ -18657,6 +19011,7 @@ fn build_state_machine_trace_reachability_helpers_rejects_step_fn_widenings() {
         "step_widen_test",
         "step_widen_test",
         &StateMachineAcceptance::AcceptsSuccess,
+        &success_trace_output_semantics(),
         &transition_semantics,
         &Default::default(),
         &mut shape_builder,

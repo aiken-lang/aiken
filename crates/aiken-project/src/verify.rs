@@ -1329,6 +1329,79 @@ pub struct DomainDiagnostic {
     pub obligations: Vec<DomainObligation>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct ScenarioTraceBounds {
+    pub min: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<usize>,
+}
+
+impl ScenarioTraceBounds {
+    fn render(&self) -> String {
+        match self.max {
+            Some(max) if max == self.min => self.min.to_string(),
+            Some(max) => format!("{}..={}", self.min, max),
+            None => format!("{}..", self.min),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum ScenarioSymbolicEncoding {
+    BoundedBooleanChecker,
+    WitnessReplayOnly,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum ScenarioPredicateStatus {
+    Available,
+    OpenObligation,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct ScenarioTraceIr {
+    pub acceptance: StateMachineAcceptance,
+    pub trace_length: ScenarioTraceBounds,
+    pub step_depth: ScenarioTraceBounds,
+    pub symbolic_encoding: ScenarioSymbolicEncoding,
+    #[serde(default)]
+    pub initial_state_anchored: bool,
+    #[serde(default)]
+    pub has_transition_prop: bool,
+    #[serde(default)]
+    pub has_step_function_ir: bool,
+    #[serde(default)]
+    pub transition_relation_exact: bool,
+    #[serde(default)]
+    pub uses_global_reachability_over_approx: bool,
+    #[serde(default)]
+    pub witness_replay_available: bool,
+    pub script_context_predicate: ScenarioPredicateStatus,
+    pub ledger_validity_predicate: ScenarioPredicateStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_obligations: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<String>,
+}
+
+fn render_scenario_predicate_status(status: ScenarioPredicateStatus) -> &'static str {
+    match status {
+        ScenarioPredicateStatus::Available => "available",
+        ScenarioPredicateStatus::OpenObligation => "open_obligation",
+    }
+}
+
+fn render_scenario_obligations(items: &[String]) -> String {
+    items.join(", ")
+}
+
 fn render_domain_obligations(obligations: &[DomainObligation]) -> String {
     obligations
         .iter()
@@ -1480,6 +1553,8 @@ pub struct LoweredDomain {
     pub production_allowed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampler: Option<SamplerMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenario_trace: Option<ScenarioTraceIr>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compatibility_diagnostics: Vec<DomainDiagnostic>,
     #[serde(default)]
@@ -1507,6 +1582,7 @@ impl LoweredDomain {
             widenings: Vec::new(),
             production_allowed: false,
             sampler: None,
+            scenario_trace: None,
             compatibility_diagnostics: Vec::new(),
             diagnostics: vec![reason],
         }
@@ -1526,6 +1602,7 @@ impl LoweredDomain {
             widenings: Vec::new(),
             production_allowed: false,
             sampler: None,
+            scenario_trace: None,
             compatibility_diagnostics: Vec::new(),
             diagnostics: vec![reason],
         }
@@ -1553,9 +1630,241 @@ fn witness_replay_domain_from_values(
         widenings: Vec::new(),
         production_allowed: true,
         sampler: sampler.or_else(|| Some(default_witness_sampler_metadata())),
+        scenario_trace: None,
         compatibility_diagnostics: Vec::new(),
         diagnostics: Vec::new(),
     }
+}
+
+fn intersect_optional_upper_bounds(left: Option<usize>, right: Option<usize>) -> Option<usize> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.min(right)),
+        (Some(bound), None) | (None, Some(bound)) => Some(bound),
+        (None, None) => None,
+    }
+}
+
+fn list_semantics_bounds(semantics: &FuzzerSemantics) -> Option<ScenarioTraceBounds> {
+    match semantics {
+        FuzzerSemantics::List {
+            min_len, max_len, ..
+        } => Some(ScenarioTraceBounds {
+            min: min_len.unwrap_or(0),
+            max: *max_len,
+        }),
+        _ => None,
+    }
+}
+
+fn scenario_trace_bounds_from_output_semantics(
+    acceptance: &StateMachineAcceptance,
+    output_semantics: &FuzzerSemantics,
+) -> (ScenarioTraceBounds, ScenarioTraceBounds) {
+    match acceptance {
+        StateMachineAcceptance::AcceptsSuccess => {
+            let step_depth = list_semantics_bounds(output_semantics)
+                .unwrap_or(ScenarioTraceBounds { min: 0, max: None });
+            let trace_length = ScenarioTraceBounds {
+                min: step_depth.min.saturating_add(1),
+                max: step_depth.max.map(|bound| bound.saturating_add(1)),
+            };
+            (trace_length, step_depth)
+        }
+        StateMachineAcceptance::AcceptsFailure => {
+            if let FuzzerSemantics::Product(parts) = output_semantics
+                && let [labels, events] = parts.as_slice()
+                && let (Some(label_bounds), Some(event_bounds)) =
+                    (list_semantics_bounds(labels), list_semantics_bounds(events))
+            {
+                let min_steps = label_bounds.min.max(event_bounds.min).max(1);
+                let max_steps = intersect_optional_upper_bounds(label_bounds.max, event_bounds.max);
+                let step_depth = ScenarioTraceBounds {
+                    min: min_steps,
+                    max: max_steps,
+                };
+                let trace_length = ScenarioTraceBounds {
+                    min: min_steps.saturating_add(1),
+                    max: max_steps.map(|bound| bound.saturating_add(1)),
+                };
+                return (trace_length, step_depth);
+            }
+
+            (
+                ScenarioTraceBounds { min: 2, max: None },
+                ScenarioTraceBounds { min: 1, max: None },
+            )
+        }
+    }
+}
+
+fn scenario_trace_ir_for_test(
+    test: &ExportedPropertyTest,
+    mode: CompatibilityMode,
+    proof_caveat: Option<&ProofCaveat>,
+) -> Option<ScenarioTraceIr> {
+    let FuzzerSemantics::StateMachineTrace {
+        acceptance,
+        output_semantics,
+        step_function_ir,
+        initial_state_shallow_ir,
+        ..
+    } = &test.semantics
+    else {
+        return None;
+    };
+
+    let has_transition_prop = test.transition_prop_lean.is_some();
+    let has_step_function_ir = step_function_ir.is_some();
+    let transition_relation_exact = test
+        .transition_prop_lean
+        .as_ref()
+        .is_some_and(|tp| !tp.is_vacuous && transition_prop_widenings(tp).is_empty());
+    let initial_state_anchored = test
+        .transition_prop_lean
+        .as_ref()
+        .and_then(|tp| tp.initial_state_lean.as_ref())
+        .is_some()
+        || initial_state_shallow_ir.is_some();
+    let witness_replay_available = !witness_values_for_mode(test, proof_caveat).is_empty();
+    let (trace_length, step_depth) =
+        scenario_trace_bounds_from_output_semantics(acceptance, output_semantics.as_ref());
+    let symbolic_encoding =
+        if matches!(mode, CompatibilityMode::WitnessCheck) && witness_replay_available {
+            ScenarioSymbolicEncoding::WitnessReplayOnly
+        } else if trace_length.max.is_some() && step_depth.max.is_some() {
+            ScenarioSymbolicEncoding::BoundedBooleanChecker
+        } else {
+            ScenarioSymbolicEncoding::Unavailable
+        };
+    let uses_global_reachability_over_approx = !matches!(mode, CompatibilityMode::WitnessCheck);
+    let script_context_predicate = if matches!(mode, CompatibilityMode::WitnessCheck)
+        || (is_state_machine_trace_halt_test(test) && has_transition_prop)
+    {
+        ScenarioPredicateStatus::Available
+    } else {
+        ScenarioPredicateStatus::OpenObligation
+    };
+    let ledger_validity_predicate = if matches!(mode, CompatibilityMode::WitnessCheck) {
+        ScenarioPredicateStatus::Available
+    } else {
+        ScenarioPredicateStatus::OpenObligation
+    };
+
+    let mut open_obligations = Vec::new();
+    let mut blockers = Vec::new();
+    if !matches!(mode, CompatibilityMode::WitnessCheck) {
+        if trace_length.max.is_none() || step_depth.max.is_none() {
+            open_obligations.push("bounded_trace_length".to_string());
+            blockers.push(
+                "No explicit maximum trace length/depth was exported for this scenario trace; symbolic verification remains unbounded.".to_string(),
+            );
+        }
+
+        if !initial_state_anchored {
+            open_obligations.push("initial_state_anchor".to_string());
+            blockers.push(
+                "Scenario symbolic reasoning is not anchored to a concrete exported initial state."
+                    .to_string(),
+            );
+        }
+
+        if !has_transition_prop && !has_step_function_ir {
+            open_obligations.push("trace_transition_relation".to_string());
+            blockers.push(
+                "No extracted transition relation or step-function IR is available for this scenario trace.".to_string(),
+            );
+        }
+
+        if has_transition_prop && !transition_relation_exact {
+            open_obligations.push("exact_transition_relation".to_string());
+            blockers.push(
+                "The exported transition relation still carries widenings or placeholders, so the symbolic trace proof is not exact.".to_string(),
+            );
+        }
+
+        if matches!(
+            script_context_predicate,
+            ScenarioPredicateStatus::OpenObligation
+        ) {
+            open_obligations.push("script_context_predicate".to_string());
+            blockers.push(
+                "No generated script-context predicate is available for this scenario trace path."
+                    .to_string(),
+            );
+        }
+
+        if matches!(
+            ledger_validity_predicate,
+            ScenarioPredicateStatus::OpenObligation
+        ) {
+            open_obligations.push("ledger_validity_predicate".to_string());
+            blockers.push(
+                "Ledger-validity predicates for scenario traces are not yet integrated into symbolic proofs.".to_string(),
+            );
+        }
+
+        if uses_global_reachability_over_approx {
+            open_obligations.push("sound_reachability_relation".to_string());
+            blockers.push(
+                "Current symbolic scenario proofs still rely on a global over-approximated reachable predicate rather than a fully threaded bounded trace semantics.".to_string(),
+            );
+        }
+    }
+
+    Some(ScenarioTraceIr {
+        acceptance: acceptance.clone(),
+        trace_length,
+        step_depth,
+        symbolic_encoding,
+        initial_state_anchored,
+        has_transition_prop,
+        has_step_function_ir,
+        transition_relation_exact,
+        uses_global_reachability_over_approx,
+        witness_replay_available,
+        script_context_predicate,
+        ledger_validity_predicate,
+        open_obligations,
+        blockers,
+    })
+}
+
+fn emit_scenario_trace_bound_helpers(
+    helper_prefix: &str,
+    trace_length: &ScenarioTraceBounds,
+    step_depth: &ScenarioTraceBounds,
+) -> (String, String, String) {
+    let trace_bounds_name = format!("{helper_prefix}_traceWithinBounds");
+    let trace_depth_bounds_name = format!("{helper_prefix}_traceDepthWithinBounds");
+    let mut content = String::new();
+    content.push_str("-- Bounded scenario trace envelope exported from Aiken.\n");
+    content.push_str(&format!(
+        "def {trace_bounds_name} (trace : List Data) : Prop :=\n  {} <= trace.length",
+        trace_length.min
+    ));
+    if let Some(max) = trace_length.max {
+        content.push_str(&format!(
+            " {AND} trace.length <= {max}",
+            AND = lean_sym::AND
+        ));
+    }
+    content.push_str("\n\n");
+    content.push_str(&format!(
+        "def {trace_depth_bounds_name} (trace : List Data) : Prop :=\n  {} <= trace.length - 1",
+        step_depth.min
+    ));
+    if let Some(max) = step_depth.max {
+        content.push_str(&format!(
+            " {AND} trace.length - 1 <= {max}",
+            AND = lean_sym::AND
+        ));
+    }
+    content.push_str("\n\n");
+    (trace_bounds_name, trace_depth_bounds_name, content)
+}
+
+fn scenario_trace_primary_blocker(trace: &ScenarioTraceIr) -> Option<&str> {
+    trace.blockers.first().map(String::as_str)
 }
 
 impl LoweredDomain {
@@ -1825,6 +2134,64 @@ fn assess_domain_compatibility(
 
     if let Some(reason) = domain.trust_limited_reason(trust_profile) {
         record_block("trust_profile_widening_block", reason, Vec::new());
+    }
+
+    if let Some(trace) = &domain.scenario_trace
+        && matches!(success_channel, SuccessChannel::SolverTheorem)
+    {
+        if !matches!(
+            trace.symbolic_encoding,
+            ScenarioSymbolicEncoding::BoundedBooleanChecker
+        ) {
+            record_block(
+                "scenario_trace_unbounded",
+                format!(
+                    "{mode_label} for this scenario trace is not production-safe because no bounded symbolic trace checker is available (trace length {}, step depth {}).",
+                    trace.trace_length.render(),
+                    trace.step_depth.render()
+                ),
+                Vec::new(),
+            );
+        }
+
+        if matches!(
+            trace.script_context_predicate,
+            ScenarioPredicateStatus::OpenObligation
+        ) {
+            record_block(
+                "scenario_missing_script_context",
+                format!(
+                    "{mode_label} for this scenario trace is missing an exported script-context predicate; symbolic success is downgraded until that obligation is discharged.",
+                ),
+                Vec::new(),
+            );
+        }
+
+        if matches!(
+            trace.ledger_validity_predicate,
+            ScenarioPredicateStatus::OpenObligation
+        ) {
+            record_block(
+                "scenario_missing_ledger_validity",
+                format!(
+                    "{mode_label} for this scenario trace has no integrated ledger-validity predicate; symbolic success is downgraded until the runtime validity obligation is modeled explicitly.",
+                ),
+                Vec::new(),
+            );
+        }
+
+        if trace.uses_global_reachability_over_approx {
+            let detail = scenario_trace_primary_blocker(trace).unwrap_or(
+                "Current symbolic scenario proofs still rely on a global over-approximated reachable predicate.",
+            );
+            record_block(
+                "scenario_global_reachability_overapprox",
+                format!(
+                    "{mode_label} for this scenario trace is downgraded because the symbolic relation is still an acknowledged over-approximation. {detail}",
+                ),
+                Vec::new(),
+            );
+        }
     }
 
     match mode {
@@ -2179,6 +2546,29 @@ fn domain_result_explanation(domain: &LoweredDomain) -> Option<String> {
 
     if !domain.lowering_path.is_empty() {
         lines.push(format!("lowering: {}", domain.lowering_path.join(" -> ")));
+    }
+
+    if let Some(trace) = &domain.scenario_trace {
+        lines.push(format!(
+            "scenario trace: {:?}, trace length {}, step depth {}",
+            trace.symbolic_encoding,
+            trace.trace_length.render(),
+            trace.step_depth.render()
+        ));
+        lines.push(format!(
+            "scenario predicates: script_context={}, ledger_validity={}",
+            render_scenario_predicate_status(trace.script_context_predicate),
+            render_scenario_predicate_status(trace.ledger_validity_predicate)
+        ));
+        if !trace.open_obligations.is_empty() {
+            lines.push(format!(
+                "scenario obligations: {}",
+                render_scenario_obligations(&trace.open_obligations)
+            ));
+        }
+        if let Some(blocker) = trace.blockers.first() {
+            lines.push(format!("scenario blocker: {blocker}"));
+        }
     }
 
     if let Some(widening) = domain.widenings.first() {
@@ -4648,6 +5038,10 @@ fn lowered_domain_for_test(
     if replay_existential_witness.is_some() {
         push_lowering_step(&mut lowering_path, "replay_witness_domain");
     }
+    let scenario_trace = scenario_trace_ir_for_test(test, mode, proof_caveat);
+    if scenario_trace.is_some() {
+        push_lowering_step(&mut lowering_path, "scenario_trace_ir");
+    }
 
     let mut widenings = transition_prop_domain_widenings(test);
     let placeholder_widenings = proof_content
@@ -4726,6 +5120,17 @@ fn lowered_domain_for_test(
         diagnostics.push(
             "Current bridge does not yet prove DomainImpliesFuzzerReturns for fail_once theorems; production success is downgraded to Partial.".to_string(),
         );
+    }
+    if let Some(trace) = &scenario_trace {
+        diagnostics.push(format!(
+            "Scenario trace IR: {:?}, trace length {}, step depth {}.",
+            trace.symbolic_encoding,
+            trace.trace_length.render(),
+            trace.step_depth.render()
+        ));
+        if let Some(blocker) = trace.blockers.first() {
+            diagnostics.push(blocker.clone());
+        }
     }
 
     let relation = if let Some(witness) = replay_existential_witness {
@@ -4910,6 +5315,7 @@ fn lowered_domain_for_test(
         widenings,
         production_allowed: false,
         sampler,
+        scenario_trace: scenario_trace.clone(),
         compatibility_diagnostics: Vec::new(),
         diagnostics,
     };
@@ -11429,6 +11835,7 @@ fn build_state_machine_trace_reachability_helpers(
     test_name: &str,
     helper_prefix: &str,
     acceptance: &StateMachineAcceptance,
+    output_semantics: &FuzzerSemantics,
     transition_semantics: &StateMachineTransitionSemantics,
     inner_data_schemas: &BTreeMap<String, ExportedDataSchema>,
     shape_builder: &mut LeanDataShapeBuilder,
@@ -11464,6 +11871,11 @@ fn build_state_machine_trace_reachability_helpers(
     let reachable_from = format!("{helper_prefix}_reachable_from");
     let output_projection = format!("{helper_prefix}_project_output");
     let reachable_output = format!("{helper_prefix}_reachable_output");
+    let (trace_length_bounds, step_depth_bounds) =
+        scenario_trace_bounds_from_output_semantics(acceptance, output_semantics);
+    let (trace_within_bounds, trace_depth_within_bounds, trace_bound_defs) =
+        emit_scenario_trace_bound_helpers(helper_prefix, &trace_length_bounds, &step_depth_bounds);
+    helper_blocks.push(trace_bound_defs);
 
     helper_blocks.push(format!(
         "def {terminal_predicate} : Data -> Prop\n  | Data.Constr tag fields => tag = {tag} {AND} fields = []\n  | _ => False\n",
@@ -11674,7 +12086,7 @@ fn build_state_machine_trace_reachability_helpers(
             ));
             if let Some(initial_state_expr) = exact_initial_state_expr.as_ref() {
                 helper_blocks.push(format!(
-                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} trace, events,\n    {reachable_from} ({initial_state_expr}) trace events {AND}\n    x = {output_projection} events\n",
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} trace, events,\n    {trace_within_bounds} trace {AND}\n    {trace_depth_within_bounds} trace {AND}\n    {reachable_from} ({initial_state_expr}) trace events {AND}\n    x = {output_projection} events\n",
                     EXISTS = lean_sym::EXISTS,
                     AND = lean_sym::AND,
                 ));
@@ -11695,7 +12107,7 @@ fn build_state_machine_trace_reachability_helpers(
                     name
                 };
                 helper_blocks.push(format!(
-                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState, trace, events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace events {AND}\n    x = {output_projection} events\n",
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState, trace, events,\n    {state_predicate} initState {AND}\n    {trace_within_bounds} trace {AND}\n    {trace_depth_within_bounds} trace {AND}\n    {reachable_from} initState trace events {AND}\n    x = {output_projection} events\n",
                     EXISTS = lean_sym::EXISTS,
                     AND = lean_sym::AND,
                 ));
@@ -11712,7 +12124,7 @@ fn build_state_machine_trace_reachability_helpers(
             ));
             if let Some(initial_state_expr) = exact_initial_state_expr.as_ref() {
                 helper_blocks.push(format!(
-                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} trace, labels, events,\n    {reachable_from} ({initial_state_expr}) trace labels events {AND}\n    x = {output_projection} labels events\n",
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} trace, labels, events,\n    {trace_within_bounds} trace {AND}\n    {trace_depth_within_bounds} trace {AND}\n    {reachable_from} ({initial_state_expr}) trace labels events {AND}\n    x = {output_projection} labels events\n",
                     EXISTS = lean_sym::EXISTS,
                     AND = lean_sym::AND,
                 ));
@@ -11733,7 +12145,7 @@ fn build_state_machine_trace_reachability_helpers(
                     name
                 };
                 helper_blocks.push(format!(
-                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState, trace, labels, events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace labels events {AND}\n    x = {output_projection} labels events\n",
+                    "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState, trace, labels, events,\n    {state_predicate} initState {AND}\n    {trace_within_bounds} trace {AND}\n    {trace_depth_within_bounds} trace {AND}\n    {reachable_from} initState trace labels events {AND}\n    x = {output_projection} labels events\n",
                     EXISTS = lean_sym::EXISTS,
                     AND = lean_sym::AND,
                 ));
@@ -11927,6 +12339,7 @@ fn try_generate_state_machine_trace_proof_from_semantics(
             &test.name,
             &format!("{helper_prefix}_reachability"),
             acceptance,
+            output_semantics.as_ref(),
             transition_semantics,
             &test.inner_data_schemas,
             &mut shape_builder,
@@ -13802,6 +14215,18 @@ fn try_generate_two_phase_proof(
     let is_valid_trace_name = format!("{helper_prefix}_isValidTrace");
     let pack_trace_name = format!("{helper_prefix}_packTrace");
     let ctx_pred_name = format!("{helper_prefix}_isValidScriptContext");
+    let FuzzerSemantics::StateMachineTrace {
+        acceptance,
+        output_semantics,
+        ..
+    } = &test.semantics
+    else {
+        return Ok(None);
+    };
+    let (trace_length_bounds, step_depth_bounds) =
+        scenario_trace_bounds_from_output_semantics(acceptance, output_semantics.as_ref());
+    let (trace_within_bounds, trace_depth_within_bounds, trace_bound_defs) =
+        emit_scenario_trace_bound_helpers(&helper_prefix, &trace_length_bounds, &step_depth_bounds);
 
     // Substitute the placeholder function name and the sub-generator prefix
     // that were emitted at export time with the concrete helper-prefixed names.
@@ -13861,6 +14286,7 @@ fn try_generate_two_phase_proof(
     content.push_str(&format!(
         "def {pack_trace_name} (trace : List Data) : Data := Data.List trace\n\n"
     ));
+    content.push_str(&trace_bound_defs);
 
     // S6 / H4: emit predicate stubs for sub-generators whose bodies could
     // not be inlined.  This branch is only reachable when
@@ -13910,17 +14336,14 @@ fn try_generate_two_phase_proof(
 
     if tp.initial_state_lean.is_some() {
         content.push_str(&format!(
-            "def {is_valid_trace_name} (trace : List Data) : Prop :=\n  \
-               {FORALL} (i : Fin trace.length),\n    \
-               {is_valid_transition_name} {initial_state_expr} (trace.get i)\n\n",
+            "def {is_valid_trace_name} (trace : List Data) : Prop :=\n  {trace_within_bounds} trace {AND}\n  {trace_depth_within_bounds} trace {AND}\n  {FORALL} (i : Fin trace.length),\n    {is_valid_transition_name} {initial_state_expr} (trace.get i)\n\n",
+            AND = lean_sym::AND,
             FORALL = lean_sym::FORALL,
         ));
     } else {
         content.push_str(&format!(
-            "def {is_valid_trace_name} (trace : List Data) : Prop :=\n  \
-               {EXISTS} (_initState : Data),\n  \
-               {FORALL} (i : Fin trace.length),\n    \
-               {is_valid_transition_name} _initState (trace.get i)\n\n",
+            "def {is_valid_trace_name} (trace : List Data) : Prop :=\n  {trace_within_bounds} trace {AND}\n  {trace_depth_within_bounds} trace {AND}\n  {EXISTS} (_initState : Data),\n  {FORALL} (i : Fin trace.length),\n    {is_valid_transition_name} _initState (trace.get i)\n\n",
+            AND = lean_sym::AND,
             FORALL = lean_sym::FORALL,
             EXISTS = lean_sym::EXISTS,
         ));
@@ -14230,11 +14653,12 @@ fn generate_proof_file(
     //   Phase 2 (`_halts`)       — CEK machine obligation, currently `sorry`.
     //   Composition              — links Phase 1 + Phase 2 (proved by construction).
     //
-    // This path supersedes the concrete native_decide witness approach for
-    // `_ok` tests: the two-phase theorem is strictly stronger (universal over
-    // all valid traces rather than existential over one seed-42 witness) while
-    // remaining sound. The `AIKEN_EMIT_TWO_PHASE` env var is retained as an
-    // opt-out escape hatch for debugging; setting it to `"0"` disables the
+    // This path supersedes the old concrete native_decide witness path for `_ok`
+    // tests only as a richer symbolic artifact. It is still reported conservatively
+    // as `Partial`: the bounded trace relation remains an acknowledged
+    // over-approximation until the step-to-step reachability and ledger-validity
+    // obligations are discharged. The `AIKEN_EMIT_TWO_PHASE` env var is retained as
+    // an opt-out escape hatch for debugging; setting it to `"0"` disables the
     // two-phase path for that run.
     let two_phase_disabled = std::env::var("AIKEN_EMIT_TWO_PHASE")
         .map(|v| v == "0")
@@ -14244,7 +14668,7 @@ fn generate_proof_file(
             eprintln!(
                 "WARNING: AIKEN_EMIT_TWO_PHASE=0 is set; two-phase proof emission disabled. \
                  For halt tests with step IR, Blaster will be used instead, which may emit \
-                 strictly weaker theorems. Remove this variable to restore sound two-phase proofs."
+                 weaker unbounded artifacts. Remove this variable to restore the bounded partial scenario-proof path."
             );
         });
     }

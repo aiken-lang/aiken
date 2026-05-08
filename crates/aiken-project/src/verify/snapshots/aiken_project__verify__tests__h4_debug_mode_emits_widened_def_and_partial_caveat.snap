@@ -37,6 +37,13 @@ set_option maxHeartbeats 2000000
 -- relating proveTestsHalt to isValidTrace (see §S6; not yet implemented).
 def prop_h4_debug_ok_s4_packTrace (trace : List Data) : Data := Data.List trace
 
+-- Bounded scenario trace envelope exported from Aiken.
+def prop_h4_debug_ok_s4_traceWithinBounds (trace : List Data) : Prop :=
+  1 <= trace.length
+
+def prop_h4_debug_ok_s4_traceDepthWithinBounds (trace : List Data) : Prop :=
+  0 <= trace.length - 1
+
 -- S6 / H4 [DEBUG]: --allow-vacuous-subgenerators is on; sub-generator predicates
 -- are widened to `fun _ _ => True`.  Each widening makes every constraint over the
 -- sub-generator domain trivially provable, so the verdict is forced to `Partial`.
@@ -47,6 +54,8 @@ def prop_h4_debug_ok_s4_isValidTransition (state : Data) (transition : Data) : P
   (prop_h4_debug_ok_s4_scenario_inputs_baseline_prop state transition)
 
 def prop_h4_debug_ok_s4_isValidTrace (trace : List Data) : Prop :=
+  prop_h4_debug_ok_s4_traceWithinBounds trace ∧
+  prop_h4_debug_ok_s4_traceDepthWithinBounds trace ∧
   ∃ (_initState : Data),
   ∀ (i : Fin trace.length),
     prop_h4_debug_ok_s4_isValidTransition _initState (trace.get i)
