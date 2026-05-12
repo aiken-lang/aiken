@@ -23,6 +23,15 @@ pub fn parser(
         )))
         .then_ignore(just(Token::RightSquare))
         .validate(|(elements, tail), span: ast::Span, emit| {
+            // A leading comma without a preceding element (e.g. `[, ..rest]`) is malformed.
+            if elements.is_empty() && tail.is_some() {
+                emit(ParseError::expected_input_found(
+                    span,
+                    None,
+                    Some(error::Pattern::Match),
+                ));
+            }
+
             let tail = match tail {
                 // There is a tail and it has a Pattern::Var or Pattern::Discard
                 Some(Some(pat @ (UntypedPattern::Var { .. } | UntypedPattern::Discard { .. }))) => {

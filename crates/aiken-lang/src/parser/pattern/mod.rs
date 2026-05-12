@@ -114,4 +114,19 @@ mod tests {
     fn pattern_list_spread() {
         assert_pattern!("[head, ..]");
     }
+
+    #[test]
+    fn pattern_list_spread_without_head_is_rejected() {
+        use chumsky::Parser;
+
+        let crate::parser::lexer::LexInfo { tokens, .. } =
+            crate::parser::lexer::run("[, ..rest]").unwrap();
+
+        let stream = chumsky::Stream::from_iter(
+            crate::ast::Span::create(tokens.len(), 1),
+            tokens.into_iter(),
+        );
+
+        assert!(super::parser().parse(stream).is_err());
+    }
 }
