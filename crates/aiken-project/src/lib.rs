@@ -638,6 +638,9 @@ fn insert_inner_data_schema_with_dependencies(
         return Ok(());
     }
 
+    // BLASTER_REVIEW_RISK(inner_schema_key_drift): the exported schema is
+    // inserted under `resolved_name`, which can differ from the original
+    // `DataWithSchema.type_name` string consumers later look up.
     let schema = export_data_schema(modules, data_types, &tipo).ok_or_else(|| {
         Error::StandardIo(std::io::Error::other(format!(
             "Test '{test_name}': DataWithSchema leaf '{type_name}' could not be exported to inner_data_schemas."
@@ -679,6 +682,9 @@ fn extend_inner_data_schemas_from_transition_prop(
     let mut type_names = Vec::new();
     collect_lang_transition_prop_data_with_schema_type_names(prop, &mut type_names);
     for type_name in type_names {
+        // BLASTER_REVIEW_RISK(swallowed_inner_schema_error): transition
+        // inner-schema export failures are ignored here, which can leave later
+        // lowering to widen semantics silently.
         let _ = insert_inner_data_schema_with_dependencies(
             modules,
             data_types,
@@ -3375,6 +3381,9 @@ where
 
         self.with_dependencies(modules)?;
 
+        // BLASTER_REVIEW_RISK(glossary_staleness): glossary entries are only
+        // extended here, before inference succeeds, so deleted/renamed or even
+        // transiently broken modules can survive across recompiles.
         modules.extends_glossary(&mut self.glossary);
 
         for name in modules.sequence(&our_modules)? {

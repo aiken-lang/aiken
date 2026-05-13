@@ -957,6 +957,9 @@ impl Certification {
             ProofStatus::Proved => Certification::SmtValidNoProofReconstruction,
             ProofStatus::WitnessProved { .. } => Certification::WitnessReplay,
             ProofStatus::Partial { .. } => Certification::OpenObligations,
+            // BLASTER_REVIEW_RISK(counterexample_certification):
+            // counterexample failures still map to a positive SMT-valid
+            // certification here, which overstates proof strength.
             ProofStatus::Failed { category, .. } => match category {
                 FailureCategory::Counterexample => Certification::SmtValidNoProofReconstruction,
                 FailureCategory::BlasterUnsupported => Certification::Unsupported,
@@ -1356,6 +1359,9 @@ pub struct VerifySummary {
     /// Whether `AIKEN_EMIT_TWO_PHASE=0` disabled two-phase proof generation for this run.
     #[serde(default)]
     pub two_phase_disabled: bool,
+    // BLASTER_REVIEW_RISK(summary_version_backward_compat): this field is
+    // required on deserialize here, and storing it as `&'static str` makes
+    // runtime JSON round-tripping harder for Rust consumers.
     /// Schema version for `aiken verify --json` output. Bumped when the
     /// JSON shape changes in a backward-incompatible way.
     pub verify_summary_version: &'static str,
@@ -2960,6 +2966,9 @@ fn domain_complexity_metrics(domain: &LoweredDomain) -> DomainComplexityMetrics 
 }
 
 fn formula_size_metrics_for_file(path: &Path) -> Option<FormulaSizeMetrics> {
+    // BLASTER_REVIEW_RISK(metrics_io_failure_silent): unreadable generated Lean
+    // files drop complexity metrics silently here instead of surfacing an
+    // explicit measurement failure.
     let content = fs::read_to_string(path).ok()?;
     Some(FormulaSizeMetrics {
         lean_file_chars: content.chars().count(),
@@ -3219,6 +3228,9 @@ impl TheoremResult {
         domain: LoweredDomain,
         input_type: Option<InputValueBridge>,
     ) -> Self {
+        // BLASTER_REVIEW_RISK(counterexample_status_frozen): status and
+        // certification are derived from ProofStatus before replay/potential
+        // refinement can downgrade widened-domain models.
         let status = VerificationStatus::from_proof_status(&proof_status);
         let certification = Certification::from_proof_status(&proof_status);
         let mut result = Self {
@@ -3790,6 +3802,9 @@ fn prepare_verify_workspace_for_generation(out_dir: &Path) -> miette::Result<()>
         return Ok(());
     }
 
+    // BLASTER_REVIEW_RISK(preserved_cache_workspace_rejected): cleanup can
+    // preserve more than `.lake`, but this reuse check accepts only a bare
+    // `.lake` entry when deciding whether regeneration is safe.
     let only_preserved_cache_entries = entries
         .iter()
         .all(|entry| entry.file_name().to_str() == Some(".lake"));
@@ -3995,6 +4010,9 @@ fn manifest_entry_caveat_with_soundness_lint(
     }
 
     let proof_path = out_dir.join(&entry.lean_file);
+    // BLASTER_REVIEW_RISK(proof_file_read_fallback): if the generated proof
+    // file cannot be read, this silently falls back to the incoming caveat
+    // instead of surfacing a distinct artifact/read failure.
     let Ok(proof_content) = fs::read_to_string(proof_path) else {
         return caveat;
     };
@@ -4261,6 +4279,9 @@ pub struct GeneratedManifest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compatibility_limitations: Vec<String>,
     pub tests: Vec<ManifestEntry>,
+    // BLASTER_REVIEW_RISK(manifest_skipped_default): `skipped` is omitted
+    // when empty, but it is not defaulted on deserialize here, so clean
+    // manifests can fail to round-trip.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub skipped: Vec<SkippedTest>,
 }
@@ -5521,11 +5542,17 @@ fn exact_semantic_existential_support_available(
         .map(relational_profile_from_structure);
     let constraint_gap_active = constraint_is_unsupported(&test.constraint);
 
+    // BLASTER_REVIEW_RISK(opaque_domain_precision_upgrade): this branch can
+    // replace an Unknown structured profile with compact precision even when
+    // the relational structure stayed opaque.
     if let Some(profile) = &structured_profile {
         let precision = if profile.precision == DomainPrecision::Unknown
             && !structured_profile_requires_block(profile)
             && let Some(compact) = &compact_profile
         {
+            // BLASTER_REVIEW_RISK(constraint_gap_exactness): if the compact
+            // fallback is Exact, only this branch downgrades to OverApprox; an
+            // already-Exact structured profile can keep its stronger claim.
             if constraint_gap_active && compact.precision == DomainPrecision::Exact {
                 DomainPrecision::OverApprox
             } else {
@@ -5892,6 +5919,12 @@ fn lowered_domain_for_test(
                     }
                 }],
             )
+        // BLASTER_REVIEW_RISK(exact_profile_ignores_constraint_gap): when the
+        // structured profile is already Exact, dropped extracted constraints do
+        // not force a precision downgrade before existential obligations.
+        // BLASTER_REVIEW_RISK(existential_precision_upgrade): the same
+        // structured→compact precision upgrade happens before existential
+        // obligation discharge here.
         } else if let Some(profile) = &structured_profile {
             let precision = if profile.precision == DomainPrecision::Unknown
                 && !structured_profile_requires_block(profile)
@@ -6004,6 +6037,9 @@ fn lowered_domain_for_test(
         diagnostics,
     };
 
+    // BLASTER_REVIEW_RISK(manifest_domain_diagnostics_hardcoded): generated
+    // manifest/domain diagnostics are assessed under Production here even for
+    // experimental or unsafe-dev runs.
     let production_assessment = assess_domain_compatibility(
         mode,
         Some(test.return_mode.clone()),
@@ -6441,6 +6477,9 @@ fn try_parse_version_at(chars: &[char], start: usize) -> Option<(String, usize)>
 
 /// Check whether a parsed version string meets a minimum (major, minor, patch).
 fn version_meets_minimum(version: &str, min: (u32, u32, u32)) -> bool {
+    // BLASTER_REVIEW_RISK(version_parse_filtering): non-numeric suffixes are
+    // discarded by `filter_map` here, so capability checks can misread
+    // prerelease or vendor-patched version strings.
     let parts: Vec<u32> = version.split('.').filter_map(|s| s.parse().ok()).collect();
     if parts.len() < 3 {
         return false;
@@ -6727,6 +6766,9 @@ fn equivalence_theorem_name_for_entry(out_dir: &Path, entry: &ManifestEntry) -> 
     let theorem_name = format!("{}_equivalence", entry.lean_theorem);
     let theorem_marker = format!("theorem {theorem_name} :");
     let proof_path = out_dir.join(&entry.lean_file);
+    // BLASTER_REVIEW_RISK(theorem_marker_probe_silent): unreadable proof files
+    // silently disable equivalence-theorem detection here instead of raising
+    // an explicit artifact/read error.
     let proof_content = fs::read_to_string(proof_path).ok()?;
     proof_content
         .contains(&theorem_marker)
@@ -7846,6 +7888,9 @@ pub fn generate_lean_workspace_with_cache(
             &config.target,
             config.existential_mode,
         );
+        // BLASTER_REVIEW_RISK(preflight_trust_profile_hardcoded): preflight
+        // compatibility is forced to Production here instead of the caller's
+        // selected trust profile.
         let preflight_block_note = assess_domain_compatibility(
             preflight_mode,
             Some(test.return_mode.clone()),
@@ -10245,6 +10290,9 @@ fn build_solver_counterexample(
         }
     }
 
+    // BLASTER_REVIEW_RISK(overapprox_replay_confirmation): confirmed replay
+    // on an OverApprox domain still does not prove the value is
+    // generator-reachable.
     let classification = if replay_status == CounterexampleReplayStatus::Confirmed {
         CounterexampleClassification::ConfirmedByReplay
     } else if domain.precision == DomainPrecision::OverApprox {
@@ -11189,6 +11237,9 @@ impl<'a> TransitionDomainShapeState<'a> {
                 definitions: parent.definitions.clone(),
             }
         };
+        // BLASTER_REVIEW_RISK(inner_schema_error_swallowed): `.ok()` turns
+        // inner schema-lowering failures into the same `None` path that later
+        // widens transition existentials.
         build_exported_data_shape_predicates_into(
             self.test_name,
             &owned_schema,
@@ -11448,6 +11499,9 @@ fn emit_partial_data_semantics_predicate(
                 // matching tightening of `export_data_schema` (see lib.rs)
                 // to guarantee every reachable inner ADT is exported. Park
                 // until that audit is performed.
+                // VERIFY_TRUE_FALLBACK_SITE(schema_missing): missing inner schema
+                // semantics are replaced with `True` here until export guarantees
+                // every reachable inner ADT schema.
                 builder.definitions.push(format!(
                     "-- DataWithSchema '{type_name}': no resolvable schema; fallback to True (outer fuzzer_data_schema covers it)\n\
                      def {name} (_ : Data) : Prop := True\n"
@@ -12860,6 +12914,9 @@ fn transition_domain_predicate(
                         "AikenVerify.Utils.allProp (fun elem => {elem_predicate}) {binder}"
                     ));
                 }
+                // VERIFY_TRUE_FALLBACK_SITE(list_constraint_set_dropped): if
+                // every list constraint disappears, `join_and(parts)` returns
+                // `None` and the existential can widen to `True` upstream.
                 join_and(parts)
             }
             _ if is_data_like => {
@@ -12884,6 +12941,9 @@ fn transition_domain_predicate(
                         "AikenVerify.Utils.allProp (fun elem => {elem_predicate}) xs"
                     ));
                 }
+                // VERIFY_TRUE_FALLBACK_SITE(list_element_constraint_dropped): if
+                // element semantics fail to lower, the list body widens to `True`
+                // here.
                 Some(format!(
                     "(match {binder} with | Data.List xs => {} | _ => False)",
                     join_and(parts).unwrap_or_else(|| "True".to_string())
@@ -12957,6 +13017,9 @@ fn transition_domain_predicate(
                         })
                     }
                     _ => {
+                        // VERIFY_TRUE_FALLBACK_SITE(one_of_non_scalar):
+                        // unsupported existential OneOf cases fall back to
+                        // `True` via `None` here.
                         push_widening(
                             unsupported_log,
                             TransitionWideningKind::Domain,
@@ -12967,6 +13030,8 @@ fn transition_domain_predicate(
                 })
                 .collect();
             if disjuncts.is_empty() {
+                // VERIFY_TRUE_FALLBACK_SITE(one_of_empty): empty existential
+                // OneOf lowers to `True` here after logging the widening.
                 push_widening(
                     unsupported_log,
                     TransitionWideningKind::Domain,
@@ -12981,6 +13046,9 @@ fn transition_domain_predicate(
             if let Some(predicate) = data_constructor_tags_predicate(binder, tags) {
                 Some(predicate)
             } else {
+                // VERIFY_TRUE_FALLBACK_SITE(constructor_tags_empty): missing
+                // constructor-tag semantics widen this existential to `True`
+                // here.
                 push_widening(
                     unsupported_log,
                     TransitionWideningKind::Domain,
@@ -13012,6 +13080,9 @@ fn transition_domain_predicate(
             .predicate_for_data_with_schema(type_name)
             .map(|predicate| format!("{predicate} {binder}"))
             .or_else(|| {
+                // VERIFY_TRUE_FALLBACK_SITE(data_with_schema_missing_predicate):
+                // missing DataWithSchema domain predicates fall back to `True`
+                // via `None` here.
                 push_widening(
                     unsupported_log,
                     TransitionWideningKind::Domain,
@@ -13040,6 +13111,10 @@ fn transition_domain_predicate(
                 ) {
                     parts.push(predicate);
                 }
+                // VERIFY_TRUE_FALLBACK_SITE(product_constraint_set_dropped):
+                // if every product-field constraint disappears,
+                // `join_and(parts)` returns `None` and the existential can
+                // widen to `True` upstream.
                 join_and(parts)
             }
             _ if is_data_like => {
@@ -13056,6 +13131,9 @@ fn transition_domain_predicate(
                         parts.push(predicate);
                     }
                 }
+                // VERIFY_TRUE_FALLBACK_SITE(product_field_constraints_dropped):
+                // if every field predicate disappears, the product body widens
+                // to `True` here.
                 Some(format!(
                     "(match {binder} with | Data.List [{}] => {} | _ => False)",
                     vars.join(", "),
@@ -13065,6 +13143,8 @@ fn transition_domain_predicate(
             _ => Some("False".to_string()),
         },
         LangFuzzerSemantics::Opaque { reason } => {
+            // VERIFY_TRUE_FALLBACK_SITE(opaque_existential): opaque existential
+            // semantics fall back to `True` via `None` here.
             push_widening(
                 unsupported_log,
                 TransitionWideningKind::Domain,
@@ -13073,6 +13153,9 @@ fn transition_domain_predicate(
             None
         }
         LangFuzzerSemantics::StateMachineTrace { .. } => {
+            // VERIFY_TRUE_FALLBACK_SITE(nested_state_machine_existential):
+            // nested state-machine existential semantics fall back to `True`
+            // via `None` here.
             push_widening(
                 unsupported_log,
                 TransitionWideningKind::Domain,
@@ -13081,6 +13164,8 @@ fn transition_domain_predicate(
             None
         }
         _ => {
+            // VERIFY_TRUE_FALLBACK_SITE(unknown_existential): unknown
+            // existential semantics fall back to `True` via `None` here.
             push_widening(
                 unsupported_log,
                 TransitionWideningKind::Domain,
@@ -13176,6 +13261,9 @@ fn emit_transition_prop_as_lean(
                 // An empty disjunction is `False`, but that would make the
                 // precondition unsatisfiable and is never useful here.
                 // Widen to `True` instead and log.
+                // VERIFY_TRUE_FALLBACK_SITE(empty_or): missing disjunct
+                // semantics are replaced with `True` here to avoid an
+                // unsatisfiable precondition.
                 push_widening(
                     unsupported_log,
                     TransitionWideningKind::Relation,
@@ -13231,6 +13319,8 @@ fn emit_transition_prop_as_lean(
                 TransitionWideningKind::Relation,
                 "Match scrutinee widened to disjunction over arm bodies (S4)",
             );
+            // VERIFY_TRUE_FALLBACK_SITE(match_arms_dropped): if widening drops
+            // every arm path, the match relation becomes `True` here.
             if arms.is_empty() {
                 "True".to_string()
             } else {
@@ -13286,6 +13376,9 @@ fn emit_transition_prop_as_lean(
                 .as_deref()
                 .map(|s| format!(" @ {s}"))
                 .unwrap_or_default();
+            // VERIFY_TRUE_FALLBACK_SITE(unsupported_relation): unsupported
+            // transition relation fragments are replaced with `True` here
+            // after logging.
             push_widening(
                 unsupported_log,
                 TransitionWideningKind::Relation,
@@ -16073,6 +16166,8 @@ fn try_generate_two_phase_proof(
     // `Partial` via `ProofCaveat::Partial("opaque sub-generator stubbed
     // to True")`, so the proof is never reported as a clean `Proved`.
     if !tp.opaque_sub_generators.is_empty() {
+        // VERIFY_TRUE_FALLBACK_SITE(opaque_subgenerator_debug): debug mode
+        // stubs opaque sub-generator semantics with `fun _ _ => True` here.
         content.push_str(
             "-- S6 / H4 [DEBUG]: --allow-vacuous-subgenerators is on; sub-generator predicates\n\
              -- are widened to `fun _ _ => True`.  Each widening makes every constraint over the\n\

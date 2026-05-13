@@ -7354,6 +7354,8 @@ fn collect_verification_artifacts_reports_manifest_logs_and_smt() {
     assert_eq!(artifacts.smt2, vec![out_dir.join("Artifacts/query.smt2")]);
 }
 
+// BLASTER_REVIEW_RISK(test_name_comment_drift): this test/comment still say
+// kebab-case even though the asserted wire values below are snake_case.
 #[test]
 fn failure_category_serializes_kebab_case() {
     // FailureCategory uses `#[serde(tag = "kind", rename_all = "kebab-case")]`.
@@ -13358,6 +13360,9 @@ fn clean_artifacts_rejects_symlinked_generated_paths_that_escape_workspace() {
         .expect_err("cleanup should reject generated paths that resolve outside out_dir");
 }
 
+// BLASTER_REVIEW_RISK(cache_cleanup_test_stops_before_regeneration): this
+// test proves cleanup preserves cache files, but it does not rerun workspace
+// generation against the preserved out-dir.
 #[test]
 fn clear_generated_workspace_removes_generated_outputs_and_preserves_cache() {
     let dir = tempfile::tempdir().unwrap();

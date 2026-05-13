@@ -164,11 +164,13 @@ Also require:
 - acceptable `trust_profile`
 - acceptable `domain.precision`
 - acceptable `domain.certificate`
+<!-- BLASTER_REVIEW_RISK(top_level_obligations_not_exhaustive): scenario/state-machine results can carry additional open blockers under nested domain fields and compatibility diagnostics, not only top-level `obligations_open`. -->
 - no unacceptable `obligations_open`
 - `counterexample.replay_status` for failing results
 
 ### If you show messages to users
 
+<!-- BLASTER_REVIEW_RISK(explanation_not_full_witness_policy): `explanation` alone may omit the key caveat that a replay-backed existential witness does not guarantee bounded randomized-runner success. -->
 Display `explanation` before surfacing raw Lean or SMT output. The new schema is designed so users can interpret the result without opening generated files.
 
 ## 8. Version markers to watch

@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blaster integration PR review checklist</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1f2430;
+      --text: #e7eaf0;
+      --muted: #aab3c2;
+      --border: #313845;
+      --accent: #73c0ff;
+      --warn: #ffcc66;
+      --danger: #ff8f8f;
+      --ok: #7bd88f;
+      --code: #10141b;
+      --shadow: rgba(0, 0, 0, 0.28);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #0f1115 0%, #121722 100%);
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    code {
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.12rem 0.38rem;
+      color: #dce7ff;
+      white-space: nowrap;
+    }
+    pre {
+      margin: 0;
+      padding: 1rem;
+      overflow-x: auto;
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #dce7ff;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 0;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 1.25rem 1rem 2rem;
+      border-right: 1px solid var(--border);
+      background: rgba(15, 17, 21, 0.92);
+      backdrop-filter: blur(12px);
+    }
+
+    .sidebar h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.15rem;
+      line-height: 1.3;
+    }
+
+    .sidebar p {
+      margin: 0.25rem 0 1rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .nav-group {
+      margin: 1.1rem 0 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .nav-group h2 {
+      margin: 0 0 0.55rem;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+
+    .sidebar ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .sidebar li { margin: 0.28rem 0; }
+    .sidebar a { color: var(--text); }
+    .sidebar a.subtle { color: var(--muted); }
+
+    main {
+      padding: 2rem 2.4rem 4rem;
+      max-width: 1200px;
+    }
+
+    .hero,
+    .panel,
+    details.section {
+      background: rgba(23, 26, 33, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 18px 40px var(--shadow);
+    }
+
+    .hero {
+      padding: 1.5rem 1.6rem;
+      margin-bottom: 1.4rem;
+    }
+
+    .hero h1 {
+      margin: 0 0 0.6rem;
+      font-size: 2rem;
+      line-height: 1.15;
+    }
+
+    .lede {
+      color: var(--muted);
+      max-width: 78ch;
+      margin: 0 0 1rem;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-top: 1rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.42rem 0.72rem;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .badge.warn { border-color: rgba(255, 204, 102, 0.45); color: var(--warn); }
+    .badge.danger { border-color: rgba(255, 143, 143, 0.45); color: var(--danger); }
+    .badge.ok { border-color: rgba(123, 216, 143, 0.45); color: var(--ok); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 1rem;
+      margin: 1rem 0 1.35rem;
+    }
+
+    .panel {
+      padding: 1rem 1.1rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .panel h2,
+    .panel h3,
+    details.section > summary h2 {
+      margin: 0 0 0.65rem;
+      line-height: 1.25;
+    }
+
+    .panel p,
+    .panel li,
+    details.section p,
+    details.section li {
+      color: var(--text);
+    }
+
+    .muted { color: var(--muted); }
+    .small { font-size: 0.92rem; }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      padding: 0.9rem 1rem;
+      background: rgba(115, 192, 255, 0.08);
+      border-radius: 12px;
+      margin: 1rem 0;
+    }
+
+    .callout.warn {
+      border-left-color: var(--warn);
+      background: rgba(255, 204, 102, 0.08);
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: rgba(255, 143, 143, 0.08);
+    }
+
+    .callout.ok {
+      border-left-color: var(--ok);
+      background: rgba(123, 216, 143, 0.08);
+    }
+
+    details.section {
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+
+    details.section > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 1rem 1.2rem;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+      border-bottom: 1px solid transparent;
+    }
+
+    details.section[open] > summary {
+      border-bottom-color: var(--border);
+    }
+
+    details.section > summary::-webkit-details-marker { display: none; }
+
+    .section-body {
+      padding: 1rem 1.2rem 1.25rem;
+    }
+
+    .section-kicker {
+      display: block;
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .checklist,
+    .marker-list,
+    .plain-list {
+      list-style: none;
+      padding: 0;
+      margin: 0.6rem 0 0;
+    }
+
+    .checklist li,
+    .marker-list li,
+    .plain-list li {
+      margin: 0.45rem 0;
+      padding-left: 0;
+    }
+
+    .checklist label {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.65rem;
+      cursor: default;
+    }
+
+    .checklist input {
+      margin-top: 0.18rem;
+      width: 1rem;
+      height: 1rem;
+      accent-color: var(--accent);
+    }
+
+    .marker-list li {
+      padding: 0.72rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .marker-list .reason {
+      display: block;
+      color: var(--muted);
+      margin-top: 0.28rem;
+      font-size: 0.94rem;
+    }
+
+    .kpi-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.8rem;
+      margin: 0.9rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .kpi-list li {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 0.9rem 1rem;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .toc-note {
+      margin-top: 1rem;
+      padding: 0.8rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 0.8rem;
+    }
+
+    .footer-space { height: 2rem; }
+
+    @media (max-width: 1024px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      main { padding: 1.25rem; }
+      .hero h1 { font-size: 1.65rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>Blaster integration review</h1>
+      <p>Human review guide for <code>blaster-integration</code> versus <code>main</code>.</p>
+
+      <div class="nav-group">
+        <h2>Use with repo search</h2>
+        <ul>
+          <li><code>BLASTER_REVIEW_RISK(</code></li>
+          <li><code>VERIFY_TRUE_FALLBACK_SITE(</code></li>
+        </ul>
+      </div>
+
+      <div class="nav-group">
+        <h2>Navigate</h2>
+        <ul>
+          <li><a href="#how-to-use">How to use</a></li>
+          <li><a href="#branch-shape">Branch shape</a></li>
+          <li><a href="#reading-order">Reading order</a></li>
+          <li><a href="#first-prune">First prune</a></li>
+          <li><a href="#section-a">A. Result classification</a></li>
+          <li><a href="#section-b">B. True fallbacks</a></li>
+          <li><a href="#section-c">C. Domain/trust</a></li>
+          <li><a href="#section-d">D. Export/schema bridge</a></li>
+          <li><a href="#section-e">E. Fuzzer lowering</a></li>
+          <li><a href="#section-f">F. CLI behavior</a></li>
+          <li><a href="#section-g">G. Caching/metrics/artifacts</a></li>
+          <li><a href="#section-h">H. CI/smoke coverage</a></li>
+          <li><a href="#section-i">I. Tests proving shape</a></li>
+          <li><a href="#section-j">J. Supporting behavior</a></li>
+          <li><a href="#final-gate">Final PR gate</a></li>
+          <li><a href="#notes">Notes</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-note">
+        Line numbers in this file are convenience only. They reflect the current working tree with the inline audit comments present and may drift as those comments are edited. Marker names and repo search are the authoritative navigation handles.
+      </div>
+    </aside>
+
+    <main>
+      <section class="hero">
+        <h1>Blaster integration PR review checklist</h1>
+        <p class="lede">
+          This file is the self-contained review guide for the <code>blaster-integration</code> branch.
+          It is intentionally tied to the inline audit comments added during branch review and is scoped to the verification/Blaster feature-set only.
+          It is not a general repository audit.
+        </p>
+        <p class="lede">
+          This version intentionally ignores <code>docs/</code> for now. Those files are expected to move to the site later.
+        </p>
+        <div class="badges">
+          <span class="badge danger">Primary risk: semantic overclaiming</span>
+          <span class="badge warn">Compare against <code>main</code></span>
+          <span class="badge ok">Use with inline audit markers</span>
+        </div>
+      </section>
+
+      <section id="how-to-use" class="panel">
+        <h2>How to use this checklist</h2>
+        <ol class="plain-list">
+          <li>Start from <code>main...blaster-integration</code>, not from isolated commits.</li>
+          <li>Keep this file open while reading the inline code comments.</li>
+          <li>Treat each inline marker as a navigation aid, not as ground truth.</li>
+          <li>For each marked site, decide one of: <strong>real issue</strong>, <strong>overstated issue</strong>, <strong>comment noise / non-issue</strong>, or <strong>needs more evidence</strong>.</li>
+          <li>Prefer reviewing behavior and classification honesty over style.</li>
+        </ol>
+
+        <div class="two-col">
+          <div>
+            <h3>Helpful commands</h3>
+            <pre><code>git diff --stat main...blaster-integration
+git diff main...blaster-integration -- &lt;path&gt;</code></pre>
+          </div>
+          <div>
+            <h3>Helpful searches</h3>
+            <ul class="plain-list">
+              <li><code>BLASTER_REVIEW_RISK(</code></li>
+              <li><code>VERIFY_TRUE_FALLBACK_SITE(</code></li>
+              <li><code>TrustProfile::Production</code></li>
+              <li><code>SmtValidNoProofReconstruction</code></li>
+              <li><code>join_and(parts)</code></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout">
+          Avoid grepping for <code>let _ =</code>, <code>ok()?</code>, or <code>unwrap_or_default()</code> from this checklist alone — they produce too many hits across the workspace to be useful as navigation. Use them only when chasing a specific marker that already names the construct.
+        </div>
+      </section>
+
+      <section id="branch-shape" class="panel">
+        <h2>What changed on this branch at a high level</h2>
+        <p class="muted">
+          Compared to <code>main</code>, this branch adds a large verification pipeline surface rather than a single localized feature.
+        </p>
+        <ul class="kpi-list">
+          <li>New verification engine in <code>crates/aiken-project/src/verify.rs</code></li>
+          <li>New result parsing and classification code</li>
+          <li>Manifest/schema changes for exported tests</li>
+          <li>Domain semantics, precision, and certificate modeling</li>
+          <li>Source-level fuzzer extraction and lowering</li>
+          <li>New CLI surfaces in <code>aiken verify</code> and <code>aiken export-tests</code></li>
+          <li>New CI jobs for verification flows</li>
+          <li>Large test additions and snapshot coverage</li>
+          <li>A smoke acceptance project under <code>examples/acceptance_tests/property_smoke</code></li>
+        </ul>
+
+        <div class="callout danger">
+          The main risk theme is not “does it compile”, but “does it tell the truth”.
+        </div>
+
+        <h3>Core review questions</h3>
+        <ul class="plain-list">
+          <li>Does the branch silently weaken semantics anywhere?</li>
+          <li>Does it overclaim exactness, certification, or falsification?</li>
+          <li>Do CLI flags actually change behavior or only reporting?</li>
+          <li>Do tests and CI exercise the risky paths they claim to cover?</li>
+        </ul>
+
+        <h3>Highest-signal markers to read first</h3>
+        <ul class="marker-list">
+          <li><code>verify.rs:960</code> — <code>counterexample_certification</code></li>
+          <li><code>verify.rs:5545</code> — <code>opaque_domain_precision_upgrade</code> and <code>5553 constraint_gap_exactness</code></li>
+          <li><code>verify.rs:5922</code> — <code>exact_profile_ignores_constraint_gap</code></li>
+          <li><code>verify.rs:6040</code> — <code>manifest_domain_diagnostics_hardcoded</code></li>
+          <li><code>verify.rs:7891</code> — <code>preflight_trust_profile_hardcoded</code></li>
+          <li><code>verify.rs:10293</code> — <code>overapprox_replay_confirmation</code></li>
+          <li><code>verify.rs:11240</code> — <code>inner_schema_error_swallowed</code> and <code>11502 VERIFY_TRUE_FALLBACK_SITE(schema_missing)</code></li>
+          <li>The <code>test_framework.rs</code> lowering markers in section E</li>
+          <li>The <code>lib.rs</code> / <code>schema_from_type.rs</code> schema-bridge markers in section D</li>
+        </ul>
+      </section>
+
+      <section id="reading-order" class="panel">
+        <h2>Reading order</h2>
+        <div class="grid">
+          <div class="panel">
+            <h3>1. Core engine</h3>
+            <ul class="plain-list small">
+              <li><code>crates/aiken-project/src/verify.rs</code></li>
+              <li><code>crates/aiken-project/src/verify/result_parser.rs</code></li>
+              <li><code>crates/aiken-project/src/verify/error_catalogue.rs</code></li>
+            </ul>
+            <p class="muted small">Focus: result status/certification logic, theorem/result JSON shape, trust-profile enforcement, counterexample replay/classification, artifact reporting, and any fallback from missing semantics to <code>True</code>.</p>
+          </div>
+          <div class="panel">
+            <h3>2. Export and schema plumbing</h3>
+            <ul class="plain-list small">
+              <li><code>crates/aiken-project/src/export.rs</code></li>
+              <li><code>crates/aiken-project/src/lib.rs</code></li>
+              <li><code>crates/aiken-project/src/blueprint/schema_from_type.rs</code></li>
+              <li><code>crates/aiken-project/src/module.rs</code></li>
+            </ul>
+            <p class="muted small">Focus: manifest/test metadata, inner schema generation and lookup, glossary/module lookup behavior, and whether missing schema details are surfaced or swallowed.</p>
+          </div>
+          <div class="panel">
+            <h3>3. Source-level fuzzer lowering</h3>
+            <ul class="plain-list small">
+              <li><code>crates/aiken-lang/src/test_framework.rs</code></li>
+            </ul>
+            <p class="muted small">Focus: primitive lowering, composed fuzzer lowering, match/pattern extraction, custom helper fuzzer extraction, and whether unsupported pieces become local fallback versus whole-test collapse.</p>
+          </div>
+          <div class="panel">
+            <h3>4. CLI/runtime surfaces</h3>
+            <ul class="plain-list small">
+              <li><code>crates/aiken/src/cmd/verify.rs</code></li>
+              <li><code>crates/aiken/src/cmd/export_tests.rs</code></li>
+              <li><code>crates/aiken-project/src/watch.rs</code></li>
+              <li><code>crates/aiken-lsp/src/quickfix.rs</code></li>
+            </ul>
+            <p class="muted small">Focus: whether user-visible flags are wired to behavior, whether JSON/text output matches actual semantics, whether diagnostics lose context, and whether helper commands emit stable output.</p>
+          </div>
+          <div class="panel">
+            <h3>5. Tests and smoke coverage</h3>
+            <ul class="plain-list small">
+              <li><code>crates/aiken-project/src/verify/tests.rs</code></li>
+              <li><code>crates/aiken-project/src/verify/tests/catalogue.rs</code></li>
+              <li><code>crates/aiken-project/src/tests/mod.rs</code></li>
+              <li><code>.github/workflows/tests.yml</code></li>
+              <li><code>examples/acceptance_tests/property_smoke/lib/property_smoke.ak</code></li>
+            </ul>
+            <p class="muted small">Focus: whether tests prove semantics or only shape, whether CI exercises intended paths, and whether smoke properties are strong enough to catch lowering regressions.</p>
+          </div>
+        </div>
+        <div class="callout">
+          <strong>Important:</strong> some files in the reading order are important contract/plumbing layers even though they currently have little or no inline marker coverage — especially <code>crates/aiken-project/src/export.rs</code>, <code>crates/aiken-project/src/verify/result_parser.rs</code>, and <code>crates/aiken-project/src/verify/error_catalogue.rs</code>. Read them anyway.
+        </div>
+        <div class="callout small">
+          On a first pass, you can safely defer snapshots, <code>Cargo.lock</code>, <code>README.md</code>, and <code>CHANGELOG.md</code> unless an implementation question sends you there.
+        </div>
+      </section>
+
+      <section id="first-prune" class="panel">
+        <h2>First prune</h2>
+        <p class="muted">
+          This section is only for triage. It is not a truth source. Use it to avoid wasting time on lower-value comments before you read the load-bearing markers.
+        </p>
+
+        <div class="callout warn">
+          The categories below are deliberately softer than “safe to delete”. Treat them as starting points for human review.
+        </div>
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Likely removable comments</h3>
+            <ul class="marker-list">
+              <li><code>crates/aiken/src/cmd/verify.rs:400</code> — <code>generate_only_empty_json_shape</code><span class="reason">Current behavior looks intentional and is locked by nearby tests.</span></li>
+              <li><code>examples/acceptance_tests/property_smoke/lib/property_smoke.ak:6</code> — <code>internal_status_names_in_fixture_prose</code><span class="reason">Prose/naming nit inside a fixture comment, not an execution-path risk.</span></li>
+            </ul>
+          </div>
+
+          <div class="panel">
+            <h3>Secondary concerns, not primary soundness blockers</h3>
+            <ul class="marker-list">
+              <li><code>crates/aiken-project/src/tests/mod.rs:316</code> — <code>key_only_schema_assertion</code><span class="reason">Test-strength commentary.</span></li>
+              <li><code>crates/aiken-project/src/verify/tests.rs:7357</code> — <code>test_name_comment_drift</code><span class="reason">Naming drift in a test.</span></li>
+              <li><code>crates/aiken-project/src/verify/tests.rs:13363</code> — <code>cache_cleanup_test_stops_before_regeneration</code><span class="reason">Test-coverage suggestion.</span></li>
+              <li><code>crates/aiken-project/src/watch.rs:483</code> — <code>single_error_only_tests</code><span class="reason">Coverage gap, but not on the core verifier trust path.</span></li>
+              <li><code>.github/workflows/tests.yml:314</code> — <code>generate_only_ci_coverage</code><span class="reason">CI breadth issue, not primary theorem-soundness logic.</span></li>
+              <li><code>.github/workflows/tests.yml:400</code> — <code>real_toolchain_target_coverage</code><span class="reason">Future test-breadth note.</span></li>
+              <li><code>crates/aiken-project/src/module.rs:183</code> — <code>suffix_module_match</code><span class="reason">Diagnostics/module-resolution UX.</span></li>
+              <li><code>crates/aiken-lsp/src/quickfix.rs:358</code> — <code>ambiguous_unknown_module_fix</code><span class="reason">LSP code-action UX.</span></li>
+              <li><code>crates/aiken/src/cmd/export_tests.rs:123</code> — <code>tracing_not_forwarded_to_compile</code><span class="reason">CLI feature gap outside the main verify path.</span></li>
+              <li><code>crates/aiken/src/cmd/export_tests.rs:208</code> — <code>workspace_json_multiemit</code><span class="reason">Output-shape ergonomics.</span></li>
+              <li><code>crates/aiken/src/cmd/export_tests.rs:219</code> — <code>output_before_deny</code><span class="reason">Side-effect ordering issue.</span></li>
+            </ul>
+          </div>
+
+          <div class="panel">
+            <h3>Duplicates or probably overstated</h3>
+            <ul class="marker-list">
+              <li><code>crates/aiken-project/src/verify.rs:1362</code> — <code>summary_version_backward_compat</code><span class="reason">Mixes a serde concern with an ergonomics point.</span></li>
+              <li><code>crates/aiken-project/src/verify.rs:3231</code> — <code>counterexample_status_frozen</code><span class="reason">Likely overlaps with stronger markers at <code>960</code> and <code>10293</code>.</span></li>
+              <li><code>crates/aiken-project/src/verify.rs:5925</code> — <code>existential_precision_upgrade</code><span class="reason">Likely overlaps with <code>opaque_domain_precision_upgrade</code> and <code>exact_profile_ignores_constraint_gap</code>.</span></li>
+              <li><code>crates/aiken-project/src/verify.rs:6480</code> — <code>version_parse_filtering</code><span class="reason">Appears cosmetic/capability-detection oriented.</span></li>
+            </ul>
+          </div>
+
+          <div class="panel">
+            <h3>Judgment-call items</h3>
+            <ul class="marker-list">
+              <li><code>crates/aiken-project/src/verify.rs:12917</code> — <code>VERIFY_TRUE_FALLBACK_SITE(list_constraint_set_dropped)</code><span class="reason">Earlier pass flagged it as possibly broad, but it was not re-confirmed.</span></li>
+              <li><code>crates/aiken-project/src/verify.rs:13114</code> — <code>VERIFY_TRUE_FALLBACK_SITE(product_constraint_set_dropped)</code><span class="reason">Same as above; verify it really drops only redundant constraints before pruning.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout ok">
+          Markers that currently still look load-bearing: every other <code>VERIFY_TRUE_FALLBACK_SITE</code>, both blueprint Data-bridge markers in <code>schema_from_type.rs</code>, the certification/replay/trust-profile/widening markers in <code>verify.rs</code>, the silent-IO markers around proof artifacts, all <code>test_framework.rs</code> lowering markers, <code>cmd/verify.rs:1737 unused_solver_profile</code>, and <code>property_smoke.ak:29 upper_bound_not_asserted</code> plus <code>:100 tautological_such_that_smoke</code>.
+        </div>
+      </section>
+
+      <details id="section-a" class="section" open>
+        <summary>
+          <span class="section-kicker">A</span>
+          <h2>Result classification and theorem honesty</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary file: <code>crates/aiken-project/src/verify.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Verify that <code>LeanCertified</code>, <code>SolverValidated</code>, <code>WitnessValidated</code>, <code>SolverFalsified</code>, <code>Partial</code>, <code>Unknown</code>, <code>TimedOut</code>, and <code>Unsupported</code> are assigned truthfully.</span></label></li>
+            <li><label><input type="checkbox"> <span>Verify that certification values are not stronger than the underlying evidence.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether solver counterexample failures should really map to <code>SmtValidNoProofReconstruction</code>.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether replay refinement can change the practical meaning of a theorem result without changing <code>status</code>/<code>certification</code>.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether over-approximate domains can still lead to overly strong falsification claims.</span></label></li>
+          </ul>
+          <h3>Key markers</h3>
+          <ul class="marker-list">
+            <li><code>crates/aiken-project/src/verify.rs:960</code> — <code>BLASTER_REVIEW_RISK(counterexample_certification)</code></li>
+            <li><code>crates/aiken-project/src/verify.rs:3231</code> — <code>BLASTER_REVIEW_RISK(counterexample_status_frozen)</code></li>
+          </ul>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Is certification purely “evidence class”, or is it user-visible enough that polarity matters?</span></label></li>
+            <li><label><input type="checkbox"> <span>Are widened/potential counterexamples clearly distinguished from confirmed Aiken failures?</span></label></li>
+            <li><label><input type="checkbox"> <span>Can any result say more than the plan allows?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-b" class="section" open>
+        <summary>
+          <span class="section-kicker">B</span>
+          <h2>Explicit <code>True</code> fallbacks</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary file: <code>crates/aiken-project/src/verify.rs</code></p>
+          <p>Review every remaining <code>VERIFY_TRUE_FALLBACK_SITE(...)</code> marker except the two judgment-call items in the first-prune section.</p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span><code>one_of_non_scalar</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>one_of_empty</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>constructor_tags_empty</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>data_with_schema_missing_predicate</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>product_field_constraints_dropped</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>opaque_existential</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>nested_state_machine_existential</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>unknown_existential</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>empty_or</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>match_arms_dropped</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>unsupported_relation</code></span></label></li>
+            <li><label><input type="checkbox"> <span><code>opaque_subgenerator_debug</code></span></label></li>
+          </ul>
+          <h3>For each one</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Is missing semantics really being replaced with <code>True</code>?</span></label></li>
+            <li><label><input type="checkbox"> <span>Is the fallback visible in JSON/result metadata?</span></label></li>
+            <li><label><input type="checkbox"> <span>Does it force <code>Partial</code>/<code>Unsupported</code>/<code>Unknown</code>, or can it still surface as success?</span></label></li>
+            <li><label><input type="checkbox"> <span>Is the behavior acceptable under the plan?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-c" class="section" open>
+        <summary>
+          <span class="section-kicker">C</span>
+          <h2>Domain precision, certificates, and trust profiles</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary file: <code>crates/aiken-project/src/verify.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Check that <code>Exact</code>, <code>OverApprox</code>, <code>UnderApprox</code>, <code>WitnessOnly</code>, and <code>Unknown</code> are used conservatively.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check that certificate values (<code>LeanProved</code>, <code>TrustedVersionedModel</code>, <code>SamplerSemanticModel</code>, <code>WitnessReplay</code>, <code>DifferentialTestedOnly</code>, <code>Unchecked</code>) are aligned with actual evidence.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check that success under <code>strict</code>, <code>production</code>, <code>experimental</code>, and <code>unsafe-dev</code> matches the revised plan.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether production compatibility is computed only for metadata, or whether it leaks into verdict logic.</span></label></li>
+          </ul>
+          <h3>Key markers</h3>
+          <ul class="marker-list">
+            <li><code>crates/aiken-project/src/verify.rs:5545</code> — <code>opaque_domain_precision_upgrade</code></li>
+            <li><code>crates/aiken-project/src/verify.rs:5553</code> — <code>constraint_gap_exactness</code></li>
+            <li><code>crates/aiken-project/src/verify.rs:5922</code> — <code>exact_profile_ignores_constraint_gap</code></li>
+            <li><code>crates/aiken-project/src/verify.rs:6040</code> — <code>manifest_domain_diagnostics_hardcoded</code></li>
+            <li><code>crates/aiken-project/src/verify.rs:7891</code> — <code>preflight_trust_profile_hardcoded</code></li>
+          </ul>
+          <div class="callout warn small">
+            <strong>Note:</strong> <code>verify.rs:5925 existential_precision_upgrade</code> appears to duplicate the concerns already captured at <code>5545</code> and <code>5922</code>. If you read those carefully, you have likely covered it.
+          </div>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Is <code>TrustProfile::Production</code> hardcoded only for <code>production_allowed</code> metadata?</span></label></li>
+            <li><label><input type="checkbox"> <span>Are actual run-time trust decisions made elsewhere and correctly?</span></label></li>
+            <li><label><input type="checkbox"> <span>Can unknown or unchecked domains still look production-safe?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-d" class="section" open>
+        <summary>
+          <span class="section-kicker">D</span>
+          <h2>Export/schema bridge integrity</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary files: <code>crates/aiken-project/src/lib.rs</code>, <code>crates/aiken-project/src/blueprint/schema_from_type.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Confirm inner schema keys are looked up under the same name they are exported under.</span></label></li>
+            <li><label><input type="checkbox"> <span>Confirm inner schema export failures are surfaced, not swallowed.</span></label></li>
+            <li><label><input type="checkbox"> <span>Confirm <code>Data::Map</code> / <code>Schema::Pair</code> exports do not outrun verifier support without explicit downgrade.</span></label></li>
+          </ul>
+          <h3>Key markers</h3>
+          <ul class="marker-list">
+            <li><code>crates/aiken-project/src/lib.rs:641</code> — <code>inner_schema_key_drift</code></li>
+            <li><code>crates/aiken-project/src/lib.rs:685</code> — <code>swallowed_inner_schema_error</code></li>
+            <li><code>crates/aiken-project/src/blueprint/schema_from_type.rs:210</code> — <code>map_schema_bridge_gap</code></li>
+            <li><code>crates/aiken-project/src/blueprint/schema_from_type.rs:340</code> — <code>pair_schema_bridge_gap</code></li>
+          </ul>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Can nested schema loss later cause domain weakening?</span></label></li>
+            <li><label><input type="checkbox"> <span>If so, is that made explicit to the user?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-e" class="section" open>
+        <summary>
+          <span class="section-kicker">E</span>
+          <h2>Source-level fuzzer extraction and lowering</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary file: <code>crates/aiken-lang/src/test_framework.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Check whether unsupported match guards can admit a branch body unsafely.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether non-variable pattern constraints are erased.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether constructor-tag-only exhaustiveness ignores subpattern gaps.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether stdlib fuzzers are recognized only when semantics are actually audited.</span></label></li>
+            <li><label><input type="checkbox"> <span>Check whether simple one-argument fuzzer calls are being overclassified as exact return-style helpers.</span></label></li>
+          </ul>
+          <h3>Key markers</h3>
+          <ul class="marker-list">
+            <li><code>crates/aiken-lang/src/test_framework.rs:807</code> — <code>unsupported_clause_guard_widens_match</code></li>
+            <li><code>crates/aiken-lang/src/test_framework.rs:1260</code> — <code>pattern_tests_dropped</code></li>
+            <li><code>crates/aiken-lang/src/test_framework.rs:2229</code> — <code>fuzz_module_alias_heuristic</code></li>
+            <li><code>crates/aiken-lang/src/test_framework.rs:9114</code> — <code>tag_only_exhaustiveness</code></li>
+            <li><code>crates/aiken-lang/src/test_framework.rs:10154</code> — <code>overbroad_return_detection</code></li>
+          </ul>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Are helper fuzzers lowered from typed source as intended?</span></label></li>
+            <li><label><input type="checkbox"> <span>Do unsupported child subterms fall back locally where possible?</span></label></li>
+            <li><label><input type="checkbox"> <span>Is any “exact” lowering actually heuristic rather than justified?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-f" class="section" open>
+        <summary>
+          <span class="section-kicker">F</span>
+          <h2>CLI behavior vs reporting</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary file: <code>crates/aiken/src/cmd/verify.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Confirm <code>--solver-profile</code> changes execution behavior, not just JSON/reporting.</span></label></li>
+            <li><label><input type="checkbox"> <span>Confirm <code>--trust-profile</code> changes acceptance behavior.</span></label></li>
+            <li><label><input type="checkbox"> <span>Confirm <code>strict-cert</code> really rejects non-<code>LeanCertified</code> runs for substantive reasons, not only at the end.</span></label></li>
+            <li><label><input type="checkbox"> <span>Confirm no-property / generate-only JSON shape is intentional.</span></label></li>
+          </ul>
+          <h3>Key markers</h3>
+          <ul class="marker-list">
+            <li><code>crates/aiken/src/cmd/verify.rs:1737</code> — <code>unused_solver_profile</code></li>
+            <li><code>crates/aiken/src/cmd/verify.rs:400</code> — <code>generate_only_empty_json_shape</code></li>
+          </ul>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Is the chosen solver profile passed into proof execution?</span></label></li>
+            <li><label><input type="checkbox"> <span>Are the reported run settings actually causal?</span></label></li>
+            <li><label><input type="checkbox"> <span>Which parts of the CLI contract are real versus declarative only?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-g" class="section" open>
+        <summary>
+          <span class="section-kicker">G</span>
+          <h2>Caching, metrics, and artifact reporting</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary file: <code>crates/aiken-project/src/verify.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Review cache reuse versus regeneration behavior.</span></label></li>
+            <li><label><input type="checkbox"> <span>Review artifact-path reporting for manifest, Lean root, logs, and SMT-LIB.</span></label></li>
+            <li><label><input type="checkbox"> <span>Review metric collection failures and whether they are intentionally best-effort.</span></label></li>
+          </ul>
+          <h3>Key marker</h3>
+          <ul class="marker-list">
+            <li><code>crates/aiken-project/src/verify.rs:2969</code> — <code>metrics_io_failure_silent</code></li>
+          </ul>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Is silent metric loss acceptable?</span></label></li>
+            <li><label><input type="checkbox"> <span>Is cached reuse always safe, or only opportunistically reported?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-h" class="section" open>
+        <summary>
+          <span class="section-kicker">H</span>
+          <h2>CI and smoke coverage</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary files: <code>.github/workflows/tests.yml</code>, <code>examples/acceptance_tests/property_smoke/lib/property_smoke.ak</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Confirm generate-only CI actually hits projects with property tests.</span></label></li>
+            <li><label><input type="checkbox"> <span>Confirm the real toolchain job covers the intended target modes.</span></label></li>
+            <li><label><input type="checkbox"> <span>Confirm the smoke properties meaningfully exercise the advertised lowerings.</span></label></li>
+          </ul>
+          <h3>Load-bearing smoke markers</h3>
+          <ul class="marker-list">
+            <li><code>examples/acceptance_tests/property_smoke/lib/property_smoke.ak:29</code> — <code>upper_bound_not_asserted</code><span class="reason">Body depends only on the lower bound, so an upper-bound regression would still pass.</span></li>
+            <li><code>examples/acceptance_tests/property_smoke/lib/property_smoke.ak:100</code> — <code>tautological_such_that_smoke</code><span class="reason"><code>flag == flag</code> stays true even if <code>such_that</code> is dropped.</span></li>
+          </ul>
+          <div class="callout small">
+            The CI-breadth markers at <code>tests.yml:314</code>, <code>tests.yml:400</code>, and the prose marker at <code>property_smoke.ak:6</code> are intentionally de-emphasized here. They are still available in the code if you want to review them.
+          </div>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Is any CI step green without exercising the risky path it claims to protect?</span></label></li>
+            <li><label><input type="checkbox"> <span>Are the smoke tests tautological or otherwise too weak?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-i" class="section" open>
+        <summary>
+          <span class="section-kicker">I</span>
+          <h2>Tests that may only prove shape</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary files: <code>crates/aiken-project/src/verify/tests.rs</code>, <code>crates/aiken-project/src/tests/mod.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Identify tests that only assert presence of keys/fields instead of meaning.</span></label></li>
+            <li><label><input type="checkbox"> <span>Identify tests that stop before the interesting second step, like regeneration after cleanup.</span></label></li>
+          </ul>
+          <div class="callout small warn">
+            The markers in this section are lower-signal than the core soundness markers. Keep them in view if you want to tighten test quality, but do not let them distract from sections A through H.
+          </div>
+          <ul class="marker-list">
+            <li><code>crates/aiken-project/src/tests/mod.rs:316</code> — <code>key_only_schema_assertion</code></li>
+            <li><code>crates/aiken-project/src/verify/tests.rs:7357</code> — <code>test_name_comment_drift</code></li>
+            <li><code>crates/aiken-project/src/verify/tests.rs:13363</code> — <code>cache_cleanup_test_stops_before_regeneration</code></li>
+          </ul>
+          <h3>Questions to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Which tests are semantic regressions versus shape locks?</span></label></li>
+            <li><label><input type="checkbox"> <span>Which weak tests matter enough to strengthen before PR?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <details id="section-j" class="section" open>
+        <summary>
+          <span class="section-kicker">J</span>
+          <h2>Supporting behavior outside core verify logic</h2>
+        </summary>
+        <div class="section-body">
+          <p class="muted">Primary files: <code>crates/aiken-project/src/module.rs</code>, <code>crates/aiken-project/src/watch.rs</code>, <code>crates/aiken-lsp/src/quickfix.rs</code>, <code>crates/aiken/src/cmd/export_tests.rs</code></p>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Review ambiguous module suffix matching.</span></label></li>
+            <li><label><input type="checkbox"> <span>Review glossary persistence across recompiles.</span></label></li>
+            <li><label><input type="checkbox"> <span>Review suppressed/flattened diagnostic rendering.</span></label></li>
+            <li><label><input type="checkbox"> <span>Review whether export-tests forwards compile tracing settings.</span></label></li>
+          </ul>
+          <ul class="marker-list">
+            <li><code>crates/aiken-project/src/module.rs:183</code> — <code>suffix_module_match</code></li>
+            <li><code>crates/aiken-project/src/lib.rs:3384</code> — <code>glossary_staleness</code></li>
+            <li><code>crates/aiken-project/src/watch.rs:49</code> — <code>suppressed_diagnostic_context</code></li>
+            <li><code>crates/aiken-project/src/watch.rs:311</code> — <code>flattened_multi_error_message</code></li>
+            <li><code>crates/aiken-lsp/src/quickfix.rs:358</code> — <code>ambiguous_unknown_module_fix</code></li>
+            <li><code>crates/aiken/src/cmd/export_tests.rs:123</code> — <code>tracing_not_forwarded_to_compile</code></li>
+          </ul>
+          <h3>Question to answer</h3>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> <span>Are these acceptable secondary limitations for the first PR, or do they create misleading user behavior?</span></label></li>
+          </ul>
+        </div>
+      </details>
+
+      <section id="final-gate" class="panel">
+        <h2>Final PR gate</h2>
+        <p class="muted">Do not consider the branch review-complete until you can answer these yes/no questions.</p>
+        <div class="grid">
+          <div class="panel">
+            <h3>Soundness gate</h3>
+            <ul class="checklist">
+              <li><label><input type="checkbox"> <span>Are all successful results justified by the reported precision + certificate + trust profile?</span></label></li>
+              <li><label><input type="checkbox"> <span>Are all approximations explicit?</span></label></li>
+              <li><label><input type="checkbox"> <span>Are all missing semantics surfaced instead of silently hidden?</span></label></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Behavior gate</h3>
+            <ul class="checklist">
+              <li><label><input type="checkbox"> <span>Do CLI options materially affect behavior when they claim to?</span></label></li>
+              <li><label><input type="checkbox"> <span>Are JSON statuses/certifications understandable without opening generated Lean?</span></label></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Coverage gate</h3>
+            <ul class="checklist">
+              <li><label><input type="checkbox"> <span>Do CI and tests exercise the risky code paths they claim to cover?</span></label></li>
+              <li><label><input type="checkbox"> <span>Are known weak tests clearly identified?</span></label></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Cleanup gate</h3>
+            <ul class="checklist">
+              <li><label><input type="checkbox"> <span>Are obviously superfluous audit comments removed or downgraded?</span></label></li>
+              <li><label><input type="checkbox"> <span>Are the remaining inline comments tightly tied to real branch-specific concerns?</span></label></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="notes" class="panel">
+        <h2>Notes for further passes</h2>
+        <p class="muted">Use this section as working space during review.</p>
+        <ul class="checklist">
+          <li><label><input type="checkbox"> <span>Add any newly discovered high-signal files here.</span></label></li>
+          <li><label><input type="checkbox"> <span>Record any audit comments that should be removed.</span></label></li>
+          <li><label><input type="checkbox"> <span>Record any comments that need stronger wording because they understate the risk.</span></label></li>
+          <li><label><input type="checkbox"> <span>Record any places where the branch materially diverges from the revised plan.</span></label></li>
+        </ul>
+      </section>
+
+      <div class="footer-space"></div>
+    </main>
+  </div>
+</body>
+</html>

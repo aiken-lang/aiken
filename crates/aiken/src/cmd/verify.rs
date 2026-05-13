@@ -397,6 +397,9 @@ fn format_no_property_tests_output(
     plutus_core_rev: &str,
     allow_vacuous_subgenerators: bool,
 ) -> Result<String, serde_json::Error> {
+    // BLASTER_REVIEW_RISK(generate_only_empty_json_shape): this path always
+    // emits a verify summary in JSON mode, even when `--generate-only` callers
+    // expect a generated manifest shape.
     if output_mode.emits_json() {
         let manifest = verify::GeneratedManifest::empty(verify::GENERATE_ONLY_VERSION.to_string());
         serde_json::to_string_pretty(&no_proofs_summary(
@@ -1731,6 +1734,8 @@ fn exec_run_with_project(
         }
 
         let start = std::time::Instant::now();
+        // BLASTER_REVIEW_RISK(unused_solver_profile): the selected solver
+        // profile is not forwarded into `run_proofs` here.
         let result = verify::run_proofs(
             &resolved_out_dir,
             run_options.timeout,

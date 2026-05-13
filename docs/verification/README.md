@@ -60,6 +60,7 @@ The selected `trust_profile` controls which successful-looking results count as 
 | `experimental` | May accept weaker evidence such as `DifferentialTestedOnly`, but must label it clearly. |
 | `unsafe-dev` | Can run experiments and placeholder paths, but must not print a production verification claim. |
 
+<!-- BLASTER_REVIEW_RISK(ci_guidance_missing_solver_profile): `strict-cert` is selected via `run_settings.solver_profile`, so CI consumers that record only trust_profile + status cannot fully reconstruct acceptance policy. -->
 If you are wiring results into CI, record both `run_settings.trust_profile` and `status`. A `SolverValidated` result can still be rejected by `strict-cert` or by an incompatible trust profile.
 
 ## 4. Domain precision and certificates

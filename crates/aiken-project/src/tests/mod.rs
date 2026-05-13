@@ -313,6 +313,9 @@ pub type Result<a> {
     )
     .expect("local custom DataWithSchema leaf should resolve and export");
 
+    // BLASTER_REVIEW_RISK(key_only_schema_assertion): this test proves the
+    // inner schema name resolved, but it does not verify the exported schema
+    // body still matches the instantiated generic.
     assert!(schemas.contains_key("Result<Int>"));
 }
 
@@ -354,7 +357,6 @@ fn json_relative_path_keeps_project_relative_paths_and_redacts_external_absolute
         "public JSON paths must not leak absolute local paths: {public}"
     );
 }
-
 
 #[test]
 fn transition_unsupported_log_includes_helper_widenings() {

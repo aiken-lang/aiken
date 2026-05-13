@@ -804,6 +804,9 @@ fn guarded_when_clause_fallback(
     body: TransitionProp,
     fallback: TransitionProp,
 ) -> TransitionProp {
+    // BLASTER_REVIEW_RISK(unsupported_clause_guard_widens_match): if the
+    // `unsupported` arm later lowers to `True`, this fallback admits `body`
+    // without proving the original clause guard held.
     TransitionProp::Or(vec![TransitionProp::And(vec![unsupported, body]), fallback])
 }
 
@@ -1254,6 +1257,9 @@ fn translate_clause_with_locals(
                         },
                     }
                 })?;
+            // BLASTER_REVIEW_RISK(pattern_tests_dropped): non-variable
+            // pattern tests are erased to `_` here, so literal/list-field
+            // constraints can disappear from lowered Match clauses.
             let bindings = arguments
                 .iter()
                 .map(|arg| match &arg.value {
@@ -2220,6 +2226,9 @@ fn try_fuzz_existential(
         _ => return None,
     };
 
+    // BLASTER_REVIEW_RISK(fuzz_module_alias_heuristic): surface-name
+    // heuristics here can treat user modules ending in `/fuzz` as stdlib-like
+    // fuzzers, or miss the real stdlib when imported under another alias.
     let is_fuzz = FUZZ_MODULES.iter().any(|m| module.contains(m))
         || module.ends_with("/fuzz")
         || module == "fuzz";
@@ -9102,6 +9111,9 @@ fn when_clauses_are_exhaustive(
     {
         return true;
     }
+    // BLASTER_REVIEW_RISK(tag_only_exhaustiveness): this check reasons from
+    // outer constructor tags only, so `Some(0)`-style subpattern gaps can be
+    // treated as exhaustive.
     let Some(possible_tags) = binding_possible_constructor_tags(subject_binding, ctx.data_types)
     else {
         return false;
@@ -10139,6 +10151,9 @@ fn lower_fuzzer_relation_with_locals(
         TypedExpr::Call {
             fun, args, tipo, ..
         } => {
+            // BLASTER_REVIEW_RISK(overbroad_return_detection): this
+            // short-circuits any matching one-argument `Fuzzer<_>` call here,
+            // not just audited constant-return helpers.
             if let Some(inner) = detect_return_call(fun, args, tipo.as_ref()) {
                 let mut visiting = BTreeSet::new();
                 return output_match_prop(

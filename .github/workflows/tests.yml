@@ -311,6 +311,9 @@ jobs:
       - name: Verify --generate-only pipeline does not regress
         run: |
           set -euo pipefail
+          # BLASTER_REVIEW_RISK(generate_only_ci_coverage): these fixtures
+          # have no property tests, so this loop can return early without
+          # exercising generate-only workspace generation.
           for project in examples/hello_world examples/gift_card; do
             echo "--- Checking $project ---"
             ./target/debug/aiken check "$project"
@@ -394,6 +397,9 @@ jobs:
           }
       - name: Build aiken CLI
         run: cargo build -p aiken
+      # BLASTER_REVIEW_RISK(real_toolchain_target_coverage): this end-to-end
+      # proof run exercises only the default property target; validator and
+      # equivalence target modes are still covered only in generate-only/unit paths.
       - name: Run verify on property_smoke fixture
         run: |
           set -euo pipefail

@@ -46,6 +46,9 @@ where
     rendered
 }
 
+// BLASTER_REVIEW_RISK(suppressed_diagnostic_context): this renderer rebuilds
+// parse/type messages from the inner diagnostic only, so outer file/code
+// context can disappear in silent or JSON flows.
 fn render_error(error: &crate::error::Error) -> String {
     match error {
         crate::error::Error::Parse { error, .. } => render_diagnostic_message(error.as_ref()),
@@ -305,6 +308,9 @@ where
         return Err(if report_diagnostics {
             ExitFailure::into_report()
         } else {
+            // BLASTER_REVIEW_RISK(flattened_multi_error_message): multiple
+            // suppressed errors are collapsed into one string here, so
+            // downstream callers lose per-error boundaries.
             ExitFailure::with_message(render_errors(&errs))
         });
     }
@@ -324,6 +330,9 @@ where
         Err(if report_diagnostics {
             ExitFailure::into_report()
         } else {
+            // BLASTER_REVIEW_RISK(flattened_multi_warning_message): multiple
+            // denied warnings are collapsed into one string here, so JSON or
+            // non-terminal callers cannot recover individual warnings.
             ExitFailure::with_message(format!(
                 "Warnings were denied by --deny.\n\n{}",
                 render_warnings(&warnings)
@@ -471,6 +480,9 @@ mod tests {
     }
 
     #[test]
+    // BLASTER_REVIEW_RISK(single_error_only_tests): the suppressed-diagnostic
+    // tests below exercise one failure at a time, so aggregation regressions
+    // can slip through.
     fn suppressed_parse_errors_preserve_the_parser_failure() {
         let tmp = tempfile::tempdir().expect("tempdir");
         fs::create_dir_all(tmp.path().join("lib")).expect("lib dir");

@@ -120,6 +120,9 @@ struct ExportCommandOptions {
     trace_level: TraceLevel,
 }
 
+// BLASTER_REVIEW_RISK(tracing_not_forwarded_to_compile): this helper only
+// copies `env`, so compile still runs with default tracing instead of the
+// user's requested trace-level/filter.
 fn export_compile_options(env: Option<String>) -> Options {
     Options {
         env,
@@ -202,6 +205,9 @@ pub fn exec(
         trace_level,
     };
 
+    // BLASTER_REVIEW_RISK(workspace_json_multiemit): `with_project` can invoke
+    // this closure once per workspace member, so stdout/output writes here are
+    // not yet aggregated across packages.
     with_project(directory.as_deref(), deny, silent, true, |p| {
         let output = run_export_command_with(
             command_options.clone(),
@@ -210,6 +216,9 @@ pub fn exec(
                 p.export_tests(match_tests, exact_match, tracing, include_flat_bytes)
                     .map_err(|e| vec![e])
             },
+            // BLASTER_REVIEW_RISK(output_before_deny): file output happens
+            // inside the build/export closure here, before any outer
+            // post-build warning denial can fail the command.
             |path, json| fs::write(path, json),
         )?;
 

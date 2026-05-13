@@ -3,6 +3,9 @@
 //// This fixture is consumed by the `verify_real_toolchain` CI job, which
 //// installs a real Lean toolchain via elan and a real Z3, then runs
 //// `aiken verify run --json` against this project. Every property test
+//// BLASTER_REVIEW_RISK(internal_status_names_in_fixture_prose): this comment
+//// still uses internal proof-status names and does not mention skipped/unsupported
+//// cases explicitly.
 //// must prove cleanly (no `Partial`, no `WitnessProved`, no `Failed`,
 //// no `TimedOut`, no `Unknown`) for the job to pass.
 ////
@@ -23,6 +26,9 @@ use aiken/fuzz
 // without any further hypothesis.
 // ---------------------------------------------------------------------------
 
+// BLASTER_REVIEW_RISK(upper_bound_not_asserted): this body only depends on the
+// lower bound, so dropping the `<= 100` half of `int_between(0, 100)` would
+// still let the smoke pass.
 test prop_int_within_bounds(x via fuzz.int_between(0, 100)) {
   x >= 0
 }
@@ -91,6 +97,9 @@ fn smoke_bool_fuzzer() -> Fuzzer<Bool> {
   fuzz.such_that(fuzz.bool(), keep_only_true)
 }
 
+// BLASTER_REVIEW_RISK(tautological_such_that_smoke): `flag == flag` stays
+// true even if the `such_that` predicate is dropped, so this smoke does not
+// prove filter lowering is exercised.
 test prop_bool_such_that_lowers_without_singleton_assumption(
   flag via smoke_bool_fuzzer(),
 ) {

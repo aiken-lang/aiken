@@ -207,6 +207,9 @@ fn do_build(
             "List" => {
                 let inner = args.first()?;
                 let generic = do_build(inner, data_types, type_parameters, definitions)?;
+                // BLASTER_REVIEW_RISK(map_schema_bridge_gap): exporting list-of-pair
+                // shapes as `Data::Map` here can outrun the verifier's schema
+                // bridge, which still rejects maps in some lowering paths.
                 // If the element reduces to a `Pair`, emit a `Data::Map` like
                 // the blueprint path does (Plutus convention inherited from
                 // PlutusTx / LedgerApi).
@@ -334,6 +337,9 @@ fn do_build(
                     Ok(Annotated {
                         title: title_override.or(Some("Pair".to_owned())),
                         description: None,
+                        // BLASTER_REVIEW_RISK(pair_schema_bridge_gap): this
+                        // pair definition can later be referenced from paths
+                        // that only accept `Schema::Data` leaves.
                         annotated: Schema::Pair(
                             Declaration::Referenced(left),
                             Declaration::Referenced(right),
