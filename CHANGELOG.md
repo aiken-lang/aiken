@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - YYYY-MM-DD
+
+### Fixed
+
+- **aiken-lang**: Emit a `DecoratorValidation` diagnostic instead of panicking when an `@tag(...)` decorator value exceeds `usize::MAX`. Fixes [#1319](https://github.com/aiken-lang/aiken/issues/1319). @SAY-5
+
 ## v1.1.22 - 2026-05-15
 
 ### Added

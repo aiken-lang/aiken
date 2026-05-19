@@ -4542,6 +4542,24 @@ fn decorator_validation_overlaping_tags() {
 }
 
 #[test]
+fn decorator_validation_tag_overflow() {
+    // A tag value beyond `usize::MAX` must surface as a normal diagnostic,
+    // not a `usize::from_str(...).unwrap()` panic during decorator checking.
+    let source_code = r#"
+        pub type Datum {
+          @tag(18446744073709551616)
+          TooLarge
+          Other
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorValidation { .. }))
+    ))
+}
+
+#[test]
 fn validator_parameter_scope_escape() {
     let source_code = r#"
         validator placeholder(foo: Option<Int>) {

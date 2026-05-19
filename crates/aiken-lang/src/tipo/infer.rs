@@ -1076,17 +1076,23 @@ impl TypedDataType {
                 None,
             )?;
 
-            let (tag, location) = constructor
-                .decorators
-                .iter()
-                .find_map(|decorator| {
-                    if let DecoratorKind::Tag { value, .. } = &decorator.kind {
-                        Some((value.parse().unwrap(), &decorator.location))
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or((index, &constructor.location));
+            let mut tagged: Option<(usize, &Span)> = None;
+            for decorator in &constructor.decorators {
+                if let DecoratorKind::Tag { value, .. } = &decorator.kind {
+                    let parsed =
+                        value
+                            .parse::<usize>()
+                            .map_err(|_| Error::DecoratorValidation {
+                                location: decorator.location,
+                                message: format!(
+                                    "tag value `{value}` does not fit in a usize on this platform"
+                                ),
+                            })?;
+                    tagged = Some((parsed, &decorator.location));
+                    break;
+                }
+            }
+            let (tag, location) = tagged.unwrap_or((index, &constructor.location));
 
             if let Some(first) = seen.insert(tag, location) {
                 return Err(Error::DecoratorTagOverlap {
