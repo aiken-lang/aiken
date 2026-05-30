@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    index_array: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(232010),
+                mem: TwoArguments::ConstantCost(32),
             },
         }
     }
@@ -2678,6 +2691,16 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::IndexArray => ExBudget {
+                mem: self
+                    .index_array
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .index_array
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
@@ -3314,7 +3337,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-mem-arguments-slope" => costs[250],
             };
 
-            if costs.len() == 297 {
+            if costs.len() >= 297 {
                 let test = hashmap! {
                     "andByteString-cpu-arguments-intercept"=> costs[251],
                     "andByteString-cpu-arguments-slope1"=> costs[252],
@@ -3365,6 +3388,15 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            if costs.len() >= 299 {
+                let array = hashmap! {
+                    "indexArray-cpu-arguments"=> costs[297],
+                    "indexArray-memory-arguments"=> costs[298],
+                };
+
+                Extend::extend::<HashMap<&str, i64>>(&mut main, array);
             }
 
             main
@@ -5125,6 +5157,24 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            index_array: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("indexArray-cpu-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("indexArray-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
         },
     }
 }
@@ -5478,6 +5528,8 @@ mod tests {
             0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
             159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
             1964219, 24520, 3,
+            // indexArray (cpu-arguments, memory-arguments).
+            232010, 32,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);

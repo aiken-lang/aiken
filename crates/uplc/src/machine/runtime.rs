@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::IndexArray => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +288,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::IndexArray => 2,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +382,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::IndexArray => 1,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1765,6 +1768,20 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
+            }
+            DefaultFunction::IndexArray => {
+                let (_, array) = args[0].unwrap_array()?;
+                let arg2 = args[1].unwrap_integer()?;
+
+                let index: i128 = arg2.try_into().unwrap();
+
+                if 0 <= index && index < array.len() as i128 {
+                    let value = Value::Con(array[index as usize].clone().into());
+
+                    Ok(value)
+                } else {
+                    Err(Error::ArrayIndexOutOfBounds(arg2.clone(), array.len()))
+                }
             } // DefaultFunction::ExpModInteger => todo!(),
         }
     }
