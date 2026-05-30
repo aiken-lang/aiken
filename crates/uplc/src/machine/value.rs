@@ -132,6 +132,16 @@ impl Value {
         Ok((t, list))
     }
 
+    pub(super) fn unwrap_array(&self) -> Result<(&Type, &Vec<Constant>), Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::ProtoArray(t, array) = inner else {
+            return Err(Error::ListTypeMismatch(inner.into()));
+        };
+
+        Ok((t, array))
+    }
+
     pub(super) fn unwrap_data(&self) -> Result<&PlutusData, Error> {
         let inner = self.unwrap_constant()?;
 

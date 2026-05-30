@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    length_of_array: CostingFun<OneArgument>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(231883),
+                mem: OneArgument::ConstantCost(10),
             },
         }
     }
@@ -2677,6 +2690,10 @@ impl BuiltinCosts {
             DefaultFunction::Ripemd_160 => ExBudget {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::LengthOfArray => ExBudget {
+                mem: self.length_of_array.mem.cost(args[0].to_ex_mem()),
+                cpu: self.length_of_array.cpu.cost(args[0].to_ex_mem()),
             },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
@@ -5122,6 +5139,24 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         *cost_map
                             .get("expModInteger-memory-arguments")
                             .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            length_of_array: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::ConstantCost(
+                        *cost_map
+                            .get("lengthOfArray-cpu-arguments")
+                            .unwrap_or(&231883),
+                    ),
+                    mem: OneArgument::ConstantCost(
+                        *cost_map
+                            .get("lengthOfArray-memory-arguments")
+                            .unwrap_or(&10),
                     ),
                 },
             },

@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::LengthOfArray => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +288,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::LengthOfArray => 1,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +382,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::LengthOfArray => 1,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1763,6 +1766,13 @@ impl DefaultFunction {
                 hasher.result(&mut bytes);
 
                 let value = Value::byte_string(bytes);
+
+                Ok(value)
+            }
+            DefaultFunction::LengthOfArray => {
+                let (_, array) = args[0].unwrap_array()?;
+
+                let value = Value::integer(array.len().into());
 
                 Ok(value)
             } // DefaultFunction::ExpModInteger => todo!(),
