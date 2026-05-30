@@ -347,7 +347,7 @@ peg::parser! {
           / _* "string" { Type::String }
           / _* "data" { Type::Data }
           / _* "bls12_381_G1_element" { Type::Bls12_381G1Element }
-          / _* "bls12_381_G1_element" { Type::Bls12_381G2Element }
+          / _* "bls12_381_G2_element" { Type::Bls12_381G2Element }
           / _* "(" _* "list" _+ t:type_info() _* ")" {
               Type::List(t.into())
             }

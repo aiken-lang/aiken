@@ -29,6 +29,13 @@ static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
     )
 });
 
+// The maximum size of a scalar for the BLS12-381 multiScalarMul functions is
+// 512 bytes = 4096 bits, so valid scalars lie in [-(2^4095), 2^4095 - 1].
+// See PlutusCore.Crypto.BLS12_381.Bounds.
+static MSM_SCALAR_UB: Lazy<BigInt> = Lazy::new(|| (BigInt::from(1) << 4095u32) - 1);
+
+static MSM_SCALAR_LB: Lazy<BigInt> = Lazy::new(|| -(BigInt::from(1) << 4095u32));
+
 const BLST_P1_COMPRESSED_SIZE: usize = 48;
 
 const BLST_P2_COMPRESSED_SIZE: usize = 96;
@@ -171,6 +178,7 @@ impl DefaultFunction {
             | DefaultFunction::Bls12_381_G2_Add
             | DefaultFunction::Bls12_381_G2_Neg
             | DefaultFunction::Bls12_381_G2_ScalarMul
+            | DefaultFunction::Bls12_381_G2_MultiScalarMul
             | DefaultFunction::Bls12_381_G2_Equal
             | DefaultFunction::Bls12_381_G2_Compress
             | DefaultFunction::Bls12_381_G2_Uncompress
@@ -266,6 +274,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Add => 2,
             DefaultFunction::Bls12_381_G2_Neg => 1,
             DefaultFunction::Bls12_381_G2_ScalarMul => 2,
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => 2,
             DefaultFunction::Bls12_381_G2_Equal => 2,
             DefaultFunction::Bls12_381_G2_Compress => 1,
             DefaultFunction::Bls12_381_G2_Uncompress => 1,
@@ -359,6 +368,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Add => 0,
             DefaultFunction::Bls12_381_G2_Neg => 0,
             DefaultFunction::Bls12_381_G2_ScalarMul => 0,
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => 0,
             DefaultFunction::Bls12_381_G2_Equal => 0,
             DefaultFunction::Bls12_381_G2_Compress => 0,
             DefaultFunction::Bls12_381_G2_Uncompress => 0,
@@ -1316,6 +1326,107 @@ impl DefaultFunction {
                         size_scalar * 8,
                     );
                 }
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+                let (scalar_type, scalars) = args[0].unwrap_list()?;
+                let (point_type, points) = args[1].unwrap_list()?;
+
+                if !matches!(scalar_type, Type::Integer) {
+                    return Err(Error::TypeMismatch(
+                        Type::Integer,
+                        scalar_type.clone(),
+                    ));
+                }
+
+                if !matches!(point_type, Type::Bls12_381G2Element) {
+                    return Err(Error::TypeMismatch(
+                        Type::Bls12_381G2Element,
+                        point_type.clone(),
+                    ));
+                }
+
+                // Every scalar (in the full first list, regardless of the
+                // point list length) must fit within the 512-byte bound.
+                for scalar in scalars {
+                    let Constant::Integer(scalar) = scalar else {
+                        return Err(Error::TypeMismatch(
+                            Type::Integer,
+                            Type::from(scalar),
+                        ));
+                    };
+
+                    if scalar < &MSM_SCALAR_LB || scalar > &MSM_SCALAR_UB {
+                        return Err(Error::MsmScalarOutOfBounds);
+                    }
+                }
+
+                // The result is the sum of scalar_i * point_i over the inputs.
+                // As with Haskell's `zip`, the inputs are truncated to the
+                // length of the shorter list.
+                let size_scalar = size_of::<blst::blst_scalar>();
+
+                let mut scalar_bytes: Vec<u8> = Vec::with_capacity(scalars.len() * size_scalar);
+                let mut blst_points: Vec<blst::blst_p2> = Vec::with_capacity(points.len());
+
+                for (scalar, point) in scalars.iter().zip(points.iter()) {
+                    let Constant::Integer(scalar) = scalar else {
+                        return Err(Error::TypeMismatch(
+                            Type::Integer,
+                            Type::from(scalar),
+                        ));
+                    };
+
+                    let Constant::Bls12_381G2Element(point) = point else {
+                        return Err(Error::TypeMismatch(
+                            Type::Bls12_381G2Element,
+                            Type::from(point),
+                        ));
+                    };
+
+                    // blst's Pippenger implementation does not accept the point
+                    // at infinity. Such points contribute nothing to the sum
+                    // (scalar * identity == identity), so we drop them.
+                    if unsafe { blst::blst_p2_is_inf(point.as_ref()) } {
+                        continue;
+                    }
+
+                    let scalar = scalar.mod_floor(&SCALAR_PERIOD);
+
+                    let (_, mut be_bytes) = scalar.to_bytes_be();
+
+                    if size_scalar > be_bytes.len() {
+                        let diff = size_scalar - be_bytes.len();
+
+                        let mut new_vec = vec![0; diff];
+
+                        new_vec.append(&mut be_bytes);
+
+                        be_bytes = new_vec;
+                    }
+
+                    let mut blst_scalar = blst::blst_scalar::default();
+
+                    unsafe {
+                        blst::blst_scalar_from_bendian(
+                            &mut blst_scalar as *mut _,
+                            be_bytes.as_ptr() as *const _,
+                        );
+                    }
+
+                    scalar_bytes.extend_from_slice(&blst_scalar.b);
+                    blst_points.push(*point.as_ref());
+                }
+
+                let out = if blst_points.is_empty() {
+                    // Empty inputs yield the group identity (point at infinity).
+                    blst::blst_p2::default()
+                } else {
+                    blst::p2_affines::from(&blst_points).mult(&scalar_bytes, size_scalar * 8)
+                };
 
                 let constant = Constant::Bls12_381G2Element(out.into());
 

@@ -339,6 +339,7 @@ pub struct BuiltinCosts {
     bls12_381_g2_compress: CostingFun<OneArgument>,
     bls12_381_g2_uncompress: CostingFun<OneArgument>,
     bls12_381_g2_hash_to_group: CostingFun<TwoArguments>,
+    bls12_381_g2_multi_scalar_mul: CostingFun<TwoArguments>,
     bls12_381_miller_loop: CostingFun<TwoArguments>,
     bls12_381_mul_ml_result: CostingFun<TwoArguments>,
     bls12_381_final_verify: CostingFun<TwoArguments>,
@@ -781,6 +782,10 @@ impl BuiltinCosts {
                 mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_hash_to_group: CostingFun {
+                mem: TwoArguments::ConstantCost(30000000000),
+                cpu: TwoArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
                 mem: TwoArguments::ConstantCost(30000000000),
                 cpu: TwoArguments::ConstantCost(30000000000),
             },
@@ -1279,6 +1284,10 @@ impl BuiltinCosts {
                 mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_hash_to_group: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
@@ -1813,6 +1822,13 @@ impl BuiltinCosts {
                 cpu: TwoArguments::LinearInX(LinearSize {
                     intercept: 166917843,
                     slope: 4307,
+                }),
+                mem: TwoArguments::ConstantCost(36),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 617887431,
+                    slope: 67302824,
                 }),
                 mem: TwoArguments::ConstantCost(36),
             },
@@ -2510,6 +2526,36 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+                // The cost model measures the scalar list (first argument) by
+                // its length (number of elements), not by its summed memory.
+                let scalars_len = match &args[0] {
+                    Value::Con(c) => match c.as_ref() {
+                        crate::ast::Constant::ProtoList(_, items) => items.len() as i64,
+                        _ => 0,
+                    },
+                    _ => 0,
+                };
+
+                let points_len = match &args[1] {
+                    Value::Con(c) => match c.as_ref() {
+                        crate::ast::Constant::ProtoList(_, items) => items.len() as i64,
+                        _ => 0,
+                    },
+                    _ => 0,
+                };
+
+                ExBudget {
+                    mem: self
+                        .bls12_381_g2_multi_scalar_mul
+                        .mem
+                        .cost(scalars_len, points_len),
+                    cpu: self
+                        .bls12_381_g2_multi_scalar_mul
+                        .cpu
+                        .cost(scalars_len, points_len),
+                }
+            }
             DefaultFunction::Bls12_381_MillerLoop => ExBudget {
                 mem: self
                     .bls12_381_miller_loop
@@ -3362,6 +3408,64 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     "ripemd_160-cpu-arguments-intercept"=> costs[294],
                     "ripemd_160-cpu-arguments-slope"=> costs[295],
                     "ripemd_160-memory-arguments"=> costs[296],
+                };
+
+                Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            // A longer protocol-param vector additionally carries the cost
+            // parameters for the newer multiScalarMul builtins.
+            if costs.len() == 300 {
+                let test = hashmap! {
+                    "andByteString-cpu-arguments-intercept"=> costs[251],
+                    "andByteString-cpu-arguments-slope1"=> costs[252],
+                    "andByteString-cpu-arguments-slope2"=> costs[253],
+                    "andByteString-memory-arguments-intercept"=> costs[254],
+                    "andByteString-memory-arguments-slope"=> costs[255],
+                    "orByteString-cpu-arguments-intercept"=> costs[256],
+                    "orByteString-cpu-arguments-slope1"=> costs[257],
+                    "orByteString-cpu-arguments-slope2"=> costs[258],
+                    "orByteString-memory-arguments-intercept"=> costs[259],
+                    "orByteString-memory-arguments-slope"=> costs[260],
+                    "xorByteString-cpu-arguments-intercept"=> costs[261],
+                    "xorByteString-cpu-arguments-slope1"=> costs[262],
+                    "xorByteString-cpu-arguments-slope2"=> costs[263],
+                    "xorByteString-memory-arguments-intercept"=> costs[264],
+                    "xorByteString-memory-arguments-slope"=> costs[265],
+                    "complementByteString-cpu-arguments-intercept"=> costs[266],
+                    "complementByteString-cpu-arguments-slope"=> costs[267],
+                    "complementByteString-memory-arguments-intercept"=> costs[268],
+                    "complementByteString-memory-arguments-slope"=> costs[269],
+                    "readBit-cpu-arguments"=> costs[270],
+                    "readBit-memory-arguments"=> costs[271],
+                    "writeBits-cpu-arguments-intercept"=> costs[272],
+                    "writeBits-cpu-arguments-slope"=> costs[273],
+                    "writeBits-memory-arguments-intercept"=> costs[274],
+                    "writeBits-memory-arguments-slope"=> costs[275],
+                    "replicateByte-cpu-arguments-intercept"=> costs[276],
+                    "replicateByte-cpu-arguments-slope"=> costs[277],
+                    "replicateByte-memory-arguments-intercept"=> costs[278],
+                    "replicateByte-memory-arguments-slope"=> costs[279],
+                    "shiftByteString-cpu-arguments-intercept"=> costs[280],
+                    "shiftByteString-cpu-arguments-slope"=> costs[281],
+                    "shiftByteString-memory-arguments-intercept"=> costs[282],
+                    "shiftByteString-memory-arguments-slope"=> costs[283],
+                    "rotateByteString-cpu-arguments-intercept"=> costs[284],
+                    "rotateByteString-cpu-arguments-slope"=> costs[285],
+                    "rotateByteString-memory-arguments-intercept"=> costs[286],
+                    "rotateByteString-memory-arguments-slope"=> costs[287],
+                    "countSetBits-cpu-arguments-intercept"=> costs[288],
+                    "countSetBits-cpu-arguments-slope"=> costs[289],
+                    "countSetBits-memory-arguments"=> costs[290],
+                    "findFirstSetBit-cpu-arguments-intercept"=> costs[291],
+                    "findFirstSetBit-cpu-arguments-slope"=> costs[292],
+                    "findFirstSetBit-memory-arguments"=> costs[293],
+                    "ripemd_160-cpu-arguments-intercept"=> costs[294],
+                    "ripemd_160-cpu-arguments-slope"=> costs[295],
+                    "ripemd_160-memory-arguments"=> costs[296],
+                    "bls12_381_G2_multiScalarMul-cpu-arguments-intercept"=> costs[297],
+                    "bls12_381_G2_multiScalarMul-cpu-arguments-slope"=> costs[298],
+                    "bls12_381_G2_multiScalarMul-mem-arguments"=> costs[299],
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
@@ -5104,6 +5208,30 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         *cost_map
                             .get("ripemd_160-memory-arguments")
                             .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            bls12_381_g2_multi_scalar_mul: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                // This builtin is not present in older protocol-param vectors,
+                // so fall back to the hardcoded V3 cost when the keys are
+                // absent from the cost map.
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInX(LinearSize {
+                        intercept: *cost_map
+                            .get("bls12_381_G2_multiScalarMul-cpu-arguments-intercept")
+                            .unwrap_or(&617887431),
+                        slope: *cost_map
+                            .get("bls12_381_G2_multiScalarMul-cpu-arguments-slope")
+                            .unwrap_or(&67302824),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("bls12_381_G2_multiScalarMul-mem-arguments")
+                            .unwrap_or(&36),
                     ),
                 },
             },

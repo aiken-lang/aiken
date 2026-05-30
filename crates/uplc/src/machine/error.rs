@@ -142,6 +142,8 @@ pub enum Error {
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]
     HashToCurveDstTooBig,
+    #[error("Scalar exceeds 512-byte bound for multiScalarMul")]
+    MsmScalarOutOfBounds,
     #[cfg(not(target_family = "wasm"))]
     #[error(transparent)]
     Secp256k1(#[from] secp256k1::Error),
