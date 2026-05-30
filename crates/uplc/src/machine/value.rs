@@ -291,6 +291,9 @@ impl Value {
                 Constant::Bls12_381G1Element(_) => size_of::<blst::blst_p1>() as i64 / 8,
                 Constant::Bls12_381G2Element(_) => size_of::<blst::blst_p2>() as i64 / 8,
                 Constant::Bls12_381MlResult(_) => size_of::<blst::blst_fp12>() as i64 / 8,
+                // An array's memory usage is its element count (Vector.length),
+                // unlike a list which sums the memory of its elements.
+                Constant::ProtoArray(_, items) => items.len() as i64,
             },
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,

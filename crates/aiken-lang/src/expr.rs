@@ -1004,6 +1004,10 @@ impl UntypedExpr {
                     }),
                 })
             }
+
+            uplc::ast::Constant::ProtoArray(..) => {
+                Err("cannot reify a UPLC 'Array' constant: no Aiken syntax for it".to_string())
+            }
         })
     }
 
