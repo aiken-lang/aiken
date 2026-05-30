@@ -1082,6 +1082,17 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
+        }
+        // NOTE: Arrays have no Aiken surface syntax, so `listToArray` is never
+        // produced by lowering Aiken source. This arm exists only to keep the
+        // match exhaustive; both the list argument and the resulting array are
+        // modelled structurally as a `list` of the element type.
+        DefaultFunction::ListToArray => {
+            let element = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::list(element.clone())], Type::list(element));
+
+            (tipo, 1)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 

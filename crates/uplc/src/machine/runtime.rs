@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::ListToArray => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -288,6 +289,7 @@ impl DefaultFunction {
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
             // DefaultFunction::ExpModInteger => 3,
+            DefaultFunction::ListToArray => 1,
         }
     }
 
@@ -381,6 +383,7 @@ impl DefaultFunction {
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
             // DefaultFunction::ExpModInteger => 0,
+            DefaultFunction::ListToArray => 1,
         }
     }
 
@@ -1766,6 +1769,13 @@ impl DefaultFunction {
 
                 Ok(value)
             } // DefaultFunction::ExpModInteger => todo!(),
+            DefaultFunction::ListToArray => {
+                let (r#type, list) = args[0].unwrap_list()?;
+
+                let value = Value::array(r#type.clone(), list.clone());
+
+                Ok(value)
+            }
         }
     }
 }
