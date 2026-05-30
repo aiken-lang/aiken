@@ -48,6 +48,13 @@ fn pair_sub_type(type_info: Option<&Type>) -> Option<(&Type, &Type)> {
     }
 }
 
+fn array_sub_type(type_info: Option<&Type>) -> Option<&Type> {
+    match type_info {
+        Some(Type::Array(t)) => Some(t),
+        _ => None,
+    }
+}
+
 pub fn escape(string: &str) -> String {
     string
         .chars()
@@ -101,6 +108,7 @@ peg::parser! {
             / constant_g2_element()
             / constant_list()
             / constant_pair()
+            / constant_array()
             ) _* ")" {
             Term::Constant(con.into())
           }
@@ -183,6 +191,11 @@ peg::parser! {
         rule constant_pair() -> Constant
           = "(" _* "pair" _+ l:type_info() _+ r:type_info() _* ")" _+ p:pair(Some((&l, &r))) {
             Constant::ProtoPair(l, r, p.0.into(), p.1.into())
+          }
+
+        rule constant_array() -> Constant
+          = "(" _* "array" _* t:type_info() _* ")" _+ ls:list(Some(&t)) {
+            Constant::ProtoArray(t, ls)
           }
 
         rule pair(type_info: Option<(&Type, &Type)>) -> (Constant, Constant)
@@ -338,6 +351,12 @@ peg::parser! {
                     _ => Err("found 'Pair' instead of expected type")
                 }
             }
+            / arr:list(array_sub_type(type_info)) {?
+                match type_info {
+                    Some(Type::Array(t)) => Ok(Constant::ProtoArray(t.as_ref().clone(), arr)),
+                    _ => Err("found 'Array' instead of expected type")
+                }
+            }
 
         rule type_info() -> Type
           = _* "unit" { Type::Unit }
@@ -347,12 +366,15 @@ peg::parser! {
           / _* "string" { Type::String }
           / _* "data" { Type::Data }
           / _* "bls12_381_G1_element" { Type::Bls12_381G1Element }
-          / _* "bls12_381_G1_element" { Type::Bls12_381G2Element }
+          / _* "bls12_381_G2_element" { Type::Bls12_381G2Element }
           / _* "(" _* "list" _+ t:type_info() _* ")" {
               Type::List(t.into())
             }
           / _* "(" _* "pair" _+ l:type_info() _+ r:type_info() _* ")" {
               Type::Pair(l.into(), r.into())
+            }
+          / _* "(" _* "array" _+ t:type_info() _* ")" {
+              Type::Array(t.into())
             }
 
         rule name(interner: &mut Interner) -> Name
@@ -802,6 +824,72 @@ mod tests {
                 )
             }
         )
+    }
+
+    #[test]
+    fn parse_array_empty() {
+        let uplc = "(program 1.1.0 (con (array integer) []))";
+        assert_eq!(
+            super::program(uplc).unwrap(),
+            Program::<Name> {
+                version: (1, 1, 0),
+                term: Term::Constant(Constant::ProtoArray(Type::Integer, vec![]).into())
+            }
+        )
+    }
+
+    #[test]
+    fn parse_array_bools() {
+        let uplc = "(program 1.1.0 (con (array bool) [True, False, True]))";
+        assert_eq!(
+            super::program(uplc).unwrap(),
+            Program::<Name> {
+                version: (1, 1, 0),
+                term: Term::Constant(
+                    Constant::ProtoArray(
+                        Type::Bool,
+                        vec![
+                            Constant::Bool(true),
+                            Constant::Bool(false),
+                            Constant::Bool(true)
+                        ]
+                    )
+                    .into()
+                )
+            }
+        )
+    }
+
+    #[test]
+    fn parse_array_units() {
+        let uplc = "(program 1.1.0 (con (array unit) [(), (), ()]))";
+        assert_eq!(
+            super::program(uplc).unwrap(),
+            Program::<Name> {
+                version: (1, 1, 0),
+                term: Term::Constant(
+                    Constant::ProtoArray(
+                        Type::Unit,
+                        vec![Constant::Unit, Constant::Unit, Constant::Unit]
+                    )
+                    .into()
+                )
+            }
+        )
+    }
+
+    #[test]
+    fn parse_array_ill_typed_element() {
+        // an integer element in a (array bool) must be rejected
+        let uplc = "(program 1.1.0 (con (array bool) [5]))";
+        assert!(super::program(uplc).is_err())
+    }
+
+    #[test]
+    fn parse_array_ill_typed_term() {
+        // a non-constant term in an array must be rejected
+        let uplc = "(program 1.1.0 (con (array bool) [(lam x (lam y x))]))";
+        assert!(super::program(uplc).is_err())
     }
 
     #[test]

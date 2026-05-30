@@ -413,6 +413,8 @@ pub enum Constant {
     Bls12_381G1Element(Box<blst::blst_p1>),
     Bls12_381G2Element(Box<blst::blst_p2>),
     Bls12_381MlResult(Box<blst::blst_fp12>),
+    // tag: 12
+    ProtoArray(Type, Vec<Constant>),
 }
 
 pub struct Data;
@@ -490,6 +492,7 @@ pub enum Type {
     Bls12_381G1Element,
     Bls12_381G2Element,
     Bls12_381MlResult,
+    Array(Rc<Type>),
 }
 
 impl Display for Type {
@@ -506,6 +509,7 @@ impl Display for Type {
             Type::Bls12_381G1Element => write!(f, "bls12_381_G1_element"),
             Type::Bls12_381G2Element => write!(f, "bls12_381_G2_element"),
             Type::Bls12_381MlResult => write!(f, "bls12_381_mlresult"),
+            Type::Array(t) => write!(f, "array {t}"),
         }
     }
 }
