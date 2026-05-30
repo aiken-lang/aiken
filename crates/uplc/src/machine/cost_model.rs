@@ -1,4 +1,4 @@
-use super::{Error, Value};
+use super::{Error, Value, value::integer_log2};
 use crate::builtins::DefaultFunction;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    insert_coin: CostingFun<FourArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            insert_coin: CostingFun {
+                cpu: FourArguments::ConstantCost(30000000000),
+                mem: FourArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            insert_coin: CostingFun {
+                cpu: FourArguments::ConstantCost(30000000000),
+                mem: FourArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,16 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            insert_coin: CostingFun {
+                cpu: FourArguments::LinearInU(LinearSize {
+                    intercept: 356924,
+                    slope: 18413,
+                }),
+                mem: FourArguments::LinearInU(LinearSize {
+                    intercept: 45,
+                    slope: 21,
+                }),
             },
         }
     }
@@ -2678,6 +2697,46 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::InsertCoin => {
+                // The fourth argument (the `Value`) is costed by its
+                // `ValueMaxDepth`, i.e. the sum of the bit-lengths of the outer
+                // map size and the largest inner map size (mirrors plutus's
+                // `ExMemoryUsage ValueMaxDepth` instance). The first three
+                // arguments do not contribute to the cost.
+                let value = args[3].unwrap_value()?;
+
+                let outer_size = value.outer_size();
+                let inner_size = value.max_inner_size();
+
+                let log_outer = if outer_size > 0 {
+                    integer_log2((outer_size as i64).into()) + 1
+                } else {
+                    0
+                };
+
+                let log_inner = if inner_size > 0 {
+                    integer_log2((inner_size as i64).into()) + 1
+                } else {
+                    0
+                };
+
+                let arg4_ex_mem = log_outer + log_inner;
+
+                ExBudget {
+                    mem: self.insert_coin.mem.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        args[2].to_ex_mem(),
+                        arg4_ex_mem,
+                    ),
+                    cpu: self.insert_coin.cpu.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        args[2].to_ex_mem(),
+                        arg4_ex_mem,
+                    ),
+                }
+            }
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
@@ -5125,6 +5184,32 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            insert_coin: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: FourArguments::ConstantCost(30000000000),
+                    mem: FourArguments::ConstantCost(30000000000),
+                },
+                // Defaults mirror the variant-E (`BuiltinCosts::v3`) model so the
+                // protocol-param vector doesn't need new entries to budget-match.
+                Language::PlutusV3 => CostingFun {
+                    cpu: FourArguments::LinearInU(LinearSize {
+                        intercept: *cost_map
+                            .get("insertCoin-cpu-arguments-intercept")
+                            .unwrap_or(&356924),
+                        slope: *cost_map
+                            .get("insertCoin-cpu-arguments-slope")
+                            .unwrap_or(&18413),
+                    }),
+                    mem: FourArguments::LinearInU(LinearSize {
+                        intercept: *cost_map
+                            .get("insertCoin-memory-arguments-intercept")
+                            .unwrap_or(&45),
+                        slope: *cost_map
+                            .get("insertCoin-memory-arguments-slope")
+                            .unwrap_or(&21),
+                    }),
+                },
+            },
         },
     }
 }
@@ -5254,6 +5339,21 @@ impl ThreeArguments {
             }
             ThreeArguments::LinearInMaxYZ(l) => y.max(z) * l.slope + l.intercept,
             ThreeArguments::LinearInYandZ(l) => y * l.slope1 + z * l.slope2 + l.intercept,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum FourArguments {
+    ConstantCost(i64),
+    LinearInU(LinearSize),
+}
+
+impl FourArguments {
+    pub fn cost(&self, _x: i64, _y: i64, _z: i64, u: i64) -> i64 {
+        match self {
+            FourArguments::ConstantCost(c) => *c,
+            FourArguments::LinearInU(l) => l.slope * u + l.intercept,
         }
     }
 }

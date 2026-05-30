@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::InsertCoin => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +288,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::InsertCoin => 4,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +382,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::InsertCoin => 0,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1765,6 +1768,52 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
+            }
+            DefaultFunction::InsertCoin => {
+                let currency = args[0].unwrap_byte_string()?;
+                let token = args[1].unwrap_byte_string()?;
+                let amount = args[2].unwrap_integer()?;
+                let value = args[3].unwrap_value()?;
+
+                // Start from the existing coins, dropping any pre-existing
+                // coin at (currency, token) so that re-inserting *replaces*
+                // (rather than sums) the quantity (mirrors plutus's
+                // `Value.insertCoin`, which uses `Map.insertLookupWithKey`
+                // with a "take the new value" combining function).
+                let mut entries: Vec<(Vec<u8>, Vec<(Vec<u8>, BigInt)>)> = value
+                    .entries()
+                    .iter()
+                    .map(|(c, inner)| {
+                        let inner = inner
+                            .iter()
+                            .filter(|(t, _)| !(c == currency && t == token))
+                            .map(|(t, q)| (t.clone(), BigInt::from(*q)))
+                            .collect::<Vec<_>>();
+
+                        (c.clone(), inner)
+                    })
+                    .collect();
+
+                if !amount.is_zero() {
+                    // Inserting a non-zero amount: append the new coin. Key
+                    // length and 128-bit quantity bounds are validated by
+                    // `Value::from_entries` while normalizing, matching
+                    // plutus's `k`/`quantity` smart-constructor checks.
+                    match entries.iter_mut().find(|(c, _)| c == currency) {
+                        Some((_, inner)) => inner.push((token.clone(), amount.clone())),
+                        None => {
+                            entries.push((currency.clone(), vec![(token.clone(), amount.clone())]))
+                        }
+                    }
+                }
+                // When `amount == 0` we simply leave the coin removed above,
+                // which both deletes the coin and prunes now-empty inner maps
+                // upon normalization. This is allowed even for keys longer than
+                // the 32-byte bound, exactly like plutus's `deleteCoin`.
+
+                let value = crate::ast::Value::from_entries(entries).map_err(Error::Value)?;
+
+                Ok(Value::value(value))
             } // DefaultFunction::ExpModInteger => todo!(),
         }
     }

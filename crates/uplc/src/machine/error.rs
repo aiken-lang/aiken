@@ -1,5 +1,5 @@
 use super::{ExBudget, Value};
-use crate::ast::{NamedDeBruijn, Term, Type};
+use crate::ast::{NamedDeBruijn, Term, Type, ValueError};
 use num_bigint::BigInt;
 use std::string::FromUtf8Error;
 
@@ -138,6 +138,8 @@ pub enum Error {
     WriteBitsOutOfBounds,
     #[error("illegal operation on empty ByteArray")]
     EmptyByteArray,
+    #[error("invalid Value: {0}")]
+    Value(ValueError),
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]

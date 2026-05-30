@@ -1082,6 +1082,22 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
+        }
+        DefaultFunction::InsertCoin => {
+            // The UPLC `Value` constant type has no Aiken surface type, so the
+            // `Value` argument and result are represented as `Data` here; this
+            // registration only matters for the type-checker's builtin table.
+            let tipo = Type::function(
+                vec![
+                    Type::byte_array(),
+                    Type::byte_array(),
+                    Type::int(),
+                    Type::data(),
+                ],
+                Type::data(),
+            );
+
+            (tipo, 4)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 
