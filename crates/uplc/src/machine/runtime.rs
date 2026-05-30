@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::UnionValue => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +288,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::UnionValue => 2,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +382,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::UnionValue => 0,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1765,6 +1768,34 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
+            }
+            DefaultFunction::UnionValue => {
+                let arg1 = args[0].unwrap_value()?;
+                let arg2 = args[1].unwrap_value()?;
+
+                // Merge the two normalized nested maps by concatenating their
+                // entries and letting `Value::from_entries` sum quantities for
+                // matching (currency, token) pairs (with i128 overflow → error),
+                // drop the resulting zero quantities, and renormalize. This
+                // mirrors plutus's `Value.unionValue`.
+                let entries = arg1
+                    .entries()
+                    .iter()
+                    .chain(arg2.entries().iter())
+                    .map(|(currency, tokens)| {
+                        (
+                            currency.clone(),
+                            tokens
+                                .iter()
+                                .map(|(token, quantity)| (token.clone(), BigInt::from(*quantity)))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+
+                let unioned = crate::ast::Value::from_entries(entries)?;
+
+                Ok(Value::value(unioned))
             } // DefaultFunction::ExpModInteger => todo!(),
         }
     }

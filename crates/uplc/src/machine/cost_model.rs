@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    union_value: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            union_value: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            union_value: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,18 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            union_value: CostingFun {
+                cpu: TwoArguments::WithInteractionInXAndY(TwoVariableWithInteractionFunction {
+                    coeff_00: 1000,
+                    coeff_10: 172116,
+                    coeff_01: 183150,
+                    coeff_11: 6,
+                }),
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 24,
+                    slope: 21,
+                }),
             },
         }
     }
@@ -2677,6 +2698,16 @@ impl BuiltinCosts {
             DefaultFunction::Ripemd_160 => ExBudget {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnionValue => ExBudget {
+                mem: self
+                    .union_value
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .union_value
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
@@ -5125,6 +5156,40 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            union_value: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                // unionValue is not yet part of the on-chain cost-model
+                // parameter list, so fall back to the hardcoded V3 model.
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::WithInteractionInXAndY(
+                        TwoVariableWithInteractionFunction {
+                            coeff_00: *cost_map
+                                .get("unionValue-cpu-arguments-c00")
+                                .unwrap_or(&1000),
+                            coeff_10: *cost_map
+                                .get("unionValue-cpu-arguments-c10")
+                                .unwrap_or(&172116),
+                            coeff_01: *cost_map
+                                .get("unionValue-cpu-arguments-c01")
+                                .unwrap_or(&183150),
+                            coeff_11: *cost_map
+                                .get("unionValue-cpu-arguments-c11")
+                                .unwrap_or(&6),
+                        },
+                    ),
+                    mem: TwoArguments::AddedSizes(AddedSizes {
+                        intercept: *cost_map
+                            .get("unionValue-memory-arguments-intercept")
+                            .unwrap_or(&24),
+                        slope: *cost_map
+                            .get("unionValue-memory-arguments-slope")
+                            .unwrap_or(&21),
+                    }),
+                },
+            },
         },
     }
 }
@@ -5166,6 +5231,7 @@ pub enum TwoArguments {
     ConstBelowDiagonal(ConstantOrTwoArguments),
     QuadraticInY(QuadraticFunction),
     ConstAboveDiagonalIntoQuadraticXAndY(i64, TwoArgumentsQuadraticFunction),
+    WithInteractionInXAndY(TwoVariableWithInteractionFunction),
 }
 
 impl TwoArguments {
@@ -5218,6 +5284,10 @@ impl TwoArguments {
                             + q.coeff_02 * y * y,
                     )
                 }
+            }
+            // c10*x + c01*y + c11*(x*y) + c00
+            TwoArguments::WithInteractionInXAndY(f) => {
+                f.coeff_10 * x + f.coeff_01 * y + f.coeff_11 * (x * y) + f.coeff_00
             }
         }
     }
@@ -5344,6 +5414,15 @@ pub struct TwoArgumentsQuadraticFunction {
     coeff_20: i64,
     coeff_11: i64,
     coeff_02: i64,
+}
+
+// cost = c10*x + c01*y + c11*(x*y) + c00
+#[derive(Debug, PartialEq, Clone)]
+pub struct TwoVariableWithInteractionFunction {
+    pub coeff_00: i64,
+    pub coeff_10: i64,
+    pub coeff_01: i64,
+    pub coeff_11: i64,
 }
 
 #[repr(u8)]

@@ -1082,6 +1082,14 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
+        }
+        DefaultFunction::UnionValue => {
+            // `Value` has no surface-language representation in Aiken; it is a
+            // UPLC-only builtin type. We approximate it with `Data` here so the
+            // builtin can still be looked up.
+            let tipo = Type::function(vec![Type::data(), Type::data()], Type::data());
+
+            (tipo, 2)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 

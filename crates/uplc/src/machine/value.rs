@@ -148,8 +148,6 @@ impl Value {
         Ok(data)
     }
 
-    // Foundation for the upcoming `Value` builtins (insertCoin/lookupCoin/…).
-    #[allow(dead_code)]
     pub(super) fn unwrap_value(&self) -> Result<&crate::ast::Value, Error> {
         let inner = self.unwrap_constant()?;
 

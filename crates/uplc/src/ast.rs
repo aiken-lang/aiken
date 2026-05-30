@@ -454,6 +454,8 @@ impl Display for ValueError {
     }
 }
 
+impl std::error::Error for ValueError {}
+
 /// The underlying type of the UPLC built-in type `Value`.
 ///
 /// This is a *normalized* nested association list mirroring plutus's
