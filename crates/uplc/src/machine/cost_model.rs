@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    drop_list: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            drop_list: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            drop_list: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,13 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            drop_list: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 116711,
+                    slope: 1957,
+                }),
+                mem: TwoArguments::ConstantCost(4),
             },
         }
     }
@@ -2678,6 +2694,26 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::DropList => {
+                // `dropList`'s first argument is costed *literally*: the size fed
+                // to the cost function is `|n|` (the absolute literal value),
+                // saturated to `i64::MAX`, rather than the integer's word size.
+                // Mirrors Plutus' `IntegerCostedLiterally` (`memoryUsage = abs n`)
+                // and the `SatInt` arithmetic used by the cost model.
+                let literal = args[0].unwrap_integer()?;
+
+                let arg0: i64 = u64::try_from(literal.abs())
+                    .unwrap()
+                    .try_into()
+                    .unwrap_or(i64::MAX);
+
+                let arg1 = args[1].to_ex_mem();
+
+                ExBudget {
+                    mem: self.drop_list.mem.cost(arg0, arg1),
+                    cpu: self.drop_list.cpu.cost(arg0, arg1),
+                }
+            }
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
@@ -3362,6 +3398,16 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     "ripemd_160-cpu-arguments-intercept"=> costs[294],
                     "ripemd_160-cpu-arguments-slope"=> costs[295],
                     "ripemd_160-memory-arguments"=> costs[296],
+                };
+
+                Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            if costs.len() == 300 {
+                let test = hashmap! {
+                    "dropList-cpu-arguments-intercept"=> costs[297],
+                    "dropList-cpu-arguments-slope"=> costs[298],
+                    "dropList-memory-arguments"=> costs[299],
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
@@ -5125,6 +5171,27 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            drop_list: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInX(LinearSize {
+                        intercept: *cost_map
+                            .get("dropList-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("dropList-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("dropList-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
         },
     }
 }
@@ -5172,8 +5239,11 @@ impl TwoArguments {
     pub fn cost(&self, x: i64, y: i64) -> i64 {
         match self {
             TwoArguments::ConstantCost(c) => *c,
-            TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
-            TwoArguments::LinearInY(l) => l.slope * y + l.intercept,
+            // Saturating arithmetic mirrors Plutus' `SatInt` costing integers, so
+            // that a literally-costed argument (e.g. `dropList`'s count) whose
+            // value approaches `i64::MAX` clamps instead of overflowing.
+            TwoArguments::LinearInX(l) => l.slope.saturating_mul(x).saturating_add(l.intercept),
+            TwoArguments::LinearInY(l) => l.slope.saturating_mul(y).saturating_add(l.intercept),
             TwoArguments::LinearInXAndY(l) => l.slope1 * x + l.slope2 * y + l.intercept,
             TwoArguments::AddedSizes(s) => s.slope * (x + y) + s.intercept,
             TwoArguments::SubtractedSizes(s) => s.slope * s.minimum.max(x - y) + s.intercept,
