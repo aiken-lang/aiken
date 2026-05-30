@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    lookup_coin: CostingFun<ThreeArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            lookup_coin: CostingFun {
+                cpu: ThreeArguments::ConstantCost(30000000000),
+                mem: ThreeArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1351,6 +1356,10 @@ impl BuiltinCosts {
                 mem: OneArgument::ConstantCost(30000000000),
             },
             exp_mod_int: CostingFun {
+                cpu: ThreeArguments::ConstantCost(30000000000),
+                mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            lookup_coin: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
@@ -1962,6 +1971,13 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            lookup_coin: CostingFun {
+                cpu: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: 219951,
+                    slope: 9444,
+                }),
+                mem: ThreeArguments::ConstantCost(1),
             },
         }
     }
@@ -2678,6 +2694,36 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::LookupCoin => {
+                // The third argument is costed by its `ValueMaxDepth`, *not* its
+                // `totalSize` (the default `to_ex_mem`). This mirrors plutus's
+                // `ValueMaxDepth` ExMemoryUsage instance: the sum of the
+                // bit-lengths of the outer-map size and the largest inner-map
+                // size (`integerLog2 n + 1` for each non-empty map, 0 otherwise).
+                let value = args[2].unwrap_value()?;
+
+                let log2_plus_1 = |n: usize| -> i64 {
+                    if n > 0 {
+                        // `integerLog2 n` is `floor(log2 n)`.
+                        (usize::BITS - 1 - n.leading_zeros()) as i64 + 1
+                    } else {
+                        0
+                    }
+                };
+
+                let arg3 = log2_plus_1(value.outer_size()) + log2_plus_1(value.max_inner_size());
+
+                ExBudget {
+                    mem: self
+                        .lookup_coin
+                        .mem
+                        .cost(args[0].to_ex_mem(), args[1].to_ex_mem(), arg3),
+                    cpu: self
+                        .lookup_coin
+                        .cpu
+                        .cost(args[0].to_ex_mem(), args[1].to_ex_mem(), arg3),
+                }
+            }
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
@@ -5122,6 +5168,28 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         *cost_map
                             .get("expModInteger-memory-arguments")
                             .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            lookup_coin: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: ThreeArguments::ConstantCost(30000000000),
+                    mem: ThreeArguments::ConstantCost(30000000000),
+                },
+                // The V3 fallbacks match `BuiltinCosts::v3()` so that a cost
+                // parameter vector that predates `lookupCoin` (e.g. the 297-entry
+                // preprod 2024-11-22 set) still reconstructs the canonical model.
+                Language::PlutusV3 => CostingFun {
+                    cpu: ThreeArguments::LinearInZ(LinearSize {
+                        intercept: *cost_map
+                            .get("lookupCoin-cpu-arguments-intercept")
+                            .unwrap_or(&219951),
+                        slope: *cost_map
+                            .get("lookupCoin-cpu-arguments-slope")
+                            .unwrap_or(&9444),
+                    }),
+                    mem: ThreeArguments::ConstantCost(
+                        *cost_map.get("lookupCoin-memory-arguments").unwrap_or(&1),
                     ),
                 },
             },

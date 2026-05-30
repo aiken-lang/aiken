@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::LookupCoin => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +288,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::LookupCoin => 3,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +382,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::LookupCoin => 0,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1765,6 +1768,24 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
+            }
+            DefaultFunction::LookupCoin => {
+                let currency = args[0].unwrap_byte_string()?;
+                let token = args[1].unwrap_byte_string()?;
+                let value = args[2].unwrap_value()?;
+
+                // Mirrors `PlutusCore.Value.lookupCoin`: find the inner map for
+                // the currency, then the quantity for the token, defaulting to 0
+                // when either is absent.
+                let quantity = value
+                    .entries()
+                    .iter()
+                    .find(|(c, _)| c == currency)
+                    .and_then(|(_, inner)| inner.iter().find(|(t, _)| t == token))
+                    .map(|(_, q)| *q)
+                    .unwrap_or(0);
+
+                Ok(Value::integer(quantity.into()))
             } // DefaultFunction::ExpModInteger => todo!(),
         }
     }
