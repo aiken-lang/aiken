@@ -138,6 +138,8 @@ pub enum Error {
     WriteBitsOutOfBounds,
     #[error("illegal operation on empty ByteArray")]
     EmptyByteArray,
+    #[error("unValueData: {0}")]
+    UnValueData(String),
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]

@@ -1082,6 +1082,15 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
+        }
+        DefaultFunction::ValueData | DefaultFunction::UnValueData => {
+            // The UPLC `Value` builtin type has no Aiken source-level
+            // representation; this registration only affects the type-checker
+            // and is not reachable from Aiken source. We type these as
+            // `Data -> Data` as a pragmatic placeholder.
+            let tipo = Type::function(vec![Type::data()], Type::data());
+
+            (tipo, 1)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 

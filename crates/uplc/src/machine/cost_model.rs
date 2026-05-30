@@ -358,6 +358,8 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    value_data: CostingFun<OneArgument>,
+    un_value_data: CostingFun<OneArgument>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +858,14 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            un_value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1363,14 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            un_value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1980,27 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            value_data: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1000,
+                    slope: 38159,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 2,
+                    slope: 22,
+                }),
+            },
+            un_value_data: CostingFun {
+                cpu: OneArgument::QuadraticInX(OneVariableQuadraticFunction {
+                    coeff_0: 1000,
+                    coeff_1: 95933,
+                    coeff_2: 1,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 1,
+                    slope: 11,
+                }),
             },
         }
     }
@@ -2678,6 +2717,23 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::ValueData => ExBudget {
+                // `valueData` is costed by the `Value`'s total size, which is
+                // exactly what `to_ex_mem` returns for a `Constant::Value`.
+                mem: self.value_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.value_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnValueData => {
+                // `unValueData` is costed by the *node count* of the input
+                // `Data` (plutus's `DataNodeCount` measure), not the regular
+                // `to_ex_mem` memory size.
+                let size = args[0].data_node_count()?;
+
+                ExBudget {
+                    mem: self.un_value_data.mem.cost(size),
+                    cpu: self.un_value_data.cpu.cost(size),
+                }
+            }
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
@@ -3314,7 +3370,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-mem-arguments-slope" => costs[250],
             };
 
-            if costs.len() == 297 {
+            if costs.len() >= 297 {
                 let test = hashmap! {
                     "andByteString-cpu-arguments-intercept"=> costs[251],
                     "andByteString-cpu-arguments-slope1"=> costs[252],
@@ -3365,6 +3421,22 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            if costs.len() >= 306 {
+                let value = hashmap! {
+                    "valueData-cpu-arguments-intercept"=> costs[297],
+                    "valueData-cpu-arguments-slope"=> costs[298],
+                    "valueData-memory-arguments-intercept"=> costs[299],
+                    "valueData-memory-arguments-slope"=> costs[300],
+                    "unValueData-cpu-arguments-c0"=> costs[301],
+                    "unValueData-cpu-arguments-c1"=> costs[302],
+                    "unValueData-cpu-arguments-c2"=> costs[303],
+                    "unValueData-memory-arguments-intercept"=> costs[304],
+                    "unValueData-memory-arguments-slope"=> costs[305],
+                };
+
+                Extend::extend::<HashMap<&str, i64>>(&mut main, value);
             }
 
             main
@@ -5125,6 +5197,57 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            value_data: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("valueData-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("valueData-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("valueData-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("valueData-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            un_value_data: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::QuadraticInX(OneVariableQuadraticFunction {
+                        coeff_0: *cost_map
+                            .get("unValueData-cpu-arguments-c0")
+                            .unwrap_or(&30000000000),
+                        coeff_1: *cost_map
+                            .get("unValueData-cpu-arguments-c1")
+                            .unwrap_or(&30000000000),
+                        coeff_2: *cost_map
+                            .get("unValueData-cpu-arguments-c2")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("unValueData-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("unValueData-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
         },
     }
 }
@@ -5139,6 +5262,7 @@ pub struct CostingFun<T> {
 pub enum OneArgument {
     ConstantCost(i64),
     LinearCost(LinearSize),
+    QuadraticInX(OneVariableQuadraticFunction),
 }
 
 impl OneArgument {
@@ -5146,6 +5270,7 @@ impl OneArgument {
         match self {
             OneArgument::ConstantCost(c) => *c,
             OneArgument::LinearCost(m) => m.slope * x + m.intercept,
+            OneArgument::QuadraticInX(q) => q.coeff_0 + q.coeff_1 * x + q.coeff_2 * x * x,
         }
     }
 }
@@ -5335,6 +5460,17 @@ pub struct QuadraticFunction {
     coeff_2: i64,
 }
 
+/// `c0 + c1*x + c2*x^2`.
+///
+/// Mirrors plutus's `OneVariableQuadraticFunction`
+/// (`ModelOneArgumentQuadraticInX`, see CostingFun/Core.hs).
+#[derive(Debug, PartialEq, Clone)]
+pub struct OneVariableQuadraticFunction {
+    pub coeff_0: i64,
+    pub coeff_1: i64,
+    pub coeff_2: i64,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct TwoArgumentsQuadraticFunction {
     minimum: i64,
@@ -5478,6 +5614,9 @@ mod tests {
             0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
             159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
             1964219, 24520, 3,
+            // valueData (cpu intercept/slope, mem intercept/slope) + unValueData
+            // (cpu c0/c1/c2, mem intercept/slope).
+            1000, 38159, 2, 22, 1000, 95933, 1, 1, 11,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);
