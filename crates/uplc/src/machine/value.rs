@@ -69,6 +69,12 @@ impl Value {
         Value::Con(constant.into())
     }
 
+    pub fn value(v: crate::ast::Value) -> Self {
+        let constant = Constant::Value(v);
+
+        Value::Con(constant.into())
+    }
+
     pub(super) fn unwrap_integer(&self) -> Result<&BigInt, Error> {
         let inner = self.unwrap_constant()?;
 
@@ -140,6 +146,18 @@ impl Value {
         };
 
         Ok(data)
+    }
+
+    // Foundation for the upcoming `Value` builtins (insertCoin/lookupCoin/…).
+    #[allow(dead_code)]
+    pub(super) fn unwrap_value(&self) -> Result<&crate::ast::Value, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Value(value) = inner else {
+            return Err(Error::TypeMismatch(Type::Value, inner.into()));
+        };
+
+        Ok(value)
     }
 
     pub(super) fn unwrap_unit(&self) -> Result<(), Error> {
@@ -291,6 +309,10 @@ impl Value {
                 Constant::Bls12_381G1Element(_) => size_of::<blst::blst_p1>() as i64 / 8,
                 Constant::Bls12_381G2Element(_) => size_of::<blst::blst_p2>() as i64 / 8,
                 Constant::Bls12_381MlResult(_) => size_of::<blst::blst_fp12>() as i64 / 8,
+                // Mirrors plutus's default `ExMemoryUsage Value` instance, which
+                // measures a `Value` by its `Value.totalSize` (the number of
+                // distinct (currency, token) pairs). See ExMemoryUsage.hs:414.
+                Constant::Value(value) => value.total_size() as i64,
             },
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,
@@ -385,6 +407,18 @@ impl Value {
             Ok(())
         } else {
             Err(Error::PairTypeMismatch(constant_type))
+        }
+    }
+
+    pub fn expect_value(&self) -> Result<(), Error> {
+        let constant: Constant = self.clone().try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        if matches!(constant_type, Type::Value) {
+            Ok(())
+        } else {
+            Err(Error::TypeMismatch(Type::Value, constant_type))
         }
     }
 }

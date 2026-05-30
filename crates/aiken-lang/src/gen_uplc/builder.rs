@@ -184,6 +184,7 @@ pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
         Some(UplcType::Bls12_381G1Element) => "_bls381_12_g1".to_string(),
         Some(UplcType::Bls12_381G2Element) => "_bls381_12_g2".to_string(),
         Some(UplcType::Bls12_381MlResult) => "_ml_result".to_string(),
+        Some(UplcType::Value) => unreachable!("aiken types never lower to a UPLC Value"),
         None if t.is_unbound() => "_unbound".to_string(),
         None if t.is_generic() => {
             unreachable!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE")
@@ -502,6 +503,7 @@ pub fn known_data_to_type(
             Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
         }
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Value) => panic!("Value not supported"),
         Some(UplcType::Data) | None => {
             let list_decorator = lookup_data_type_by_tipo(data_types, field_type)
                 .map(|dt| {
@@ -541,6 +543,7 @@ pub fn unknown_data_to_type(
             Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
         }
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Value) => panic!("Value not supported"),
 
         Some(UplcType::Pair(_, _)) => Term::tail_list()
             .apply(Term::tail_list().apply(Term::var("__list_data")))
@@ -616,6 +619,8 @@ pub fn softcast_data_to_type_otherwise(
         Some(UplcType::Bls12_381MlResult) => {
             unreachable!("attempted to cast Data into Bls12_381MlResult?!")
         }
+
+        Some(UplcType::Value) => unreachable!("attempted to cast Data into Value?!"),
 
         Some(UplcType::Integer) => Term::choose_data_integer(val, callback, &otherwise_delayed),
 
@@ -742,6 +747,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                 b.deref().clone().compress().into(),
             )),
             UplcConstant::Bls12_381MlResult(_) => panic!("Bls12_381MlResult not supported"),
+            UplcConstant::Value(_) => panic!("Value not supported"),
         };
         new_constants.push(constant);
     }
@@ -769,6 +775,7 @@ pub fn convert_type_to_data(
             Term::b_data().apply(Term::bls12_381_g2_compress().apply(term))
         }
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Value) => panic!("Value not supported"),
         Some(UplcType::Pair(_, _)) => Term::list_data()
             .apply(
                 Term::mk_cons()

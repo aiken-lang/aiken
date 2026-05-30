@@ -275,6 +275,9 @@ impl Constant {
                 .append(RcDoc::text("0x"))
                 .append(RcDoc::text(hex::encode(p2.compress()))),
             Constant::Bls12_381MlResult(_) => panic!("cannot represent Bls12_381MlResult as text"),
+            Constant::Value(value) => RcDoc::text("value")
+                .append(RcDoc::line())
+                .append(Self::to_doc_value(value)),
         }
     }
 
@@ -315,7 +318,38 @@ impl Constant {
                 RcDoc::text("0x").append(RcDoc::text(hex::encode(p2.compress())))
             }
             Constant::Bls12_381MlResult(_) => panic!("cannot represent Bls12_381MlResult as text"),
+            Constant::Value(value) => Self::to_doc_value(value),
         }
+    }
+
+    // Renders a `Value` as `[(#cur, [(#tok, qty), ...]), ...]`, matching the
+    // textual form produced by plutus and consumed by the parser.
+    fn to_doc_value(value: &crate::ast::Value) -> RcDoc<'_, ()> {
+        RcDoc::text("[")
+            .append(RcDoc::intersperse(
+                value.entries().iter().map(|(currency, inner)| {
+                    RcDoc::text("(")
+                        .append(RcDoc::text("#"))
+                        .append(RcDoc::text(hex::encode(currency)))
+                        .append(RcDoc::text(", "))
+                        .append(RcDoc::text("["))
+                        .append(RcDoc::intersperse(
+                            inner.iter().map(|(token, quantity)| {
+                                RcDoc::text("(")
+                                    .append(RcDoc::text("#"))
+                                    .append(RcDoc::text(hex::encode(token)))
+                                    .append(RcDoc::text(", "))
+                                    .append(RcDoc::as_string(quantity))
+                                    .append(RcDoc::text(")"))
+                            }),
+                            RcDoc::text(", "),
+                        ))
+                        .append(RcDoc::text("]"))
+                        .append(RcDoc::text(")"))
+                }),
+                RcDoc::text(", "),
+            ))
+            .append(RcDoc::text("]"))
     }
 
     // This feels a little awkward here; not sure if it should be upstreamed to pallas
@@ -393,6 +427,7 @@ impl Type {
             Type::Bls12_381G1Element => RcDoc::text("bls12_381_G1_element"),
             Type::Bls12_381G2Element => RcDoc::text("bls12_381_G1_element"),
             Type::Bls12_381MlResult => RcDoc::text("bls12_381_mlresult"),
+            Type::Value => RcDoc::text("value"),
         }
     }
 }

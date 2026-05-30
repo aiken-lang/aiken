@@ -568,10 +568,52 @@ impl Encode for Constant {
                     "BLS12-381 ML results are not supported for flat encoding".to_string(),
                 ));
             }
+            Constant::Value(value) => {
+                // Universe tag for `Value` is the bare `[13]` (nullary, like Data),
+                // NOT apply-prefixed.
+                encode_constant(&[13], e)?;
+
+                encode_value(value, e)?;
+            }
         }
 
         Ok(())
     }
+}
+
+/// Flat-encode a `Value` as the underlying nested map: an outer list of pairs
+/// `(currency :: bytestring, inner list of pairs (token :: bytestring, quantity :: integer))`.
+/// Mirrors the `Flat.Flat Value` instance in PlutusCore.Value.
+fn encode_value(value: &crate::ast::Value, e: &mut Encoder) -> Result<(), en::Error> {
+    e.encode_list_with(value.entries(), encode_value_outer_entry)?;
+
+    Ok(())
+}
+
+fn encode_value_outer_entry(
+    entry: &(Vec<u8>, Vec<(Vec<u8>, i128)>),
+    e: &mut Encoder,
+) -> Result<(), en::Error> {
+    let (currency, inner) = entry;
+
+    currency.encode(e)?;
+
+    e.encode_list_with(inner, encode_value_inner_entry)?;
+
+    Ok(())
+}
+
+fn encode_value_inner_entry(
+    entry: &(Vec<u8>, i128),
+    e: &mut Encoder,
+) -> Result<(), en::Error> {
+    let (token, quantity) = entry;
+
+    token.encode(e)?;
+
+    BigInt::from(*quantity).encode(e)?;
+
+    Ok(())
 }
 
 fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error> {
@@ -606,6 +648,7 @@ fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error>
         Constant::Bls12_381MlResult(_) => Err(en::Error::Message(
             "BLS12-381 ML results are not supported for flat encoding".to_string(),
         )),
+        Constant::Value(value) => encode_value(value, e),
     }
 }
 
@@ -629,6 +672,7 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
         Type::Bls12_381G1Element => bytes.push(9),
         Type::Bls12_381G2Element => bytes.push(10),
         Type::Bls12_381MlResult => bytes.push(11),
+        Type::Value => bytes.push(13),
     }
 }
 
@@ -693,11 +737,32 @@ impl Decode<'_> for Constant {
             [11] => Err(de::Error::Message(
                 "BLS12-381 ML results are not supported for flat decoding".to_string(),
             )),
+            [13] => Ok(Constant::Value(decode_value(d)?)),
             x => Err(de::Error::Message(format!(
                 "Unknown constant constructor tag: {x:?}"
             ))),
         }
     }
+}
+
+/// Flat-decode a `Value` from the underlying nested map encoding, validating
+/// key lengths and quantity bounds (mirrors the `Flat.Flat Value` instance,
+/// which rebuilds and validates the value via `buildValueWith`).
+fn decode_value(d: &mut Decoder) -> Result<crate::ast::Value, de::Error> {
+    let outer: Vec<(Vec<u8>, Vec<(Vec<u8>, BigInt)>)> = d.decode_list_with(|d| {
+        let currency = Vec::<u8>::decode(d)?;
+
+        let inner: Vec<(Vec<u8>, BigInt)> = d.decode_list_with(|d| {
+            let token = Vec::<u8>::decode(d)?;
+            let quantity = BigInt::decode(d)?;
+
+            Ok((token, quantity))
+        })?;
+
+        Ok((currency, inner))
+    })?;
+
+    crate::ast::Value::from_entries(outer).map_err(|err| de::Error::Message(err.to_string()))
 }
 
 fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de::Error> {
@@ -755,6 +820,7 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
         Type::Bls12_381MlResult => Err(de::Error::Message(
             "BLS12-381 ML results are not supported for flat decoding".to_string(),
         )),
+        Type::Value => Ok(Constant::Value(decode_value(d)?)),
     }
 }
 
@@ -769,6 +835,7 @@ fn decode_type(types: &mut VecDeque<u8>) -> Result<Type, de::Error> {
         Some(9) => Ok(Type::Bls12_381G1Element),
         Some(10) => Ok(Type::Bls12_381G2Element),
         Some(11) => Ok(Type::Bls12_381MlResult),
+        Some(13) => Ok(Type::Value),
         Some(7) => match types.pop_front() {
             Some(5) => Ok(Type::List(decode_type(types)?.into())),
             Some(7) => match types.pop_front() {
@@ -1180,5 +1247,57 @@ mod tests {
         let program = parser::program(source).unwrap();
 
         assert_eq!(program.to_pretty(), source);
+    }
+
+    #[test]
+    fn flat_round_trip_value() {
+        use crate::ast::Value;
+
+        let value = Value::from_entries(vec![
+            (
+                vec![],
+                vec![
+                    (vec![], 123.into()),
+                    (vec![0xbb], 50000.into()),
+                ],
+            ),
+            (
+                vec![0xff, 0xff],
+                vec![
+                    (vec![0xaa], (-10).into()),
+                    (vec![0xbb], 20.into()),
+                ],
+            ),
+        ])
+        .unwrap();
+
+        let program = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Constant::Value(value).into()),
+        };
+
+        let bytes = program.to_flat().unwrap();
+
+        let decoded: Program<Name> = Program::unflat(&bytes).unwrap();
+
+        assert_eq!(decoded, program);
+    }
+
+    #[test]
+    fn flat_decode_value_rejects_out_of_bounds_quantity() {
+        use crate::ast::Value;
+
+        // A canonical, in-bounds value encodes/decodes fine...
+        let value =
+            Value::from_entries(vec![(vec![], vec![(vec![], 1.into())])]).unwrap();
+
+        let program = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Constant::Value(value).into()),
+        };
+
+        let bytes = program.to_flat().unwrap();
+
+        assert!(Program::<Name>::unflat(&bytes).is_ok());
     }
 }
