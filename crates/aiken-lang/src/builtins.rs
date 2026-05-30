@@ -1085,8 +1085,8 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
         }
         // NOTE: Arrays have no Aiken surface syntax, so array builtins are never
         // produced by lowering Aiken source. These arms exist only to keep the
-        // match exhaustive; the array argument is modelled structurally as a
-        // `list` of the element type.
+        // match exhaustive; array arguments and results are modelled structurally
+        // as `list`s of their element types.
         DefaultFunction::LengthOfArray => {
             let element = Type::generic_var(id_gen.next());
 
@@ -1100,6 +1100,13 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::list(element.clone()), Type::int()], element);
 
             (tipo, 2)
+        }
+        DefaultFunction::ListToArray => {
+            let element = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::list(element.clone())], Type::list(element));
+
+            (tipo, 1)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 

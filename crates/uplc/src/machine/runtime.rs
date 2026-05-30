@@ -193,6 +193,7 @@ impl DefaultFunction {
             | DefaultFunction::FindFirstSetBit
             | DefaultFunction::Ripemd_160
             | DefaultFunction::LengthOfArray
+            | DefaultFunction::ListToArray
             | DefaultFunction::IndexArray => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
@@ -292,6 +293,7 @@ impl DefaultFunction {
             DefaultFunction::LengthOfArray => 1,
             DefaultFunction::IndexArray => 2,
             // DefaultFunction::ExpModInteger => 3,
+            DefaultFunction::ListToArray => 1,
         }
     }
 
@@ -387,6 +389,7 @@ impl DefaultFunction {
             DefaultFunction::LengthOfArray => 1,
             DefaultFunction::IndexArray => 1,
             // DefaultFunction::ExpModInteger => 0,
+            DefaultFunction::ListToArray => 1,
         }
     }
 
@@ -1793,6 +1796,13 @@ impl DefaultFunction {
                     Err(Error::ArrayIndexOutOfBounds(arg2.clone(), array.len()))
                 }
             } // DefaultFunction::ExpModInteger => todo!(),
+            DefaultFunction::ListToArray => {
+                let (r#type, list) = args[0].unwrap_list()?;
+
+                let value = Value::array(r#type.clone(), list.clone());
+
+                Ok(value)
+            }
         }
     }
 }

@@ -132,8 +132,9 @@ pub enum DefaultFunction {
     // Ripemd_160
     Ripemd_160 = 86,
     // ExpModInteger = 87,
-    // DropList = 88,
+    // Arrays
     LengthOfArray = 89,
+    ListToArray = 90,
     // Match
     // CaseList = 88,
     // CaseData = 89,
@@ -331,6 +332,7 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::LengthOfArray as u8 => {
                 Ok(DefaultFunction::LengthOfArray)
             }
+            v if v == DefaultFunction::ListToArray as u8 => Ok(DefaultFunction::ListToArray),
             v if v == DefaultFunction::IndexArray as u8 => Ok(DefaultFunction::IndexArray),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
@@ -436,6 +438,7 @@ impl FromStr for DefaultFunction {
             "lengthOfArray" => Ok(LengthOfArray),
             "indexArray" => Ok(IndexArray),
             // "expModInteger" => Ok(ExpModInteger),
+            "listToArray" => Ok(ListToArray),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
             rest => Err(format!("Default Function not found - {rest}")),
@@ -538,6 +541,7 @@ impl Display for DefaultFunction {
             LengthOfArray => write!(f, "lengthOfArray"),
             IndexArray => write!(f, "indexArray"),
             // ExpModInteger => write!(f, "expModInteger"),
+            ListToArray => write!(f, "listToArray"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
         }
@@ -639,6 +643,7 @@ impl DefaultFunction {
             LengthOfArray => "length_of_array",
             IndexArray => "index_array",
             // ExpModInteger => "exp_mod_integer",
+            ListToArray => "list_to_array",
             // CaseList => "case_list",
             // CaseData => "case_data",
         }

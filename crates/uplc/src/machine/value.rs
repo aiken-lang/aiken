@@ -63,6 +63,12 @@ impl Value {
         Value::Con(constant.into())
     }
 
+    pub fn array(typ: Type, n: Vec<Constant>) -> Self {
+        let constant = Constant::ProtoArray(typ, n);
+
+        Value::Con(constant.into())
+    }
+
     pub fn data(d: PlutusData) -> Self {
         let constant = Constant::Data(d);
 
