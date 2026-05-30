@@ -138,6 +138,12 @@ pub enum Error {
     WriteBitsOutOfBounds,
     #[error("illegal operation on empty ByteArray")]
     EmptyByteArray,
+    #[error(
+        "valueData: maximum input size exceeded\n{:>13} {0}\n{:>13} {1}",
+        "Size",
+        "Maximum"
+    )]
+    ValueDataSizeTooBig(usize, usize),
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]

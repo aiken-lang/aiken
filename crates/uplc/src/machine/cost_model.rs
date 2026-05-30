@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    value_data: CostingFun<OneArgument>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,16 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            value_data: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1000,
+                    slope: 38159,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 2,
+                    slope: 22,
+                }),
             },
         }
     }
@@ -2677,6 +2696,12 @@ impl BuiltinCosts {
             DefaultFunction::Ripemd_160 => ExBudget {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
+            },
+            // `to_ex_mem` of a `Value` constant is its `total_size`, which is
+            // exactly plutus's `ValueTotalSize` costing measure.
+            DefaultFunction::ValueData => ExBudget {
+                mem: self.value_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.value_data.cpu.cost(args[0].to_ex_mem()),
             },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
@@ -5123,6 +5148,34 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                             .get("expModInteger-memory-arguments")
                             .unwrap_or(&30000000000),
                     ),
+                },
+            },
+            // `valueData` is not yet part of the on-chain protocol cost
+            // parameters, so it is absent from `cost_map`. Fall back to the
+            // hard-coded V3 values (matching `BuiltinCosts::v3`) rather than the
+            // placeholder, so `initialize_cost_model` agrees with `v3()`.
+            value_data: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("valueData-cpu-arguments-intercept")
+                            .unwrap_or(&1000),
+                        slope: *cost_map
+                            .get("valueData-cpu-arguments-slope")
+                            .unwrap_or(&38159),
+                    }),
+                    mem: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("valueData-memory-arguments-intercept")
+                            .unwrap_or(&2),
+                        slope: *cost_map
+                            .get("valueData-memory-arguments-slope")
+                            .unwrap_or(&22),
+                    }),
                 },
             },
         },

@@ -135,6 +135,8 @@ pub enum DefaultFunction {
     // Match
     // CaseList = 88,
     // CaseData = 89,
+    // Value
+    ValueData = 98,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -325,6 +327,7 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::FindFirstSetBit)
             }
             v if v == DefaultFunction::Ripemd_160 as u8 => Ok(DefaultFunction::Ripemd_160),
+            v if v == DefaultFunction::ValueData as u8 => Ok(DefaultFunction::ValueData),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -429,6 +432,7 @@ impl FromStr for DefaultFunction {
             // "expModInteger" => Ok(ExpModInteger),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
+            "valueData" => Ok(ValueData),
             rest => Err(format!("Default Function not found - {rest}")),
         }
     }
@@ -529,6 +533,7 @@ impl Display for DefaultFunction {
             // ExpModInteger => write!(f, "expModInteger"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
+            ValueData => write!(f, "valueData"),
         }
     }
 }
@@ -628,6 +633,7 @@ impl DefaultFunction {
             // ExpModInteger => "exp_mod_integer",
             // CaseList => "case_list",
             // CaseData => "case_data",
+            ValueData => "value_data",
         }
         .to_string()
     }
