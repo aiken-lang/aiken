@@ -1083,10 +1083,17 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
-        // NOTE: Arrays have no Aiken surface syntax, so `indexArray` is never
-        // produced by lowering Aiken source. This arm exists only to keep the
+        // NOTE: Arrays have no Aiken surface syntax, so array builtins are never
+        // produced by lowering Aiken source. These arms exist only to keep the
         // match exhaustive; the array argument is modelled structurally as a
         // `list` of the element type.
+        DefaultFunction::LengthOfArray => {
+            let element = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::list(element)], Type::int());
+
+            (tipo, 1)
+        }
         DefaultFunction::IndexArray => {
             let element = Type::generic_var(id_gen.next());
 
