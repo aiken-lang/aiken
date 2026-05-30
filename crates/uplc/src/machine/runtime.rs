@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::ScaleValue => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +288,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::ScaleValue => 2,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +382,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::ScaleValue => 0,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1765,6 +1768,40 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
+            }
+            DefaultFunction::ScaleValue => {
+                let scalar = args[0].unwrap_integer()?;
+                let value = args[1].unwrap_value()?;
+
+                // Scaling by zero always yields the empty value.
+                if scalar.is_zero() {
+                    return Ok(Value::value(crate::ast::Value::empty()));
+                }
+
+                // Multiply every quantity by the scalar using arbitrary
+                // precision, then rebuild the value. `from_entries` re-validates
+                // that each resulting quantity stays within the signed 128-bit
+                // bounds and renormalizes (mirrors PlutusCore.Value.scaleValue,
+                // which fails when `scaleQuantity` overflows).
+                let entries = value
+                    .entries()
+                    .iter()
+                    .map(|(currency, tokens)| {
+                        let tokens = tokens
+                            .iter()
+                            .map(|(token, quantity)| {
+                                (token.clone(), scalar * BigInt::from(*quantity))
+                            })
+                            .collect();
+
+                        (currency.clone(), tokens)
+                    })
+                    .collect();
+
+                let scaled = crate::ast::Value::from_entries(entries)
+                    .map_err(Error::ValueError)?;
+
+                Ok(Value::value(scaled))
             } // DefaultFunction::ExpModInteger => todo!(),
         }
     }

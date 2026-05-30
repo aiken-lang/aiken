@@ -1,5 +1,5 @@
 use super::{ExBudget, Value};
-use crate::ast::{NamedDeBruijn, Term, Type};
+use crate::ast::{NamedDeBruijn, Term, Type, ValueError};
 use num_bigint::BigInt;
 use std::string::FromUtf8Error;
 
@@ -128,6 +128,8 @@ pub enum Error {
     DeserialisationError(String, Value),
     #[error("integer overflow")]
     OverflowError,
+    #[error("value error: {0}")]
+    ValueError(ValueError),
     #[error("{0} is not within the bounds of a Natural")]
     OutsideNaturalBounds(BigInt),
     #[error("{0} is not within the bounds of a Byte")]

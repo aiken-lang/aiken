@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    scale_value: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            scale_value: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            scale_value: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,16 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            scale_value: CostingFun {
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: 1000,
+                    slope: 277577,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 12,
+                    slope: 21,
+                }),
             },
         }
     }
@@ -2677,6 +2696,16 @@ impl BuiltinCosts {
             DefaultFunction::Ripemd_160 => ExBudget {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ScaleValue => ExBudget {
+                mem: self
+                    .scale_value
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .scale_value
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
@@ -5123,6 +5152,34 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                             .get("expModInteger-memory-arguments")
                             .unwrap_or(&30000000000),
                     ),
+                },
+            },
+            scale_value: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                // The protocol-parameter vector consumed here does not (yet)
+                // carry the scaleValue parameters, so we fall back to the known
+                // V3 values, keeping `initialize_cost_model` in sync with
+                // `CostModel::v3()`.
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("scaleValue-cpu-arguments-intercept")
+                            .unwrap_or(&1000),
+                        slope: *cost_map
+                            .get("scaleValue-cpu-arguments-slope")
+                            .unwrap_or(&277577),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("scaleValue-memory-arguments-intercept")
+                            .unwrap_or(&12),
+                        slope: *cost_map
+                            .get("scaleValue-memory-arguments-slope")
+                            .unwrap_or(&21),
+                    }),
                 },
             },
         },

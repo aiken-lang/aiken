@@ -1082,6 +1082,15 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
+        }
+        // `scaleValue` operates on the UPLC `Value` builtin type, which has no
+        // representation in the Aiken source language. It is only exercised by
+        // the UPLC conformance harness, so we use `Data` as an opaque
+        // stand-in for the `Value` argument and result here.
+        DefaultFunction::ScaleValue => {
+            let tipo = Type::function(vec![Type::int(), Type::data()], Type::data());
+
+            (tipo, 2)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 
