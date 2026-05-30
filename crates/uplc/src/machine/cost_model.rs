@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    bls12_381_g1_multi_scalar_mul: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,13 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 321837444,
+                    slope: 25087669,
+                }),
+                mem: TwoArguments::ConstantCost(18),
             },
         }
     }
@@ -2678,6 +2694,22 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+                // The cost is linear in the *length* of the first list argument
+                // (number of scalars), matching Plutus' ExMemoryUsage for lists.
+                let scalars_len = args[0].list_len() as i64;
+
+                ExBudget {
+                    mem: self
+                        .bls12_381_g1_multi_scalar_mul
+                        .mem
+                        .cost(scalars_len, args[1].to_ex_mem()),
+                    cpu: self
+                        .bls12_381_g1_multi_scalar_mul
+                        .cpu
+                        .cost(scalars_len, args[1].to_ex_mem()),
+                }
+            }
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
@@ -3314,7 +3346,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-mem-arguments-slope" => costs[250],
             };
 
-            if costs.len() == 297 {
+            if costs.len() >= 297 {
                 let test = hashmap! {
                     "andByteString-cpu-arguments-intercept"=> costs[251],
                     "andByteString-cpu-arguments-slope1"=> costs[252],
@@ -3362,6 +3394,16 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     "ripemd_160-cpu-arguments-intercept"=> costs[294],
                     "ripemd_160-cpu-arguments-slope"=> costs[295],
                     "ripemd_160-memory-arguments"=> costs[296],
+                };
+
+                Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            if costs.len() >= 300 {
+                let test = hashmap! {
+                    "bls12_381_G1_multiScalarMul-cpu-arguments-intercept"=> costs[297],
+                    "bls12_381_G1_multiScalarMul-cpu-arguments-slope"=> costs[298],
+                    "bls12_381_G1_multiScalarMul-memory-arguments"=> costs[299],
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
@@ -5125,6 +5167,27 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            bls12_381_g1_multi_scalar_mul: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInX(LinearSize {
+                        intercept: *cost_map
+                            .get("bls12_381_G1_multiScalarMul-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("bls12_381_G1_multiScalarMul-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("bls12_381_G1_multiScalarMul-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
         },
     }
 }
@@ -5477,7 +5540,7 @@ mod tests {
             28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719,
             0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
             159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
-            1964219, 24520, 3,
+            1964219, 24520, 3, 321837444, 25087669, 18,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);

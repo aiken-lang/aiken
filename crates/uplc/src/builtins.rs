@@ -135,6 +135,8 @@ pub enum DefaultFunction {
     // Match
     // CaseList = 88,
     // CaseData = 89,
+    // BLS12-381 multi-scalar multiplication
+    Bls12_381_G1_MultiScalarMul = 92,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -325,6 +327,9 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::FindFirstSetBit)
             }
             v if v == DefaultFunction::Ripemd_160 as u8 => Ok(DefaultFunction::Ripemd_160),
+            v if v == DefaultFunction::Bls12_381_G1_MultiScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_MultiScalarMul)
+            }
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -426,6 +431,7 @@ impl FromStr for DefaultFunction {
             "countSetBits" => Ok(CountSetBits),
             "findFirstSetBit" => Ok(FindFirstSetBit),
             "ripemd_160" => Ok(Ripemd_160),
+            "bls12_381_G1_multiScalarMul" => Ok(Bls12_381_G1_MultiScalarMul),
             // "expModInteger" => Ok(ExpModInteger),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
@@ -526,6 +532,7 @@ impl Display for DefaultFunction {
             CountSetBits => write!(f, "countSetBits"),
             FindFirstSetBit => write!(f, "findFirstSetBit"),
             Ripemd_160 => write!(f, "ripemd_160"),
+            Bls12_381_G1_MultiScalarMul => write!(f, "bls12_381_G1_multiScalarMul"),
             // ExpModInteger => write!(f, "expModInteger"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
@@ -625,6 +632,7 @@ impl DefaultFunction {
             CountSetBits => "count_set_bits",
             FindFirstSetBit => "find_first_set_bit",
             Ripemd_160 => "ripemd_160",
+            Bls12_381_G1_MultiScalarMul => "bls12_381_g1_multi_scalar_mul",
             // ExpModInteger => "exp_mod_integer",
             // CaseList => "case_list",
             // CaseData => "case_data",

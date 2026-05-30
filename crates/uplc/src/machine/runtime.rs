@@ -33,6 +33,13 @@ const BLST_P1_COMPRESSED_SIZE: usize = 48;
 
 const BLST_P2_COMPRESSED_SIZE: usize = 96;
 
+// Bounds on scalars accepted by the BLS12-381 multiScalarMul builtins.
+// 64 words = 4096 bits, so scalars must lie in [-(2^4095), 2^4095 - 1].
+// See PlutusCore.Crypto.BLS12_381.Bounds (msmScalarLb / msmScalarUb).
+static MSM_SCALAR_UB: Lazy<BigInt> = Lazy::new(|| (BigInt::from(1) << 4095u32) - 1);
+
+static MSM_SCALAR_LB: Lazy<BigInt> = Lazy::new(|| -(BigInt::from(1) << 4095u32));
+
 pub const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
 
 pub enum BuiltinSemantics {
@@ -191,7 +198,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::Bls12_381_G1_MultiScalarMul => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +295,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => 2,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +389,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => 0,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1765,6 +1775,89 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
+            }
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+                let (_, scalars) = args[0].unwrap_list()?;
+                let (_, points) = args[1].unwrap_list()?;
+
+                // Validate that every scalar (in the *whole* first list, before
+                // zipping) lies within the allowed bound, matching Plutus'
+                // `any msmScalarOutOfBounds ss`.
+                let mut scalar_values = Vec::with_capacity(scalars.len());
+
+                for constant in scalars {
+                    let Constant::Integer(scalar) = constant else {
+                        return Err(Error::TypeMismatch(Type::Integer, constant.into()));
+                    };
+
+                    if scalar < &MSM_SCALAR_LB || scalar > &MSM_SCALAR_UB {
+                        return Err(Error::MsmScalarOutOfBounds);
+                    }
+
+                    scalar_values.push(scalar);
+                }
+
+                let mut point_values = Vec::with_capacity(points.len());
+
+                for constant in points {
+                    let Constant::Bls12_381G1Element(point) = constant else {
+                        return Err(Error::TypeMismatch(
+                            Type::Bls12_381G1Element,
+                            constant.into(),
+                        ));
+                    };
+
+                    point_values.push(point.as_ref());
+                }
+
+                let size_scalar = size_of::<blst::blst_scalar>();
+
+                // Accumulator starts at the group identity (point at infinity).
+                let mut acc = blst::blst_p1::default();
+
+                // `zip` truncates to the shorter list, matching Plutus' denotation.
+                for (scalar, point) in scalar_values.iter().zip(point_values.iter()) {
+                    let scalar = scalar.mod_floor(&SCALAR_PERIOD);
+
+                    let (_, mut scalar_bytes) = scalar.to_bytes_be();
+
+                    if size_scalar > scalar_bytes.len() {
+                        let diff = size_scalar - scalar_bytes.len();
+
+                        let mut new_vec = vec![0; diff];
+
+                        new_vec.append(&mut scalar_bytes);
+
+                        scalar_bytes = new_vec;
+                    }
+
+                    let mut term = blst::blst_p1::default();
+                    let mut blst_scalar = blst::blst_scalar::default();
+
+                    unsafe {
+                        blst::blst_scalar_from_bendian(
+                            &mut blst_scalar as *mut _,
+                            scalar_bytes.as_ptr() as *const _,
+                        );
+
+                        blst::blst_p1_mult(
+                            &mut term as *mut _,
+                            *point as *const _,
+                            blst_scalar.b.as_ptr() as *const _,
+                            size_scalar * 8,
+                        );
+
+                        blst::blst_p1_add_or_double(
+                            &mut acc as *mut _,
+                            &acc as *const _,
+                            &term as *const _,
+                        );
+                    }
+                }
+
+                let constant = Constant::Bls12_381G1Element(acc.into());
+
+                Ok(Value::Con(constant.into()))
             } // DefaultFunction::ExpModInteger => todo!(),
         }
     }

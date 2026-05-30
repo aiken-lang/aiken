@@ -260,6 +260,19 @@ impl Value {
         Ok(arg1_exmem)
     }
 
+    /// Number of elements in a list constant, used for costing builtins whose
+    /// cost is linear in the length of a list argument. Returns 0 for any
+    /// non-list value.
+    pub fn list_len(&self) -> usize {
+        match self {
+            Value::Con(c) => match c.as_ref() {
+                Constant::ProtoList(_, items) => items.len(),
+                _ => 0,
+            },
+            _ => 0,
+        }
+    }
+
     // TODO: Make this to_ex_mem not recursive.
     pub fn to_ex_mem(&self) -> i64 {
         match self {
