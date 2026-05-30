@@ -43,6 +43,8 @@ pub enum Error {
     TypeMismatch(Type, Type),
     #[error("type mismatch\n{:>13} (list a)\n{:>13} {0}", "Expected", "Got")]
     ListTypeMismatch(Type),
+    #[error("type mismatch\n{:>13} (array a)\n{:>13} {0}", "Expected", "Got")]
+    ArrayTypeMismatch(Type),
     #[error("type mismatch\n{:>13}(pair a b)\n{:>13} {0}", "Expected", "Got")]
     PairTypeMismatch(Type),
     #[error(
@@ -109,6 +111,8 @@ pub enum Error {
         .1.len() - 1
     )]
     ByteStringOutOfBounds(BigInt, Vec<u8>),
+    #[error("Array index out of bounds")]
+    ArrayIndexOutOfBounds(BigInt, usize),
     #[error(
         "attempt to consByteString something than isn't a byte between [0-255]\n{:>13} {0}",
         "Found"
