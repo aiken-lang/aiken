@@ -1082,6 +1082,14 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
+        }
+        DefaultFunction::ValueContains => {
+            // `Value` has no surface Aiken type; it is only reachable through
+            // UPLC. We model both arguments as opaque `Data` placeholders so the
+            // constructor type-checks.
+            let tipo = Type::function(vec![Type::data(), Type::data()], Type::bool());
+
+            (tipo, 2)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 

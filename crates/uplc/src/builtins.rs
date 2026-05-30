@@ -135,6 +135,8 @@ pub enum DefaultFunction {
     // Match
     // CaseList = 88,
     // CaseData = 89,
+    // Value
+    ValueContains = 97,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -325,6 +327,7 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::FindFirstSetBit)
             }
             v if v == DefaultFunction::Ripemd_160 as u8 => Ok(DefaultFunction::Ripemd_160),
+            v if v == DefaultFunction::ValueContains as u8 => Ok(DefaultFunction::ValueContains),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -426,6 +429,7 @@ impl FromStr for DefaultFunction {
             "countSetBits" => Ok(CountSetBits),
             "findFirstSetBit" => Ok(FindFirstSetBit),
             "ripemd_160" => Ok(Ripemd_160),
+            "valueContains" => Ok(ValueContains),
             // "expModInteger" => Ok(ExpModInteger),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
@@ -526,6 +530,7 @@ impl Display for DefaultFunction {
             CountSetBits => write!(f, "countSetBits"),
             FindFirstSetBit => write!(f, "findFirstSetBit"),
             Ripemd_160 => write!(f, "ripemd_160"),
+            ValueContains => write!(f, "valueContains"),
             // ExpModInteger => write!(f, "expModInteger"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
@@ -625,6 +630,7 @@ impl DefaultFunction {
             CountSetBits => "count_set_bits",
             FindFirstSetBit => "find_first_set_bit",
             Ripemd_160 => "ripemd_160",
+            ValueContains => "value_contains",
             // ExpModInteger => "exp_mod_integer",
             // CaseList => "case_list",
             // CaseData => "case_data",

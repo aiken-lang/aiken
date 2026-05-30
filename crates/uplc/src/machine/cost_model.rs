@@ -358,6 +358,7 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    value_contains: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -856,6 +857,10 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            value_contains: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1353,6 +1358,10 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            value_contains: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1962,6 +1971,17 @@ impl BuiltinCosts {
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            value_contains: CostingFun {
+                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                    constant: 213283,
+                    model: Box::new(TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                        intercept: 618401,
+                        slope1: 1998,
+                        slope2: 28258,
+                    })),
+                }),
+                mem: TwoArguments::ConstantCost(1),
             },
         }
     }
@@ -2677,6 +2697,16 @@ impl BuiltinCosts {
             DefaultFunction::Ripemd_160 => ExBudget {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ValueContains => ExBudget {
+                mem: self
+                    .value_contains
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .value_contains
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
@@ -5122,6 +5152,35 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         *cost_map
                             .get("expModInteger-memory-arguments")
                             .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            value_contains: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                        constant: *cost_map
+                            .get("valueContains-cpu-arguments-constant")
+                            .unwrap_or(&213283),
+                        model: Box::new(TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                            intercept: *cost_map
+                                .get("valueContains-cpu-arguments-model-arguments-intercept")
+                                .unwrap_or(&618401),
+                            slope1: *cost_map
+                                .get("valueContains-cpu-arguments-model-arguments-slope1")
+                                .unwrap_or(&1998),
+                            slope2: *cost_map
+                                .get("valueContains-cpu-arguments-model-arguments-slope2")
+                                .unwrap_or(&28258),
+                        })),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("valueContains-memory-arguments")
+                            .unwrap_or(&1),
                     ),
                 },
             },

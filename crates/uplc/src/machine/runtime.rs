@@ -191,7 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::ValueContains => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +288,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::ValueContains => 2,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +382,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::ValueContains => 0,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -1765,6 +1768,36 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
+            }
+            DefaultFunction::ValueContains => {
+                let v1 = args[0].unwrap_value()?;
+                let v2 = args[1].unwrap_value()?;
+
+                // Both values must not contain negative amounts.
+                if v1.negative_amounts() > 0 || v2.negative_amounts() > 0 {
+                    return Err(Error::EvaluationFailure);
+                }
+
+                // Short-circuit: if v2 has more total entries than v1, it can't be contained.
+                let contains = if v1.total_size() < v2.total_size() {
+                    false
+                } else {
+                    // v1 contains v2 iff for every (currency, token, quantity) in v2,
+                    // the quantity of that coin in v1 is >= quantity.
+                    v2.entries().iter().all(|(currency, inner2)| {
+                        match v1.entries().iter().find(|(c, _)| c == currency) {
+                            None => false,
+                            Some((_, inner1)) => inner2.iter().all(|(token, q2)| {
+                                match inner1.iter().find(|(t, _)| t == token) {
+                                    None => false,
+                                    Some((_, q1)) => q1 >= q2,
+                                }
+                            }),
+                        }
+                    })
+                };
+
+                Ok(Value::bool(contains))
             } // DefaultFunction::ExpModInteger => todo!(),
         }
     }
