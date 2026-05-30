@@ -84,6 +84,11 @@ pub struct Machine {
     pub traces: Vec<Trace>,
     pub spend_counter: Option<[i64; (TERM_COUNT + BUILTIN_COUNT) * 2]>,
     version: Language,
+    /// When `true`, the machine runs in *counting* mode: it accumulates the
+    /// cost of every step/builtin (with saturating arithmetic) but never fails
+    /// when the budget would be exceeded. This mirrors Plutus' `counting`
+    /// evaluation mode used to produce the conformance budget goldens.
+    counting: bool,
 }
 
 impl Machine {
@@ -101,6 +106,27 @@ impl Machine {
             traces: vec![],
             spend_counter: None,
             version,
+            counting: false,
+        }
+    }
+
+    /// Build a machine that evaluates in *counting* mode (see [`Machine::counting`]).
+    /// The initial budget should be effectively unbounded (e.g. [`ExBudget::counting`]).
+    pub fn new_counting(
+        version: Language,
+        costs: CostModel,
+        initial_budget: ExBudget,
+        slippage: u32,
+    ) -> Machine {
+        Machine {
+            costs,
+            ex_budget: initial_budget,
+            slippage,
+            unbudgeted_steps: [0; 10],
+            traces: vec![],
+            spend_counter: None,
+            version,
+            counting: true,
         }
     }
 
@@ -118,6 +144,7 @@ impl Machine {
             traces: vec![],
             spend_counter: Some([0; (TERM_COUNT + BUILTIN_COUNT) * 2]),
             version,
+            counting: false,
         }
     }
 
@@ -428,10 +455,14 @@ impl Machine {
     }
 
     fn spend_budget(&mut self, spend_budget: ExBudget) -> Result<(), Error> {
-        self.ex_budget.mem -= spend_budget.mem;
-        self.ex_budget.cpu -= spend_budget.cpu;
+        // Saturating subtraction keeps the remaining budget representable even
+        // when a single (literally-costed) builtin charges close to `i64::MAX`,
+        // matching Plutus' `SatInt` arithmetic.
+        self.ex_budget.mem = self.ex_budget.mem.saturating_sub(spend_budget.mem);
+        self.ex_budget.cpu = self.ex_budget.cpu.saturating_sub(spend_budget.cpu);
 
-        if self.ex_budget.mem < 0 || self.ex_budget.cpu < 0 {
+        // In counting mode we only measure consumption and never enforce a cap.
+        if !self.counting && (self.ex_budget.mem < 0 || self.ex_budget.cpu < 0) {
             Err(Error::OutOfExError(self.ex_budget))
         } else {
             Ok(())

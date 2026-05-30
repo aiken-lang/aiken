@@ -36,6 +36,18 @@ impl ExBudget {
             cpu: 10000000000000,
         }
     }
+
+    /// An effectively unbounded budget used for *counting* evaluation, where the
+    /// goal is to measure how much would be spent rather than to enforce a cap.
+    /// Seeded at `i64::MAX` so that, combined with saturating subtraction, the
+    /// reported consumed budget saturates at `i64::MAX` (matching Plutus'
+    /// `SatInt`-based counting machine) instead of overflowing.
+    pub fn counting() -> Self {
+        ExBudget {
+            mem: i64::MAX,
+            cpu: i64::MAX,
+        }
+    }
 }
 
 impl Default for ExBudget {
@@ -51,9 +63,13 @@ impl std::ops::Sub for ExBudget {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
+        // Saturating subtraction mirrors Plutus' `SatInt` costing integers, so
+        // that the consumed budget (`initial - remaining`) clamps at `i64::MAX`
+        // for literally-costed builtins (e.g. `dropList` with a huge count)
+        // rather than overflowing.
         ExBudget {
-            mem: self.mem - rhs.mem,
-            cpu: self.cpu - rhs.cpu,
+            mem: self.mem.saturating_sub(rhs.mem),
+            cpu: self.cpu.saturating_sub(rhs.cpu),
         }
     }
 }
@@ -3350,7 +3366,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-mem-arguments-slope" => costs[250],
             };
 
-            if costs.len() == 297 {
+            if costs.len() >= 297 {
                 let test = hashmap! {
                     "andByteString-cpu-arguments-intercept"=> costs[251],
                     "andByteString-cpu-arguments-slope1"=> costs[252],
@@ -3403,7 +3419,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
             }
 
-            if costs.len() == 300 {
+            if costs.len() >= 300 {
                 let test = hashmap! {
                     "dropList-cpu-arguments-intercept"=> costs[297],
                     "dropList-cpu-arguments-slope"=> costs[298],
@@ -5547,7 +5563,7 @@ mod tests {
             28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719,
             0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
             159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
-            1964219, 24520, 3,
+            1964219, 24520, 3, 116711, 1957, 4,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);

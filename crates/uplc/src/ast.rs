@@ -896,6 +896,28 @@ impl Program<NamedDeBruijn> {
         )
     }
 
+    /// Evaluate the program in *counting* mode: the machine measures the budget
+    /// that would be consumed but never fails when a cap is exceeded. This
+    /// mirrors Plutus' `counting` evaluation mode used to generate the
+    /// conformance budget goldens (where, e.g., `dropList` with a huge count
+    /// reports a saturated `i64::MAX` cost while still succeeding).
+    pub fn eval_version_counting(self, version: &Language) -> EvalResult {
+        let initial_budget = ExBudget::counting();
+
+        let mut machine =
+            Machine::new_counting(version.clone(), CostModel::default(), initial_budget, 200);
+
+        let term = machine.run(self.term);
+
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            initial_budget,
+            machine.traces,
+            machine.spend_counter.map(|i| i.into()),
+        )
+    }
+
     pub fn eval_as(
         self,
         version: &Language,

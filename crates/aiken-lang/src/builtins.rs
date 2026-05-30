@@ -1082,6 +1082,13 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
+        }
+        DefaultFunction::DropList => {
+            let ret = Type::list(Type::generic_var(id_gen.next()));
+
+            let tipo = Type::function(vec![Type::int(), ret.clone()], ret);
+
+            (tipo, 2)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 
