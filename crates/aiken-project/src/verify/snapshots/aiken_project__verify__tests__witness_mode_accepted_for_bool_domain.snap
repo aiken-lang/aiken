@@ -1,0 +1,35 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: proof
+---
+import AikenVerify.Utils
+import PlutusCore.Integer
+import PlutusCore.ByteString
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.My_module.test_bool_witness
+open PlutusCore.Integer (Integer)
+open PlutusCore.ByteString (ByteString)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_my_module__test_bool_witness_7eebb2e3 PlutusV3 single_cbor_hex "./cbor/my_module__test_bool_witness_7eebb2e3.cbor"
+#import_uplc fuzzer_prog_my_module__test_bool_witness_7eebb2e3 PlutusV3 single_cbor_hex "./cbor/my_module__test_bool_witness_7eebb2e3_fuzzer.cbor"
+
+set_option maxRecDepth 16384
+
+-- Manifest-driven mode and execution metadata.
+private abbrev testReturnMode : ReturnMode := .bool
+private abbrev testMode : TestMode := .failOnce
+private abbrev testDecodePolicy : DecodePolicy := .decodeErrorIsTestFailure
+private abbrev testOutcome (args : List Term) : TestEvalOutcome :=
+  RunProperty testReturnMode prog_my_module__test_bool_witness_7eebb2e3 args
+
+-- Mode: witness (deterministic witness search)
+theorem test_bool_witness :
+  ∃ (x : Bool), PropertyFails testReturnMode testDecodePolicy (testOutcome (boolArg x)) :=
+  ⟨true, by decide⟩
+
+end AikenVerify.Proofs.My_module.test_bool_witness

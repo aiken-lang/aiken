@@ -117,7 +117,7 @@ impl ParsedModule {
 }
 
 /// Used by the LSP to lookup missing definitions in modules.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Glossary(BTreeMap<String, ModuleGlossary>);
 
 impl Default for Glossary {
@@ -216,7 +216,7 @@ impl Glossary {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ModuleGlossary {
     public_definitions: BTreeSet<String>,
     public_constructors: BTreeSet<String>,

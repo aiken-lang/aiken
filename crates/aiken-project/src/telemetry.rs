@@ -112,6 +112,7 @@ impl Display for CoverageMode {
 pub enum EventTarget {
     Json(Json),
     Terminal(Terminal),
+    Silent,
 }
 
 impl Default for EventTarget {
@@ -129,6 +130,7 @@ impl EventListener for EventTarget {
         match self {
             EventTarget::Terminal(term) => term.handle_event(event),
             EventTarget::Json(json) => json.handle_event(event),
+            EventTarget::Silent => {}
         }
     }
 }

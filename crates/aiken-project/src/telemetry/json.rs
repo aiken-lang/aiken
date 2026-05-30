@@ -71,7 +71,15 @@ impl EventListener for Json {
 
                 println!("{}", serde_json::to_string_pretty(&json).unwrap());
             }
-            _ => super::Terminal.handle_event(event),
+            Event::PackageResolveFallback { name } => {
+                let json = serde_json::json!({
+                    "kind": "package_resolve_fallback",
+                    "package": name,
+                    "message": "Using a cached package resolution because the package version is unpinned and the network is not accessible."
+                });
+                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+            }
+            _ => {}
         }
     }
 }

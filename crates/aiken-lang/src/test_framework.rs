@@ -1,17 +1,29 @@
+#![allow(clippy::collapsible_if)]
+// The verifier-lowering code keeps nested guard checks explicit so each extraction branch remains auditable.
+
+#[cfg(test)]
+use crate::ast::{Annotation, RecordConstructor, RecordConstructorArg};
 use crate::{
     ast::{
-        BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TraceLevel, Tracing, TypedArg,
-        TypedDataType, TypedTest,
+        BinOp, DataTypeKey, FunctionAccessKey, IfBranch, OnTestFailure, Span, TraceLevel, Tracing,
+        TypedArg, TypedClause, TypedDataType, TypedFunction, TypedIfBranch, TypedPattern,
+        TypedTest, UnOp,
     },
     expr::{CallArg, TypedExpr, UntypedExpr},
     format::Formatter,
-    gen_uplc::CodeGenerator,
+    gen_uplc::{CodeGenerator, builder::get_constr_index_variant},
+    parser::token::Base,
     plutus_version::PlutusVersion,
-    tipo::{Type, convert_opaque_type},
+    tipo::{
+        ModuleValueConstructor, Type, TypeVar, ValueConstructorVariant, convert_opaque_type,
+        find_and_replace_generics, get_generic_id_and_type, lookup_data_type_by_tipo,
+        pretty::Printer,
+    },
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
 use itertools::Itertools;
+use num_bigint::BigInt;
 use owo_colors::{OwoColorize, Stream, Stream::Stderr};
 use pallas_primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
@@ -19,7 +31,8 @@ use patricia_tree::PatriciaMap;
 use std::time::Duration;
 use std::{
     borrow::Borrow,
-    collections::BTreeMap,
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     fmt::{Debug, Display},
     ops::Deref,
@@ -31,6 +44,26 @@ use uplc::{
     machine::{cost_model::ExBudget, eval_result::EvalResult},
 };
 use vec1::{Vec1, vec1};
+
+const STDLIB_FUZZ_MODULE: &str = "aiken/fuzz";
+const MAX_FINITE_MAPPER_SOURCE_CASES: usize = 64;
+const MAX_FINITE_DOMAIN_CASES: usize = 64;
+const STDLIB_FUZZ_SCENARIO_MODULE: &str = "aiken/fuzz/scenario";
+
+mod analysis_support;
+mod fuzzer_analysis;
+mod shallow_ir;
+mod state_machine;
+mod transition_prop;
+
+pub use fuzzer_analysis::*;
+pub use shallow_ir::*;
+pub use transition_prop::*;
+
+use fuzzer_analysis::{
+    extract_constraint_from_via_with_constants_and_data_types,
+    extract_semantics_from_via_with_constants, normalize_fuzzer_from_via_with_constants,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum RunnableKind {
@@ -55,6 +88,8 @@ pub enum RunnableKind {
 /// minithesis. More specifically, we do not currently support pre-conditions, nor
 /// targets.
 ///
+// Public enum; boxing the large property-test variant would force constructor and match churn.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum Test {
     UnitTest(UnitTest),
@@ -117,14 +152,14 @@ impl Test {
         program: Program<Name>,
         fuzzer: Fuzzer<Name>,
     ) -> Test {
-        Test::PropertyTest(PropertyTest {
+        Test::PropertyTest(PropertyTest::new(
             input_path,
             module,
             name,
-            program,
             on_test_failure,
+            program,
             fuzzer,
-        })
+        ))
     }
 
     pub fn from_function_definition(
@@ -140,6 +175,11 @@ impl Test {
             } else {
                 Self::unit_test(generator, test, module_name, input_path)
             }
+        } else if matches!(kind, RunnableKind::Test) {
+            Test::PropertyTest(
+                PropertyTest::from_function_definition(generator, test, module_name, input_path)
+                    .test,
+            )
         } else {
             let parameter = test.arguments.first().unwrap().to_owned();
 
@@ -163,32 +203,18 @@ impl Test {
             // apply onto it later.
             let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
 
-            match kind {
-                RunnableKind::Bench => Test::Benchmark(Benchmark {
-                    input_path,
-                    module: module_name,
-                    name: test.name,
-                    program,
-                    on_test_failure: test.on_test_failure,
-                    sampler: Sampler {
-                        program: generator_program,
-                        type_info,
-                        stripped_type_info,
-                    },
-                }),
-                RunnableKind::Test => Self::property_test(
-                    input_path,
-                    module_name,
-                    test.name,
-                    test.on_test_failure,
-                    program,
-                    Fuzzer {
-                        program: generator_program,
-                        stripped_type_info,
-                        type_info,
-                    },
-                ),
-            }
+            Test::Benchmark(Benchmark {
+                input_path,
+                module: module_name,
+                name: test.name,
+                program,
+                on_test_failure: test.on_test_failure,
+                sampler: Sampler {
+                    program: generator_program,
+                    type_info,
+                    stripped_type_info,
+                },
+            })
         }
     }
 
@@ -352,6 +378,197 @@ impl Display for Event {
 }
 
 impl PropertyTest {
+    fn new(
+        input_path: PathBuf,
+        module: String,
+        name: String,
+        on_test_failure: OnTestFailure,
+        program: Program<Name>,
+        fuzzer: Fuzzer<Name>,
+    ) -> Self {
+        Self {
+            input_path,
+            module,
+            name,
+            on_test_failure,
+            program,
+            fuzzer,
+        }
+    }
+
+    pub fn from_function_definition(
+        generator: &mut CodeGenerator<'_>,
+        test: TypedTest,
+        module_name: String,
+        input_path: PathBuf,
+    ) -> AnalyzedPropertyTest {
+        let TypedTest {
+            name,
+            on_test_failure,
+            body,
+            arguments,
+            return_type,
+            ..
+        } = test;
+
+        let parameter = arguments
+            .first()
+            .expect("property tests must have at least one argument")
+            .to_owned();
+
+        let via = parameter.via.clone();
+        let normalized = normalize_fuzzer_from_via_with_constants(
+            &via,
+            module_name.as_str(),
+            generator.functions(),
+            generator.constants(),
+        );
+        let constraint = extract_constraint_from_via_with_constants_and_data_types(
+            &via,
+            module_name.as_str(),
+            generator.functions(),
+            generator.constants(),
+            generator.data_types(),
+        );
+        let type_info = parameter.arg.tipo.clone();
+
+        let stripped_type_info = convert_opaque_type(&type_info, generator.data_types(), true);
+        let semantics = extract_semantics_from_via_with_constants(
+            &via,
+            module_name.as_str(),
+            generator.functions(),
+            generator.constants(),
+            generator.data_types(),
+            stripped_type_info.as_ref(),
+        );
+
+        let program = generator.clone().generate_raw(
+            &body,
+            &[TypedArg {
+                tipo: stripped_type_info.clone(),
+                ..parameter.clone().into()
+            }],
+            &module_name,
+        );
+
+        // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
+        // argument is a Data constructor which needs not any conversion. So we can just safely
+        // apply onto it later.
+        let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
+
+        AnalyzedPropertyTest {
+            test: PropertyTest::new(
+                input_path,
+                module_name,
+                name,
+                on_test_failure,
+                program,
+                Fuzzer {
+                    program: generator_program,
+                    stripped_type_info,
+                    type_info,
+                },
+            ),
+            analysis: PropertyTestAnalysis {
+                return_type,
+                fuzzer: FuzzerAnalysis {
+                    normalized,
+                    constraint,
+                    semantics,
+                    source_span: via.location(),
+                },
+            },
+        }
+    }
+
+    pub fn from_function_definition_with_context(
+        generator: &mut CodeGenerator<'_>,
+        test: TypedTest,
+        module_name: String,
+        input_path: PathBuf,
+        known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+        known_constants: &IndexMap<&FunctionAccessKey, &TypedExpr>,
+        known_data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    ) -> AnalyzedPropertyTest {
+        let TypedTest {
+            name,
+            on_test_failure,
+            body,
+            arguments,
+            return_type,
+            ..
+        } = test;
+
+        let parameter = arguments
+            .first()
+            .expect("property tests must have at least one argument")
+            .to_owned();
+
+        let via = parameter.via.clone();
+        let normalized = normalize_fuzzer_from_via_with_constants(
+            &via,
+            module_name.as_str(),
+            known_functions,
+            known_constants,
+        );
+        let constraint = extract_constraint_from_via_with_constants_and_data_types(
+            &via,
+            module_name.as_str(),
+            known_functions,
+            known_constants,
+            known_data_types,
+        );
+        let type_info = parameter.arg.tipo.clone();
+
+        let stripped_type_info = convert_opaque_type(&type_info, known_data_types, true);
+        let semantics = extract_semantics_from_via_with_constants(
+            &via,
+            module_name.as_str(),
+            known_functions,
+            known_constants,
+            known_data_types,
+            stripped_type_info.as_ref(),
+        );
+
+        let program = generator.clone().generate_raw(
+            &body,
+            &[TypedArg {
+                tipo: stripped_type_info.clone(),
+                ..parameter.clone().into()
+            }],
+            &module_name,
+        );
+
+        // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
+        // argument is a Data constructor which needs not any conversion. So we can just safely
+        // apply onto it later.
+        let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
+
+        AnalyzedPropertyTest {
+            test: PropertyTest::new(
+                input_path,
+                module_name,
+                name,
+                on_test_failure,
+                program,
+                Fuzzer {
+                    program: generator_program,
+                    stripped_type_info,
+                    type_info,
+                },
+            ),
+            analysis: PropertyTestAnalysis {
+                return_type,
+                fuzzer: FuzzerAnalysis {
+                    normalized,
+                    constraint,
+                    semantics,
+                    source_span: via.location(),
+                },
+            },
+        }
+    }
+
     pub const DEFAULT_MAX_SUCCESS: usize = 100;
 
     /// Run a property test from a given seed. The property is run at most DEFAULT_MAX_SUCCESS times. It
@@ -1117,6 +1334,8 @@ where
 //
 // ----------------------------------------------------------------------------
 
+// Public enum; boxing result variants would ripple through telemetry and error callsites.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum TestResult<U, T> {
     UnitTestResult(UnitTestResult<U>),
@@ -1660,38 +1879,4 @@ unsafe impl Send for BenchmarkResult {}
 unsafe impl Sync for BenchmarkResult {}
 
 #[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_cache() {
-        let called = std::cell::RefCell::new(0);
-
-        let mut cache = Cache::new(|choices| {
-            called.replace_with(|n| *n + 1);
-
-            match choices {
-                [0, 0, 0] => Status::Keep(true),
-                _ => {
-                    if choices.len() <= 2 {
-                        Status::Invalid
-                    } else {
-                        Status::Ignore
-                    }
-                }
-            }
-        });
-
-        assert_eq!(cache.get(&[1, 1]), Status::Invalid); // Fn executed
-        assert_eq!(cache.get(&[1, 1, 2, 3]), Status::Ignore); // Fn executed
-        assert_eq!(cache.get(&[1, 1, 2]), Status::Ignore); // Fnexecuted
-        assert_eq!(cache.get(&[1, 1, 2, 2]), Status::Ignore); // Cached result
-        assert_eq!(cache.get(&[1, 1, 2, 1]), Status::Ignore); // Cached result
-        assert_eq!(cache.get(&[0, 1, 2]), Status::Ignore); // Fn executed
-        assert_eq!(cache.get(&[0, 0, 0]), Status::Keep(true)); // Fn executed
-        assert_eq!(cache.get(&[0, 0, 0]), Status::Keep(true)); // Cached result
-
-        assert_eq!(called.borrow().deref().to_owned(), 5, "execution calls");
-        assert_eq!(cache.size(), 4, "cache size");
-    }
-}
+mod test;

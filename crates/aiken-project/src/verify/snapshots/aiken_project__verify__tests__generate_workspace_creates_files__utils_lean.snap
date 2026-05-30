@@ -1,0 +1,260 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: utils
+---
+import PlutusCore.UPLC.CekMachine
+import PlutusCore.UPLC.PlutusScript
+
+namespace AikenVerify.Utils
+open PlutusCore.Integer (Integer)
+open PlutusCore.ByteString (ByteString)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.CekValue (CekValue)
+open PlutusCore.Data (Data)
+open PlutusCore.UPLC.Term (Term Const Program)
+open PlutusCore.UPLC.PlutusScript (PlutusScript)
+
+def fromHaltState (s : State): Option CekValue :=
+  match s with
+  | .Halt cv => some cv
+  | _ => none
+
+def fromFrameToInt (s : State): Option Integer :=
+  match s with
+  | .Halt (.VCon (Const.Integer x)) => some x
+  | _ => none
+
+def fromFrameToBool (s : State) : Option Bool :=
+  match s with
+  | .Halt (.VCon (Const.Bool x)) => some x
+  | _ => none
+
+def fromFrameToData (s : State) : Option Data :=
+  match s with
+  | .Halt (.VCon (Const.Data x)) => some x
+  | _ => none
+
+def integerToBuiltin (x : Integer) : Term := Term.Const (Const.Integer x)
+
+def executeIntProgram (p : Program) (args : List Term) (exUnit : Nat) : Option Integer :=
+  fromFrameToInt $ cekExecuteProgram p args exUnit
+
+def executeDataProgram (p : Program) (args : List Term) (exUnit : Nat) : Option Data :=
+  fromFrameToData $ cekExecuteProgram p args exUnit
+
+def intArgs2 (x : Integer) (y : Integer) : List Term :=
+    [integerToBuiltin x, integerToBuiltin y]
+
+def intArgs3 (x : Integer) (y : Integer) (z : Integer) : List Term :=
+    [integerToBuiltin x, integerToBuiltin y, integerToBuiltin z]
+
+def isErrorState : State -> Prop
+ | State.Error => True
+ | _ => False
+
+def isHaltState : State -> Prop
+ | .Halt _ => True
+ | _ => False
+
+inductive ReturnMode where
+  | bool
+  | void
+deriving DecidableEq
+
+inductive TestMode where
+  | normal
+  | fail
+  | failOnce
+deriving DecidableEq
+
+inductive DecodePolicy where
+  | decodeErrorIsTestFailure
+  | decodeErrorIsExportError
+deriving DecidableEq
+
+inductive TestEvalOutcome where
+  | returnsTrue
+  | returnsFalse
+  | returnsVoid
+  | evalError
+  | budgetExceeded
+  | decodeError
+deriving DecidableEq
+
+inductive PrngMode where
+  | seeded
+  | replayed
+deriving DecidableEq
+
+structure FuzzerRunConfig where
+  fuel : Nat
+  prngMode : PrngMode
+  size : Option Integer
+  decodePolicy : DecodePolicy
+deriving DecidableEq
+
+inductive FuzzerRunResult where
+  | success : Data → Data → FuzzerRunResult
+  | failure : FuzzerRunResult
+  | error : FuzzerRunResult
+  | timeout : FuzzerRunResult
+deriving DecidableEq
+
+abbrev defaultFuzzerFuel : Nat := 20000
+
+abbrev defaultFuzzerRunConfig
+    (prngMode : PrngMode)
+    (decodePolicy : DecodePolicy) : FuzzerRunConfig :=
+  { fuel := defaultFuzzerFuel, prngMode := prngMode, size := none, decodePolicy := decodePolicy }
+
+def validSeededPrng : Data → Prop
+  | Data.Constr 0 [Data.B _, Data.B _] => True
+  | _ => False
+
+def validReplayedPrng : Data → Prop
+  | Data.Constr 1 [Data.I n, Data.B _] => 0 ≤ n
+  | _ => False
+
+def runFuzzerHarness (cfg : FuzzerRunConfig) (harness : PlutusScript) (prng : Data) : FuzzerRunResult :=
+  match cekExecuteProgram harness.script [Term.Const (Const.Data prng)] cfg.fuel with
+  | .Halt (.VCon (Const.Data (Data.Constr 0 [Data.List [nextPrng, rawValue]]))) =>
+      .success nextPrng rawValue
+  | .Halt (.VCon (Const.Data (Data.Constr 1 []))) => .failure
+  | .Halt _ => .error
+  | .Error => .error
+  | _ => .timeout
+
+def SeededFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  ∃ prng0 nextPrng rawValue,
+    validSeededPrng prng0 ∧
+    runFuzzerHarness cfg harness prng0 = .success nextPrng rawValue ∧
+    rawValue = x
+
+def ReplayedFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  ∃ prng0 nextPrng rawValue,
+    validReplayedPrng prng0 ∧
+    runFuzzerHarness cfg harness prng0 = .success nextPrng rawValue ∧
+    rawValue = x
+
+def WitnessReplays
+    (cfg : FuzzerRunConfig)
+    (harness : PlutusScript)
+    (replayPrng : Data)
+    (x : Data) : Prop :=
+  validReplayedPrng replayPrng ∧
+  ∃ nextPrng rawValue,
+    runFuzzerHarness cfg harness replayPrng = .success nextPrng rawValue ∧
+    rawValue = x
+
+def FuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  match cfg.prngMode with
+  | .seeded => SeededFuzzerReturns cfg harness x
+  | .replayed => ReplayedFuzzerReturns cfg harness x
+
+def SizedFuzzerReturns (cfg : FuzzerRunConfig) (harness : PlutusScript) (x : Data) : Prop :=
+  FuzzerReturns cfg harness x
+
+abbrev RunProperty (returnMode : ReturnMode) (p : PlutusScript) (args : List Term) : TestEvalOutcome :=
+  match returnMode, cekExecuteProgram p.script args 20000 with
+  | .bool, .Halt (.VCon (Const.Bool true)) => .returnsTrue
+  | .bool, .Halt (.VCon (Const.Bool false)) => .returnsFalse
+  | .bool, _ => .evalError
+  | .void, .Halt _ => .returnsVoid
+  | .void, _ => .evalError
+abbrev PropertySucceeds (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsTrue => True
+  | .void, .returnsVoid => True
+  | _, _ => False
+
+abbrev PropertyFails
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsFalse => True
+  | .void, .evalError => True
+  | _, .budgetExceeded => False
+  | _, .decodeError =>
+      match decodePolicy with
+      | .decodeErrorIsTestFailure => True
+      | .decodeErrorIsExportError => False
+  | _, _ => False
+
+
+abbrev PropertyFailsBool
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) : Bool :=
+  match returnMode, out with
+  | .bool, .returnsFalse => true
+  | .void, .evalError => true
+  | _, .budgetExceeded => false
+  | _, .decodeError =>
+      match decodePolicy with
+      | .decodeErrorIsTestFailure => true
+      | .decodeErrorIsExportError => false
+  | _, _ => false
+
+theorem PropertyFailsBool_iff_PropertyFails
+    (returnMode : ReturnMode)
+    (decodePolicy : DecodePolicy)
+    (out : TestEvalOutcome) :
+    PropertyFailsBool returnMode decodePolicy out = true ↔
+      PropertyFails returnMode decodePolicy out := by
+  cases returnMode <;> cases decodePolicy <;> cases out <;> simp [PropertyFailsBool, PropertyFails]
+abbrev PropertyReturns (returnMode : ReturnMode) (out : TestEvalOutcome) : Prop :=
+  match returnMode, out with
+  | .bool, .returnsTrue => True
+  | .bool, .returnsFalse => True
+  | .void, .returnsVoid => True
+  | _, _ => False
+
+def proveTests (p : PlutusScript) (args : List Term) : Option Bool :=
+  match RunProperty .bool p args with
+  | .returnsTrue => some true
+  | .returnsFalse => some false
+  | _ => none
+
+/-- For Void-returning tests: True iff the shared outcome classifier sees a successful halt. -/
+def proveTestsHalt (p : PlutusScript) (args : List Term) : Prop :=
+  PropertySucceeds .void (RunProperty .void p args)
+
+/-- For Void+fail tests: True iff the shared outcome classifier sees an evaluation error. -/
+def proveTestsError (p : PlutusScript) (args : List Term) : Prop :=
+  PropertyFails .void .decodeErrorIsExportError (RunProperty .void p args)
+
+def intArg (x : Integer) : List Term :=
+  [Term.Const (Const.Data (Data.I x))]
+
+def boolArg (x : Bool) : List Term :=
+  [Term.Const (Const.Data (Data.Constr (if x then 1 else 0) []))]
+
+def bytearrayArg (x : ByteString) : List Term :=
+  [Term.Const (Const.Data (Data.B x))]
+
+def dataArg (x : Data) : List Term :=
+  [Term.Const (Const.Data x)]
+
+def dataArgs2 (x : Data) (y : Data) : List Term :=
+  [Term.Const (Const.Data x), Term.Const (Const.Data y)]
+
+def dataArgs3 (x : Data) (y : Data) (z : Data) : List Term :=
+  [Term.Const (Const.Data x), Term.Const (Const.Data y), Term.Const (Const.Data z)]
+
+def stringArg (x : ByteString) : List Term :=
+  [Term.Const (Const.Data (Data.B x))]
+
+def pairArg (x : Data) (y : Data) : List Term :=
+  [Term.Const (Const.Data (Data.List [x, y]))]
+
+/-- `allProp p xs` holds iff every element of `xs` satisfies predicate `p`.
+    Used in generated theorem preconditions to express per-element constraints
+    (e.g. element range bounds) as a recursively-defined Prop rather than
+    using `∀ x ∈ xs, ...` which desugars to `List.Mem` — an inductive predicate
+    that Blaster's SMT backend cannot translate. -/
+def allProp {α : Type} (p : α → Prop) : List α → Prop
+  | [] => True
+  | x :: xs => p x ∧ allProp p xs
+
+end AikenVerify.Utils
