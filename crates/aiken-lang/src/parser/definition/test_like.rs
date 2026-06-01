@@ -2,14 +2,7 @@ use crate::{
     ast,
     ast::OnTestFailure,
     expr::UntypedExpr,
-    parser::{
-        annotation,
-        chain::{Chain, call::parser as call, field_access, tuple_index::parser as tuple_index},
-        error::ParseError,
-        expr::{self, bytearray, int as uint, list, pair, string, tuple, var},
-        pattern,
-        token::Token,
-    },
+    parser::{annotation, error::ParseError, expr, pattern, token::Token},
 };
 use chumsky::prelude::*;
 
@@ -102,45 +95,7 @@ pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {
 }
 
 pub fn fuzzer<'a>() -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a {
-    recursive(|expression| {
-        let chain = choice((
-            tuple_index(),
-            field_access::parser(),
-            call(expression.clone()),
-        ));
-
-        let int = || {
-            choice((just(Token::Minus), just(Token::NewLineMinus)))
-                .to(ast::UnOp::Negate)
-                .map_with_span(|op, span| (op, span))
-                .or_not()
-                .then(uint())
-                .map(|(op, value)| match op {
-                    None => value,
-                    Some((op, location)) => UntypedExpr::UnOp {
-                        op,
-                        location,
-                        value: Box::new(value),
-                    },
-                })
-        };
-
-        choice((
-            int(),
-            string(),
-            bytearray(),
-            pair(expression.clone()),
-            tuple(expression.clone()),
-            list(expression.clone()),
-            var(),
-        ))
-        .then(chain.repeated())
-        .foldl(|expr, chain| match chain {
-            Chain::Call(args, span) => expr.call(args, span),
-            Chain::FieldAccess(label, span) => expr.field_access(label, span),
-            Chain::TupleIndex(index, span) => expr.tuple_index(index, span),
-        })
-    })
+    expr::sequence()
 }
 
 #[cfg(test)]
@@ -180,6 +135,23 @@ mod tests {
               )
             ) {
               x * x <= 100
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn test_parse_via_anonymous_function_argument() {
+        assert_definition!(
+            r#"
+            test foo(
+              xs via fuzz.map2(
+                fuzz.int(),
+                fuzz.int(),
+                fn(a, b) { [a, b] },
+              )
+            ) {
+              True
             }
             "#
         );

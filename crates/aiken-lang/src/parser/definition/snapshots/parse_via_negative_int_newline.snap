@@ -1,5 +1,6 @@
 ---
 source: crates/aiken-lang/src/parser/definition/test_like.rs
+assertion_line: 129
 description: "Code:\n\ntest foo(\n  n via int_between(\n    -10,\n    10,\n  )\n) {\n  x * x <= 100\n}\n"
 ---
 Test(
@@ -26,7 +27,7 @@ Test(
                             location: 35..38,
                             value: UnOp {
                                 op: Negate,
-                                location: 35..36,
+                                location: 35..38,
                                 value: UInt {
                                     location: 36..38,
                                     value: "10",

@@ -1,0 +1,134 @@
+---
+source: crates/aiken-lang/src/parser/definition/test_like.rs
+assertion_line: 145
+description: "Code:\n\ntest foo(\n  xs via fuzz.map2(\n    fuzz.int(),\n    fuzz.int(),\n    fn(a, b) { [a, b] },\n  )\n) {\n  True\n}\n"
+---
+Test(
+    Function {
+        arguments: [
+            ArgVia {
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "xs",
+                            label: "xs",
+                            location: 12..14,
+                        },
+                    ),
+                    location: 12..14,
+                    annotation: None,
+                    doc: None,
+                    is_validator_param: false,
+                },
+                via: Call {
+                    arguments: [
+                        CallArg {
+                            label: None,
+                            location: 34..44,
+                            value: Call {
+                                arguments: [],
+                                fun: FieldAccess {
+                                    location: 34..42,
+                                    label: "int",
+                                    container: Var {
+                                        location: 34..38,
+                                        name: "fuzz",
+                                    },
+                                },
+                                location: 34..44,
+                            },
+                        },
+                        CallArg {
+                            label: None,
+                            location: 50..60,
+                            value: Call {
+                                arguments: [],
+                                fun: FieldAccess {
+                                    location: 50..58,
+                                    label: "int",
+                                    container: Var {
+                                        location: 50..54,
+                                        name: "fuzz",
+                                    },
+                                },
+                                location: 50..60,
+                            },
+                        },
+                        CallArg {
+                            label: None,
+                            location: 66..85,
+                            value: Fn {
+                                location: 66..85,
+                                fn_style: Plain,
+                                arguments: [
+                                    UntypedArg {
+                                        by: ByName(
+                                            Named {
+                                                name: "a",
+                                                label: "a",
+                                                location: 69..70,
+                                            },
+                                        ),
+                                        location: 69..70,
+                                        annotation: None,
+                                        doc: None,
+                                        is_validator_param: false,
+                                    },
+                                    UntypedArg {
+                                        by: ByName(
+                                            Named {
+                                                name: "b",
+                                                label: "b",
+                                                location: 72..73,
+                                            },
+                                        ),
+                                        location: 72..73,
+                                        annotation: None,
+                                        doc: None,
+                                        is_validator_param: false,
+                                    },
+                                ],
+                                body: List {
+                                    location: 77..83,
+                                    elements: [
+                                        Var {
+                                            location: 78..79,
+                                            name: "a",
+                                        },
+                                        Var {
+                                            location: 81..82,
+                                            name: "b",
+                                        },
+                                    ],
+                                    tail: None,
+                                },
+                                return_annotation: None,
+                            },
+                        },
+                    ],
+                    fun: FieldAccess {
+                        location: 19..28,
+                        label: "map2",
+                        container: Var {
+                            location: 19..23,
+                            name: "fuzz",
+                        },
+                    },
+                    location: 19..90,
+                },
+            },
+        ],
+        body: Var {
+            location: 97..101,
+            name: "True",
+        },
+        doc: None,
+        location: 0..92,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 102,
+        on_test_failure: FailImmediately,
+    },
+)
