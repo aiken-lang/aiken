@@ -2261,13 +2261,25 @@ impl<'a> CodeGenerator<'a> {
                     IndexMap::new()
                 };
 
+                let data_type_module = match tipo.as_ref() {
+                    Type::Fn { ret, .. } => match ret.as_ref() {
+                        Type::App { module, .. } => module.clone(),
+                        _ => String::new(),
+                    },
+                    Type::App { module, .. } => module.clone(),
+                    _ => String::new(),
+                };
+
                 let data_type_name = if otherwise.is_some() {
                     format!(
-                        "__expect_{}_{}_otherwise",
-                        data_type.name, data_type_variant
+                        "__expect_{}_{}_{}_otherwise",
+                        data_type_module, data_type.name, data_type_variant
                     )
                 } else {
-                    format!("__expect_{}_{}", data_type.name, data_type_variant)
+                    format!(
+                        "__expect_{}_{}_{}",
+                        data_type_module, data_type.name, data_type_variant
+                    )
                 };
                 let function = self.code_gen_functions.get(&data_type_name);
 

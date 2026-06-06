@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - YYYY-MM-DD
+
+### Fixed
+
+- **aiken-lang**: Include module identity in cached `expect` decoder names to avoid cross-module collisions for same-named types.
+
 ## v1.1.22 - 2026-05-15
 
 ### Added

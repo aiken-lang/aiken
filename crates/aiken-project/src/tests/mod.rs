@@ -1,7 +1,8 @@
 use crate::{
-    builtins,
+    Project, builtins,
     module::{CheckedModule, ParsedModule},
     package_name::PackageName,
+    telemetry::{CoverageMode, EventListener},
     utils,
 };
 use aiken_lang::{
@@ -18,7 +19,12 @@ use aiken_lang::{
     tipo::TypeInfo,
 };
 use indexmap::IndexMap;
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 mod gen_uplc;
 
@@ -140,4 +146,104 @@ impl TestProject {
 
         checked_module
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NoopEventListener;
+
+impl EventListener for NoopEventListener {}
+
+#[test]
+fn cross_module_expect_decoder_cache_key_uses_module_identity() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock should be after epoch")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("aiken-cross-module-expect-{unique}"));
+
+    fs::create_dir_all(root.join("lib")).expect("should create lib dir");
+    fs::write(
+        root.join("aiken.toml"),
+        r#"name = "aiken-lang/actiontype-collision"
+version = "0.0.0"
+compiler = "v1.1.22"
+plutus = "v3"
+license = "Apache-2.0"
+"#,
+    )
+    .expect("should write aiken.toml");
+
+    fs::write(
+        root.join("lib/mod_a.ak"),
+        r#"pub type ActionType {
+  Variant { payload: ByteArray }
+}
+
+pub type RedeemerA {
+  tag: Int,
+  action: ActionType,
+}
+"#,
+    )
+    .expect("should write mod_a");
+
+    fs::write(
+        root.join("lib/mod_b.ak"),
+        r#"pub type ActionType {
+  Variant { payload: Int }
+}
+
+pub type RedeemerB {
+  tag: Int,
+  action: ActionType,
+}
+"#,
+    )
+    .expect("should write mod_b");
+
+    fs::write(
+        root.join("lib/collision.ak"),
+        r#"use mod_a
+use mod_b
+
+pub fn expect_both(a_raw: Data, b_raw: Data) -> Bool {
+  expect _a: mod_a.RedeemerA = a_raw
+  expect _b: mod_b.RedeemerB = b_raw
+  True
+}
+
+test reproduces_collision() {
+  let a_raw: Data =
+    mod_a.RedeemerA { tag: 1, action: mod_a.Variant { payload: #"deadbeef" } }
+
+  let b_raw: Data =
+    mod_b.RedeemerB { tag: 2, action: mod_b.Variant { payload: 42 } }
+
+  expect_both(a_raw, b_raw)
+}
+"#,
+    )
+    .expect("should write collision module");
+
+    let mut project = Project::new(root.clone(), NoopEventListener).expect("should load project");
+
+    let result = project.check(
+        false,
+        None,
+        false,
+        false,
+        1,
+        1,
+        CoverageMode::default(),
+        Tracing::All(TraceLevel::Verbose),
+        true,
+        None,
+    );
+
+    let _ = fs::remove_dir_all(&root);
+
+    assert!(
+        result.is_ok(),
+        "cross-module expect decoders with the same local type name should not collide: {result:#?}"
+    );
 }
