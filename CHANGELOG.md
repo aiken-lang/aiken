@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - YYYY-MM-DD
+
+### Fixed
+
+- **aiken-lang**: Avoid compiler panics when module-constant folding hits `fail`/`todo`; keep the compiled term so fail-marked tests observe the expected runtime failure instead. Fixes [#1314](https://github.com/aiken-lang/aiken/issues/1314). @knoal
+
 ## v1.1.22 - 2026-05-15
 
 ### Added

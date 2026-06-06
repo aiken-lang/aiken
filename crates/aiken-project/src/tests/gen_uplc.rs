@@ -119,6 +119,53 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
 }
 
 #[test]
+fn fail_annotated_module_constant_does_not_panic_during_codegen() {
+    let src = r#"
+        fn helper_fail_bool() -> Bool {
+          fail @"constant helper bool"
+        }
+
+        const broken_fail: Bool =
+          helper_fail_bool()
+
+        test use_fail_constant() fail {
+          broken_fail
+        }
+    "#;
+
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(src)));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+
+    let checked_module = modules.values().next().expect("expected checked module");
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("expected test definition");
+
+    let program = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        generator.generate_raw(&test.body, &[], &checked_module.name)
+    }))
+    .expect("code generation for fail-constant test should not panic");
+
+    let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+    let eval = debruijn_program.eval(ExBudget::default());
+
+    assert!(
+        eval.failed(true, &Language::PlutusV3),
+        "expected fail-constant test to fail at runtime instead of panicking during codegen; logs: {:#?}",
+        eval.logs()
+    );
+}
+
+#[test]
 fn acceptance_test_1_length() {
     let src = r#"
         pub fn length(xs: List<a>) -> Int {
