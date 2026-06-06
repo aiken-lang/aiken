@@ -6,6 +6,7 @@
 
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
 - **uplc**: Convert `bls12_381_g1_multi_scalar_mul` / `bls12_381_g2_multi_scalar_mul` arguments from Aiken's data-encoded lists to the typed `List<Int>` and `List<G1Element>` / `List<G2Element>` constants expected by the builtins, like already done for `write_bits`. Fixes [#1378](https://github.com/aiken-lang/aiken/issues/1378). @perturbing
+- **aiken-lang**: Avoid compiler panic when module-constant folding evaluates a `fail`/`todo` RHS — handle `Error::EvaluationFailure` by preserving the unevaluated term so the fail surfaces at runtime instead of during codegen. Other eval errors still surface as compiler panics so genuine bugs are not masked. Fixes [#1314](https://github.com/aiken-lang/aiken/issues/1314). @knoal
 
 
 ## v1.1.23 - 2026-06-26
