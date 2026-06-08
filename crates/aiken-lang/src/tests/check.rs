@@ -93,6 +93,14 @@ fn check_with_verbosity(
 }
 
 #[allow(clippy::result_large_err)]
+fn check_with_tracing(
+    ast: UntypedModule,
+    tracing: Tracing,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, Vec::new(), ModuleKind::Lib, tracing)
+}
+
+#[allow(clippy::result_large_err)]
 fn check_with_deps(
     ast: UntypedModule,
     extra: Vec<UntypedModule>,
@@ -1373,6 +1381,36 @@ fn trace_if_false_ok() {
     "#;
 
     assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn compiler_generated_filter_warns_for_user_trace() {
+    let source_code = r#"
+        test foo() {
+          trace @"user trace": True
+        }
+    "#;
+
+    assert!(matches!(
+        &check_with_tracing(parse(source_code), Tracing::CompilerGenerated(TraceLevel::Verbose)),
+        Ok((warnings, _)) if warnings == &[Warning::FilteredUserTrace { location: Span::create(32, 25) }],
+    ));
+}
+
+#[test]
+fn no_filtered_user_trace_warning_without_compiler_generated_filter() {
+    let source_code = r#"
+        test foo() {
+          trace @"user trace": True
+        }
+    "#;
+
+    for tracing in [Tracing::All(TraceLevel::Verbose), Tracing::UserDefined(TraceLevel::Verbose)] {
+        assert!(matches!(
+            &check_with_tracing(parse(source_code), tracing),
+            Ok((warnings, _)) if warnings.is_empty(),
+        ));
+    }
 }
 
 #[test]

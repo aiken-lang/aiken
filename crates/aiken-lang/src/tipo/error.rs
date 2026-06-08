@@ -1937,6 +1937,17 @@ pub enum Warning {
         #[label("compact trace label is not String")]
         location: Span,
     },
+
+    #[error("I found a user-defined trace that will be removed by the active trace filter")]
+    #[diagnostic(help(
+        "Compiling with the compiler-generated trace filter removes user-defined traces from the program. That can be surprising because it may also change evaluation behavior, not just which trace messages are emitted."
+    ))]
+    #[diagnostic(code("trace::filtered_user_trace"))]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/troubleshooting#traces"))]
+    FilteredUserTrace {
+        #[label("this user-defined trace will be removed")]
+        location: Span,
+    },
 }
 
 impl ExtraData for Warning {
@@ -1953,6 +1964,7 @@ impl ExtraData for Warning {
             | Warning::DiscardedLetAssignment { .. }
             | Warning::ValidatorInLibraryModule { .. }
             | Warning::CompactTraceLabelIsNotstring { .. }
+            | Warning::FilteredUserTrace { .. }
             | Warning::UseWhenInstead { .. } => None,
             Warning::UnusedPrivateFunction { name, .. }
             | Warning::UnusedType { name, .. }

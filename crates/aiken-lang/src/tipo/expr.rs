@@ -2601,6 +2601,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             })
         }
 
+        if matches!(kind, TraceKind::Trace)
+            && matches!(self.tracing, Tracing::CompilerGenerated(_))
+        {
+            self.environment
+                .warnings
+                .push(Warning::FilteredUserTrace { location });
+        }
+
         let label = self.infer_trace_arg(label)?;
 
         let text = if typed_arguments.is_empty() {
