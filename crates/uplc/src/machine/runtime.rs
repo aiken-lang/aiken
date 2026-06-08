@@ -82,7 +82,7 @@ fn unwrap_bls12_381_g1_list(value: &Value) -> Result<Vec<blst::blst_p1>, Error> 
                     ));
                 };
 
-                blst::blst_p1::uncompress(bytes.as_ref()).map(|point| point.into())
+                blst::blst_p1::uncompress(bytes.as_ref())
             })
             .collect(),
         _ => Err(Error::TypeMismatch(
@@ -116,7 +116,7 @@ fn unwrap_bls12_381_g2_list(value: &Value) -> Result<Vec<blst::blst_p2>, Error> 
                     ));
                 };
 
-                blst::blst_p2::uncompress(bytes.as_ref()).map(|point| point.into())
+                blst::blst_p2::uncompress(bytes.as_ref())
             })
             .collect(),
         _ => Err(Error::TypeMismatch(
