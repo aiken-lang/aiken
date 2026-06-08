@@ -27,7 +27,8 @@ use crate::{
         air::ExpectLevel,
         builder::{
             CodeGenFunction, erase_opaque_type_operations, get_generic_variant_name,
-            get_src_code_by_span, known_data_to_type, monomorphize, wrap_validator_condition,
+            get_line_columns_by_span, get_src_code_by_span, known_data_to_type, monomorphize,
+            wrap_validator_condition,
         },
     },
     line_numbers::LineNumbers,
@@ -75,7 +76,7 @@ pub struct CodeGenerator<'a> {
     module_types: IndexMap<&'a str, &'a TypeInfo>,
     module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
     /// immutable option
-    tracing: TraceLevel,
+    tracing: Tracing,
     /// mutable index maps that are reset
     defined_functions: IndexMap<FunctionAccessKey, ()>,
     special_functions: CodeGenSpecialFuncs,
@@ -90,6 +91,44 @@ pub struct CodeGenerator<'a> {
 impl<'a> CodeGenerator<'a> {
     pub fn data_types(&self) -> &IndexMap<&'a DataTypeKey, &'a TypedDataType> {
         &self.data_types
+    }
+
+    fn code_gen_trace_level(&self) -> TraceLevel {
+        self.tracing.trace_level(true)
+    }
+
+    fn expect_trace(
+        &self,
+        module_build_name: &str,
+        location: &Span,
+        comment: Option<&String>,
+    ) -> String {
+        match self.tracing {
+            Tracing::CompilerGenerated(TraceLevel::Silent)
+            | Tracing::UserDefined(TraceLevel::Silent)
+            | Tracing::All(TraceLevel::Silent) => "".to_string(),
+
+            Tracing::CompilerGenerated(TraceLevel::Compact) => {
+                get_line_columns_by_span(module_build_name, location, &self.module_src).to_string()
+            }
+            Tracing::CompilerGenerated(TraceLevel::Verbose) => {
+                get_src_code_by_span(module_build_name, location, &self.module_src)
+            }
+
+            Tracing::UserDefined(TraceLevel::Compact) | Tracing::All(TraceLevel::Compact) => {
+                comment
+                    .as_ref()
+                    .and_then(|s| s.split(':').next())
+                    .unwrap_or("")
+                    .to_string()
+            }
+            Tracing::UserDefined(TraceLevel::Verbose) | Tracing::All(TraceLevel::Verbose) => {
+                match comment.as_ref() {
+                    None => get_src_code_by_span(module_build_name, location, &self.module_src),
+                    Some(comment) => format!("<expected> {comment}"),
+                }
+            }
+        }
     }
 
     pub fn new(
@@ -108,7 +147,7 @@ impl<'a> CodeGenerator<'a> {
             data_types,
             module_types,
             module_src,
-            tracing: tracing.trace_level(true),
+            tracing,
             defined_functions: IndexMap::new(),
             special_functions: CodeGenSpecialFuncs::new(),
             code_gen_functions: IndexMap::new(),
@@ -140,7 +179,7 @@ impl<'a> CodeGenerator<'a> {
 
         let air_tree_fun = wrap_validator_condition(
             self.build(&validator.into_script_context_handler(), module_name, &[]),
-            self.tracing,
+            self.code_gen_trace_level(),
         );
 
         let air_tree_fun = AirTree::anon_func(vec![context_name_interned], air_tree_fun, true);
@@ -255,18 +294,11 @@ impl<'a> CodeGenerator<'a> {
             let air_value = self.build(value, module_build_name, &[]);
 
             let otherwise_delayed = {
-                let msg = match (self.tracing, kind) {
-                    (TraceLevel::Silent, _) | (_, AssignmentKind::Let { .. }) => "".to_string(),
-                    (TraceLevel::Compact, _) => {
-                        match comment.as_ref().and_then(|s| s.split(":").next()) {
-                            None => "".to_string(),
-                            Some(label) => format!("<expected> {label}"),
-                        }
+                let msg = match kind {
+                    AssignmentKind::Expect { .. } => {
+                        self.expect_trace(module_build_name, location, comment.as_ref())
                     }
-                    (TraceLevel::Verbose, _) => match comment.as_ref() {
-                        None => get_src_code_by_span(module_build_name, location, &self.module_src),
-                        Some(comment) => format!("<expected> {comment}"),
-                    },
+                    AssignmentKind::Let { .. } | AssignmentKind::Is => "".to_string(),
                 };
 
                 let msg_func_name = msg.split_whitespace().join("");
