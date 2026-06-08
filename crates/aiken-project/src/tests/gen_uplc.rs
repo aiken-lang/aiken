@@ -118,6 +118,43 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
     }
 }
 
+fn assert_runs(source_code: &str, should_fail: bool, verbose_mode: bool) {
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
+
+    let mut generator = project.new_generator(if verbose_mode {
+        Tracing::All(TraceLevel::Verbose)
+    } else {
+        Tracing::All(TraceLevel::Silent)
+    });
+
+    let Some(checked_module) = modules.values().next() else {
+        unreachable!("There's got to be one right?")
+    };
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("expected a test definition");
+
+    let program = generator.generate_raw(&test.body, &[], &checked_module.name);
+    let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+    let eval = debruijn_program.eval(ExBudget::default());
+
+    assert_eq!(
+        eval.failed(true, &Language::PlutusV3),
+        should_fail,
+        "logs - {}\nresult - {:#?}\n",
+        format!("{:#?}", eval.logs()),
+        eval.result()
+    );
+}
+
 #[test]
 fn acceptance_test_1_length() {
     let src = r#"
@@ -5936,6 +5973,48 @@ fn bls12_381_elements_from_data_conversion() {
         false,
         true,
     )
+}
+
+#[test]
+fn bls12_381_g1_multi_scalar_mul() {
+    let src = r#"
+      use aiken/builtin
+
+      pub const generator_g1: G1Element =
+        #<Bls12_381, G1>"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
+
+      test msm_g1() {
+        let doubled = builtin.bls12_381_g1_scalar_mul(2, generator_g1)
+
+        builtin.bls12_381_g1_equal(
+          builtin.bls12_381_g1_multi_scalar_mul([1, 2], [generator_g1, doubled]),
+          builtin.bls12_381_g1_scalar_mul(5, generator_g1),
+        )
+      }
+    "#;
+
+    assert_runs(src, false, true)
+}
+
+#[test]
+fn bls12_381_g2_multi_scalar_mul() {
+    let src = r#"
+      use aiken/builtin
+
+      pub const generator_g2: G2Element =
+        #<Bls12_381, G2>"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
+
+      test msm_g2() {
+        let doubled = builtin.bls12_381_g2_scalar_mul(2, generator_g2)
+
+        builtin.bls12_381_g2_equal(
+          builtin.bls12_381_g2_multi_scalar_mul([1, 2], [generator_g2, doubled]),
+          builtin.bls12_381_g2_scalar_mul(5, generator_g2),
+        )
+      }
+    "#;
+
+    assert_runs(src, false, true)
 }
 
 #[test]

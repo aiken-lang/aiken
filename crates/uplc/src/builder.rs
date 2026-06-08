@@ -143,6 +143,9 @@ where
     pub fn bls12_381_g1_scalar_mul() -> Self {
         Term::Builtin(DefaultFunction::Bls12_381_G1_ScalarMul)
     }
+    pub fn bls12_381_g1_multi_scalar_mul() -> Self {
+        Term::Builtin(DefaultFunction::Bls12_381_G1_MultiScalarMul)
+    }
     pub fn bls12_381_g1_equal() -> Self {
         Term::Builtin(DefaultFunction::Bls12_381_G1_Equal)
     }
@@ -163,6 +166,9 @@ where
     }
     pub fn bls12_381_g2_scalar_mul() -> Self {
         Term::Builtin(DefaultFunction::Bls12_381_G2_ScalarMul)
+    }
+    pub fn bls12_381_g2_multi_scalar_mul() -> Self {
+        Term::Builtin(DefaultFunction::Bls12_381_G2_MultiScalarMul)
     }
     pub fn bls12_381_g2_equal() -> Self {
         Term::Builtin(DefaultFunction::Bls12_381_G2_Equal)

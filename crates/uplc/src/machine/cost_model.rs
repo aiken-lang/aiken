@@ -328,6 +328,7 @@ pub struct BuiltinCosts {
     bls12_381_g1_add: CostingFun<TwoArguments>,
     bls12_381_g1_neg: CostingFun<OneArgument>,
     bls12_381_g1_scalar_mul: CostingFun<TwoArguments>,
+    bls12_381_g1_multi_scalar_mul: CostingFun<TwoArguments>,
     bls12_381_g1_equal: CostingFun<TwoArguments>,
     bls12_381_g1_compress: CostingFun<OneArgument>,
     bls12_381_g1_uncompress: CostingFun<OneArgument>,
@@ -335,6 +336,7 @@ pub struct BuiltinCosts {
     bls12_381_g2_add: CostingFun<TwoArguments>,
     bls12_381_g2_neg: CostingFun<OneArgument>,
     bls12_381_g2_scalar_mul: CostingFun<TwoArguments>,
+    bls12_381_g2_multi_scalar_mul: CostingFun<TwoArguments>,
     bls12_381_g2_equal: CostingFun<TwoArguments>,
     bls12_381_g2_compress: CostingFun<OneArgument>,
     bls12_381_g2_uncompress: CostingFun<OneArgument>,
@@ -740,6 +742,10 @@ impl BuiltinCosts {
                 mem: TwoArguments::ConstantCost(30000000000),
                 cpu: TwoArguments::ConstantCost(30000000000),
             },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                mem: TwoArguments::ConstantCost(30000000000),
+                cpu: TwoArguments::ConstantCost(30000000000),
+            },
             bls12_381_g1_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
@@ -765,6 +771,10 @@ impl BuiltinCosts {
                 mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
@@ -1238,6 +1248,10 @@ impl BuiltinCosts {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
             bls12_381_g1_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
@@ -1263,6 +1277,10 @@ impl BuiltinCosts {
                 mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
@@ -1763,6 +1781,13 @@ impl BuiltinCosts {
                 }),
                 mem: TwoArguments::ConstantCost(18),
             },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 321837444,
+                    slope: 25087669,
+                }),
+                mem: TwoArguments::ConstantCost(18),
+            },
             bls12_381_g1_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(442008),
                 mem: TwoArguments::ConstantCost(1),
@@ -1794,6 +1819,13 @@ impl BuiltinCosts {
                 cpu: TwoArguments::LinearInX(LinearSize {
                     intercept: 158221314,
                     slope: 26549,
+                }),
+                mem: TwoArguments::ConstantCost(36),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 617887431,
+                    slope: 67302824,
                 }),
                 mem: TwoArguments::ConstantCost(36),
             },
@@ -2430,6 +2462,16 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => ExBudget {
+                mem: self
+                    .bls12_381_g1_multi_scalar_mul
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g1_multi_scalar_mul
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::Bls12_381_G1_Equal => ExBudget {
                 mem: self
                     .bls12_381_g1_equal
@@ -2479,6 +2521,16 @@ impl BuiltinCosts {
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
                 cpu: self
                     .bls12_381_g2_scalar_mul
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => ExBudget {
+                mem: self
+                    .bls12_381_g2_multi_scalar_mul
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g2_multi_scalar_mul
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
@@ -4509,6 +4561,27 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            bls12_381_g1_multi_scalar_mul: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInX(LinearSize {
+                        intercept: *cost_map
+                            .get("bls12_381_G1_multiScalarMul-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("bls12_381_G1_multiScalarMul-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("bls12_381_G1_multiScalarMul-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
             bls12_381_g1_equal: match version {
                 Language::PlutusV1 | Language::PlutusV2 => CostingFun {
                     cpu: TwoArguments::ConstantCost(30000000000),
@@ -4637,6 +4710,27 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     mem: TwoArguments::ConstantCost(
                         *cost_map
                             .get("bls12_381_G2_scalarMul-mem-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            bls12_381_g2_multi_scalar_mul: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInX(LinearSize {
+                        intercept: *cost_map
+                            .get("bls12_381_G2_multiScalarMul-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("bls12_381_G2_multiScalarMul-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("bls12_381_G2_multiScalarMul-memory-arguments")
                             .unwrap_or(&30000000000),
                     ),
                 },
