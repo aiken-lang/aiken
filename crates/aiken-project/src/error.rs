@@ -920,7 +920,10 @@ fn default_miette_handler(context_lines: usize) -> MietteHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aiken_lang::{ast::Span, tipo::{self, Type}};
+    use aiken_lang::{
+        ast::Span,
+        tipo::{self, Type},
+    };
     use std::collections::HashMap;
 
     #[test]
@@ -932,7 +935,10 @@ mod tests {
             src: Box::new(src.clone()),
             named: Box::new(NamedSource::new("validators/main.ak", src)),
             error: Box::new(tipo::error::Error::CouldNotUnify {
-                location: Span { start: 999, end: 1005 },
+                location: Span {
+                    start: 999,
+                    end: 1005,
+                },
                 expected: Type::bool(),
                 given: Type::void(),
                 situation: Some(tipo::error::UnifyErrorSituation::ReturnAnnotationMismatch),
