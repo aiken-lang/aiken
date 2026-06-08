@@ -329,11 +329,12 @@ impl Error {
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        default_miette_handler(2)
-            .debug(self, f)
-            // Ignore error to prevent format! panics. This can happen if span points at some
-            // inaccessible location, for example by calling `report_error()` with wrong working set.
-            .or(Ok(()))
+        match default_miette_handler(2).debug(self, f) {
+            Ok(()) => Ok(()),
+            // Fall back to the plain display text instead of rendering nothing when
+            // miette can't highlight the provided span/source combination.
+            Err(_) => write!(f, "{self}"),
+        }
     }
 }
 
@@ -838,19 +839,18 @@ impl Warning {
 
 impl Debug for Warning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        default_miette_handler(1)
-            .debug(
-                &DisplayWarning {
-                    title: &self.to_string(),
-                    source_code: self.source_code(),
-                    labels: self.labels().map(|ls| ls.collect()),
-                    help: self.help().map(|s| s.to_string()),
-                },
-                f,
-            )
-            // Ignore error to prevent format! panics. This can happen if span points at some
-            // inaccessible location, for example by calling `report_error()` with wrong working set.
-            .or(Ok(()))
+        match default_miette_handler(1).debug(
+            &DisplayWarning {
+                title: &self.to_string(),
+                source_code: self.source_code(),
+                labels: self.labels().map(|ls| ls.collect()),
+                help: self.help().map(|s| s.to_string()),
+            },
+            f,
+        ) {
+            Ok(()) => Ok(()),
+            Err(_) => write!(f, "{self}"),
+        }
     }
 }
 
@@ -915,4 +915,37 @@ fn default_miette_handler(context_lines: usize) -> MietteHandler {
         .terminal_links(true)
         .context_lines(context_lines)
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aiken_lang::{ast::Span, tipo::{self, Type}};
+    use std::collections::HashMap;
+
+    #[test]
+    fn type_error_debug_falls_back_when_miette_rendering_fails() {
+        let src = "pub fn foo() -> Bool { trace @\"x\": True }".to_string();
+
+        let err = Error::Type {
+            path: Box::new(PathBuf::from("validators/main.ak")),
+            src: Box::new(src.clone()),
+            named: Box::new(NamedSource::new("validators/main.ak", src)),
+            error: Box::new(tipo::error::Error::CouldNotUnify {
+                location: Span { start: 999, end: 1005 },
+                expected: Type::bool(),
+                given: Type::void(),
+                situation: Some(tipo::error::UnifyErrorSituation::ReturnAnnotationMismatch),
+                rigid_type_names: HashMap::new(),
+            }),
+        };
+
+        let rendered = format!("{err:?}");
+
+        assert!(!rendered.trim().is_empty());
+        assert!(
+            rendered.contains("While trying to make sense of your code")
+                || rendered.contains("I struggled to unify the types of two expressions")
+        );
+    }
 }
