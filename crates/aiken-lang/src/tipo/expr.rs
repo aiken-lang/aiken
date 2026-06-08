@@ -2601,8 +2601,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             })
         }
 
-        if matches!(kind, TraceKind::Trace)
-            && matches!(self.tracing, Tracing::CompilerGenerated(_))
+        if matches!(kind, TraceKind::Trace) && matches!(self.tracing, Tracing::CompilerGenerated(_))
         {
             self.environment
                 .warnings

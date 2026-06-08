@@ -1405,7 +1405,10 @@ fn no_filtered_user_trace_warning_without_compiler_generated_filter() {
         }
     "#;
 
-    for tracing in [Tracing::All(TraceLevel::Verbose), Tracing::UserDefined(TraceLevel::Verbose)] {
+    for tracing in [
+        Tracing::All(TraceLevel::Verbose),
+        Tracing::UserDefined(TraceLevel::Verbose),
+    ] {
         assert!(matches!(
             &check_with_tracing(parse(source_code), tracing),
             Ok((warnings, _)) if warnings.is_empty(),
