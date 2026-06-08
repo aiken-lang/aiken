@@ -56,6 +56,11 @@ impl<T> Definitions<T> {
         self.inner.get(&reference.as_key()).and_then(|v| v.as_ref())
     }
 
+    /// Retrieve a definition mutably, if it exists and is resolved.
+    pub fn get_mut(&mut self, reference: &Reference) -> Option<&mut T> {
+        self.inner.get_mut(&reference.as_key()).and_then(|v| v.as_mut())
+    }
+
     /// Merge two set of definitions together. Prioritize callee.
     pub fn merge(&mut self, other: &mut Definitions<T>) {
         self.inner.append(&mut other.inner);
