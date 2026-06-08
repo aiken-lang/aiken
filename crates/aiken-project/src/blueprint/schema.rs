@@ -224,8 +224,16 @@ impl Annotated<Schema> {
         type_parameters: &mut HashMap<u64, Rc<Type>>,
         definitions: &mut Definitions<Self>,
     ) -> Result<Reference, Error> {
-        let title = if type_info.alias().is_some() {
-            Some(type_info.to_pretty(0))
+        let title = if let Some(alias) = type_info.alias() {
+            let alias_target = type_info.clone().set_alias(None);
+            let alias_reference = Reference::from_type(type_info, type_parameters);
+            let target_reference = Reference::from_type(alias_target.as_ref(), type_parameters);
+
+            if alias_reference != target_reference {
+                Some(alias.alias.clone())
+            } else {
+                Some(type_info.to_pretty(0))
+            }
         } else {
             None
         };

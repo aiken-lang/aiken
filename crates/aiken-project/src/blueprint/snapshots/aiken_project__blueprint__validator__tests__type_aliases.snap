@@ -61,7 +61,7 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
       ]
     },
     "Pairs<test_module/Asset,test_module/POSIXTime>": {
-      "title": "Pairs<a, POSIXTime>",
+      "title": "Pairs",
       "dataType": "map",
       "keys": {
         "$ref": "#/definitions/test_module~1Asset"
