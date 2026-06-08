@@ -1318,7 +1318,11 @@ impl DefaultFunction {
                             size_scalar * 8,
                         );
 
-                        blst::blst_p1_add_or_double(&mut out as *mut _, &out as *const _, &tmp as *const _);
+                        blst::blst_p1_add_or_double(
+                            &mut out as *mut _,
+                            &out as *const _,
+                            &tmp as *const _,
+                        );
                     }
                 }
 
@@ -1457,7 +1461,11 @@ impl DefaultFunction {
                             size_scalar * 8,
                         );
 
-                        blst::blst_p2_add_or_double(&mut out as *mut _, &out as *const _, &tmp as *const _);
+                        blst::blst_p2_add_or_double(
+                            &mut out as *mut _,
+                            &out as *const _,
+                            &tmp as *const _,
+                        );
                     }
                 }
 
