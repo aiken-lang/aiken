@@ -516,7 +516,7 @@ impl Annotated<Schema> {
 
             Type::Fn { .. } => Err(Error::new(ErrorContext::UnexpectedFunction, type_info)),
         }
-        .map(|reference| {
+        .inspect(|reference| {
             let alias_target = type_info.clone().set_alias(None);
             let alias = type_info
                 .alias()
@@ -530,17 +530,15 @@ impl Annotated<Schema> {
             let should_attach_alias = alias
                 .as_ref()
                 .is_some_and(|alias| {
-                    alias != &reference
+                    alias != reference
                         && (definitions.try_lookup(alias).is_some() || alias_is_named_type)
                 });
 
             if should_attach_alias
-                && let Some(schema) = definitions.get_mut(&reference)
+                && let Some(schema) = definitions.get_mut(reference)
             {
                 schema.alias = alias;
             }
-
-            reference
         })
     }
 }
