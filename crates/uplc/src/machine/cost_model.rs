@@ -328,6 +328,7 @@ pub struct BuiltinCosts {
     bls12_381_g1_add: CostingFun<TwoArguments>,
     bls12_381_g1_neg: CostingFun<OneArgument>,
     bls12_381_g1_scalar_mul: CostingFun<TwoArguments>,
+    bls12_381_g1_multi_scalar_mul: CostingFun<TwoArguments>,
     bls12_381_g1_equal: CostingFun<TwoArguments>,
     bls12_381_g1_compress: CostingFun<OneArgument>,
     bls12_381_g1_uncompress: CostingFun<OneArgument>,
@@ -335,6 +336,7 @@ pub struct BuiltinCosts {
     bls12_381_g2_add: CostingFun<TwoArguments>,
     bls12_381_g2_neg: CostingFun<OneArgument>,
     bls12_381_g2_scalar_mul: CostingFun<TwoArguments>,
+    bls12_381_g2_multi_scalar_mul: CostingFun<TwoArguments>,
     bls12_381_g2_equal: CostingFun<TwoArguments>,
     bls12_381_g2_compress: CostingFun<OneArgument>,
     bls12_381_g2_uncompress: CostingFun<OneArgument>,
@@ -740,6 +742,10 @@ impl BuiltinCosts {
                 mem: TwoArguments::ConstantCost(30000000000),
                 cpu: TwoArguments::ConstantCost(30000000000),
             },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                mem: TwoArguments::ConstantCost(30000000000),
+                cpu: TwoArguments::ConstantCost(30000000000),
+            },
             bls12_381_g1_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
@@ -765,6 +771,10 @@ impl BuiltinCosts {
                 mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
@@ -1238,6 +1248,10 @@ impl BuiltinCosts {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
             bls12_381_g1_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
@@ -1263,6 +1277,10 @@ impl BuiltinCosts {
                 mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
@@ -1763,6 +1781,13 @@ impl BuiltinCosts {
                 }),
                 mem: TwoArguments::ConstantCost(18),
             },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 321837444,
+                    slope: 25087669,
+                }),
+                mem: TwoArguments::ConstantCost(18),
+            },
             bls12_381_g1_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(442008),
                 mem: TwoArguments::ConstantCost(1),
@@ -1794,6 +1819,13 @@ impl BuiltinCosts {
                 cpu: TwoArguments::LinearInX(LinearSize {
                     intercept: 158221314,
                     slope: 26549,
+                }),
+                mem: TwoArguments::ConstantCost(36),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 617887431,
+                    slope: 67302824,
                 }),
                 mem: TwoArguments::ConstantCost(36),
             },
@@ -2430,6 +2462,16 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => ExBudget {
+                mem: self
+                    .bls12_381_g1_multi_scalar_mul
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g1_multi_scalar_mul
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::Bls12_381_G1_Equal => ExBudget {
                 mem: self
                     .bls12_381_g1_equal
@@ -2479,6 +2521,16 @@ impl BuiltinCosts {
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
                 cpu: self
                     .bls12_381_g2_scalar_mul
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => ExBudget {
+                mem: self
+                    .bls12_381_g2_multi_scalar_mul
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g2_multi_scalar_mul
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
@@ -3272,96 +3324,102 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "bls12_381_G1_scalarMul-cpu-arguments-intercept" => costs[208],
                 "bls12_381_G1_scalarMul-cpu-arguments-slope" => costs[209],
                 "bls12_381_G1_scalarMul-mem-arguments" => costs[210],
-                "bls12_381_G1_uncompress-cpu-arguments" => costs[211],
-                "bls12_381_G1_uncompress-mem-arguments" => costs[212],
-                "bls12_381_G2_add-cpu-arguments" => costs[213],
-                "bls12_381_G2_add-mem-arguments" => costs[214],
-                "bls12_381_G2_compress-cpu-arguments" => costs[215],
-                "bls12_381_G2_compress-mem-arguments" => costs[216],
-                "bls12_381_G2_equal-cpu-arguments" => costs[217],
-                "bls12_381_G2_equal-mem-arguments" => costs[218],
-                "bls12_381_G2_hashToGroup-cpu-arguments-intercept" => costs[219],
-                "bls12_381_G2_hashToGroup-cpu-arguments-slope" => costs[220],
-                "bls12_381_G2_hashToGroup-mem-arguments" => costs[221],
-                "bls12_381_G2_neg-cpu-arguments" => costs[222],
-                "bls12_381_G2_neg-mem-arguments" => costs[223],
-                "bls12_381_G2_scalarMul-cpu-arguments-intercept" => costs[224],
-                "bls12_381_G2_scalarMul-cpu-arguments-slope" => costs[225],
-                "bls12_381_G2_scalarMul-mem-arguments" => costs[226],
-                "bls12_381_G2_uncompress-cpu-arguments" => costs[227],
-                "bls12_381_G2_uncompress-mem-arguments" => costs[228],
-                "bls12_381_finalVerify-cpu-arguments" => costs[229],
-                "bls12_381_finalVerify-mem-arguments" => costs[230],
-                "bls12_381_millerLoop-cpu-arguments" => costs[231],
-                "bls12_381_millerLoop-mem-arguments" => costs[232],
-                "bls12_381_mulMlResult-cpu-arguments" => costs[233],
-                "bls12_381_mulMlResult-mem-arguments" => costs[234],
-                "keccak_256-cpu-arguments-intercept" => costs[235],
-                "keccak_256-cpu-arguments-slope" => costs[236],
-                "keccak_256-mem-arguments" => costs[237],
-                "blake2b_224-cpu-arguments-intercept" => costs[238],
-                "blake2b_224-cpu-arguments-slope" => costs[239],
-                "blake2b_224-mem-arguments-slope" => costs[240],
-                "integerToByteString-cpu-arguments-c0" => costs[241],
-                "integerToByteString-cpu-arguments-c1" => costs[242],
-                "integerToByteString-cpu-arguments-c2" => costs[243],
-                "integerToByteString-mem-arguments-intercept" => costs[244],
-                "integerToByteString-mem-arguments-slope" => costs[245],
-                "byteStringToInteger-cpu-arguments-c0" => costs[246],
-                "byteStringToInteger-cpu-arguments-c1" => costs[247],
-                "byteStringToInteger-cpu-arguments-c2" => costs[248],
-                "byteStringToInteger-mem-arguments-intercept" => costs[249],
-                "byteStringToInteger-mem-arguments-slope" => costs[250],
+                "bls12_381_G1_multiScalarMul-cpu-arguments-intercept" => costs[211],
+                "bls12_381_G1_multiScalarMul-cpu-arguments-slope" => costs[212],
+                "bls12_381_G1_multiScalarMul-memory-arguments" => costs[213],
+                "bls12_381_G1_uncompress-cpu-arguments" => costs[214],
+                "bls12_381_G1_uncompress-mem-arguments" => costs[215],
+                "bls12_381_G2_add-cpu-arguments" => costs[216],
+                "bls12_381_G2_add-mem-arguments" => costs[217],
+                "bls12_381_G2_compress-cpu-arguments" => costs[218],
+                "bls12_381_G2_compress-mem-arguments" => costs[219],
+                "bls12_381_G2_equal-cpu-arguments" => costs[220],
+                "bls12_381_G2_equal-mem-arguments" => costs[221],
+                "bls12_381_G2_hashToGroup-cpu-arguments-intercept" => costs[222],
+                "bls12_381_G2_hashToGroup-cpu-arguments-slope" => costs[223],
+                "bls12_381_G2_hashToGroup-mem-arguments" => costs[224],
+                "bls12_381_G2_neg-cpu-arguments" => costs[225],
+                "bls12_381_G2_neg-mem-arguments" => costs[226],
+                "bls12_381_G2_scalarMul-cpu-arguments-intercept" => costs[227],
+                "bls12_381_G2_scalarMul-cpu-arguments-slope" => costs[228],
+                "bls12_381_G2_scalarMul-mem-arguments" => costs[229],
+                "bls12_381_G2_multiScalarMul-cpu-arguments-intercept" => costs[230],
+                "bls12_381_G2_multiScalarMul-cpu-arguments-slope" => costs[231],
+                "bls12_381_G2_multiScalarMul-memory-arguments" => costs[232],
+                "bls12_381_G2_uncompress-cpu-arguments" => costs[233],
+                "bls12_381_G2_uncompress-mem-arguments" => costs[234],
+                "bls12_381_finalVerify-cpu-arguments" => costs[235],
+                "bls12_381_finalVerify-mem-arguments" => costs[236],
+                "bls12_381_millerLoop-cpu-arguments" => costs[237],
+                "bls12_381_millerLoop-mem-arguments" => costs[238],
+                "bls12_381_mulMlResult-cpu-arguments" => costs[239],
+                "bls12_381_mulMlResult-mem-arguments" => costs[240],
+                "keccak_256-cpu-arguments-intercept" => costs[241],
+                "keccak_256-cpu-arguments-slope" => costs[242],
+                "keccak_256-mem-arguments" => costs[243],
+                "blake2b_224-cpu-arguments-intercept" => costs[244],
+                "blake2b_224-cpu-arguments-slope" => costs[245],
+                "blake2b_224-mem-arguments-slope" => costs[246],
+                "integerToByteString-cpu-arguments-c0" => costs[247],
+                "integerToByteString-cpu-arguments-c1" => costs[248],
+                "integerToByteString-cpu-arguments-c2" => costs[249],
+                "integerToByteString-mem-arguments-intercept" => costs[250],
+                "integerToByteString-mem-arguments-slope" => costs[251],
+                "byteStringToInteger-cpu-arguments-c0" => costs[252],
+                "byteStringToInteger-cpu-arguments-c1" => costs[253],
+                "byteStringToInteger-cpu-arguments-c2" => costs[254],
+                "byteStringToInteger-mem-arguments-intercept" => costs[255],
+                "byteStringToInteger-mem-arguments-slope" => costs[256],
             };
 
-            if costs.len() == 297 {
+            if costs.len() == 303 {
                 let test = hashmap! {
-                    "andByteString-cpu-arguments-intercept"=> costs[251],
-                    "andByteString-cpu-arguments-slope1"=> costs[252],
-                    "andByteString-cpu-arguments-slope2"=> costs[253],
-                    "andByteString-memory-arguments-intercept"=> costs[254],
-                    "andByteString-memory-arguments-slope"=> costs[255],
-                    "orByteString-cpu-arguments-intercept"=> costs[256],
-                    "orByteString-cpu-arguments-slope1"=> costs[257],
-                    "orByteString-cpu-arguments-slope2"=> costs[258],
-                    "orByteString-memory-arguments-intercept"=> costs[259],
-                    "orByteString-memory-arguments-slope"=> costs[260],
-                    "xorByteString-cpu-arguments-intercept"=> costs[261],
-                    "xorByteString-cpu-arguments-slope1"=> costs[262],
-                    "xorByteString-cpu-arguments-slope2"=> costs[263],
-                    "xorByteString-memory-arguments-intercept"=> costs[264],
-                    "xorByteString-memory-arguments-slope"=> costs[265],
-                    "complementByteString-cpu-arguments-intercept"=> costs[266],
-                    "complementByteString-cpu-arguments-slope"=> costs[267],
-                    "complementByteString-memory-arguments-intercept"=> costs[268],
-                    "complementByteString-memory-arguments-slope"=> costs[269],
-                    "readBit-cpu-arguments"=> costs[270],
-                    "readBit-memory-arguments"=> costs[271],
-                    "writeBits-cpu-arguments-intercept"=> costs[272],
-                    "writeBits-cpu-arguments-slope"=> costs[273],
-                    "writeBits-memory-arguments-intercept"=> costs[274],
-                    "writeBits-memory-arguments-slope"=> costs[275],
-                    "replicateByte-cpu-arguments-intercept"=> costs[276],
-                    "replicateByte-cpu-arguments-slope"=> costs[277],
-                    "replicateByte-memory-arguments-intercept"=> costs[278],
-                    "replicateByte-memory-arguments-slope"=> costs[279],
-                    "shiftByteString-cpu-arguments-intercept"=> costs[280],
-                    "shiftByteString-cpu-arguments-slope"=> costs[281],
-                    "shiftByteString-memory-arguments-intercept"=> costs[282],
-                    "shiftByteString-memory-arguments-slope"=> costs[283],
-                    "rotateByteString-cpu-arguments-intercept"=> costs[284],
-                    "rotateByteString-cpu-arguments-slope"=> costs[285],
-                    "rotateByteString-memory-arguments-intercept"=> costs[286],
-                    "rotateByteString-memory-arguments-slope"=> costs[287],
-                    "countSetBits-cpu-arguments-intercept"=> costs[288],
-                    "countSetBits-cpu-arguments-slope"=> costs[289],
-                    "countSetBits-memory-arguments"=> costs[290],
-                    "findFirstSetBit-cpu-arguments-intercept"=> costs[291],
-                    "findFirstSetBit-cpu-arguments-slope"=> costs[292],
-                    "findFirstSetBit-memory-arguments"=> costs[293],
-                    "ripemd_160-cpu-arguments-intercept"=> costs[294],
-                    "ripemd_160-cpu-arguments-slope"=> costs[295],
-                    "ripemd_160-memory-arguments"=> costs[296],
+                    "andByteString-cpu-arguments-intercept"=> costs[257],
+                    "andByteString-cpu-arguments-slope1"=> costs[258],
+                    "andByteString-cpu-arguments-slope2"=> costs[259],
+                    "andByteString-memory-arguments-intercept"=> costs[260],
+                    "andByteString-memory-arguments-slope"=> costs[261],
+                    "orByteString-cpu-arguments-intercept"=> costs[262],
+                    "orByteString-cpu-arguments-slope1"=> costs[263],
+                    "orByteString-cpu-arguments-slope2"=> costs[264],
+                    "orByteString-memory-arguments-intercept"=> costs[265],
+                    "orByteString-memory-arguments-slope"=> costs[266],
+                    "xorByteString-cpu-arguments-intercept"=> costs[267],
+                    "xorByteString-cpu-arguments-slope1"=> costs[268],
+                    "xorByteString-cpu-arguments-slope2"=> costs[269],
+                    "xorByteString-memory-arguments-intercept"=> costs[270],
+                    "xorByteString-memory-arguments-slope"=> costs[271],
+                    "complementByteString-cpu-arguments-intercept"=> costs[272],
+                    "complementByteString-cpu-arguments-slope"=> costs[273],
+                    "complementByteString-memory-arguments-intercept"=> costs[274],
+                    "complementByteString-memory-arguments-slope"=> costs[275],
+                    "readBit-cpu-arguments"=> costs[276],
+                    "readBit-memory-arguments"=> costs[277],
+                    "writeBits-cpu-arguments-intercept"=> costs[278],
+                    "writeBits-cpu-arguments-slope"=> costs[279],
+                    "writeBits-memory-arguments-intercept"=> costs[280],
+                    "writeBits-memory-arguments-slope"=> costs[281],
+                    "replicateByte-cpu-arguments-intercept"=> costs[282],
+                    "replicateByte-cpu-arguments-slope"=> costs[283],
+                    "replicateByte-memory-arguments-intercept"=> costs[284],
+                    "replicateByte-memory-arguments-slope"=> costs[285],
+                    "shiftByteString-cpu-arguments-intercept"=> costs[286],
+                    "shiftByteString-cpu-arguments-slope"=> costs[287],
+                    "shiftByteString-memory-arguments-intercept"=> costs[288],
+                    "shiftByteString-memory-arguments-slope"=> costs[289],
+                    "rotateByteString-cpu-arguments-intercept"=> costs[290],
+                    "rotateByteString-cpu-arguments-slope"=> costs[291],
+                    "rotateByteString-memory-arguments-intercept"=> costs[292],
+                    "rotateByteString-memory-arguments-slope"=> costs[293],
+                    "countSetBits-cpu-arguments-intercept"=> costs[294],
+                    "countSetBits-cpu-arguments-slope"=> costs[295],
+                    "countSetBits-memory-arguments"=> costs[296],
+                    "findFirstSetBit-cpu-arguments-intercept"=> costs[297],
+                    "findFirstSetBit-cpu-arguments-slope"=> costs[298],
+                    "findFirstSetBit-memory-arguments"=> costs[299],
+                    "ripemd_160-cpu-arguments-intercept"=> costs[300],
+                    "ripemd_160-cpu-arguments-slope"=> costs[301],
+                    "ripemd_160-memory-arguments"=> costs[302],
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
@@ -4509,6 +4567,27 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     ),
                 },
             },
+            bls12_381_g1_multi_scalar_mul: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInX(LinearSize {
+                        intercept: *cost_map
+                            .get("bls12_381_G1_multiScalarMul-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("bls12_381_G1_multiScalarMul-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("bls12_381_G1_multiScalarMul-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
             bls12_381_g1_equal: match version {
                 Language::PlutusV1 | Language::PlutusV2 => CostingFun {
                     cpu: TwoArguments::ConstantCost(30000000000),
@@ -4637,6 +4716,27 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     mem: TwoArguments::ConstantCost(
                         *cost_map
                             .get("bls12_381_G2_scalarMul-mem-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            bls12_381_g2_multi_scalar_mul: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInX(LinearSize {
+                        intercept: *cost_map
+                            .get("bls12_381_G2_multiScalarMul-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("bls12_381_G2_multiScalarMul-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("bls12_381_G2_multiScalarMul-memory-arguments")
                             .unwrap_or(&30000000000),
                     ),
                 },
@@ -5471,13 +5571,13 @@ mod tests {
             1457325, 64566, 4, 20467, 1, 4, 0, 141992, 32, 100788, 420, 1, 1, 81663, 32, 59498, 32,
             20142, 32, 24588, 32, 20744, 32, 25933, 32, 24623, 32, 43053543, 10, 53384111, 14333,
             10, 43574283, 26308, 10, 16000, 100, 16000, 100, 962335, 18, 2780678, 6, 442008, 1,
-            52538055, 3756, 18, 267929, 18, 76433006, 8868, 18, 52948122, 18, 1995836, 36, 3227919,
-            12, 901022, 1, 166917843, 4307, 36, 284546, 36, 158221314, 26549, 36, 74698472, 36,
-            333849714, 1, 254006273, 72, 2174038, 72, 2261318, 64571, 4, 207616, 8310, 4, 1293828,
-            28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719,
-            0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
-            159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
-            1964219, 24520, 3,
+            52538055, 3756, 18, 267929, 18, 76433006, 8868, 18, 321837444, 25087669, 18, 52948122,
+            18, 1995836, 36, 3227919, 12, 901022, 1, 166917843, 4307, 36, 284546, 36, 158221314,
+            26549, 36, 617887431, 67302824, 36, 74698472, 36, 333849714, 1, 254006273, 72, 2174038,
+            72, 2261318, 64571, 4, 207616, 8310, 4, 1293828, 28716, 63, 0, 1, 1006041, 43623, 251,
+            0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719, 0, 1, 107878,
+            680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194, 159, 1, 1, 158519, 8942, 0, 1,
+            159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1, 1964219, 24520, 3,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);

@@ -98,6 +98,7 @@ pub enum DefaultFunction {
     Bls12_381_G1_Add = 54,
     Bls12_381_G1_Neg = 55,
     Bls12_381_G1_ScalarMul = 56,
+    Bls12_381_G1_MultiScalarMul = 92,
     Bls12_381_G1_Equal = 57,
     Bls12_381_G1_Compress = 58,
     Bls12_381_G1_Uncompress = 59,
@@ -105,6 +106,7 @@ pub enum DefaultFunction {
     Bls12_381_G2_Add = 61,
     Bls12_381_G2_Neg = 62,
     Bls12_381_G2_ScalarMul = 63,
+    Bls12_381_G2_MultiScalarMul = 93,
     Bls12_381_G2_Equal = 64,
     Bls12_381_G2_Compress = 65,
     Bls12_381_G2_Uncompress = 66,
@@ -255,6 +257,9 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G1_ScalarMul as u8 => {
                 Ok(DefaultFunction::Bls12_381_G1_ScalarMul)
             }
+            v if v == DefaultFunction::Bls12_381_G1_MultiScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_MultiScalarMul)
+            }
             v if v == DefaultFunction::Bls12_381_G1_Equal as u8 => {
                 Ok(DefaultFunction::Bls12_381_G1_Equal)
             }
@@ -275,6 +280,9 @@ impl TryFrom<u8> for DefaultFunction {
             }
             v if v == DefaultFunction::Bls12_381_G2_ScalarMul as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_ScalarMul)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_MultiScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_MultiScalarMul)
             }
             v if v == DefaultFunction::Bls12_381_G2_Equal as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_Equal)
@@ -398,6 +406,7 @@ impl FromStr for DefaultFunction {
             "bls12_381_G1_add" => Ok(Bls12_381_G1_Add),
             "bls12_381_G1_neg" => Ok(Bls12_381_G1_Neg),
             "bls12_381_G1_scalarMul" => Ok(Bls12_381_G1_ScalarMul),
+            "bls12_381_G1_multiScalarMul" => Ok(Bls12_381_G1_MultiScalarMul),
             "bls12_381_G1_equal" => Ok(Bls12_381_G1_Equal),
             "bls12_381_G1_compress" => Ok(Bls12_381_G1_Compress),
             "bls12_381_G1_uncompress" => Ok(Bls12_381_G1_Uncompress),
@@ -405,6 +414,7 @@ impl FromStr for DefaultFunction {
             "bls12_381_G2_add" => Ok(Bls12_381_G2_Add),
             "bls12_381_G2_neg" => Ok(Bls12_381_G2_Neg),
             "bls12_381_G2_scalarMul" => Ok(Bls12_381_G2_ScalarMul),
+            "bls12_381_G2_multiScalarMul" => Ok(Bls12_381_G2_MultiScalarMul),
             "bls12_381_G2_equal" => Ok(Bls12_381_G2_Equal),
             "bls12_381_G2_compress" => Ok(Bls12_381_G2_Compress),
             "bls12_381_G2_uncompress" => Ok(Bls12_381_G2_Uncompress),
@@ -498,6 +508,7 @@ impl Display for DefaultFunction {
             Bls12_381_G1_Add => write!(f, "bls12_381_G1_add"),
             Bls12_381_G1_Neg => write!(f, "bls12_381_G1_neg"),
             Bls12_381_G1_ScalarMul => write!(f, "bls12_381_G1_scalarMul"),
+            Bls12_381_G1_MultiScalarMul => write!(f, "bls12_381_G1_multiScalarMul"),
             Bls12_381_G1_Equal => write!(f, "bls12_381_G1_equal"),
             Bls12_381_G1_Compress => write!(f, "bls12_381_G1_compress"),
             Bls12_381_G1_Uncompress => write!(f, "bls12_381_G1_uncompress"),
@@ -505,6 +516,7 @@ impl Display for DefaultFunction {
             Bls12_381_G2_Add => write!(f, "bls12_381_G2_add"),
             Bls12_381_G2_Neg => write!(f, "bls12_381_G2_neg"),
             Bls12_381_G2_ScalarMul => write!(f, "bls12_381_G2_scalarMul"),
+            Bls12_381_G2_MultiScalarMul => write!(f, "bls12_381_G2_multiScalarMul"),
             Bls12_381_G2_Equal => write!(f, "bls12_381_G2_equal"),
             Bls12_381_G2_Compress => write!(f, "bls12_381_G2_compress"),
             Bls12_381_G2_Uncompress => write!(f, "bls12_381_G2_uncompress"),
@@ -597,6 +609,7 @@ impl DefaultFunction {
             Bls12_381_G1_Add => "bls12_381_g1_add",
             Bls12_381_G1_Neg => "bls12_381_g1_neg",
             Bls12_381_G1_ScalarMul => "bls12_381_g1_scalar_mul",
+            Bls12_381_G1_MultiScalarMul => "bls12_381_g1_multi_scalar_mul",
             Bls12_381_G1_Equal => "bls12_381_g1_equal",
             Bls12_381_G1_Compress => "bls12_381_g1_compress",
             Bls12_381_G1_Uncompress => "bls12_381_g1_uncompress",
@@ -604,6 +617,7 @@ impl DefaultFunction {
             Bls12_381_G2_Add => "bls12_381_g2_add",
             Bls12_381_G2_Neg => "bls12_381_g2_neg",
             Bls12_381_G2_ScalarMul => "bls12_381_g2_scalar_mul",
+            Bls12_381_G2_MultiScalarMul => "bls12_381_g2_multi_scalar_mul",
             Bls12_381_G2_Equal => "bls12_381_g2_equal",
             Bls12_381_G2_Compress => "bls12_381_g2_compress",
             Bls12_381_G2_Uncompress => "bls12_381_g2_uncompress",

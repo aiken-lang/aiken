@@ -914,6 +914,14 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 2)
         }
+        DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+            let tipo = Type::function(
+                vec![Type::list(Type::int()), Type::list(Type::g1_element())],
+                Type::g1_element(),
+            );
+
+            (tipo, 2)
+        }
         DefaultFunction::Bls12_381_G1_Compress => {
             let tipo = Type::function(vec![Type::g1_element()], Type::byte_array());
 
@@ -953,6 +961,14 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
         }
         DefaultFunction::Bls12_381_G2_ScalarMul => {
             let tipo = Type::function(vec![Type::int(), Type::g2_element()], Type::g2_element());
+
+            (tipo, 2)
+        }
+        DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+            let tipo = Type::function(
+                vec![Type::list(Type::int()), Type::list(Type::g2_element())],
+                Type::g2_element(),
+            );
 
             (tipo, 2)
         }

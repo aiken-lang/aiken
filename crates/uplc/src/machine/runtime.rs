@@ -35,6 +35,128 @@ const BLST_P2_COMPRESSED_SIZE: usize = 96;
 
 pub const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
 
+fn normalize_bls_scalar(integer: &BigInt) -> blst::blst_scalar {
+    let size_scalar = size_of::<blst::blst_scalar>();
+
+    let integer = integer.mod_floor(&SCALAR_PERIOD);
+
+    let (_, mut bytes) = integer.to_bytes_be();
+
+    if size_scalar > bytes.len() {
+        let diff = size_scalar - bytes.len();
+        let mut new_vec = vec![0; diff];
+        new_vec.append(&mut bytes);
+        bytes = new_vec;
+    }
+
+    let mut scalar = blst::blst_scalar::default();
+
+    unsafe {
+        blst::blst_scalar_from_bendian(&mut scalar as *mut _, bytes.as_ptr() as *const _);
+    }
+
+    scalar
+}
+
+fn unwrap_bls12_381_g1_list(value: &Value) -> Result<Vec<blst::blst_p1>, Error> {
+    let inner = value.unwrap_constant()?;
+
+    match inner {
+        Constant::ProtoList(Type::Bls12_381G1Element, list) => Ok(list
+            .iter()
+            .map(|point| {
+                let Constant::Bls12_381G1Element(point) = point else {
+                    unreachable!("G1 list must only contain G1 elements")
+                };
+
+                **point
+            })
+            .collect()),
+        Constant::ProtoList(Type::Data, list) => list
+            .iter()
+            .map(|point| {
+                let Constant::Data(PlutusData::BoundedBytes(bytes)) = point else {
+                    return Err(Error::TypeMismatch(
+                        Type::List(Type::Bls12_381G1Element.into()),
+                        inner.into(),
+                    ));
+                };
+
+                blst::blst_p1::uncompress(bytes.as_ref())
+            })
+            .collect(),
+        _ => Err(Error::TypeMismatch(
+            Type::List(Type::Bls12_381G1Element.into()),
+            inner.into(),
+        )),
+    }
+}
+
+fn unwrap_bls12_381_g2_list(value: &Value) -> Result<Vec<blst::blst_p2>, Error> {
+    let inner = value.unwrap_constant()?;
+
+    match inner {
+        Constant::ProtoList(Type::Bls12_381G2Element, list) => Ok(list
+            .iter()
+            .map(|point| {
+                let Constant::Bls12_381G2Element(point) = point else {
+                    unreachable!("G2 list must only contain G2 elements")
+                };
+
+                **point
+            })
+            .collect()),
+        Constant::ProtoList(Type::Data, list) => list
+            .iter()
+            .map(|point| {
+                let Constant::Data(PlutusData::BoundedBytes(bytes)) = point else {
+                    return Err(Error::TypeMismatch(
+                        Type::List(Type::Bls12_381G2Element.into()),
+                        inner.into(),
+                    ));
+                };
+
+                blst::blst_p2::uncompress(bytes.as_ref())
+            })
+            .collect(),
+        _ => Err(Error::TypeMismatch(
+            Type::List(Type::Bls12_381G2Element.into()),
+            inner.into(),
+        )),
+    }
+}
+
+fn unwrap_bls12_381_scalar_list(value: &Value) -> Result<Vec<BigInt>, Error> {
+    match value.unwrap_int_list() {
+        Ok(list) => Ok(list
+            .iter()
+            .map(|scalar| {
+                let Constant::Integer(integer) = scalar else {
+                    unreachable!("unwrap_int_list must only contain integers")
+                };
+
+                integer.clone()
+            })
+            .collect()),
+        Err(_) => {
+            let list = value.unwrap_data_list()?;
+
+            list.iter()
+                .map(|scalar| {
+                    let Constant::Data(PlutusData::BigInt(integer)) = scalar else {
+                        return Err(Error::TypeMismatch(
+                            Type::List(Type::Integer.into()),
+                            value.unwrap_constant()?.into(),
+                        ));
+                    };
+
+                    Ok(from_pallas_bigint(integer))
+                })
+                .collect()
+        }
+    }
+}
+
 pub enum BuiltinSemantics {
     V1,
     V2,
@@ -164,6 +286,7 @@ impl DefaultFunction {
             | DefaultFunction::Bls12_381_G1_Add
             | DefaultFunction::Bls12_381_G1_Neg
             | DefaultFunction::Bls12_381_G1_ScalarMul
+            | DefaultFunction::Bls12_381_G1_MultiScalarMul
             | DefaultFunction::Bls12_381_G1_Equal
             | DefaultFunction::Bls12_381_G1_Compress
             | DefaultFunction::Bls12_381_G1_Uncompress
@@ -171,6 +294,7 @@ impl DefaultFunction {
             | DefaultFunction::Bls12_381_G2_Add
             | DefaultFunction::Bls12_381_G2_Neg
             | DefaultFunction::Bls12_381_G2_ScalarMul
+            | DefaultFunction::Bls12_381_G2_MultiScalarMul
             | DefaultFunction::Bls12_381_G2_Equal
             | DefaultFunction::Bls12_381_G2_Compress
             | DefaultFunction::Bls12_381_G2_Uncompress
@@ -259,6 +383,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G1_Add => 2,
             DefaultFunction::Bls12_381_G1_Neg => 1,
             DefaultFunction::Bls12_381_G1_ScalarMul => 2,
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => 2,
             DefaultFunction::Bls12_381_G1_Equal => 2,
             DefaultFunction::Bls12_381_G1_Compress => 1,
             DefaultFunction::Bls12_381_G1_Uncompress => 1,
@@ -266,6 +391,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Add => 2,
             DefaultFunction::Bls12_381_G2_Neg => 1,
             DefaultFunction::Bls12_381_G2_ScalarMul => 2,
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => 2,
             DefaultFunction::Bls12_381_G2_Equal => 2,
             DefaultFunction::Bls12_381_G2_Compress => 1,
             DefaultFunction::Bls12_381_G2_Uncompress => 1,
@@ -352,6 +478,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G1_Add => 0,
             DefaultFunction::Bls12_381_G1_Neg => 0,
             DefaultFunction::Bls12_381_G1_ScalarMul => 0,
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => 0,
             DefaultFunction::Bls12_381_G1_Equal => 0,
             DefaultFunction::Bls12_381_G1_Compress => 0,
             DefaultFunction::Bls12_381_G1_Uncompress => 0,
@@ -359,6 +486,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Add => 0,
             DefaultFunction::Bls12_381_G2_Neg => 0,
             DefaultFunction::Bls12_381_G2_ScalarMul => 0,
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => 0,
             DefaultFunction::Bls12_381_G2_Equal => 0,
             DefaultFunction::Bls12_381_G2_Compress => 0,
             DefaultFunction::Bls12_381_G2_Uncompress => 0,
@@ -1154,36 +1282,48 @@ impl DefaultFunction {
                 let arg2 = args[1].unwrap_bls12_381_g1_element()?;
 
                 let size_scalar = size_of::<blst::blst_scalar>();
-
-                let arg1 = arg1.mod_floor(&SCALAR_PERIOD);
-
-                let (_, mut arg1) = arg1.to_bytes_be();
-
-                if size_scalar > arg1.len() {
-                    let diff = size_scalar - arg1.len();
-
-                    let mut new_vec = vec![0; diff];
-
-                    new_vec.append(&mut arg1);
-
-                    arg1 = new_vec;
-                }
+                let scalar = normalize_bls_scalar(arg1);
 
                 let mut out = blst::blst_p1::default();
-                let mut scalar = blst::blst_scalar::default();
 
                 unsafe {
-                    blst::blst_scalar_from_bendian(
-                        &mut scalar as *mut _,
-                        arg1.as_ptr() as *const _,
-                    );
-
                     blst::blst_p1_mult(
                         &mut out as *mut _,
                         arg2 as *const _,
                         scalar.b.as_ptr() as *const _,
                         size_scalar * 8,
                     );
+                }
+
+                let constant = Constant::Bls12_381G1Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+                let scalars = unwrap_bls12_381_scalar_list(&args[0])?;
+                let points = unwrap_bls12_381_g1_list(&args[1])?;
+
+                let size_scalar = size_of::<blst::blst_scalar>();
+                let mut out = blst::blst_p1::default();
+
+                for (integer, point) in scalars.iter().zip(points.iter()) {
+                    let scalar = normalize_bls_scalar(integer);
+                    let mut tmp = blst::blst_p1::default();
+
+                    unsafe {
+                        blst::blst_p1_mult(
+                            &mut tmp as *mut _,
+                            point as *const _,
+                            scalar.b.as_ptr() as *const _,
+                            size_scalar * 8,
+                        );
+
+                        blst::blst_p1_add_or_double(
+                            &mut out as *mut _,
+                            &out as *const _,
+                            &tmp as *const _,
+                        );
+                    }
                 }
 
                 let constant = Constant::Bls12_381G1Element(out.into());
@@ -1285,36 +1425,48 @@ impl DefaultFunction {
                 let arg2 = args[1].unwrap_bls12_381_g2_element()?;
 
                 let size_scalar = size_of::<blst::blst_scalar>();
-
-                let arg1 = arg1.mod_floor(&SCALAR_PERIOD);
-
-                let (_, mut arg1) = arg1.to_bytes_be();
-
-                if size_scalar > arg1.len() {
-                    let diff = size_scalar - arg1.len();
-
-                    let mut new_vec = vec![0; diff];
-
-                    new_vec.append(&mut arg1);
-
-                    arg1 = new_vec;
-                }
+                let scalar = normalize_bls_scalar(arg1);
 
                 let mut out = blst::blst_p2::default();
-                let mut scalar = blst::blst_scalar::default();
 
                 unsafe {
-                    blst::blst_scalar_from_bendian(
-                        &mut scalar as *mut _,
-                        arg1.as_ptr() as *const _,
-                    );
-
                     blst::blst_p2_mult(
                         &mut out as *mut _,
                         arg2 as *const _,
                         scalar.b.as_ptr() as *const _,
                         size_scalar * 8,
                     );
+                }
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+                let scalars = unwrap_bls12_381_scalar_list(&args[0])?;
+                let points = unwrap_bls12_381_g2_list(&args[1])?;
+
+                let size_scalar = size_of::<blst::blst_scalar>();
+                let mut out = blst::blst_p2::default();
+
+                for (integer, point) in scalars.iter().zip(points.iter()) {
+                    let scalar = normalize_bls_scalar(integer);
+                    let mut tmp = blst::blst_p2::default();
+
+                    unsafe {
+                        blst::blst_p2_mult(
+                            &mut tmp as *mut _,
+                            point as *const _,
+                            scalar.b.as_ptr() as *const _,
+                            size_scalar * 8,
+                        );
+
+                        blst::blst_p2_add_or_double(
+                            &mut out as *mut _,
+                            &out as *const _,
+                            &tmp as *const _,
+                        );
+                    }
                 }
 
                 let constant = Constant::Bls12_381G2Element(out.into());
