@@ -17,6 +17,15 @@ macro_rules! hashmap {
     }};
 }
 
+const DEFAULT_LENGTH_OF_ARRAY_CPU: i64 = 1;
+const DEFAULT_LENGTH_OF_ARRAY_MEM: i64 = 0;
+const DEFAULT_LIST_TO_ARRAY_CPU_INTERCEPT: i64 = 1;
+const DEFAULT_LIST_TO_ARRAY_CPU_SLOPE: i64 = 0;
+const DEFAULT_LIST_TO_ARRAY_MEM_INTERCEPT: i64 = 0;
+const DEFAULT_LIST_TO_ARRAY_MEM_SLOPE: i64 = 0;
+const DEFAULT_INDEX_ARRAY_CPU: i64 = 1;
+const DEFAULT_INDEX_ARRAY_MEM: i64 = 0;
+
 /// Can be negative
 #[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize)]
 pub struct ExBudget {
@@ -357,6 +366,9 @@ pub struct BuiltinCosts {
     count_set_bits: CostingFun<OneArgument>,
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
+    length_of_array: CostingFun<OneArgument>,
+    list_to_array: CostingFun<OneArgument>,
+    index_array: CostingFun<TwoArguments>,
     exp_mod_int: CostingFun<ThreeArguments>,
 }
 
@@ -851,6 +863,18 @@ impl BuiltinCosts {
             ripemd_160: CostingFun {
                 cpu: OneArgument::ConstantCost(30000000000),
                 mem: OneArgument::ConstantCost(30000000000),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            list_to_array: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
@@ -1349,6 +1373,18 @@ impl BuiltinCosts {
             ripemd_160: CostingFun {
                 cpu: OneArgument::ConstantCost(30000000000),
                 mem: OneArgument::ConstantCost(30000000000),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            list_to_array: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             exp_mod_int: CostingFun {
                 cpu: ThreeArguments::ConstantCost(30000000000),
@@ -1957,6 +1993,24 @@ impl BuiltinCosts {
                     slope: 24520,
                 }),
                 mem: OneArgument::ConstantCost(3),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(DEFAULT_LENGTH_OF_ARRAY_CPU),
+                mem: OneArgument::ConstantCost(DEFAULT_LENGTH_OF_ARRAY_MEM),
+            },
+            list_to_array: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: DEFAULT_LIST_TO_ARRAY_CPU_INTERCEPT,
+                    slope: DEFAULT_LIST_TO_ARRAY_CPU_SLOPE,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: DEFAULT_LIST_TO_ARRAY_MEM_INTERCEPT,
+                    slope: DEFAULT_LIST_TO_ARRAY_MEM_SLOPE,
+                }),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(DEFAULT_INDEX_ARRAY_CPU),
+                mem: TwoArguments::ConstantCost(DEFAULT_INDEX_ARRAY_MEM),
             },
             // Not yet properly costed
             exp_mod_int: CostingFun {
@@ -2678,6 +2732,24 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::LengthOfArray => ExBudget {
+                mem: self.length_of_array.mem.cost(args[0].to_ex_mem()),
+                cpu: self.length_of_array.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ListToArray => ExBudget {
+                mem: self.list_to_array.mem.cost(args[0].to_ex_mem()),
+                cpu: self.list_to_array.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::IndexArray => ExBudget {
+                mem: self
+                    .index_array
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .index_array
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
@@ -3314,7 +3386,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-mem-arguments-slope" => costs[250],
             };
 
-            if costs.len() == 297 {
+            if costs.len() >= 297 {
                 let test = hashmap! {
                     "andByteString-cpu-arguments-intercept"=> costs[251],
                     "andByteString-cpu-arguments-slope1"=> costs[252],
@@ -3365,6 +3437,21 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            if costs.len() >= 305 {
+                let arrays = hashmap! {
+                    "lengthOfArray-cpu-arguments"=> costs[297],
+                    "lengthOfArray-memory-arguments"=> costs[298],
+                    "listToArray-cpu-arguments-intercept"=> costs[299],
+                    "listToArray-cpu-arguments-slope"=> costs[300],
+                    "listToArray-memory-arguments-intercept"=> costs[301],
+                    "listToArray-memory-arguments-slope"=> costs[302],
+                    "indexArray-cpu-arguments"=> costs[303],
+                    "indexArray-memory-arguments"=> costs[304],
+                };
+
+                Extend::extend::<HashMap<&str, i64>>(&mut main, arrays);
             }
 
             main
@@ -5104,6 +5191,66 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         *cost_map
                             .get("ripemd_160-memory-arguments")
                             .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            length_of_array: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::ConstantCost(
+                        *cost_map
+                            .get("lengthOfArray-cpu-arguments")
+                            .unwrap_or(&DEFAULT_LENGTH_OF_ARRAY_CPU),
+                    ),
+                    mem: OneArgument::ConstantCost(
+                        *cost_map
+                            .get("lengthOfArray-memory-arguments")
+                            .unwrap_or(&DEFAULT_LENGTH_OF_ARRAY_MEM),
+                    ),
+                },
+            },
+            list_to_array: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("listToArray-cpu-arguments-intercept")
+                            .unwrap_or(&DEFAULT_LIST_TO_ARRAY_CPU_INTERCEPT),
+                        slope: *cost_map
+                            .get("listToArray-cpu-arguments-slope")
+                            .unwrap_or(&DEFAULT_LIST_TO_ARRAY_CPU_SLOPE),
+                    }),
+                    mem: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("listToArray-memory-arguments-intercept")
+                            .unwrap_or(&DEFAULT_LIST_TO_ARRAY_MEM_INTERCEPT),
+                        slope: *cost_map
+                            .get("listToArray-memory-arguments-slope")
+                            .unwrap_or(&DEFAULT_LIST_TO_ARRAY_MEM_SLOPE),
+                    }),
+                },
+            },
+            index_array: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("indexArray-cpu-arguments")
+                            .unwrap_or(&DEFAULT_INDEX_ARRAY_CPU),
+                    ),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("indexArray-memory-arguments")
+                            .unwrap_or(&DEFAULT_INDEX_ARRAY_MEM),
                     ),
                 },
             },

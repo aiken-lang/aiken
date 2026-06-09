@@ -191,7 +191,10 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::LengthOfArray
+            | DefaultFunction::ListToArray
+            | DefaultFunction::IndexArray => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -287,6 +290,9 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
+            DefaultFunction::LengthOfArray => 1,
+            DefaultFunction::ListToArray => 1,
+            DefaultFunction::IndexArray => 2,
             // DefaultFunction::ExpModInteger => 3,
         }
     }
@@ -380,6 +386,9 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::LengthOfArray => 0,
+            DefaultFunction::ListToArray => 0,
+            DefaultFunction::IndexArray => 0,
             // DefaultFunction::ExpModInteger => 0,
         }
     }
@@ -581,6 +590,30 @@ impl DefaultFunction {
                     Ok(value)
                 } else {
                     Err(Error::ByteStringOutOfBounds(arg2.clone(), arg1.to_vec()))
+                }
+            }
+            DefaultFunction::LengthOfArray => {
+                let (_, array) = args[0].unwrap_list()?;
+
+                let value = Value::integer(array.len().into());
+
+                Ok(value)
+            }
+            DefaultFunction::ListToArray => {
+                let (r#type, list) = args[0].unwrap_list()?;
+
+                Ok(Value::list(r#type.clone(), list.clone()))
+            }
+            DefaultFunction::IndexArray => {
+                let (_, array) = args[0].unwrap_list()?;
+                let index = args[1].unwrap_integer()?;
+
+                let i: i128 = index.try_into().unwrap();
+
+                if 0 <= i && i < array.len() as i128 {
+                    Ok(Value::Con(array[i as usize].clone().into()))
+                } else {
+                    Err(Error::ArrayOutOfBounds(index.clone(), array.len()))
                 }
             }
             DefaultFunction::EqualsByteString => {

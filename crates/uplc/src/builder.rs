@@ -284,8 +284,16 @@ where
         Term::Builtin(DefaultFunction::IndexByteString)
     }
 
+    pub fn index_array() -> Self {
+        Term::Builtin(DefaultFunction::IndexArray)
+    }
+
     pub fn keccak_256() -> Self {
         Term::Builtin(DefaultFunction::Keccak_256)
+    }
+
+    pub fn length_of_array() -> Self {
+        Term::Builtin(DefaultFunction::LengthOfArray)
     }
 
     pub fn length_of_bytearray() -> Self {
@@ -310,6 +318,10 @@ where
 
     pub fn list_data() -> Self {
         Term::Builtin(DefaultFunction::ListData)
+    }
+
+    pub fn list_to_array() -> Self {
+        Term::Builtin(DefaultFunction::ListToArray)
     }
 
     pub fn map_data() -> Self {

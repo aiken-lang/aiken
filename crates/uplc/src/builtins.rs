@@ -134,7 +134,10 @@ pub enum DefaultFunction {
     // ExpModInteger = 87,
     // Match
     // CaseList = 88,
-    // CaseData = 89,
+    // Array
+    LengthOfArray = 89,
+    ListToArray = 90,
+    IndexArray = 91,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -325,6 +328,9 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::FindFirstSetBit)
             }
             v if v == DefaultFunction::Ripemd_160 as u8 => Ok(DefaultFunction::Ripemd_160),
+            v if v == DefaultFunction::LengthOfArray as u8 => Ok(DefaultFunction::LengthOfArray),
+            v if v == DefaultFunction::ListToArray as u8 => Ok(DefaultFunction::ListToArray),
+            v if v == DefaultFunction::IndexArray as u8 => Ok(DefaultFunction::IndexArray),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -426,6 +432,9 @@ impl FromStr for DefaultFunction {
             "countSetBits" => Ok(CountSetBits),
             "findFirstSetBit" => Ok(FindFirstSetBit),
             "ripemd_160" => Ok(Ripemd_160),
+            "lengthOfArray" => Ok(LengthOfArray),
+            "listToArray" => Ok(ListToArray),
+            "indexArray" => Ok(IndexArray),
             // "expModInteger" => Ok(ExpModInteger),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
@@ -526,6 +535,9 @@ impl Display for DefaultFunction {
             CountSetBits => write!(f, "countSetBits"),
             FindFirstSetBit => write!(f, "findFirstSetBit"),
             Ripemd_160 => write!(f, "ripemd_160"),
+            LengthOfArray => write!(f, "lengthOfArray"),
+            ListToArray => write!(f, "listToArray"),
+            IndexArray => write!(f, "indexArray"),
             // ExpModInteger => write!(f, "expModInteger"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
@@ -625,6 +637,9 @@ impl DefaultFunction {
             CountSetBits => "count_set_bits",
             FindFirstSetBit => "find_first_set_bit",
             Ripemd_160 => "ripemd_160",
+            LengthOfArray => "length_of_array",
+            ListToArray => "list_to_array",
+            IndexArray => "index_array",
             // ExpModInteger => "exp_mod_integer",
             // CaseList => "case_list",
             // CaseData => "case_data",
@@ -642,5 +657,26 @@ impl<T> From<DefaultFunction> for Term<T> {
 impl<T> From<DefaultFunction> for Rc<Term<T>> {
     fn from(builtin: DefaultFunction) -> Self {
         Term::Builtin(builtin).into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DefaultFunction;
+    use std::str::FromStr;
+
+    #[test]
+    fn cip_138_array_builtins_parse_and_display() {
+        let builtins = [
+            (89, "lengthOfArray", DefaultFunction::LengthOfArray),
+            (90, "listToArray", DefaultFunction::ListToArray),
+            (91, "indexArray", DefaultFunction::IndexArray),
+        ];
+
+        for (tag, name, builtin) in builtins {
+            assert_eq!(DefaultFunction::try_from(tag).unwrap(), builtin);
+            assert_eq!(DefaultFunction::from_str(name).unwrap(), builtin);
+            assert_eq!(builtin.to_string(), name);
+        }
     }
 }

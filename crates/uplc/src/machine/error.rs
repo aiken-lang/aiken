@@ -110,6 +110,14 @@ pub enum Error {
     )]
     ByteStringOutOfBounds(BigInt, Vec<u8>),
     #[error(
+        "array index out of bounds\n{:>13} {}\n{:>13} {}",
+        "Index",
+        .0,
+        "Length",
+        .1
+    )]
+    ArrayOutOfBounds(BigInt, usize),
+    #[error(
         "attempt to consByteString something than isn't a byte between [0-255]\n{:>13} {0}",
         "Found"
     )]

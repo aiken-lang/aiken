@@ -759,6 +759,27 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
+        DefaultFunction::LengthOfArray => {
+            let a = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::list(a)], Type::int());
+
+            (tipo, 1)
+        }
+        DefaultFunction::ListToArray => {
+            let array = Type::list(Type::generic_var(id_gen.next()));
+
+            let tipo = Type::function(vec![array.clone()], array);
+
+            (tipo, 1)
+        }
+        DefaultFunction::IndexArray => {
+            let a = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::list(a.clone()), Type::int()], a);
+
+            (tipo, 2)
+        }
         DefaultFunction::ConstrData => {
             let tipo = Type::function(vec![Type::int(), Type::list(Type::data())], Type::data());
 

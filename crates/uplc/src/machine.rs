@@ -43,7 +43,7 @@ enum Context {
 }
 
 pub const TERM_COUNT: usize = 9;
-pub const BUILTIN_COUNT: usize = 87;
+pub const BUILTIN_COUNT: usize = 92;
 
 #[derive(Debug, Clone)]
 pub enum Trace {
@@ -473,7 +473,7 @@ impl From<&Constant> for Type {
 mod tests {
     use num_bigint::BigInt;
 
-    use super::{cost_model::ExBudget, runtime::Compressable};
+    use super::{Error, cost_model::ExBudget, runtime::Compressable};
     use crate::{
         ast::{Constant, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
@@ -549,6 +549,64 @@ mod tests {
                 Term::Constant(Constant::Integer(result.into()).into())
             );
         }
+    }
+
+    #[test]
+    fn cip_138_array_builtins() {
+        let list = Term::int_values(vec![
+            Constant::Integer(11.into()),
+            Constant::Integer(22.into()),
+            Constant::Integer(33.into()),
+        ]);
+
+        let length_program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::length_of_array().apply(Term::list_to_array().apply(list.clone())),
+        };
+
+        assert_eq!(
+            length_program.eval(ExBudget::default()).result().unwrap(),
+            Term::integer(3.into())
+        );
+
+        let index_program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::index_array()
+                .apply(Term::list_to_array().apply(list.clone()))
+                .apply(Term::integer(1.into())),
+        };
+
+        assert_eq!(
+            index_program.eval(ExBudget::default()).result().unwrap(),
+            Term::integer(22.into())
+        );
+
+        let convert_program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::list_to_array().apply(list.clone()),
+        };
+
+        assert_eq!(
+            convert_program.eval(ExBudget::default()).result().unwrap(),
+            list
+        );
+    }
+
+    #[test]
+    fn cip_138_index_array_out_of_bounds() {
+        let list = Term::int_values(vec![Constant::Integer(11.into())]);
+
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::index_array()
+                .apply(Term::list_to_array().apply(list))
+                .apply(Term::integer(3.into())),
+        };
+
+        assert_eq!(
+            program.eval(ExBudget::default()).result(),
+            Err(Error::ArrayOutOfBounds(3.into(), 1))
+        );
     }
 
     #[test]
