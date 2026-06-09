@@ -1,5 +1,6 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
+assertion_line: 581
 description: "Code:\n\nvalidator generics {\n  mint(redeemer: a, policy_id: ByteArray, transaction: Data) {\n    True\n  }\n}\n"
 ---
 Schema {
@@ -9,7 +10,7 @@ Schema {
             Var {
                 tipo: RefCell {
                     value: Generic {
-                        id: 72,
+                        id: 76,
                     },
                 },
                 alias: None,

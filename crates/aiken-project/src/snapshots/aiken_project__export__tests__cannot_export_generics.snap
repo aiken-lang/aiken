@@ -1,5 +1,6 @@
 ---
 source: crates/aiken-project/src/export.rs
+assertion_line: 221
 description: "Code:\n\npub fn add(_a: a, _b: b) -> Bool {\n    True\n}\n"
 ---
 Schema {
@@ -9,7 +10,7 @@ Schema {
             Var {
                 tipo: RefCell {
                     value: Generic {
-                        id: 72,
+                        id: 76,
                     },
                 },
                 alias: None,

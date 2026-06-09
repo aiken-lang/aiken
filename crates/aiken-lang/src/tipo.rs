@@ -547,9 +547,7 @@ impl Type {
             Some(UplcType::List(
                 UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into(),
             ))
-        } else if self.is_array() {
-            Some(UplcType::List(UplcType::Data.into()))
-        } else if self.is_list() || self.is_tuple() {
+        } else if self.is_array() || self.is_list() || self.is_tuple() {
             Some(UplcType::List(UplcType::Data.into()))
         } else if self.is_pair() {
             Some(UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()))
