@@ -67,6 +67,12 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         TypeConstructor::primitive(Type::byte_array()),
     );
 
+    // Array(a)
+    prelude.types.insert(
+        well_known::ARRAY.to_string(),
+        TypeConstructor::primitive(Type::array(Type::generic_var(id_gen.next()))),
+    );
+
     // Bool
     prelude.types.insert(
         well_known::BOOL.to_string(),
@@ -762,21 +768,21 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
         DefaultFunction::LengthOfArray => {
             let a = Type::generic_var(id_gen.next());
 
-            let tipo = Type::function(vec![Type::list(a)], Type::int());
+            let tipo = Type::function(vec![Type::array(a)], Type::int());
 
             (tipo, 1)
         }
         DefaultFunction::ListToArray => {
-            let array = Type::list(Type::generic_var(id_gen.next()));
+            let a = Type::generic_var(id_gen.next());
 
-            let tipo = Type::function(vec![array.clone()], array);
+            let tipo = Type::function(vec![Type::list(a.clone())], Type::array(a));
 
             (tipo, 1)
         }
         DefaultFunction::IndexArray => {
             let a = Type::generic_var(id_gen.next());
 
-            let tipo = Type::function(vec![Type::list(a.clone()), Type::int()], a);
+            let tipo = Type::function(vec![Type::array(a.clone()), Type::int()], a);
 
             (tipo, 2)
         }

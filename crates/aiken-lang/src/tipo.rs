@@ -331,6 +331,16 @@ impl Type {
         }
     }
 
+    pub fn is_array(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if well_known::ARRAY == name && module.is_empty() => {
+                true
+            }
+            Self::Var { tipo, .. } => tipo.borrow().is_array(),
+            _ => false,
+        }
+    }
+
     pub fn is_bls381_12_g1(&self) -> bool {
         match self {
             Self::App { module, name, .. } => well_known::G1_ELEMENT == name && module.is_empty(),
@@ -488,7 +498,7 @@ impl Type {
     }
 
     pub fn get_inner_types(&self) -> Vec<Rc<Type>> {
-        if self.is_list() {
+        if self.is_list() || self.is_array() {
             match self {
                 Self::App { args, .. } => args.clone(),
                 Self::Var { tipo, .. } => tipo.borrow().get_inner_types(),
@@ -537,6 +547,8 @@ impl Type {
             Some(UplcType::List(
                 UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into(),
             ))
+        } else if self.is_array() {
+            Some(UplcType::List(UplcType::Data.into()))
         } else if self.is_list() || self.is_tuple() {
             Some(UplcType::List(UplcType::Data.into()))
         } else if self.is_pair() {
@@ -1014,6 +1026,13 @@ impl TypeVar {
     pub fn is_bytearray(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_bytearray(),
+            _ => false,
+        }
+    }
+
+    pub fn is_array(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_array(),
             _ => false,
         }
     }

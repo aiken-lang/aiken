@@ -4135,7 +4135,7 @@ impl<'a> CodeGenerator<'a> {
                     DefaultFunction::FstPair | DefaultFunction::SndPair => {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
                     }
-                    DefaultFunction::HeadList if !tipo.is_pair() => {
+                    DefaultFunction::HeadList | DefaultFunction::IndexArray if !tipo.is_pair() => {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
                     }
                     _ => {

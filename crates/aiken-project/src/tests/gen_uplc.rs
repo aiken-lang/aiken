@@ -1107,6 +1107,61 @@ fn acceptance_test_9_is_empty() {
 }
 
 #[test]
+fn cip_138_length_of_array_builtin() {
+    let src = r#"
+      use aiken/builtin.{length_of_array, list_to_array}
+
+      test cip_138_length_of_array_builtin() {
+        length_of_array(list_to_array([11, 22, 33])) == 3
+      }
+    "#;
+
+    let uplc =
+        Term::equals_integer()
+            .apply(Term::integer(3.into()))
+            .apply(
+                Term::length_of_array().apply(Term::list_to_array().apply(Term::list_values(
+                    vec![
+                        Constant::Data(Data::integer(11.into())),
+                        Constant::Data(Data::integer(22.into())),
+                        Constant::Data(Data::integer(33.into())),
+                    ],
+                ))),
+            );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
+}
+
+#[test]
+fn cip_138_index_array_builtin() {
+    let src = r#"
+      use aiken/builtin.{index_array, list_to_array}
+
+      test cip_138_index_array_builtin() {
+        index_array(list_to_array([11, 22, 33]), 1) == 22
+      }
+    "#;
+
+    let uplc = Term::equals_integer()
+        .apply(Term::integer(22.into()))
+        .apply(
+            Term::un_i_data().apply(
+                Term::index_array()
+                    .apply(Term::list_to_array().apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(11.into())),
+                        Constant::Data(Data::integer(22.into())),
+                        Constant::Data(Data::integer(33.into())),
+                    ])))
+                    .apply(Term::integer(1.into())),
+            ),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
+}
+
+#[test]
 fn acceptance_test_10_map_none() {
     let src = r#"
       pub fn map(opt: Option<a>, f: fn(a) -> b) -> Option<b> {

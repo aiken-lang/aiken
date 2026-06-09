@@ -170,6 +170,10 @@ impl Default for CodeGenSpecialFuncs {
 }
 
 pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
+    if t.is_array() {
+        return "_array".to_string();
+    }
+
     let uplc_type = t.get_uplc_type();
 
     match uplc_type {
