@@ -33,6 +33,21 @@
 
    Pull requests are welcome, but we do recommend you open an issue to bring any idea to discussion first! Especially if the pull request will end up very large, any significant changes should be discussed up front with the maintainers. This avoids awkward situations where someone puts in a bunch of work to ultimately have the pull request closed due to a potential variety of unforeseen reasons.
 
+   **Suggested first contribution loop**
+
+   If you're not sure how to get started, this is a good low-friction path:
+
+   1. Pick a small issue from [Help Welcomed](https://github.com/aiken-lang/aiken/discussions/categories/help-welcomed) or a well-scoped bug report.
+   2. Reproduce it on current `main` before changing code.
+   3. Inspect the smallest relevant source path.
+   4. Add or update a focused regression test.
+   5. Run the smallest meaningful local validation first, then the full CI commands before pushing.
+
+   For example:
+   - parser-only changes usually benefit from targeted parser tests first
+   - diagnostic fixes usually benefit from the narrow affected test module first
+   - runtime / evaluator changes usually benefit from targeted `uplc` tests before a full workspace run
+
    CI runs the following commands. To save time, it's good to run these on your local machine before pushing to origin.
 
    ```
