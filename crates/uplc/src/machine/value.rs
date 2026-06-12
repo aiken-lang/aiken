@@ -1,6 +1,6 @@
 use super::{
     Error,
-    runtime::{self, BuiltinRuntime},
+    runtime::{self, BuiltinRuntime, BuiltinSemantics},
 };
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
@@ -260,38 +260,13 @@ impl Value {
         Ok(arg1_exmem)
     }
 
-    // TODO: Make this to_ex_mem not recursive.
     pub fn to_ex_mem(&self) -> i64 {
+        self.to_ex_mem_with_semantics(BuiltinSemantics::C)
+    }
+
+    pub fn to_ex_mem_with_semantics(&self, semantics: BuiltinSemantics) -> i64 {
         match self {
-            Value::Con(c) => match c.as_ref() {
-                Constant::Integer(i) => {
-                    if *i == 0.into() {
-                        1
-                    } else {
-                        (integer_log2(i.abs()) / 64) + 1
-                    }
-                }
-                Constant::ByteString(b) => {
-                    if b.is_empty() {
-                        1
-                    } else {
-                        ((b.len() as i64 - 1) / 8) + 1
-                    }
-                }
-                Constant::String(s) => s.chars().count() as i64,
-                Constant::Unit => 1,
-                Constant::Bool(_) => 1,
-                Constant::ProtoList(_, items) => items.iter().fold(0, |acc, constant| {
-                    acc + Value::Con(constant.clone().into()).to_ex_mem()
-                }),
-                Constant::ProtoPair(_, _, l, r) => {
-                    Value::Con(l.clone()).to_ex_mem() + Value::Con(r.clone()).to_ex_mem()
-                }
-                Constant::Data(item) => self.data_to_ex_mem(item),
-                Constant::Bls12_381G1Element(_) => size_of::<blst::blst_p1>() as i64 / 8,
-                Constant::Bls12_381G2Element(_) => size_of::<blst::blst_p2>() as i64 / 8,
-                Constant::Bls12_381MlResult(_) => size_of::<blst::blst_fp12>() as i64 / 8,
-            },
+            Value::Con(c) => Self::constant_to_ex_mem(c, semantics),
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,
             Value::Builtin { .. } => 1,
@@ -299,12 +274,62 @@ impl Value {
         }
     }
 
-    // I made data not recursive since data tends to be deeply nested
-    // thus causing a significant hit on performance
+    fn constant_to_ex_mem(constant: &Constant, semantics: BuiltinSemantics) -> i64 {
+        let mut stack = vec![constant];
+        let mut total = 0;
+
+        while let Some(constant) = stack.pop() {
+            match constant {
+                Constant::Integer(i) => total += Self::integer_to_ex_mem(i),
+                Constant::ByteString(b) => total += Self::byte_string_to_ex_mem(b),
+                Constant::String(s) => {
+                    total += if semantics.costs_strings_by_utf8_bytes() {
+                        s.len() as i64
+                    } else {
+                        s.chars().count() as i64
+                    };
+                }
+                Constant::Unit | Constant::Bool(_) => total += 1,
+                Constant::ProtoList(_, items) => stack.extend(items.iter()),
+                Constant::ProtoPair(_, _, l, r) => {
+                    stack.push(l.as_ref());
+                    stack.push(r.as_ref());
+                }
+                Constant::Data(item) => total += Self::data_to_ex_mem_inner(item),
+                Constant::Bls12_381G1Element(_) => total += size_of::<blst::blst_p1>() as i64 / 8,
+                Constant::Bls12_381G2Element(_) => total += size_of::<blst::blst_p2>() as i64 / 8,
+                Constant::Bls12_381MlResult(_) => total += size_of::<blst::blst_fp12>() as i64 / 8,
+            }
+        }
+
+        total
+    }
+
+    fn integer_to_ex_mem(i: &BigInt) -> i64 {
+        if i.is_zero() {
+            1
+        } else {
+            (integer_log2(i.abs()) / 64) + 1
+        }
+    }
+
+    fn byte_string_to_ex_mem(b: &[u8]) -> i64 {
+        if b.is_empty() {
+            1
+        } else {
+            ((b.len() as i64 - 1) / 8) + 1
+        }
+    }
+
     pub fn data_to_ex_mem(&self, data: &PlutusData) -> i64 {
+        Self::data_to_ex_mem_inner(data)
+    }
+
+    fn data_to_ex_mem_inner(data: &PlutusData) -> i64 {
         let mut stack: VecDeque<&PlutusData> = VecDeque::new();
         let mut total = 0;
         stack.push_front(data);
+
         while let Some(item) = stack.pop_front() {
             // each time we deconstruct a data we add 4 memory units
             total += 4;
@@ -333,11 +358,10 @@ impl Value {
                 PlutusData::BigInt(i) => {
                     let i = from_pallas_bigint(i);
 
-                    total += Value::Con(Constant::Integer(i).into()).to_ex_mem();
+                    total += Self::integer_to_ex_mem(&i);
                 }
                 PlutusData::BoundedBytes(b) => {
-                    let byte_string: Vec<u8> = b.deref().clone();
-                    total += Value::Con(Constant::ByteString(byte_string).into()).to_ex_mem();
+                    total += Self::byte_string_to_ex_mem(b.deref());
                 }
                 PlutusData::Array(a) => {
                     // create new stack with of items from the list of data
@@ -479,10 +503,14 @@ pub fn to_pallas_bigint(n: &BigInt) -> conway::BigInt {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::Constant,
-        machine::value::{Value, integer_log2},
+        ast::{Constant, Type},
+        machine::{
+            runtime::BuiltinSemantics,
+            value::{Value, integer_log2},
+        },
     };
     use num_bigint::BigInt;
+    use std::rc::Rc;
 
     #[test]
     fn to_ex_mem_bigint() {
@@ -631,5 +659,27 @@ mod tests {
             integer_log2(BigInt::parse_bytes("999999999999999999999999999999999999999999999999999999999999999999999999999999999999".as_bytes(), 10).unwrap()),
             279
         );
+    }
+
+    #[test]
+    fn to_ex_mem_counts_nested_constants_iteratively() {
+        let nested = Constant::ProtoPair(
+            Type::Integer,
+            Type::List(Type::String.into()),
+            Rc::new(Constant::Integer((1_i128 << 64).into())),
+            Rc::new(Constant::ProtoList(
+                Type::String,
+                vec![
+                    Constant::String("a".to_string()),
+                    Constant::String("é".to_string()),
+                    Constant::ByteString(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                ],
+            )),
+        );
+
+        let value = Value::Con(nested.into());
+
+        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::C), 6);
+        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::D), 7);
     }
 }

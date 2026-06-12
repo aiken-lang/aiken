@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - 2026-06-12
+
+### Fixed
+
+- **uplc**: Evaluate phase-two scripts with protocol-aware builtin semantics and parse PlutusV3 PV11 cost models. @colll78
+
 ## v1.1.22 - 2026-05-15
 
 ### Added

@@ -35,18 +35,61 @@ const BLST_P2_COMPRESSED_SIZE: usize = 96;
 
 pub const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
 
+pub const CHANG_PROTOCOL_VERSION: u16 = 9;
+pub const VAN_ROSSEM_PROTOCOL_VERSION: u16 = 11;
+
+/// Ledger builtin semantics variants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinSemantics {
-    V1,
-    V2,
+    A,
+    B,
+    C,
+    D,
+    E,
+}
+
+impl BuiltinSemantics {
+    pub fn for_language(language: &Language) -> Self {
+        match language {
+            // Preserve the old language-only evaluator behavior. Protocol-aware
+            // entry points can still select pre-Chang A explicitly.
+            Language::PlutusV1 | Language::PlutusV2 => BuiltinSemantics::B,
+            Language::PlutusV3 => BuiltinSemantics::C,
+        }
+    }
+
+    pub fn for_language_and_protocol(language: &Language, protocol_major_version: u16) -> Self {
+        match language {
+            Language::PlutusV1 | Language::PlutusV2
+                if protocol_major_version >= VAN_ROSSEM_PROTOCOL_VERSION =>
+            {
+                BuiltinSemantics::D
+            }
+            Language::PlutusV1 | Language::PlutusV2
+                if protocol_major_version >= CHANG_PROTOCOL_VERSION =>
+            {
+                BuiltinSemantics::B
+            }
+            Language::PlutusV1 | Language::PlutusV2 => BuiltinSemantics::A,
+            Language::PlutusV3 if protocol_major_version >= VAN_ROSSEM_PROTOCOL_VERSION => {
+                BuiltinSemantics::E
+            }
+            Language::PlutusV3 => BuiltinSemantics::C,
+        }
+    }
+
+    pub fn costs_strings_by_utf8_bytes(self) -> bool {
+        matches!(self, BuiltinSemantics::D | BuiltinSemantics::E)
+    }
+
+    fn cons_byte_string_range_checks(self) -> bool {
+        matches!(self, BuiltinSemantics::C | BuiltinSemantics::E)
+    }
 }
 
 impl From<&Language> for BuiltinSemantics {
     fn from(language: &Language) -> Self {
-        match language {
-            Language::PlutusV1 => BuiltinSemantics::V1,
-            Language::PlutusV2 => BuiltinSemantics::V1,
-            Language::PlutusV3 => BuiltinSemantics::V2,
-        }
+        Self::for_language(language)
     }
 }
 
@@ -82,8 +125,12 @@ impl BuiltinRuntime {
         self.forces += 1;
     }
 
-    pub fn call(&self, language: &Language, traces: &mut Vec<Trace>) -> Result<Value, Error> {
-        self.fun.call(language.into(), &self.args, traces)
+    pub fn call(
+        &self,
+        semantics: BuiltinSemantics,
+        traces: &mut Vec<Trace>,
+    ) -> Result<Value, Error> {
+        self.fun.call(semantics, &self.args, traces)
     }
 
     pub fn push(&mut self, arg: Value) -> Result<(), Error> {
@@ -92,8 +139,12 @@ impl BuiltinRuntime {
         Ok(())
     }
 
-    pub fn to_ex_budget(&self, costs: &BuiltinCosts) -> Result<ExBudget, Error> {
-        costs.to_ex_budget(self.fun, &self.args)
+    pub fn to_ex_budget(
+        &self,
+        costs: &BuiltinCosts,
+        semantics: BuiltinSemantics,
+    ) -> Result<ExBudget, Error> {
+        costs.to_ex_budget(self.fun, &self.args, semantics)
     }
 }
 
@@ -515,19 +566,16 @@ impl DefaultFunction {
                 let arg1 = args[0].unwrap_integer()?;
                 let arg2 = args[1].unwrap_byte_string()?;
 
-                let byte: u8 = match semantics {
-                    BuiltinSemantics::V1 => {
-                        let wrap = arg1.mod_floor(&256.into());
-
-                        wrap.try_into().unwrap()
+                let byte: u8 = if semantics.cons_byte_string_range_checks() {
+                    if *arg1 > 255.into() || *arg1 < 0.into() {
+                        return Err(Error::ByteStringConsNotAByte(arg1.clone()));
                     }
-                    BuiltinSemantics::V2 => {
-                        if *arg1 > 255.into() || *arg1 < 0.into() {
-                            return Err(Error::ByteStringConsNotAByte(arg1.clone()));
-                        }
 
-                        arg1.try_into().unwrap()
-                    }
+                    arg1.try_into().unwrap()
+                } else {
+                    let wrap = arg1.mod_floor(&256.into());
+
+                    wrap.try_into().unwrap()
                 };
 
                 let mut ret = vec![byte];
@@ -1944,7 +1992,49 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::{convert_constr_to_tag, convert_tag_to_constr};
+    use super::{BuiltinSemantics, convert_constr_to_tag, convert_tag_to_constr};
+    use crate::{builtins::DefaultFunction, machine::value::Value};
+    use pallas_primitives::conway::Language;
+
+    #[test]
+    fn protocol_versions_select_ledger_semantics() {
+        assert_eq!(
+            BuiltinSemantics::for_language_and_protocol(&Language::PlutusV2, 8),
+            BuiltinSemantics::A
+        );
+        assert_eq!(
+            BuiltinSemantics::for_language_and_protocol(&Language::PlutusV2, 9),
+            BuiltinSemantics::B
+        );
+        assert_eq!(
+            BuiltinSemantics::for_language_and_protocol(&Language::PlutusV3, 10),
+            BuiltinSemantics::C
+        );
+        assert_eq!(
+            BuiltinSemantics::for_language_and_protocol(&Language::PlutusV3, 11),
+            BuiltinSemantics::E
+        );
+        assert_eq!(
+            BuiltinSemantics::for_language_and_protocol(&Language::PlutusV2, 11),
+            BuiltinSemantics::D
+        );
+    }
+
+    #[test]
+    fn cons_byte_string_keeps_d_wrapping_and_e_range_checking() {
+        let args = [Value::integer(256.into()), Value::byte_string(vec![])];
+
+        let wrapped = DefaultFunction::ConsByteString
+            .call(BuiltinSemantics::D, &args, &mut vec![])
+            .unwrap();
+
+        assert_eq!(wrapped, Value::byte_string(vec![0]));
+        assert!(
+            DefaultFunction::ConsByteString
+                .call(BuiltinSemantics::E, &args, &mut vec![])
+                .is_err()
+        );
+    }
 
     #[test]
     fn compact_tag_range() {

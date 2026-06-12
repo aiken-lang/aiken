@@ -4,7 +4,9 @@ use crate::{
     flat::Binder,
     machine::{
         Machine,
-        cost_model::{CostModel, ExBudget, initialize_cost_model},
+        cost_model::{
+            CostModel, ExBudget, initialize_cost_model, initialize_cost_model_with_protocol,
+        },
         eval_result::EvalResult,
         value::to_pallas_bigint,
     },
@@ -896,6 +898,33 @@ impl Program<NamedDeBruijn> {
         )
     }
 
+    /// Evaluate a Program as a specific PlutusVersion and protocol version,
+    /// using the default cost model for the chosen PlutusVersion.
+    pub fn eval_version_with_protocol(
+        self,
+        initial_budget: ExBudget,
+        version: &Language,
+        protocol_major_version: u16,
+    ) -> EvalResult {
+        let mut machine = Machine::new_with_protocol(
+            version.clone(),
+            protocol_major_version,
+            CostModel::default(),
+            initial_budget,
+            200,
+        );
+
+        let term = machine.run(self.term);
+
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            initial_budget,
+            machine.traces,
+            machine.spend_counter.map(|i| i.into()),
+        )
+    }
+
     pub fn eval_as(
         self,
         version: &Language,
@@ -907,6 +936,36 @@ impl Program<NamedDeBruijn> {
         let mut machine = Machine::new(
             version.clone(),
             initialize_cost_model(version, costs),
+            budget,
+            200, //slippage
+        );
+
+        let term = machine.run(self.term);
+
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            budget,
+            machine.traces,
+            machine.spend_counter.map(|i| i.into()),
+        )
+    }
+
+    /// Evaluate a Program with an explicit ledger cost model and protocol
+    /// version.
+    pub fn eval_as_with_protocol(
+        self,
+        version: &Language,
+        protocol_major_version: u16,
+        costs: &[i64],
+        initial_budget: Option<&ExBudget>,
+    ) -> EvalResult {
+        let budget = initial_budget.copied().unwrap_or_default();
+
+        let mut machine = Machine::new_with_protocol(
+            version.clone(),
+            protocol_major_version,
+            initialize_cost_model_with_protocol(version, protocol_major_version, costs),
             budget,
             200, //slippage
         );
@@ -951,6 +1010,16 @@ impl Program<DeBruijn> {
     pub fn eval_version(self, initial_budget: ExBudget, version: &Language) -> EvalResult {
         let program: Program<NamedDeBruijn> = self.clone().into();
         program.eval_version(initial_budget, version)
+    }
+
+    pub fn eval_version_with_protocol(
+        self,
+        initial_budget: ExBudget,
+        version: &Language,
+        protocol_major_version: u16,
+    ) -> EvalResult {
+        let program: Program<NamedDeBruijn> = self.clone().into();
+        program.eval_version_with_protocol(initial_budget, version, protocol_major_version)
     }
 }
 

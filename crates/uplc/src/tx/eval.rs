@@ -24,10 +24,57 @@ pub fn eval_redeemer(
     cost_mdls_opt: Option<&CostModels>,
     initial_budget: &ExBudget,
 ) -> Result<(Redeemer, EvalResult), Error> {
+    eval_redeemer_with_optional_protocol(
+        tx,
+        utxos,
+        slot_config,
+        redeemer,
+        lookup_table,
+        cost_mdls_opt,
+        initial_budget,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn eval_redeemer_with_protocol(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    slot_config: &SlotConfig,
+    redeemer: &Redeemer,
+    lookup_table: &DataLookupTable,
+    cost_mdls_opt: Option<&CostModels>,
+    initial_budget: &ExBudget,
+    protocol_major_version: u16,
+) -> Result<(Redeemer, EvalResult), Error> {
+    eval_redeemer_with_optional_protocol(
+        tx,
+        utxos,
+        slot_config,
+        redeemer,
+        lookup_table,
+        cost_mdls_opt,
+        initial_budget,
+        Some(protocol_major_version),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn eval_redeemer_with_optional_protocol(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    slot_config: &SlotConfig,
+    redeemer: &Redeemer,
+    lookup_table: &DataLookupTable,
+    cost_mdls_opt: Option<&CostModels>,
+    initial_budget: &ExBudget,
+    protocol_major_version: Option<u16>,
+) -> Result<(Redeemer, EvalResult), Error> {
     fn do_eval_redeemer(
         cost_mdl_opt: Option<&CostModel>,
         initial_budget: &ExBudget,
         lang: &Language,
+        protocol_major_version: Option<u16>,
         datum: Option<PlutusData>,
         redeemer: &Redeemer,
         tx_info: TxInfo,
@@ -50,7 +97,18 @@ pub fn eval_redeemer(
         };
 
         let eval_result = if let Some(costs) = cost_mdl_opt {
-            program.eval_as(lang, costs, Some(initial_budget))
+            if let Some(protocol_major_version) = protocol_major_version {
+                program.eval_as_with_protocol(
+                    lang,
+                    protocol_major_version,
+                    costs,
+                    Some(initial_budget),
+                )
+            } else {
+                program.eval_as(lang, costs, Some(initial_budget))
+            }
+        } else if let Some(protocol_major_version) = protocol_major_version {
+            program.eval_version_with_protocol(ExBudget::default(), lang, protocol_major_version)
         } else {
             program.eval_version(ExBudget::default(), lang)
         };
@@ -92,6 +150,7 @@ pub fn eval_redeemer(
                 .transpose()?,
             initial_budget,
             &Language::PlutusV1,
+            protocol_major_version,
             datum,
             redeemer,
             TxInfoV1::from_transaction(tx, utxos, slot_config)?,
@@ -109,6 +168,7 @@ pub fn eval_redeemer(
                 .transpose()?,
             initial_budget,
             &Language::PlutusV2,
+            protocol_major_version,
             datum,
             redeemer,
             TxInfoV2::from_transaction(tx, utxos, slot_config)?,
@@ -126,6 +186,7 @@ pub fn eval_redeemer(
                 .transpose()?,
             initial_budget,
             &Language::PlutusV3,
+            protocol_major_version,
             datum,
             redeemer,
             TxInfoV3::from_transaction(tx, utxos, slot_config)?,

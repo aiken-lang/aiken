@@ -53,6 +53,32 @@ pub fn eval_phase_two(
     )
 }
 
+/// Like eval_phase_two, but selects builtin semantics and costing from an
+/// explicit protocol major version.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_phase_two_with_protocol(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    cost_mdls: Option<&CostModels>,
+    initial_budget: Option<&ExBudget>,
+    slot_config: &SlotConfig,
+    protocol_major_version: u16,
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
+    eval_phase_two_with_override_and_protocol(
+        tx,
+        utxos,
+        cost_mdls,
+        initial_budget,
+        slot_config,
+        protocol_major_version,
+        HashMap::new(),
+        run_phase_one,
+        with_redeemer,
+    )
+}
+
 /// Like eval_phase_two, but allows replacing scripts dynamically for simulations
 #[allow(clippy::too_many_arguments)]
 pub fn eval_phase_two_with_override(
@@ -61,6 +87,58 @@ pub fn eval_phase_two_with_override(
     cost_mdls: Option<&CostModels>,
     initial_budget: Option<&ExBudget>,
     slot_config: &SlotConfig,
+    override_scripts: HashMap<ScriptHash, PlutusScript>,
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
+    eval_phase_two_with_override_and_optional_protocol(
+        tx,
+        utxos,
+        cost_mdls,
+        initial_budget,
+        slot_config,
+        None,
+        override_scripts,
+        run_phase_one,
+        with_redeemer,
+    )
+}
+
+/// Like eval_phase_two_with_override, but selects builtin semantics and costing
+/// from an explicit protocol major version.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_phase_two_with_override_and_protocol(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    cost_mdls: Option<&CostModels>,
+    initial_budget: Option<&ExBudget>,
+    slot_config: &SlotConfig,
+    protocol_major_version: u16,
+    override_scripts: HashMap<ScriptHash, PlutusScript>,
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
+    eval_phase_two_with_override_and_optional_protocol(
+        tx,
+        utxos,
+        cost_mdls,
+        initial_budget,
+        slot_config,
+        Some(protocol_major_version),
+        override_scripts,
+        run_phase_one,
+        with_redeemer,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn eval_phase_two_with_override_and_optional_protocol(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    cost_mdls: Option<&CostModels>,
+    initial_budget: Option<&ExBudget>,
+    slot_config: &SlotConfig,
+    protocol_major_version: Option<u16>,
     override_scripts: HashMap<ScriptHash, PlutusScript>,
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
@@ -95,15 +173,29 @@ pub fn eval_phase_two_with_override(
 
                 with_redeemer(&redeemer);
 
-                let (redeemer, eval_result) = eval::eval_redeemer(
-                    tx,
-                    utxos,
-                    slot_config,
-                    &redeemer,
-                    &lookup_table,
-                    cost_mdls,
-                    &remaining_budget,
-                )?;
+                let (redeemer, eval_result) =
+                    if let Some(protocol_major_version) = protocol_major_version {
+                        eval::eval_redeemer_with_protocol(
+                            tx,
+                            utxos,
+                            slot_config,
+                            &redeemer,
+                            &lookup_table,
+                            cost_mdls,
+                            &remaining_budget,
+                            protocol_major_version,
+                        )?
+                    } else {
+                        eval::eval_redeemer(
+                            tx,
+                            utxos,
+                            slot_config,
+                            &redeemer,
+                            &lookup_table,
+                            cost_mdls,
+                            &remaining_budget,
+                        )?
+                    };
 
                 // The subtraction is safe here as ex units counting is done during evaluation.
                 // Redeemer would fail already if budget was negative.
@@ -129,6 +221,54 @@ pub fn eval_phase_two_raw(
     cost_mdls_bytes: Option<&[u8]>,
     initial_budget: (u64, u64),
     slot_config: (u64, u64, u32),
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+) -> Result<Vec<(Vec<u8>, EvalResult)>, Error> {
+    eval_phase_two_raw_with_optional_protocol(
+        tx_bytes,
+        utxos_bytes,
+        cost_mdls_bytes,
+        initial_budget,
+        slot_config,
+        None,
+        run_phase_one,
+        with_redeemer,
+    )
+}
+
+/// Like eval_phase_two_raw, but selects builtin semantics and costing from an
+/// explicit protocol major version.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_phase_two_raw_with_protocol(
+    tx_bytes: &[u8],
+    utxos_bytes: &[(Vec<u8>, Vec<u8>)],
+    cost_mdls_bytes: Option<&[u8]>,
+    initial_budget: (u64, u64),
+    slot_config: (u64, u64, u32),
+    protocol_major_version: u16,
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+) -> Result<Vec<(Vec<u8>, EvalResult)>, Error> {
+    eval_phase_two_raw_with_optional_protocol(
+        tx_bytes,
+        utxos_bytes,
+        cost_mdls_bytes,
+        initial_budget,
+        slot_config,
+        Some(protocol_major_version),
+        run_phase_one,
+        with_redeemer,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn eval_phase_two_raw_with_optional_protocol(
+    tx_bytes: &[u8],
+    utxos_bytes: &[(Vec<u8>, Vec<u8>)],
+    cost_mdls_bytes: Option<&[u8]>,
+    initial_budget: (u64, u64),
+    slot_config: (u64, u64, u32),
+    protocol_major_version: Option<u16>,
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
 ) -> Result<Vec<(Vec<u8>, EvalResult)>, Error> {
@@ -162,15 +302,30 @@ pub fn eval_phase_two_raw(
 
     match multi_era_tx {
         MultiEraTx::Conway(tx) => {
-            match eval_phase_two(
-                &tx,
-                &utxos,
-                cost_mdls.as_ref(),
-                Some(&budget),
-                &sc,
-                run_phase_one,
-                with_redeemer,
-            ) {
+            let result = if let Some(protocol_major_version) = protocol_major_version {
+                eval_phase_two_with_protocol(
+                    &tx,
+                    &utxos,
+                    cost_mdls.as_ref(),
+                    Some(&budget),
+                    &sc,
+                    protocol_major_version,
+                    run_phase_one,
+                    with_redeemer,
+                )
+            } else {
+                eval_phase_two(
+                    &tx,
+                    &utxos,
+                    cost_mdls.as_ref(),
+                    Some(&budget),
+                    &sc,
+                    run_phase_one,
+                    with_redeemer,
+                )
+            };
+
+            match result {
                 Ok(redeemers) => Ok(redeemers
                     .into_iter()
                     .map(|(r, e)| (r.encode_fragment().unwrap(), e))

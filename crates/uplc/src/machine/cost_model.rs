@@ -1,4 +1,4 @@
-use super::{Error, Value};
+use super::{Error, Value, runtime::BuiltinSemantics};
 use crate::builtins::DefaultFunction;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
@@ -23,6 +23,10 @@ pub struct ExBudget {
     pub mem: i64,
     pub cpu: i64,
 }
+
+// Existing default cost models use a large sentinel for builtins that are not
+// available in a language version.
+const UNAVAILABLE_BUILTIN_COST: i64 = 30000000000;
 
 impl ExBudget {
     pub fn occurrences(&mut self, n: i64) {
@@ -358,6 +362,216 @@ pub struct BuiltinCosts {
     find_first_set_bit: CostingFun<OneArgument>,
     ripemd_160: CostingFun<OneArgument>,
     exp_mod_int: CostingFun<ThreeArguments>,
+    pub pv11_builtin_costs: Pv11BuiltinCosts,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Pv11BuiltinCosts {
+    pub drop_list: CostingFun<TwoArguments>,
+    pub length_of_array: CostingFun<OneArgument>,
+    pub list_to_array: CostingFun<OneArgument>,
+    pub index_array: CostingFun<TwoArguments>,
+    pub bls12_381_g1_multi_scalar_mul: CostingFun<TwoArguments>,
+    pub bls12_381_g2_multi_scalar_mul: CostingFun<TwoArguments>,
+    pub insert_coin: CostingFun<FourArguments>,
+    pub lookup_coin: CostingFun<ThreeArguments>,
+    pub union_value: CostingFun<TwoArguments>,
+    pub value_contains: CostingFun<TwoArguments>,
+    pub value_data: CostingFun<OneArgument>,
+    pub un_value_data: CostingFun<OneArgument>,
+    pub scale_value: CostingFun<TwoArguments>,
+}
+
+impl Pv11BuiltinCosts {
+    fn unavailable() -> Self {
+        Self {
+            drop_list: CostingFun {
+                cpu: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            list_to_array: CostingFun {
+                cpu: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            insert_coin: CostingFun {
+                cpu: FourArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: FourArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            lookup_coin: CostingFun {
+                cpu: ThreeArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: ThreeArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            union_value: CostingFun {
+                cpu: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            value_contains: CostingFun {
+                cpu: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            un_value_data: CostingFun {
+                cpu: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: OneArgument::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+            scale_value: CostingFun {
+                cpu: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+                mem: TwoArguments::ConstantCost(UNAVAILABLE_BUILTIN_COST),
+            },
+        }
+    }
+
+    fn from_van_rossem_costs(costs: &[i64]) -> Self {
+        debug_assert!(costs.len() >= 350);
+
+        Self {
+            drop_list: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: costs[302],
+                    slope: costs[303],
+                }),
+                mem: TwoArguments::ConstantCost(costs[304]),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(costs[305]),
+                mem: OneArgument::ConstantCost(costs[306]),
+            },
+            list_to_array: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: costs[307],
+                    slope: costs[308],
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: costs[309],
+                    slope: costs[310],
+                }),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(costs[311]),
+                mem: TwoArguments::ConstantCost(costs[312]),
+            },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: costs[313],
+                    slope: costs[314],
+                }),
+                mem: TwoArguments::ConstantCost(costs[315]),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: costs[316],
+                    slope: costs[317],
+                }),
+                mem: TwoArguments::ConstantCost(costs[318]),
+            },
+            insert_coin: CostingFun {
+                cpu: FourArguments::LinearInU(LinearSize {
+                    intercept: costs[319],
+                    slope: costs[320],
+                }),
+                mem: FourArguments::LinearInU(LinearSize {
+                    intercept: costs[321],
+                    slope: costs[322],
+                }),
+            },
+            lookup_coin: CostingFun {
+                cpu: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: costs[323],
+                    slope: costs[324],
+                }),
+                mem: ThreeArguments::ConstantCost(costs[325]),
+            },
+            union_value: CostingFun {
+                cpu: TwoArguments::WithInteractionInXAndY(TwoVariableWithInteractionSize {
+                    coeff_00: costs[326],
+                    coeff_10: costs[327],
+                    coeff_01: costs[328],
+                    coeff_11: costs[329],
+                }),
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: costs[330],
+                    slope: costs[331],
+                }),
+            },
+            value_contains: CostingFun {
+                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                    constant: costs[332],
+                    model: Box::new(TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                        intercept: costs[333],
+                        slope1: costs[334],
+                        slope2: costs[335],
+                    })),
+                }),
+                mem: TwoArguments::ConstantCost(costs[336]),
+            },
+            value_data: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: costs[337],
+                    slope: costs[338],
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: costs[339],
+                    slope: costs[340],
+                }),
+            },
+            un_value_data: CostingFun {
+                cpu: OneArgument::QuadraticCost(QuadraticFunction {
+                    coeff_0: costs[341],
+                    coeff_1: costs[342],
+                    coeff_2: costs[343],
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: costs[344],
+                    slope: costs[345],
+                }),
+            },
+            scale_value: CostingFun {
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: costs[346],
+                    slope: costs[347],
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: costs[348],
+                    slope: costs[349],
+                }),
+            },
+        }
+    }
+}
+
+fn pv11_exp_mod_integer_costs(costs: &[i64]) -> CostingFun<ThreeArguments> {
+    debug_assert!(costs.len() >= 350);
+
+    CostingFun {
+        cpu: ThreeArguments::ExpModCost(ExpModCostingFunction {
+            coefficient_00: costs[297],
+            coefficient_11: costs[298],
+            coefficient_12: costs[299],
+        }),
+        mem: ThreeArguments::LinearInZ(LinearSize {
+            intercept: costs[300],
+            slope: costs[301],
+        }),
+    }
 }
 
 impl BuiltinCosts {
@@ -856,6 +1070,7 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            pv11_builtin_costs: Pv11BuiltinCosts::unavailable(),
         }
     }
 
@@ -1354,6 +1569,7 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            pv11_builtin_costs: Pv11BuiltinCosts::unavailable(),
         }
     }
 
@@ -1963,6 +2179,7 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
+            pv11_builtin_costs: Pv11BuiltinCosts::unavailable(),
         }
     }
 }
@@ -1974,7 +2191,12 @@ impl Default for BuiltinCosts {
 }
 
 impl BuiltinCosts {
-    pub fn to_ex_budget(&self, fun: DefaultFunction, args: &[Value]) -> Result<ExBudget, Error> {
+    pub fn to_ex_budget(
+        &self,
+        fun: DefaultFunction,
+        args: &[Value],
+        semantics: BuiltinSemantics,
+    ) -> Result<ExBudget, Error> {
         Ok(match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self
@@ -2201,28 +2423,34 @@ impl BuiltinCosts {
                 ),
             },
             DefaultFunction::AppendString => ExBudget {
-                mem: self
-                    .append_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .append_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                mem: self.append_string.mem.cost(
+                    args[0].to_ex_mem_with_semantics(semantics),
+                    args[1].to_ex_mem_with_semantics(semantics),
+                ),
+                cpu: self.append_string.cpu.cost(
+                    args[0].to_ex_mem_with_semantics(semantics),
+                    args[1].to_ex_mem_with_semantics(semantics),
+                ),
             },
             DefaultFunction::EqualsString => ExBudget {
-                mem: self
-                    .equals_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .equals_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                mem: self.equals_string.mem.cost(
+                    args[0].to_ex_mem_with_semantics(semantics),
+                    args[1].to_ex_mem_with_semantics(semantics),
+                ),
+                cpu: self.equals_string.cpu.cost(
+                    args[0].to_ex_mem_with_semantics(semantics),
+                    args[1].to_ex_mem_with_semantics(semantics),
+                ),
             },
             DefaultFunction::EncodeUtf8 => ExBudget {
-                mem: self.encode_utf8.mem.cost(args[0].to_ex_mem()),
-                cpu: self.encode_utf8.cpu.cost(args[0].to_ex_mem()),
+                mem: self
+                    .encode_utf8
+                    .mem
+                    .cost(args[0].to_ex_mem_with_semantics(semantics)),
+                cpu: self
+                    .encode_utf8
+                    .cpu
+                    .cost(args[0].to_ex_mem_with_semantics(semantics)),
             },
             DefaultFunction::DecodeUtf8 => ExBudget {
                 mem: self.decode_utf8.mem.cost(args[0].to_ex_mem()),
@@ -2708,6 +2936,28 @@ impl BuiltinCosts {
 }
 
 pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
+    initialize_cost_model_with_semantics(version, BuiltinSemantics::for_language(version), costs)
+}
+
+pub fn initialize_cost_model_with_protocol(
+    version: &Language,
+    protocol_major_version: u16,
+    costs: &[i64],
+) -> CostModel {
+    initialize_cost_model_with_semantics(
+        version,
+        BuiltinSemantics::for_language_and_protocol(version, protocol_major_version),
+        costs,
+    )
+}
+
+fn initialize_cost_model_with_semantics(
+    version: &Language,
+    semantics: BuiltinSemantics,
+    costs: &[i64],
+) -> CostModel {
+    let has_pv11_tail = matches!(version, Language::PlutusV3) && costs.len() >= 350;
+
     let cost_map: HashMap<&str, i64> = match version {
         Language::PlutusV1 => {
             hashmap! {
@@ -3314,7 +3564,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-mem-arguments-slope" => costs[250],
             };
 
-            if costs.len() == 297 {
+            if costs.len() >= 297 {
                 let test = hashmap! {
                     "andByteString-cpu-arguments-intercept"=> costs[251],
                     "andByteString-cpu-arguments-slope1"=> costs[252],
@@ -3500,14 +3750,27 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .get("multiply_integer-mem-arguments-slope")
                         .unwrap_or(&30000000000),
                 }),
-                cpu: TwoArguments::MultipliedSizes(MultipliedSizes {
-                    intercept: *cost_map
-                        .get("multiply_integer-cpu-arguments-intercept")
-                        .unwrap_or(&30000000000),
-                    slope: *cost_map
-                        .get("multiply_integer-cpu-arguments-slope")
-                        .unwrap_or(&30000000000),
-                }),
+                cpu: match semantics {
+                    BuiltinSemantics::A => TwoArguments::AddedSizes(AddedSizes {
+                        intercept: *cost_map
+                            .get("multiply_integer-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("multiply_integer-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    BuiltinSemantics::B
+                    | BuiltinSemantics::C
+                    | BuiltinSemantics::D
+                    | BuiltinSemantics::E => TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: *cost_map
+                            .get("multiply_integer-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("multiply_integer-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
             },
             divide_integer: CostingFun {
                 mem: TwoArguments::SubtractedSizes(SubtractedSizes {
@@ -3521,8 +3784,8 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .get("divide_integer-mem-arguments-minimum")
                         .unwrap_or(&30000000000),
                 }),
-                cpu: match version {
-                    Language::PlutusV1 | Language::PlutusV2 => {
+                cpu: match semantics {
+                    BuiltinSemantics::A | BuiltinSemantics::B => {
                         TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
                             constant: *cost_map
                                 .get("divide_integer-cpu-arguments-constant")
@@ -3537,7 +3800,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                             })),
                         })
                     }
-                    Language::PlutusV3 => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                    BuiltinSemantics::C => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
                         *cost_map
                             .get("divide_integer-cpu-arguments-constant")
                             .unwrap_or(&30000000000),
@@ -3565,6 +3828,53 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                                 .unwrap_or(&30000000000),
                         },
                     ),
+                    BuiltinSemantics::D => {
+                        TwoArguments::AboveAndBelowDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("divide_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                                intercept: *cost_map
+                                    .get("divide_integer-cpu-arguments-model-arguments-intercept")
+                                    .unwrap_or(&30000000000),
+                                slope: *cost_map
+                                    .get("divide_integer-cpu-arguments-model-arguments-slope")
+                                    .unwrap_or(&30000000000),
+                            })),
+                        })
+                    }
+                    BuiltinSemantics::E => {
+                        TwoArguments::AboveAndBelowDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("divide_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::QuadraticInXAndY(
+                                TwoArgumentsQuadraticFunction {
+                                    minimum: *cost_map
+                                        .get("divide_integer-cpu-arguments-minimum")
+                                        .unwrap_or(&30000000000),
+                                    coeff_00: *cost_map
+                                        .get("divide_integer-cpu-arguments-c00")
+                                        .unwrap_or(&30000000000),
+                                    coeff_10: *cost_map
+                                        .get("divide_integer-cpu-arguments-c10")
+                                        .unwrap_or(&30000000000),
+                                    coeff_01: *cost_map
+                                        .get("divide_integer-cpu-arguments-c01")
+                                        .unwrap_or(&30000000000),
+                                    coeff_20: *cost_map
+                                        .get("divide_integer-cpu-arguments-c20")
+                                        .unwrap_or(&30000000000),
+                                    coeff_11: *cost_map
+                                        .get("divide_integer-cpu-arguments-c11")
+                                        .unwrap_or(&30000000000),
+                                    coeff_02: *cost_map
+                                        .get("divide_integer-cpu-arguments-c02")
+                                        .unwrap_or(&30000000000),
+                                },
+                            )),
+                        })
+                    }
                 },
             },
             quotient_integer: CostingFun {
@@ -3626,8 +3936,8 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 },
             },
             remainder_integer: CostingFun {
-                mem: match version {
-                    Language::PlutusV1 | Language::PlutusV2 => {
+                mem: match semantics {
+                    BuiltinSemantics::A | BuiltinSemantics::B => {
                         TwoArguments::SubtractedSizes(SubtractedSizes {
                             intercept: *cost_map
                                 .get("remainder_integer-mem-arguments-intercept")
@@ -3640,17 +3950,30 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                                 .unwrap_or(&30000000000),
                         })
                     }
-                    Language::PlutusV3 => TwoArguments::LinearInY(LinearSize {
+                    BuiltinSemantics::C | BuiltinSemantics::E => {
+                        TwoArguments::LinearInY(LinearSize {
+                            intercept: *cost_map
+                                .get("remainder_integer-mem-arguments-intercept")
+                                .unwrap_or(&30000000000),
+                            slope: *cost_map
+                                .get("remainder_integer-mem-arguments-slope")
+                                .unwrap_or(&30000000000),
+                        })
+                    }
+                    BuiltinSemantics::D => TwoArguments::LinearInY2(SubtractedSizes {
                         intercept: *cost_map
                             .get("remainder_integer-mem-arguments-intercept")
                             .unwrap_or(&30000000000),
                         slope: *cost_map
                             .get("remainder_integer-mem-arguments-slope")
                             .unwrap_or(&30000000000),
+                        minimum: *cost_map
+                            .get("remainder_integer-mem-arguments-minimum")
+                            .unwrap_or(&30000000000),
                     }),
                 },
-                cpu: match version {
-                    Language::PlutusV1 | Language::PlutusV2 => {
+                cpu: match semantics {
+                    BuiltinSemantics::A | BuiltinSemantics::B | BuiltinSemantics::D => {
                         TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
                             constant: *cost_map
                                 .get("remainder_integer-cpu-arguments-constant")
@@ -3667,39 +3990,41 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                             })),
                         })
                     }
-                    Language::PlutusV3 => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
-                        *cost_map
-                            .get("remainder_integer-cpu-arguments-constant")
-                            .unwrap_or(&30000000000),
-                        TwoArgumentsQuadraticFunction {
-                            minimum: *cost_map
-                                .get("remainder_integer-cpu-arguments-minimum")
+                    BuiltinSemantics::C | BuiltinSemantics::E => {
+                        TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                            *cost_map
+                                .get("remainder_integer-cpu-arguments-constant")
                                 .unwrap_or(&30000000000),
-                            coeff_00: *cost_map
-                                .get("remainder_integer-cpu-arguments-c00")
-                                .unwrap_or(&30000000000),
-                            coeff_10: *cost_map
-                                .get("remainder_integer-cpu-arguments-c10")
-                                .unwrap_or(&30000000000),
-                            coeff_01: *cost_map
-                                .get("remainder_integer-cpu-arguments-c01")
-                                .unwrap_or(&30000000000),
-                            coeff_20: *cost_map
-                                .get("remainder_integer-cpu-arguments-c20")
-                                .unwrap_or(&30000000000),
-                            coeff_11: *cost_map
-                                .get("remainder_integer-cpu-arguments-c11")
-                                .unwrap_or(&30000000000),
-                            coeff_02: *cost_map
-                                .get("remainder_integer-cpu-arguments-c02")
-                                .unwrap_or(&30000000000),
-                        },
-                    ),
+                            TwoArgumentsQuadraticFunction {
+                                minimum: *cost_map
+                                    .get("remainder_integer-cpu-arguments-minimum")
+                                    .unwrap_or(&30000000000),
+                                coeff_00: *cost_map
+                                    .get("remainder_integer-cpu-arguments-c00")
+                                    .unwrap_or(&30000000000),
+                                coeff_10: *cost_map
+                                    .get("remainder_integer-cpu-arguments-c10")
+                                    .unwrap_or(&30000000000),
+                                coeff_01: *cost_map
+                                    .get("remainder_integer-cpu-arguments-c01")
+                                    .unwrap_or(&30000000000),
+                                coeff_20: *cost_map
+                                    .get("remainder_integer-cpu-arguments-c20")
+                                    .unwrap_or(&30000000000),
+                                coeff_11: *cost_map
+                                    .get("remainder_integer-cpu-arguments-c11")
+                                    .unwrap_or(&30000000000),
+                                coeff_02: *cost_map
+                                    .get("remainder_integer-cpu-arguments-c02")
+                                    .unwrap_or(&30000000000),
+                            },
+                        )
+                    }
                 },
             },
             mod_integer: CostingFun {
-                mem: match version {
-                    Language::PlutusV1 | Language::PlutusV2 => {
+                mem: match semantics {
+                    BuiltinSemantics::A | BuiltinSemantics::B => {
                         TwoArguments::SubtractedSizes(SubtractedSizes {
                             intercept: *cost_map
                                 .get("mod_integer-mem-arguments-intercept")
@@ -3712,17 +4037,30 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                                 .unwrap_or(&30000000000),
                         })
                     }
-                    Language::PlutusV3 => TwoArguments::LinearInY(LinearSize {
+                    BuiltinSemantics::C | BuiltinSemantics::E => {
+                        TwoArguments::LinearInY(LinearSize {
+                            intercept: *cost_map
+                                .get("mod_integer-mem-arguments-intercept")
+                                .unwrap_or(&30000000000),
+                            slope: *cost_map
+                                .get("mod_integer-mem-arguments-slope")
+                                .unwrap_or(&30000000000),
+                        })
+                    }
+                    BuiltinSemantics::D => TwoArguments::LinearInY2(SubtractedSizes {
                         intercept: *cost_map
                             .get("mod_integer-mem-arguments-intercept")
                             .unwrap_or(&30000000000),
                         slope: *cost_map
                             .get("mod_integer-mem-arguments-slope")
                             .unwrap_or(&30000000000),
+                        minimum: *cost_map
+                            .get("mod_integer-mem-arguments-minimum")
+                            .unwrap_or(&30000000000),
                     }),
                 },
-                cpu: match version {
-                    Language::PlutusV1 | Language::PlutusV2 => {
+                cpu: match semantics {
+                    BuiltinSemantics::A | BuiltinSemantics::B => {
                         TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
                             constant: *cost_map
                                 .get("mod_integer-cpu-arguments-constant")
@@ -3737,7 +4075,7 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                             })),
                         })
                     }
-                    Language::PlutusV3 => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                    BuiltinSemantics::C => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
                         *cost_map
                             .get("mod_integer-cpu-arguments-constant")
                             .unwrap_or(&30000000000),
@@ -3765,6 +4103,53 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                                 .unwrap_or(&30000000000),
                         },
                     ),
+                    BuiltinSemantics::D => {
+                        TwoArguments::AboveAndBelowDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("mod_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                                intercept: *cost_map
+                                    .get("mod_integer-cpu-arguments-model-arguments-intercept")
+                                    .unwrap_or(&30000000000),
+                                slope: *cost_map
+                                    .get("mod_integer-cpu-arguments-model-arguments-slope")
+                                    .unwrap_or(&30000000000),
+                            })),
+                        })
+                    }
+                    BuiltinSemantics::E => {
+                        TwoArguments::AboveAndBelowDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("mod_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::QuadraticInXAndY(
+                                TwoArgumentsQuadraticFunction {
+                                    minimum: *cost_map
+                                        .get("mod_integer-cpu-arguments-minimum")
+                                        .unwrap_or(&30000000000),
+                                    coeff_00: *cost_map
+                                        .get("mod_integer-cpu-arguments-c00")
+                                        .unwrap_or(&30000000000),
+                                    coeff_10: *cost_map
+                                        .get("mod_integer-cpu-arguments-c10")
+                                        .unwrap_or(&30000000000),
+                                    coeff_01: *cost_map
+                                        .get("mod_integer-cpu-arguments-c01")
+                                        .unwrap_or(&30000000000),
+                                    coeff_20: *cost_map
+                                        .get("mod_integer-cpu-arguments-c20")
+                                        .unwrap_or(&30000000000),
+                                    coeff_11: *cost_map
+                                        .get("mod_integer-cpu-arguments-c11")
+                                        .unwrap_or(&30000000000),
+                                    coeff_02: *cost_map
+                                        .get("mod_integer-cpu-arguments-c02")
+                                        .unwrap_or(&30000000000),
+                                },
+                            )),
+                        })
+                    }
                 },
             },
             equals_integer: CostingFun {
@@ -5112,18 +5497,16 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     cpu: ThreeArguments::ConstantCost(30000000000),
                     mem: ThreeArguments::ConstantCost(30000000000),
                 },
+                Language::PlutusV3 if has_pv11_tail => pv11_exp_mod_integer_costs(costs),
                 Language::PlutusV3 => CostingFun {
-                    cpu: ThreeArguments::ConstantCost(
-                        *cost_map
-                            .get("expModInteger-cpu-arguments")
-                            .unwrap_or(&30000000000),
-                    ),
-                    mem: ThreeArguments::ConstantCost(
-                        *cost_map
-                            .get("expModInteger-memory-arguments")
-                            .unwrap_or(&30000000000),
-                    ),
+                    cpu: ThreeArguments::ConstantCost(30000000000),
+                    mem: ThreeArguments::ConstantCost(30000000000),
                 },
+            },
+            pv11_builtin_costs: if has_pv11_tail {
+                Pv11BuiltinCosts::from_van_rossem_costs(costs)
+            } else {
+                Pv11BuiltinCosts::unavailable()
             },
         },
     }
@@ -5139,6 +5522,7 @@ pub struct CostingFun<T> {
 pub enum OneArgument {
     ConstantCost(i64),
     LinearCost(LinearSize),
+    QuadraticCost(QuadraticFunction),
 }
 
 impl OneArgument {
@@ -5146,6 +5530,7 @@ impl OneArgument {
         match self {
             OneArgument::ConstantCost(c) => *c,
             OneArgument::LinearCost(m) => m.slope * x + m.intercept,
+            OneArgument::QuadraticCost(q) => q.coeff_0 + (q.coeff_1 * x) + (q.coeff_2 * x * x),
         }
     }
 }
@@ -5155,7 +5540,9 @@ pub enum TwoArguments {
     ConstantCost(i64),
     LinearInX(LinearSize),
     LinearInY(LinearSize),
+    LinearInY2(SubtractedSizes),
     LinearInXAndY(TwoVariableLinearSize),
+    WithInteractionInXAndY(TwoVariableWithInteractionSize),
     AddedSizes(AddedSizes),
     SubtractedSizes(SubtractedSizes),
     MultipliedSizes(MultipliedSizes),
@@ -5163,8 +5550,10 @@ pub enum TwoArguments {
     MaxSize(MaxSize),
     LinearOnDiagonal(ConstantOrLinear),
     ConstAboveDiagonal(ConstantOrTwoArguments),
+    AboveAndBelowDiagonal(ConstantOrTwoArguments),
     ConstBelowDiagonal(ConstantOrTwoArguments),
     QuadraticInY(QuadraticFunction),
+    QuadraticInXAndY(TwoArgumentsQuadraticFunction),
     ConstAboveDiagonalIntoQuadraticXAndY(i64, TwoArgumentsQuadraticFunction),
 }
 
@@ -5174,7 +5563,11 @@ impl TwoArguments {
             TwoArguments::ConstantCost(c) => *c,
             TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
             TwoArguments::LinearInY(l) => l.slope * y + l.intercept,
+            TwoArguments::LinearInY2(l) => l.slope * y + l.intercept,
             TwoArguments::LinearInXAndY(l) => l.slope1 * x + l.slope2 * y + l.intercept,
+            TwoArguments::WithInteractionInXAndY(l) => {
+                l.coeff_00 + l.coeff_10 * x + l.coeff_01 * y + l.coeff_11 * x * y
+            }
             TwoArguments::AddedSizes(s) => s.slope * (x + y) + s.intercept,
             TwoArguments::SubtractedSizes(s) => s.slope * s.minimum.max(x - y) + s.intercept,
             TwoArguments::MultipliedSizes(s) => s.slope * (x * y) + s.intercept,
@@ -5195,6 +5588,10 @@ impl TwoArguments {
                     p.cost(x, y)
                 }
             }
+            TwoArguments::AboveAndBelowDiagonal(l) => {
+                let p = *l.model.clone();
+                p.cost(x.max(y), x.min(y))
+            }
             TwoArguments::ConstBelowDiagonal(l) => {
                 if x > y {
                     l.constant
@@ -5204,6 +5601,15 @@ impl TwoArguments {
                 }
             }
             TwoArguments::QuadraticInY(q) => q.coeff_0 + (q.coeff_1 * y) + (q.coeff_2 * y * y),
+            TwoArguments::QuadraticInXAndY(q) => std::cmp::max(
+                q.minimum,
+                q.coeff_00
+                    + q.coeff_10 * x
+                    + q.coeff_01 * y
+                    + q.coeff_20 * x * x
+                    + q.coeff_11 * x * y
+                    + q.coeff_02 * y * y,
+            ),
             TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(constant, q) => {
                 if x < y {
                     *constant
@@ -5231,6 +5637,7 @@ pub enum ThreeArguments {
     LinearInY(LinearSize),
     LinearInZ(LinearSize),
     QuadraticInZ(QuadraticFunction),
+    ExpModCost(ExpModCostingFunction),
     LiteralInYorLinearInZ(LinearSize),
     LinearInMaxYZ(LinearSize),
     LinearInYandZ(TwoVariableLinearSize),
@@ -5245,6 +5652,12 @@ impl ThreeArguments {
             ThreeArguments::LinearInY(l) => y * l.slope + l.intercept,
             ThreeArguments::LinearInZ(l) => z * l.slope + l.intercept,
             ThreeArguments::QuadraticInZ(q) => q.coeff_0 + (q.coeff_1 * z) + (q.coeff_2 * z * z),
+            ThreeArguments::ExpModCost(e) => {
+                let cost =
+                    e.coefficient_00 + e.coefficient_11 * y * z + e.coefficient_12 * y * z * z;
+
+                if x <= z { cost } else { cost + cost / 2 }
+            }
             ThreeArguments::LiteralInYorLinearInZ(l) => {
                 if y == 0 {
                     l.slope * z + l.intercept
@@ -5254,6 +5667,21 @@ impl ThreeArguments {
             }
             ThreeArguments::LinearInMaxYZ(l) => y.max(z) * l.slope + l.intercept,
             ThreeArguments::LinearInYandZ(l) => y * l.slope1 + z * l.slope2 + l.intercept,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum FourArguments {
+    ConstantCost(i64),
+    LinearInU(LinearSize),
+}
+
+impl FourArguments {
+    pub fn cost(&self, _: i64, _: i64, _: i64, u: i64) -> i64 {
+        match self {
+            FourArguments::ConstantCost(c) => *c,
+            FourArguments::LinearInU(l) => l.slope * u + l.intercept,
         }
     }
 }
@@ -5282,6 +5710,14 @@ pub struct TwoVariableLinearSize {
     pub intercept: i64,
     pub slope1: i64,
     pub slope2: i64,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TwoVariableWithInteractionSize {
+    pub coeff_00: i64,
+    pub coeff_10: i64,
+    pub coeff_01: i64,
+    pub coeff_11: i64,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -5346,6 +5782,13 @@ pub struct TwoArgumentsQuadraticFunction {
     coeff_02: i64,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct ExpModCostingFunction {
+    coefficient_00: i64,
+    coefficient_11: i64,
+    coefficient_12: i64,
+}
+
 #[repr(u8)]
 #[derive(Debug, EnumIter, Display, Clone, Copy)]
 pub enum StepKind {
@@ -5384,6 +5827,10 @@ impl TryFrom<u8> for StepKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        builtins::DefaultFunction,
+        machine::{runtime::BuiltinSemantics, value::Value},
+    };
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -5483,5 +5930,225 @@ mod tests {
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);
 
         assert_eq!(CostModel::v3(), cost_model);
+    }
+
+    #[test]
+    fn plutus_v3_pv11_divide_integer_uses_above_and_below_diagonal() {
+        let mut costs: Vec<i64> = (0..350).collect();
+        costs[49] = 85848;
+        costs[50] = 123203;
+        costs[51] = 7305;
+        costs[52] = -900;
+        costs[53] = 1716;
+        costs[54] = 960;
+        costs[55] = 57;
+        costs[56] = 85848;
+
+        let language_only = initialize_cost_model(&Language::PlutusV3, &costs);
+        let pv11 = initialize_cost_model_with_protocol(&Language::PlutusV3, 11, &costs);
+
+        let old_cpu = language_only.builtin_costs.divide_integer.cpu.cost(1, 2);
+        let pv11_cpu = pv11.builtin_costs.divide_integer.cpu.cost(1, 2);
+
+        assert_eq!(85848, old_cpu);
+        assert_eq!(49340, pv11_cpu - old_cpu);
+    }
+
+    #[test]
+    fn plutus_v2_protocol_selects_multiply_integer_a_or_b_costing() {
+        let mut costs: Vec<i64> = (0..350).collect();
+        costs[115] = 10;
+        costs[116] = 3;
+
+        let before_chang = initialize_cost_model_with_protocol(&Language::PlutusV2, 8, &costs);
+        let after_chang = initialize_cost_model_with_protocol(&Language::PlutusV2, 9, &costs);
+        let language_only = initialize_cost_model(&Language::PlutusV2, &costs);
+
+        assert_eq!(
+            TwoArguments::AddedSizes(AddedSizes {
+                intercept: 10,
+                slope: 3
+            }),
+            before_chang.builtin_costs.multiply_integer.cpu
+        );
+        assert_eq!(
+            TwoArguments::MultipliedSizes(MultipliedSizes {
+                intercept: 10,
+                slope: 3,
+            }),
+            after_chang.builtin_costs.multiply_integer.cpu
+        );
+        assert_eq!(
+            10 + 3 * (2 + 4),
+            before_chang.builtin_costs.multiply_integer.cpu.cost(2, 4)
+        );
+        assert_eq!(
+            10 + 3 * (2 * 4),
+            after_chang.builtin_costs.multiply_integer.cpu.cost(2, 4)
+        );
+        assert_eq!(
+            after_chang.builtin_costs.multiply_integer.cpu,
+            language_only.builtin_costs.multiply_integer.cpu
+        );
+    }
+
+    #[test]
+    fn plutus_v2_pv11_linear_in_y2_keeps_ledger_payload() {
+        let costs: Vec<i64> = (0..350).collect();
+
+        let cost_model = initialize_cost_model_with_protocol(&Language::PlutusV2, 11, &costs);
+        let builtin_costs = &cost_model.builtin_costs;
+
+        assert_eq!(
+            TwoArguments::LinearInY2(SubtractedSizes {
+                intercept: 130,
+                slope: 132,
+                minimum: 131,
+            }),
+            builtin_costs.remainder_integer.mem
+        );
+        assert_eq!(
+            TwoArguments::LinearInY2(SubtractedSizes {
+                intercept: 112,
+                slope: 114,
+                minimum: 113,
+            }),
+            builtin_costs.mod_integer.mem
+        );
+        assert_eq!(
+            130 + 132 * 7,
+            builtin_costs.remainder_integer.mem.cost(3, 7)
+        );
+    }
+
+    #[test]
+    fn plutus_v3_350_entry_cost_model_parses_pv11_tail() {
+        let costs: Vec<i64> = (0..350).collect();
+
+        let cost_model = initialize_cost_model_with_protocol(&Language::PlutusV3, 11, &costs);
+        let builtin_costs = &cost_model.builtin_costs;
+        let pv11 = &builtin_costs.pv11_builtin_costs;
+
+        assert_eq!(
+            ThreeArguments::ExpModCost(ExpModCostingFunction {
+                coefficient_00: 297,
+                coefficient_11: 298,
+                coefficient_12: 299,
+            }),
+            builtin_costs.exp_mod_int.cpu
+        );
+        assert_eq!(
+            ThreeArguments::LinearInZ(LinearSize {
+                intercept: 300,
+                slope: 301,
+            }),
+            builtin_costs.exp_mod_int.mem
+        );
+        assert_eq!(
+            TwoArguments::LinearInX(LinearSize {
+                intercept: 302,
+                slope: 303,
+            }),
+            pv11.drop_list.cpu
+        );
+        assert_eq!(TwoArguments::ConstantCost(304), pv11.drop_list.mem);
+        assert_eq!(
+            OneArgument::LinearCost(LinearSize {
+                intercept: 307,
+                slope: 308,
+            }),
+            pv11.list_to_array.cpu
+        );
+        assert_eq!(
+            TwoArguments::WithInteractionInXAndY(TwoVariableWithInteractionSize {
+                coeff_00: 326,
+                coeff_10: 327,
+                coeff_01: 328,
+                coeff_11: 329,
+            }),
+            pv11.union_value.cpu
+        );
+        assert_eq!(
+            TwoArguments::AddedSizes(AddedSizes {
+                intercept: 330,
+                slope: 331,
+            }),
+            pv11.union_value.mem
+        );
+        assert_eq!(330 + 331 * (2 + 4), pv11.union_value.mem.cost(2, 4));
+        assert_eq!(
+            OneArgument::QuadraticCost(QuadraticFunction {
+                coeff_0: 341,
+                coeff_1: 342,
+                coeff_2: 343,
+            }),
+            pv11.un_value_data.cpu
+        );
+        assert_eq!(
+            TwoArguments::LinearInY(LinearSize {
+                intercept: 348,
+                slope: 349,
+            }),
+            pv11.scale_value.mem
+        );
+    }
+
+    #[test]
+    fn string_costing_uses_utf8_byte_length_under_d_and_e() {
+        let costs = BuiltinCosts::v3();
+        let one_multibyte = [Value::string("é".to_string()), Value::string(String::new())];
+        let two_multibyte = [
+            Value::string("é".to_string()),
+            Value::string("é".to_string()),
+        ];
+
+        let append_c = costs
+            .to_ex_budget(
+                DefaultFunction::AppendString,
+                &one_multibyte,
+                BuiltinSemantics::C,
+            )
+            .unwrap();
+        let append_e = costs
+            .to_ex_budget(
+                DefaultFunction::AppendString,
+                &one_multibyte,
+                BuiltinSemantics::E,
+            )
+            .unwrap();
+        let equals_c = costs
+            .to_ex_budget(
+                DefaultFunction::EqualsString,
+                &two_multibyte,
+                BuiltinSemantics::C,
+            )
+            .unwrap();
+        let equals_d = costs
+            .to_ex_budget(
+                DefaultFunction::EqualsString,
+                &two_multibyte,
+                BuiltinSemantics::D,
+            )
+            .unwrap();
+        let encode_c = costs
+            .to_ex_budget(
+                DefaultFunction::EncodeUtf8,
+                &one_multibyte[..1],
+                BuiltinSemantics::C,
+            )
+            .unwrap();
+        let encode_e = costs
+            .to_ex_budget(
+                DefaultFunction::EncodeUtf8,
+                &one_multibyte[..1],
+                BuiltinSemantics::E,
+            )
+            .unwrap();
+
+        assert_eq!(59957, append_e.cpu - append_c.cpu);
+        assert_eq!(1, append_e.mem - append_c.mem);
+        assert_eq!(60594, equals_d.cpu - equals_c.cpu);
+        assert_eq!(42921, encode_e.cpu - encode_c.cpu);
+        assert_eq!(2, encode_e.mem - encode_c.mem);
     }
 }
