@@ -1,4 +1,4 @@
-use super::{Error, Value, runtime::BuiltinSemantics};
+use super::{Error, Value, runtime::BuiltinSemantics, value::integer_log2};
 use crate::builtins::DefaultFunction;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
@@ -3011,6 +3011,46 @@ impl BuiltinCosts {
                         .bls12_381_g1_multi_scalar_mul
                         .cpu
                         .cost(scalars_len, args[1].to_ex_mem()),
+                }
+            }
+            DefaultFunction::InsertCoin => {
+                // The fourth argument (the `Value`) is costed by its
+                // `ValueMaxDepth`, i.e. the sum of the bit-lengths of the outer
+                // map size and the largest inner map size (mirrors plutus's
+                // `ExMemoryUsage ValueMaxDepth` instance). The first three
+                // arguments do not contribute to the cost.
+                let value = args[3].unwrap_value()?;
+
+                let outer_size = value.outer_size();
+                let inner_size = value.max_inner_size();
+
+                let log_outer = if outer_size > 0 {
+                    integer_log2((outer_size as i64).into()) + 1
+                } else {
+                    0
+                };
+
+                let log_inner = if inner_size > 0 {
+                    integer_log2((inner_size as i64).into()) + 1
+                } else {
+                    0
+                };
+
+                let arg4_ex_mem = log_outer + log_inner;
+
+                ExBudget {
+                    mem: self.pv11_builtin_costs.insert_coin.mem.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        args[2].to_ex_mem(),
+                        arg4_ex_mem,
+                    ),
+                    cpu: self.pv11_builtin_costs.insert_coin.cpu.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        args[2].to_ex_mem(),
+                        arg4_ex_mem,
+                    ),
                 }
             }
             // `to_ex_mem` of a `Value` constant is its `total_size`, which is

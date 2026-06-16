@@ -146,6 +146,7 @@ pub enum DefaultFunction {
     // Value
     ValueData = 98,
     UnValueData = 99,
+    InsertCoin = 94,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -350,6 +351,7 @@ impl TryFrom<u8> for DefaultFunction {
             }
             v if v == DefaultFunction::ValueData as u8 => Ok(DefaultFunction::ValueData),
             v if v == DefaultFunction::UnValueData as u8 => Ok(DefaultFunction::UnValueData),
+            v if v == DefaultFunction::InsertCoin as u8 => Ok(DefaultFunction::InsertCoin),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -458,6 +460,7 @@ impl FromStr for DefaultFunction {
             "bls12_381_G1_multiScalarMul" => Ok(Bls12_381_G1_MultiScalarMul),
             "valueData" => Ok(ValueData),
             "unValueData" => Ok(UnValueData),
+            "insertCoin" => Ok(InsertCoin),
             // "expModInteger" => Ok(ExpModInteger),
             "listToArray" => Ok(ListToArray),
             // "caseList" => Ok(CaseList),
@@ -567,6 +570,7 @@ impl Display for DefaultFunction {
             Bls12_381_G1_MultiScalarMul => write!(f, "bls12_381_G1_multiScalarMul"),
             ValueData => write!(f, "valueData"),
             UnValueData => write!(f, "unValueData"),
+            InsertCoin => write!(f, "insertCoin"),
             // ExpModInteger => write!(f, "expModInteger"),
             ListToArray => write!(f, "listToArray"),
             // CaseList => write!(f, "caseList"),
@@ -675,6 +679,7 @@ impl DefaultFunction {
             Bls12_381_G1_MultiScalarMul => "bls12_381_g1_multi_scalar_mul",
             ValueData => "value_data",
             UnValueData => "un_value_data",
+            InsertCoin => "insert_coin",
             // ExpModInteger => "exp_mod_integer",
             ListToArray => "list_to_array",
             // CaseList => "case_list",

@@ -1,5 +1,5 @@
 use super::{ExBudget, Value};
-use crate::ast::{NamedDeBruijn, Term, Type};
+use crate::ast::{NamedDeBruijn, Term, Type, ValueError};
 use num_bigint::BigInt;
 use std::string::FromUtf8Error;
 
@@ -150,6 +150,8 @@ pub enum Error {
     ValueDataSizeTooBig(usize, usize),
     #[error("unValueData: {0}")]
     UnValueData(String),
+    #[error("invalid Value: {0}")]
+    Value(ValueError),
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]
