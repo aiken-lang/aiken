@@ -2976,6 +2976,24 @@ impl BuiltinCosts {
                     args[1].to_ex_mem(),
                 ),
             },
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+                // The cost is linear in the *length* of the first list argument
+                // (number of scalars), matching Plutus' ExMemoryUsage for lists.
+                let scalars_len = args[0].list_len() as i64;
+
+                ExBudget {
+                    mem: self
+                        .pv11_builtin_costs
+                        .bls12_381_g1_multi_scalar_mul
+                        .mem
+                        .cost(scalars_len, args[1].to_ex_mem()),
+                    cpu: self
+                        .pv11_builtin_costs
+                        .bls12_381_g1_multi_scalar_mul
+                        .cpu
+                        .cost(scalars_len, args[1].to_ex_mem()),
+                }
+            }
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
