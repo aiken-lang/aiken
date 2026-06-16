@@ -46,6 +46,10 @@ pub const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
 pub const CHANG_PROTOCOL_VERSION: u16 = 9;
 pub const VAN_ROSSEM_PROTOCOL_VERSION: u16 = 11;
 
+/// Maximum `Value.totalSize` accepted by `valueData` (plutus's
+/// `valueDataMaxSize`). Exceeding it is a builtin error.
+pub const VALUE_DATA_MAX_SIZE: usize = 40_000;
+
 /// Ledger builtin semantics variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinSemantics {
@@ -256,7 +260,8 @@ impl DefaultFunction {
             | DefaultFunction::LengthOfArray
             | DefaultFunction::ListToArray
             | DefaultFunction::IndexArray
-            | DefaultFunction::Bls12_381_G1_MultiScalarMul => false,
+            | DefaultFunction::Bls12_381_G1_MultiScalarMul
+            | DefaultFunction::ValueData => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -359,6 +364,7 @@ impl DefaultFunction {
             // DefaultFunction::ExpModInteger => 3,
             DefaultFunction::DropList => 2,
             DefaultFunction::ListToArray => 1,
+            DefaultFunction::ValueData => 1,
         }
     }
 
@@ -458,6 +464,7 @@ impl DefaultFunction {
             // DefaultFunction::ExpModInteger => 0,
             DefaultFunction::DropList => 1,
             DefaultFunction::ListToArray => 1,
+            DefaultFunction::ValueData => 0,
         }
     }
 
@@ -2073,6 +2080,43 @@ impl DefaultFunction {
                 let (r#type, list) = args[0].unwrap_list()?;
 
                 let value = Value::array(r#type.clone(), list.clone());
+
+                Ok(value)
+            }
+            DefaultFunction::ValueData => {
+                let v = args[0].unwrap_value()?;
+
+                let total_size = v.total_size();
+
+                if total_size > VALUE_DATA_MAX_SIZE {
+                    return Err(Error::ValueDataSizeTooBig(total_size, VALUE_DATA_MAX_SIZE));
+                }
+
+                // Encode the `Value` as `Data`, matching plutus's `valueData`:
+                // an outer `Map` from currency symbol (`B`) to an inner `Map`
+                // from token name (`B`) to quantity (`I`).
+                let outer: Vec<(PlutusData, PlutusData)> = v
+                    .entries()
+                    .iter()
+                    .map(|(currency, tokens)| {
+                        let inner: Vec<(PlutusData, PlutusData)> = tokens
+                            .iter()
+                            .map(|(token, quantity)| {
+                                (
+                                    PlutusData::BoundedBytes(token.clone().into()),
+                                    PlutusData::BigInt(to_pallas_bigint(&BigInt::from(*quantity))),
+                                )
+                            })
+                            .collect();
+
+                        (
+                            PlutusData::BoundedBytes(currency.clone().into()),
+                            PlutusData::Map(inner.into()),
+                        )
+                    })
+                    .collect();
+
+                let value = Value::data(PlutusData::Map(outer.into()));
 
                 Ok(value)
             }

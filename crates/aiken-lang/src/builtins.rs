@@ -1132,6 +1132,17 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             );
 
             (tipo, 2)
+        }
+        DefaultFunction::ValueData => {
+            // The UPLC built-in `Value` type has no Aiken surface representation
+            // (see `Type::is_*` / lowering in `gen_uplc/builder.rs`), so this
+            // builtin is not callable from Aiken source. We still must provide a
+            // well-formed signature; model the input with a fresh generic var
+            // and the output as `Data`.
+            let a = Type::generic_var(id_gen.next());
+            let tipo = Type::function(vec![a], Type::data());
+
+            (tipo, 1)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 

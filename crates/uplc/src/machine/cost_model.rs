@@ -3013,6 +3013,20 @@ impl BuiltinCosts {
                         .cost(scalars_len, args[1].to_ex_mem()),
                 }
             }
+            // `to_ex_mem` of a `Value` constant is its `total_size`, which is
+            // exactly plutus's `ValueTotalSize` costing measure.
+            DefaultFunction::ValueData => ExBudget {
+                mem: self
+                    .pv11_builtin_costs
+                    .value_data
+                    .mem
+                    .cost(args[0].to_ex_mem()),
+                cpu: self
+                    .pv11_builtin_costs
+                    .value_data
+                    .cpu
+                    .cost(args[0].to_ex_mem()),
+            },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {

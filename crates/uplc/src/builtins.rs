@@ -143,6 +143,8 @@ pub enum DefaultFunction {
     // BLS12-381 multi-scalar multiplication
     Bls12_381_G1_MultiScalarMul = 92,
     Bls12_381_G2_MultiScalarMul = 93,
+    // Value
+    ValueData = 98,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -345,6 +347,7 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G1_MultiScalarMul as u8 => {
                 Ok(DefaultFunction::Bls12_381_G1_MultiScalarMul)
             }
+            v if v == DefaultFunction::ValueData as u8 => Ok(DefaultFunction::ValueData),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -455,6 +458,7 @@ impl FromStr for DefaultFunction {
             "listToArray" => Ok(ListToArray),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
+            "valueData" => Ok(ValueData),
             rest => Err(format!("Default Function not found - {rest}")),
         }
     }
@@ -561,6 +565,7 @@ impl Display for DefaultFunction {
             ListToArray => write!(f, "listToArray"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
+            ValueData => write!(f, "valueData"),
         }
     }
 }
@@ -666,6 +671,7 @@ impl DefaultFunction {
             ListToArray => "list_to_array",
             // CaseList => "case_list",
             // CaseData => "case_data",
+            ValueData => "value_data",
         }
         .to_string()
     }
