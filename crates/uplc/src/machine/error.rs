@@ -148,6 +148,8 @@ pub enum Error {
         "Maximum"
     )]
     ValueDataSizeTooBig(usize, usize),
+    #[error("unValueData: {0}")]
+    UnValueData(String),
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]

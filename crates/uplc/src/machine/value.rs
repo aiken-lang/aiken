@@ -418,6 +418,51 @@ impl Value {
         total
     }
 
+    /// The number of `Data` nodes in the argument, matching plutus's
+    /// `DataNodeCount` `ExMemoryUsage` measure (ExMemoryUsage.hs). Every
+    /// `Data` constructor counts as one node; a `Map` additionally counts
+    /// both the key and the value of each pair. This is the size measure fed
+    /// to the `unValueData` cost model and is distinct from `to_ex_mem`.
+    pub fn data_node_count(&self) -> Result<i64, Error> {
+        let data = self.unwrap_data()?;
+
+        let mut stack: VecDeque<&PlutusData> = VecDeque::new();
+        let mut total: i64 = 0;
+        stack.push_front(data);
+
+        while let Some(item) = stack.pop_front() {
+            // Every node (Constr/Map/List/I/B) contributes one.
+            total += 1;
+            match item {
+                PlutusData::Constr(c) => {
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(c.fields.deref().iter());
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::Map(m) => {
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        m.iter().fold(VecDeque::new(), |mut acc, d| {
+                            acc.push_back(&d.0);
+                            acc.push_back(&d.1);
+                            acc
+                        });
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::Array(a) => {
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(a.deref().iter());
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::BigInt(_) | PlutusData::BoundedBytes(_) => {}
+            }
+        }
+
+        Ok(total)
+    }
+
     pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
         let constant: Constant = self.clone().try_into()?;
 

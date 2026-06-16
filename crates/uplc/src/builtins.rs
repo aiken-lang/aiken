@@ -145,6 +145,7 @@ pub enum DefaultFunction {
     Bls12_381_G2_MultiScalarMul = 93,
     // Value
     ValueData = 98,
+    UnValueData = 99,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -348,6 +349,7 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::Bls12_381_G1_MultiScalarMul)
             }
             v if v == DefaultFunction::ValueData as u8 => Ok(DefaultFunction::ValueData),
+            v if v == DefaultFunction::UnValueData as u8 => Ok(DefaultFunction::UnValueData),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -454,6 +456,8 @@ impl FromStr for DefaultFunction {
             "lengthOfArray" => Ok(LengthOfArray),
             "indexArray" => Ok(IndexArray),
             "bls12_381_G1_multiScalarMul" => Ok(Bls12_381_G1_MultiScalarMul),
+            "valueData" => Ok(ValueData),
+            "unValueData" => Ok(UnValueData),
             // "expModInteger" => Ok(ExpModInteger),
             "listToArray" => Ok(ListToArray),
             // "caseList" => Ok(CaseList),
@@ -561,6 +565,8 @@ impl Display for DefaultFunction {
             LengthOfArray => write!(f, "lengthOfArray"),
             IndexArray => write!(f, "indexArray"),
             Bls12_381_G1_MultiScalarMul => write!(f, "bls12_381_G1_multiScalarMul"),
+            ValueData => write!(f, "valueData"),
+            UnValueData => write!(f, "unValueData"),
             // ExpModInteger => write!(f, "expModInteger"),
             ListToArray => write!(f, "listToArray"),
             // CaseList => write!(f, "caseList"),
@@ -667,6 +673,8 @@ impl DefaultFunction {
             LengthOfArray => "length_of_array",
             IndexArray => "index_array",
             Bls12_381_G1_MultiScalarMul => "bls12_381_g1_multi_scalar_mul",
+            ValueData => "value_data",
+            UnValueData => "un_value_data",
             // ExpModInteger => "exp_mod_integer",
             ListToArray => "list_to_array",
             // CaseList => "case_list",

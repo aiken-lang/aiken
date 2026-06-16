@@ -261,7 +261,8 @@ impl DefaultFunction {
             | DefaultFunction::ListToArray
             | DefaultFunction::IndexArray
             | DefaultFunction::Bls12_381_G1_MultiScalarMul
-            | DefaultFunction::ValueData => false,
+            | DefaultFunction::ValueData
+            | DefaultFunction::UnValueData => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -365,6 +366,7 @@ impl DefaultFunction {
             DefaultFunction::DropList => 2,
             DefaultFunction::ListToArray => 1,
             DefaultFunction::ValueData => 1,
+            DefaultFunction::UnValueData => 1,
         }
     }
 
@@ -465,6 +467,7 @@ impl DefaultFunction {
             DefaultFunction::DropList => 1,
             DefaultFunction::ListToArray => 1,
             DefaultFunction::ValueData => 0,
+            DefaultFunction::UnValueData => 0,
         }
     }
 
@@ -2119,6 +2122,104 @@ impl DefaultFunction {
                 let value = Value::data(PlutusData::Map(outer.into()));
 
                 Ok(value)
+            }
+            DefaultFunction::UnValueData => {
+                use crate::ast::{VALUE_MAX_KEY_LEN, Value as UplcValue};
+
+                let fail = |msg: &str| Error::UnValueData(msg.to_string());
+
+                // Helper: a `Data` node must be a `B` constructor whose payload
+                // is at most `VALUE_MAX_KEY_LEN` bytes (the `unB`/`k` of plutus).
+                let un_b = |d: &PlutusData| -> Result<Vec<u8>, Error> {
+                    match d {
+                        PlutusData::BoundedBytes(b) => {
+                            let bytes: Vec<u8> = b.deref().clone();
+                            if bytes.len() > VALUE_MAX_KEY_LEN {
+                                Err(fail("invalid key"))
+                            } else {
+                                Ok(bytes)
+                            }
+                        }
+                        _ => Err(fail("non-B constructor")),
+                    }
+                };
+
+                // Helper: a `Data` node must be an `I` constructor whose value
+                // fits in a signed 128-bit integer (the `unQ`/`quantity` of
+                // plutus).
+                let un_q = |d: &PlutusData| -> Result<i128, Error> {
+                    match d {
+                        PlutusData::BigInt(i) => i128::try_from(&from_pallas_bigint(i))
+                            .map_err(|_| fail("invalid quantity")),
+                        _ => Err(fail("non-I constructor")),
+                    }
+                };
+
+                let outer = match args[0].unwrap_data()? {
+                    PlutusData::Map(m) => m,
+                    _ => return Err(fail("non-Map constructor")),
+                };
+
+                // Build the (already strictly ordered) entries, validating the
+                // structure exactly as plutus's `buildValueWith` with `pure`
+                // converters does: strictly ascending keys, no empty inner map,
+                // no zero quantity.
+                let mut entries: Vec<(Vec<u8>, Vec<(Vec<u8>, num_bigint::BigInt)>)> = Vec::new();
+                let mut prev_currency: Option<Vec<u8>> = None;
+
+                for (c_data, ts_data) in outer.deref().iter() {
+                    let currency = un_b(c_data)?;
+
+                    if let Some(prev) = &prev_currency {
+                        if !(prev.as_slice() < currency.as_slice()) {
+                            return Err(fail("currency symbols not strictly ascending"));
+                        }
+                    }
+
+                    let inner_pairs = match ts_data {
+                        PlutusData::Map(m) => m,
+                        _ => return Err(fail("non-Map constructor")),
+                    };
+
+                    if inner_pairs.is_empty() {
+                        return Err(fail("empty inner map"));
+                    }
+
+                    let mut inner: Vec<(Vec<u8>, num_bigint::BigInt)> = Vec::new();
+                    let mut prev_token: Option<Vec<u8>> = None;
+
+                    for (t_data, q_data) in inner_pairs.deref().iter() {
+                        let token = un_b(t_data)?;
+
+                        if let Some(prev) = &prev_token {
+                            if !(prev.as_slice() < token.as_slice()) {
+                                return Err(fail("token names not strictly ascending"));
+                            }
+                        }
+
+                        let quantity = un_q(q_data)?;
+
+                        if quantity == 0 {
+                            return Err(fail("zero quantity"));
+                        }
+
+                        prev_token = Some(token.clone());
+                        inner.push((token, num_bigint::BigInt::from(quantity)));
+                    }
+
+                    prev_currency = Some(currency.clone());
+                    entries.push((currency, inner));
+                }
+
+                // The entries are already normalized (strictly ascending, no
+                // zeros, no empty inner maps, all quantities within i128
+                // bounds), so `from_entries` performs an identity
+                // normalization. Any residual `ValueError` is still surfaced
+                // as a builtin failure.
+                let value = UplcValue::from_entries(entries)
+                    .map_err(|e| Error::UnValueData(e.to_string()))?;
+
+                Ok(Value::value(value))
             }
         }
     }

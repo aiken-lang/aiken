@@ -3027,6 +3027,18 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::UnValueData => ExBudget {
+                mem: self
+                    .pv11_builtin_costs
+                    .un_value_data
+                    .mem
+                    .cost(args[0].to_ex_mem()),
+                cpu: self
+                    .pv11_builtin_costs
+                    .un_value_data
+                    .cpu
+                    .cost(args[0].to_ex_mem()),
+            },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
