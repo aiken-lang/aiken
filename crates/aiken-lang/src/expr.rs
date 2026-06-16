@@ -1055,6 +1055,10 @@ impl UntypedExpr {
                     }),
                 })
             }
+
+            uplc::ast::Constant::Value(..) => {
+                Err("cannot reify a UPLC 'Value' constant: no Aiken syntax for it".to_string())
+            }
         })
     }
 

@@ -1867,9 +1867,10 @@ impl<'a> CodeGenerator<'a> {
                 | UplcType::Bls12_381G1Element
                 | UplcType::Bls12_381G2Element
                 | UplcType::Bls12_381MlResult
-                // NOTE: aiken's `get_uplc_type` never yields `Array`; this arm
-                // exists only to keep the match exhaustive.
+                // NOTE: aiken's `get_uplc_type` never yields `Array` or `Value`;
+                // these arms exist only to keep the match exhaustive.
                 | UplcType::Array(_)
+                | UplcType::Value
                 | UplcType::Data,
             ) => then,
 
@@ -4264,6 +4265,9 @@ impl<'a> CodeGenerator<'a> {
                             Some(UplcType::Array(_)) => {
                                 panic!("Array equality is not supported")
                             }
+                            Some(UplcType::Value) => {
+                                panic!("Value equality is not supported")
+                            }
                         };
 
                         let binop_eq = match uplc_type {
@@ -4321,6 +4325,9 @@ impl<'a> CodeGenerator<'a> {
 
                             Some(UplcType::Array(_)) => {
                                 panic!("Array equality is not supported")
+                            }
+                            Some(UplcType::Value) => {
+                                panic!("Value equality is not supported")
                             }
 
                             None => {
@@ -4640,7 +4647,8 @@ impl<'a> CodeGenerator<'a> {
                         | UplcType::Bls12_381G1Element
                         | UplcType::Bls12_381G2Element
                         | UplcType::Bls12_381MlResult
-                        | UplcType::Array(_),
+                        | UplcType::Array(_)
+                        | UplcType::Value,
                     ) => subject,
 
                     Some(UplcType::Data) => subject,
@@ -4707,7 +4715,8 @@ impl<'a> CodeGenerator<'a> {
                             | UplcType::List(_)
                             | UplcType::Pair(_, _)
                             | UplcType::Bls12_381MlResult
-                            | UplcType::Array(_),
+                            | UplcType::Array(_)
+                            | UplcType::Value,
                         ) => unreachable!("{:#?}", tipo),
                         Some(UplcType::Data) => unimplemented!(),
                         Some(UplcType::Integer) => Term::equals_integer()

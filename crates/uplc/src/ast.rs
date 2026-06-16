@@ -14,6 +14,7 @@ use crate::{
     tx::script_context::PlutusScript,
 };
 use num_bigint::BigInt;
+use num_traits::Zero;
 use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
 use pallas_primitives::{
     alonzo::{Constr, PlutusData},
@@ -417,6 +418,180 @@ pub enum Constant {
     Bls12_381MlResult(Box<blst::blst_fp12>),
     // tag: 12
     ProtoArray(Type, Vec<Constant>),
+    // tag: 13
+    Value(Value),
+}
+
+/// Maximum length, in bytes, of a currency symbol or token name used as a key
+/// in a `Value`. Mirrors `maxKeyLen` in PlutusCore.Value (currency symbols are
+/// in practice either empty or 28 bytes, but plutus allows anything in
+/// `0..=32`, so we do the same).
+pub const VALUE_MAX_KEY_LEN: usize = 32;
+
+/// Inclusive lower bound for a `Value` quantity: `-(2^127)` (i.e. `i128::MIN`).
+pub const VALUE_QUANTITY_MIN: i128 = i128::MIN;
+
+/// Inclusive upper bound for a `Value` quantity: `2^127 - 1` (i.e. `i128::MAX`).
+pub const VALUE_QUANTITY_MAX: i128 = i128::MAX;
+
+/// Errors that can occur while constructing/normalizing a [`Value`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValueError {
+    /// A key (currency symbol or token name) exceeded [`VALUE_MAX_KEY_LEN`] bytes.
+    KeyTooLong(usize),
+    /// A quantity (either as provided or as the result of merging duplicate
+    /// keys) fell outside the signed 128-bit integer bounds.
+    QuantityOutOfBounds(BigInt),
+}
+
+impl Display for ValueError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueError::KeyTooLong(len) => write!(
+                f,
+                "Value key exceeds maximum length of {VALUE_MAX_KEY_LEN} bytes: got {len} bytes"
+            ),
+            ValueError::QuantityOutOfBounds(q) => {
+                write!(f, "Value quantity out of signed 128-bit integer bounds: {q}")
+            }
+        }
+    }
+}
+
+/// The underlying type of the UPLC built-in type `Value`.
+///
+/// This is a *normalized* nested association list mirroring plutus's
+/// `Map CurrencySymbol (Map TokenName Quantity)` (see
+/// `plutus-core/plutus-core/src/PlutusCore/Value.hs`).
+///
+/// Invariants (enforced by every constructor):
+///   * outer keys (currency symbols) are strictly ascending and unique;
+///   * inner keys (token names) are strictly ascending and unique;
+///   * no inner map is empty;
+///   * no quantity is zero;
+///   * every key is at most [`VALUE_MAX_KEY_LEN`] bytes;
+///   * every quantity is a valid signed 128-bit integer.
+///
+/// Keys are ordered lexicographically by their raw bytes, exactly matching
+/// the `Ord ByteString` instance plutus relies on.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Value {
+    // Outer: (currency symbol, inner association list of (token name, quantity)).
+    inner: Vec<(Vec<u8>, Vec<(Vec<u8>, i128)>)>,
+}
+
+impl Value {
+    /// The empty `Value`.
+    pub fn empty() -> Self {
+        Value { inner: Vec::new() }
+    }
+
+    /// Build a normalized `Value` from a (possibly ill-formed) list of entries.
+    ///
+    /// This mirrors `PlutusCore.Value.fromList`: duplicate currency/token keys
+    /// are merged by *summing* their quantities (using arbitrary-precision
+    /// arithmetic so a transient overflow during merge is not falsely
+    /// rejected), then the resulting nested map is normalized (zero quantities
+    /// and empty inner maps dropped, keys sorted/deduplicated) and every final
+    /// quantity is validated to be within the signed 128-bit integer bounds.
+    pub fn from_entries(
+        entries: Vec<(Vec<u8>, Vec<(Vec<u8>, BigInt)>)>,
+    ) -> Result<Self, ValueError> {
+        // Outer map: currency -> (inner map: token -> summed quantity).
+        let mut outer: Vec<(Vec<u8>, Vec<(Vec<u8>, BigInt)>)> = Vec::new();
+
+        for (currency, tokens) in entries {
+            if currency.len() > VALUE_MAX_KEY_LEN {
+                return Err(ValueError::KeyTooLong(currency.len()));
+            }
+
+            let inner = match outer.iter_mut().find(|(c, _)| *c == currency) {
+                Some((_, inner)) => inner,
+                None => {
+                    outer.push((currency, Vec::new()));
+                    &mut outer.last_mut().expect("just pushed").1
+                }
+            };
+
+            for (token, quantity) in tokens {
+                if token.len() > VALUE_MAX_KEY_LEN {
+                    return Err(ValueError::KeyTooLong(token.len()));
+                }
+
+                match inner.iter_mut().find(|(t, _)| *t == token) {
+                    // Unchecked (arbitrary-precision) addition while merging.
+                    Some((_, q)) => *q += quantity,
+                    None => inner.push((token, quantity)),
+                }
+            }
+        }
+
+        // Normalize: drop zero quantities, validate bounds, sort token names,
+        // drop empty inner maps, sort currency symbols.
+        let mut normalized: Vec<(Vec<u8>, Vec<(Vec<u8>, i128)>)> = Vec::new();
+
+        for (currency, tokens) in outer {
+            let mut inner: Vec<(Vec<u8>, i128)> = Vec::new();
+
+            for (token, quantity) in tokens {
+                if quantity.is_zero() {
+                    continue;
+                }
+
+                let quantity = i128::try_from(&quantity)
+                    .map_err(|_| ValueError::QuantityOutOfBounds(quantity.clone()))?;
+
+                inner.push((token, quantity));
+            }
+
+            if inner.is_empty() {
+                continue;
+            }
+
+            inner.sort_by(|(a, _), (b, _)| a.cmp(b));
+            normalized.push((currency, inner));
+        }
+
+        normalized.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        Ok(Value { inner: normalized })
+    }
+
+    /// The raw, normalized nested association list backing this `Value`.
+    pub fn entries(&self) -> &[(Vec<u8>, Vec<(Vec<u8>, i128)>)] {
+        &self.inner
+    }
+
+    /// Total size: the number of distinct `(currency, token)` pairs. This is
+    /// plutus's `Value.totalSize`, used as the default `memoryUsage` of a
+    /// `Value` for costing.
+    pub fn total_size(&self) -> usize {
+        self.inner.iter().map(|(_, inner)| inner.len()).sum()
+    }
+
+    /// Size of the largest inner map (plutus's `Value.maxInnerSize`).
+    pub fn max_inner_size(&self) -> usize {
+        self.inner
+            .iter()
+            .map(|(_, inner)| inner.len())
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Number of policies (outer map size).
+    pub fn outer_size(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// The number of negative quantities contained in this `Value`
+    /// (plutus's `Value.negativeAmounts`).
+    pub fn negative_amounts(&self) -> usize {
+        self.inner
+            .iter()
+            .flat_map(|(_, inner)| inner.iter())
+            .filter(|(_, q)| *q < 0)
+            .count()
+    }
 }
 
 pub struct Data;
@@ -495,6 +670,7 @@ pub enum Type {
     Bls12_381G2Element,
     Bls12_381MlResult,
     Array(Rc<Type>),
+    Value,
 }
 
 impl Display for Type {
@@ -512,6 +688,7 @@ impl Display for Type {
             Type::Bls12_381G2Element => write!(f, "bls12_381_G2_element"),
             Type::Bls12_381MlResult => write!(f, "bls12_381_mlresult"),
             Type::Array(t) => write!(f, "array {t}"),
+            Type::Value => write!(f, "value"),
         }
     }
 }
@@ -1057,7 +1234,7 @@ impl Term<NamedDeBruijn> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::Data;
+    use crate::ast::{Data, Value, ValueError};
     use num_bigint::{BigInt, Sign};
     use pallas_codec::minicbor;
 
@@ -1075,5 +1252,113 @@ mod tests {
         let large_negative_num_decoded = BigInt::from_bytes_be(Sign::Plus, &buf[2..]);
 
         assert_eq!(large_negative_num_decoded, -1 - large_negative_num);
+    }
+
+    fn entries(value: &Value) -> Vec<(Vec<u8>, Vec<(Vec<u8>, i128)>)> {
+        value.entries().to_vec()
+    }
+
+    #[test]
+    fn value_merges_duplicate_token_keys() {
+        let v = Value::from_entries(vec![(
+            vec![],
+            vec![(vec![], 123.into()), (vec![], 456.into())],
+        )])
+        .unwrap();
+
+        assert_eq!(entries(&v), vec![(vec![], vec![(vec![], 579)])]);
+    }
+
+    #[test]
+    fn value_drops_zero_quantities_and_empty_inner_maps() {
+        let v = Value::from_entries(vec![
+            (vec![], vec![(vec![], 0.into()), (vec![0xaa], 1.into())]),
+            (vec![0x01], vec![(vec![], 0.into())]),
+            (vec![0x02], vec![]),
+        ])
+        .unwrap();
+
+        // Only the (#, [(#aa, 1)]) entry survives; the all-zero and empty
+        // currencies are dropped.
+        assert_eq!(entries(&v), vec![(vec![], vec![(vec![0xaa], 1)])]);
+    }
+
+    #[test]
+    fn value_sorts_keys_lexicographically() {
+        let v = Value::from_entries(vec![
+            (vec![0xff, 0xff], vec![(vec![0xbb], 123.into()), (vec![0xaa], 456.into())]),
+            (vec![0xaa], vec![(vec![0xaa], 123.into())]),
+            (vec![], vec![(vec![0xaa], 123.into())]),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            entries(&v),
+            vec![
+                (vec![], vec![(vec![0xaa], 123)]),
+                (vec![0xaa], vec![(vec![0xaa], 123)]),
+                (vec![0xff, 0xff], vec![(vec![0xaa], 456), (vec![0xbb], 123)]),
+            ]
+        );
+    }
+
+    #[test]
+    fn value_accepts_i128_bounds() {
+        let max = Value::from_entries(vec![(vec![], vec![(vec![], i128::MAX.into())])]).unwrap();
+        assert_eq!(entries(&max), vec![(vec![], vec![(vec![], i128::MAX)])]);
+
+        let min = Value::from_entries(vec![(vec![], vec![(vec![], i128::MIN.into())])]).unwrap();
+        assert_eq!(entries(&min), vec![(vec![], vec![(vec![], i128::MIN)])]);
+    }
+
+    #[test]
+    fn value_rejects_out_of_bounds_quantities() {
+        let overflow: BigInt = BigInt::from(i128::MAX) + 1;
+        assert_eq!(
+            Value::from_entries(vec![(vec![], vec![(vec![], overflow.clone())])]),
+            Err(ValueError::QuantityOutOfBounds(overflow))
+        );
+
+        let underflow: BigInt = BigInt::from(i128::MIN) - 1;
+        assert_eq!(
+            Value::from_entries(vec![(vec![], vec![(vec![], underflow.clone())])]),
+            Err(ValueError::QuantityOutOfBounds(underflow))
+        );
+    }
+
+    #[test]
+    fn value_accepts_max_key_length() {
+        let key = vec![0xaa; 32];
+        let v = Value::from_entries(vec![(key.clone(), vec![(key.clone(), 1.into())])]).unwrap();
+        assert_eq!(entries(&v), vec![(key.clone(), vec![(key, 1)])]);
+    }
+
+    #[test]
+    fn value_rejects_keys_that_are_too_long() {
+        let long = vec![0xaa; 33];
+
+        assert_eq!(
+            Value::from_entries(vec![(long.clone(), vec![(vec![], 1.into())])]),
+            Err(ValueError::KeyTooLong(33))
+        );
+
+        assert_eq!(
+            Value::from_entries(vec![(vec![], vec![(long, 1.into())])]),
+            Err(ValueError::KeyTooLong(33))
+        );
+    }
+
+    #[test]
+    fn value_size_metrics() {
+        let v = Value::from_entries(vec![
+            (vec![], vec![(vec![], 1.into()), (vec![0xaa], (-2).into())]),
+            (vec![0xff], vec![(vec![0xbb], 3.into())]),
+        ])
+        .unwrap();
+
+        assert_eq!(v.total_size(), 3);
+        assert_eq!(v.max_inner_size(), 2);
+        assert_eq!(v.outer_size(), 2);
+        assert_eq!(v.negative_amounts(), 1);
     }
 }

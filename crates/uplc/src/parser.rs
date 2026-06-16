@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, Data, Name, Program, Term, Type},
+    ast::{Constant, Data, Name, Program, Term, Type, Value},
     builtins::DefaultFunction,
     machine::{runtime::Compressable, value::to_pallas_bigint},
 };
@@ -109,6 +109,7 @@ peg::parser! {
             / constant_list()
             / constant_pair()
             / constant_array()
+            / constant_value()
             ) _* ")" {
             Term::Constant(con.into())
           }
@@ -200,6 +201,36 @@ peg::parser! {
 
         rule pair(type_info: Option<(&Type, &Type)>) -> (Constant, Constant)
           = "(" _* x:typed_constant(type_info.map(|t| t.0)) comma() y:typed_constant(type_info.map(|t| t.1)) _* ")" { (x, y) }
+
+        // A `Value` literal: `(con value [ (#cur, [ (#tok, qty), ... ]), ... ])`.
+        // The outer list pairs a currency-symbol bytestring with an inner list,
+        // and the inner list pairs a token-name bytestring with an integer
+        // quantity. Normalization (sorting/dedup, dropping zeros and empty
+        // inner maps) and validation (32-byte key cap, signed 128-bit quantity
+        // bounds) are performed by `Value::from_entries`; a violation yields a
+        // parse error.
+        rule constant_value() -> Constant
+          = "value" _+ entries:value_outer_list() {?
+              Value::from_entries(entries)
+                  .map(Constant::Value)
+                  .map_err(|_| "invalid value literal")
+            }
+
+        rule value_outer_list() -> Vec<(Vec<u8>, Vec<(Vec<u8>, BigInt)>)>
+          = "[" _* xs:(value_outer_entry() ** comma()) _* "]" { xs }
+
+        rule value_outer_entry() -> (Vec<u8>, Vec<(Vec<u8>, BigInt)>)
+          = "(" _* currency:bytestring() comma() inner:value_inner_list() _* ")" {
+              (currency, inner)
+            }
+
+        rule value_inner_list() -> Vec<(Vec<u8>, BigInt)>
+          = "[" _* xs:(value_inner_entry() ** comma()) _* "]" { xs }
+
+        rule value_inner_entry() -> (Vec<u8>, BigInt)
+          = "(" _* token:bytestring() comma() quantity:big_number() _* ")" {
+              (token, quantity)
+            }
 
         rule decimal() -> usize
           = n:$(['0'..='9']+) {? n.parse().or(Err("usize")) }
@@ -367,6 +398,7 @@ peg::parser! {
           / _* "data" { Type::Data }
           / _* "bls12_381_G1_element" { Type::Bls12_381G1Element }
           / _* "bls12_381_G2_element" { Type::Bls12_381G2Element }
+          / _* "value" { Type::Value }
           / _* "(" _* "list" _+ t:type_info() _* ")" {
               Type::List(t.into())
             }
