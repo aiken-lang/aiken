@@ -142,6 +142,7 @@ pub enum DefaultFunction {
     IndexArray = 91,
     // BLS12-381 multi-scalar multiplication
     Bls12_381_G1_MultiScalarMul = 92,
+    Bls12_381_G2_MultiScalarMul = 93,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -283,6 +284,9 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G2_ScalarMul as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_ScalarMul)
             }
+            v if v == DefaultFunction::Bls12_381_G2_MultiScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_MultiScalarMul)
+            }
             v if v == DefaultFunction::Bls12_381_G2_Equal as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_Equal)
             }
@@ -421,6 +425,7 @@ impl FromStr for DefaultFunction {
             "bls12_381_G2_add" => Ok(Bls12_381_G2_Add),
             "bls12_381_G2_neg" => Ok(Bls12_381_G2_Neg),
             "bls12_381_G2_scalarMul" => Ok(Bls12_381_G2_ScalarMul),
+            "bls12_381_G2_multiScalarMul" => Ok(Bls12_381_G2_MultiScalarMul),
             "bls12_381_G2_equal" => Ok(Bls12_381_G2_Equal),
             "bls12_381_G2_compress" => Ok(Bls12_381_G2_Compress),
             "bls12_381_G2_uncompress" => Ok(Bls12_381_G2_Uncompress),
@@ -526,6 +531,7 @@ impl Display for DefaultFunction {
             Bls12_381_G2_Add => write!(f, "bls12_381_G2_add"),
             Bls12_381_G2_Neg => write!(f, "bls12_381_G2_neg"),
             Bls12_381_G2_ScalarMul => write!(f, "bls12_381_G2_scalarMul"),
+            Bls12_381_G2_MultiScalarMul => write!(f, "bls12_381_G2_multiScalarMul"),
             Bls12_381_G2_Equal => write!(f, "bls12_381_G2_equal"),
             Bls12_381_G2_Compress => write!(f, "bls12_381_G2_compress"),
             Bls12_381_G2_Uncompress => write!(f, "bls12_381_G2_uncompress"),
@@ -630,6 +636,7 @@ impl DefaultFunction {
             Bls12_381_G2_Add => "bls12_381_g2_add",
             Bls12_381_G2_Neg => "bls12_381_g2_neg",
             Bls12_381_G2_ScalarMul => "bls12_381_g2_scalar_mul",
+            Bls12_381_G2_MultiScalarMul => "bls12_381_g2_multi_scalar_mul",
             Bls12_381_G2_Equal => "bls12_381_g2_equal",
             Bls12_381_G2_Compress => "bls12_381_g2_compress",
             Bls12_381_G2_Uncompress => "bls12_381_g2_uncompress",

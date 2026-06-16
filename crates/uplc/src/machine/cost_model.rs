@@ -2754,6 +2754,25 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+                // The cost model measures the scalar list (first argument) by
+                // its length (number of elements), not by its summed memory.
+                let scalars_len = args[0].list_len() as i64;
+                let points_len = args[1].list_len() as i64;
+
+                ExBudget {
+                    mem: self
+                        .pv11_builtin_costs
+                        .bls12_381_g2_multi_scalar_mul
+                        .mem
+                        .cost(scalars_len, points_len),
+                    cpu: self
+                        .pv11_builtin_costs
+                        .bls12_381_g2_multi_scalar_mul
+                        .cpu
+                        .cost(scalars_len, points_len),
+                }
+            }
             DefaultFunction::Bls12_381_MillerLoop => ExBudget {
                 mem: self
                     .bls12_381_miller_loop

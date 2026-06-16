@@ -1124,6 +1124,14 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::list(element.clone())], Type::array(element));
 
             (tipo, 1)
+        }
+        DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+            let tipo = Type::function(
+                vec![Type::list(Type::int()), Type::list(Type::g2_element())],
+                Type::g2_element(),
+            );
+
+            (tipo, 2)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 
