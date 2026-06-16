@@ -60,7 +60,13 @@ fn actual_evaluation_result(
 
     let version = program.version;
 
-    let eval = program.eval_version(Default::default(), language);
+    // The Plutus conformance suite generates its budget goldens in *counting*
+    // mode (`runCekNoEmit params counting t`), which never enforces a budget cap
+    // and accumulates cost with saturating `SatInt` arithmetic. We mirror that
+    // here so the measured budget matches exactly — including builtins like
+    // `dropList` whose literal-costed argument can saturate the cost at
+    // `i64::MAX` while still succeeding.
+    let eval = program.eval_version_counting(language);
 
     let cost = eval.cost();
 

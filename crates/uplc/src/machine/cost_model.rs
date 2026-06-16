@@ -40,6 +40,18 @@ impl ExBudget {
             cpu: 10000000000000,
         }
     }
+
+    /// An effectively unbounded budget used for *counting* evaluation, where the
+    /// goal is to measure how much would be spent rather than to enforce a cap.
+    /// Seeded at `i64::MAX` so that, combined with saturating subtraction, the
+    /// reported consumed budget saturates at `i64::MAX` (matching Plutus'
+    /// `SatInt`-based counting machine) instead of overflowing.
+    pub fn counting() -> Self {
+        ExBudget {
+            mem: i64::MAX,
+            cpu: i64::MAX,
+        }
+    }
 }
 
 impl Default for ExBudget {
@@ -55,9 +67,13 @@ impl std::ops::Sub for ExBudget {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
+        // Saturating subtraction mirrors Plutus' `SatInt` costing integers, so
+        // that the consumed budget (`initial - remaining`) clamps at `i64::MAX`
+        // for literally-costed builtins (e.g. `dropList` with a huge count)
+        // rather than overflowing.
         ExBudget {
-            mem: self.mem - rhs.mem,
-            cpu: self.cpu - rhs.cpu,
+            mem: self.mem.saturating_sub(rhs.mem),
+            cpu: self.cpu.saturating_sub(rhs.cpu),
         }
     }
 }
@@ -2906,6 +2922,26 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::DropList => {
+                // `dropList`'s first argument is costed *literally*: the size fed
+                // to the cost function is `|n|` (the absolute literal value),
+                // saturated to `i64::MAX`, rather than the integer's word size.
+                // Mirrors Plutus' `IntegerCostedLiterally` (`memoryUsage = abs n`)
+                // and the `SatInt` arithmetic used by the cost model.
+                let literal = args[0].unwrap_integer()?;
+
+                let arg0: i64 = u64::try_from(literal.abs())
+                    .unwrap()
+                    .try_into()
+                    .unwrap_or(i64::MAX);
+
+                let arg1 = args[1].to_ex_mem();
+
+                ExBudget {
+                    mem: self.pv11_builtin_costs.drop_list.mem.cost(arg0, arg1),
+                    cpu: self.pv11_builtin_costs.drop_list.cpu.cost(arg0, arg1),
+                }
+            }
             DefaultFunction::LengthOfArray => ExBudget {
                 mem: self
                     .pv11_builtin_costs
@@ -3646,6 +3682,16 @@ fn initialize_cost_model_with_semantics(
                     "ripemd_160-cpu-arguments-intercept"=> costs[294],
                     "ripemd_160-cpu-arguments-slope"=> costs[295],
                     "ripemd_160-memory-arguments"=> costs[296],
+                };
+
+                Extend::extend::<HashMap<&str, i64>>(&mut main, test);
+            }
+
+            if costs.len() >= 300 {
+                let test = hashmap! {
+                    "dropList-cpu-arguments-intercept"=> costs[297],
+                    "dropList-cpu-arguments-slope"=> costs[298],
+                    "dropList-memory-arguments"=> costs[299],
                 };
 
                 Extend::extend::<HashMap<&str, i64>>(&mut main, test);
@@ -5595,9 +5641,12 @@ impl TwoArguments {
     pub fn cost(&self, x: i64, y: i64) -> i64 {
         match self {
             TwoArguments::ConstantCost(c) => *c,
-            TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
-            TwoArguments::LinearInY(l) => l.slope * y + l.intercept,
-            TwoArguments::LinearInY2(l) => l.slope * y + l.intercept,
+            // Saturating arithmetic mirrors Plutus' `SatInt` costing integers, so
+            // that a literally-costed argument (e.g. `dropList`'s count) whose
+            // value approaches `i64::MAX` clamps instead of overflowing.
+            TwoArguments::LinearInX(l) => l.slope.saturating_mul(x).saturating_add(l.intercept),
+            TwoArguments::LinearInY(l) => l.slope.saturating_mul(y).saturating_add(l.intercept),
+            TwoArguments::LinearInY2(l) => l.slope.saturating_mul(y).saturating_add(l.intercept),
             TwoArguments::LinearInXAndY(l) => l.slope1 * x + l.slope2 * y + l.intercept,
             TwoArguments::WithInteractionInXAndY(l) => {
                 l.coeff_00 + l.coeff_10 * x + l.coeff_01 * y + l.coeff_11 * x * y
@@ -5958,7 +6007,7 @@ mod tests {
             28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719,
             0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
             159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
-            1964219, 24520, 3,
+            1964219, 24520, 3, 116711, 1957, 4,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);

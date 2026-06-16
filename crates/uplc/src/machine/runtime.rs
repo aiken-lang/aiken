@@ -243,6 +243,7 @@ impl DefaultFunction {
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
             | DefaultFunction::Ripemd_160
+            | DefaultFunction::DropList
             | DefaultFunction::LengthOfArray
             | DefaultFunction::ListToArray
             | DefaultFunction::IndexArray => false,
@@ -344,6 +345,7 @@ impl DefaultFunction {
             DefaultFunction::LengthOfArray => 1,
             DefaultFunction::IndexArray => 2,
             // DefaultFunction::ExpModInteger => 3,
+            DefaultFunction::DropList => 2,
             DefaultFunction::ListToArray => 1,
         }
     }
@@ -440,6 +442,7 @@ impl DefaultFunction {
             DefaultFunction::LengthOfArray => 1,
             DefaultFunction::IndexArray => 1,
             // DefaultFunction::ExpModInteger => 0,
+            DefaultFunction::DropList => 1,
             DefaultFunction::ListToArray => 1,
         }
     }
@@ -1820,6 +1823,30 @@ impl DefaultFunction {
                 hasher.result(&mut bytes);
 
                 let value = Value::byte_string(bytes);
+
+                Ok(value)
+            }
+            DefaultFunction::DropList => {
+                let n = args[0].unwrap_integer()?;
+                let (r#type, list) = args[1].unwrap_list()?;
+
+                // Drop the first `n` elements of the list. A non-positive `n`
+                // leaves the list unchanged, while an `n` greater than or equal
+                // to the length yields the empty list. Mirrors Plutus' `drop`
+                // semantics over an `Int`-bounded count.
+                let dropped = if n <= &0.into() {
+                    list.clone()
+                } else {
+                    let n = usize::try_from(n).unwrap_or(usize::MAX);
+
+                    if n >= list.len() {
+                        vec![]
+                    } else {
+                        list[n..].to_vec()
+                    }
+                };
+
+                let value = Value::list(r#type.clone(), dropped);
 
                 Ok(value)
             }

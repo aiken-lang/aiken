@@ -1089,6 +1089,13 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
+        DefaultFunction::DropList => {
+            let ret = Type::list(Type::generic_var(id_gen.next()));
+
+            let tipo = Type::function(vec![Type::int(), ret.clone()], ret);
+
+            (tipo, 2)
+        }
         DefaultFunction::LengthOfArray => {
             let element = Type::generic_var(id_gen.next());
 

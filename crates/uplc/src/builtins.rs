@@ -132,6 +132,7 @@ pub enum DefaultFunction {
     // Ripemd_160
     Ripemd_160 = 86,
     // ExpModInteger = 87,
+    DropList = 88,
     // Arrays
     LengthOfArray = 89,
     ListToArray = 90,
@@ -329,6 +330,7 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::FindFirstSetBit)
             }
             v if v == DefaultFunction::Ripemd_160 as u8 => Ok(DefaultFunction::Ripemd_160),
+            v if v == DefaultFunction::DropList as u8 => Ok(DefaultFunction::DropList),
             v if v == DefaultFunction::LengthOfArray as u8 => {
                 Ok(DefaultFunction::LengthOfArray)
             }
@@ -435,6 +437,7 @@ impl FromStr for DefaultFunction {
             "countSetBits" => Ok(CountSetBits),
             "findFirstSetBit" => Ok(FindFirstSetBit),
             "ripemd_160" => Ok(Ripemd_160),
+            "dropList" => Ok(DropList),
             "lengthOfArray" => Ok(LengthOfArray),
             "indexArray" => Ok(IndexArray),
             // "expModInteger" => Ok(ExpModInteger),
@@ -538,6 +541,7 @@ impl Display for DefaultFunction {
             CountSetBits => write!(f, "countSetBits"),
             FindFirstSetBit => write!(f, "findFirstSetBit"),
             Ripemd_160 => write!(f, "ripemd_160"),
+            DropList => write!(f, "dropList"),
             LengthOfArray => write!(f, "lengthOfArray"),
             IndexArray => write!(f, "indexArray"),
             // ExpModInteger => write!(f, "expModInteger"),
@@ -640,6 +644,7 @@ impl DefaultFunction {
             CountSetBits => "count_set_bits",
             FindFirstSetBit => "find_first_set_bit",
             Ripemd_160 => "ripemd_160",
+            DropList => "drop_list",
             LengthOfArray => "length_of_array",
             IndexArray => "index_array",
             // ExpModInteger => "exp_mod_integer",
