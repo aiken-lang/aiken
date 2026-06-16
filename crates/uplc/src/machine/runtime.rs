@@ -262,6 +262,7 @@ impl DefaultFunction {
             | DefaultFunction::IndexArray
             | DefaultFunction::Bls12_381_G1_MultiScalarMul
             | DefaultFunction::InsertCoin
+            | DefaultFunction::LookupCoin
             | DefaultFunction::ValueData
             | DefaultFunction::UnValueData => false,
             // | DefaultFunction::ExpModInteger
@@ -367,6 +368,7 @@ impl DefaultFunction {
             DefaultFunction::DropList => 2,
             DefaultFunction::ListToArray => 1,
             DefaultFunction::InsertCoin => 4,
+            DefaultFunction::LookupCoin => 3,
             DefaultFunction::ValueData => 1,
             DefaultFunction::UnValueData => 1,
         }
@@ -469,6 +471,7 @@ impl DefaultFunction {
             DefaultFunction::DropList => 1,
             DefaultFunction::ListToArray => 1,
             DefaultFunction::InsertCoin => 0,
+            DefaultFunction::LookupCoin => 0,
             DefaultFunction::ValueData => 0,
             DefaultFunction::UnValueData => 0,
         }
@@ -2127,6 +2130,24 @@ impl DefaultFunction {
                 let value = crate::ast::Value::from_entries(entries).map_err(Error::Value)?;
 
                 Ok(Value::value(value))
+            }
+            DefaultFunction::LookupCoin => {
+                let currency = args[0].unwrap_byte_string()?;
+                let token = args[1].unwrap_byte_string()?;
+                let value = args[2].unwrap_value()?;
+
+                // Mirrors `PlutusCore.Value.lookupCoin`: find the inner map for
+                // the currency, then the quantity for the token, defaulting to 0
+                // when either is absent.
+                let quantity = value
+                    .entries()
+                    .iter()
+                    .find(|(c, _)| c == currency)
+                    .and_then(|(_, inner)| inner.iter().find(|(t, _)| t == token))
+                    .map(|(_, q)| *q)
+                    .unwrap_or(0);
+
+                Ok(Value::integer(quantity.into()))
             }
             DefaultFunction::ListToArray => {
                 let (r#type, list) = args[0].unwrap_list()?;

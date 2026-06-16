@@ -3053,6 +3053,38 @@ impl BuiltinCosts {
                     ),
                 }
             }
+            DefaultFunction::LookupCoin => {
+                // The third argument is costed by its `ValueMaxDepth`, *not* its
+                // `totalSize` (the default `to_ex_mem`). This mirrors plutus's
+                // `ValueMaxDepth` ExMemoryUsage instance: the sum of the
+                // bit-lengths of the outer-map size and the largest inner-map
+                // size (`integerLog2 n + 1` for each non-empty map, 0 otherwise).
+                let value = args[2].unwrap_value()?;
+
+                let log2_plus_1 = |n: usize| -> i64 {
+                    if n > 0 {
+                        // `integerLog2 n` is `floor(log2 n)`.
+                        (usize::BITS - 1 - n.leading_zeros()) as i64 + 1
+                    } else {
+                        0
+                    }
+                };
+
+                let arg3 = log2_plus_1(value.outer_size()) + log2_plus_1(value.max_inner_size());
+
+                ExBudget {
+                    mem: self.pv11_builtin_costs.lookup_coin.mem.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        arg3,
+                    ),
+                    cpu: self.pv11_builtin_costs.lookup_coin.cpu.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        arg3,
+                    ),
+                }
+            }
             // `to_ex_mem` of a `Value` constant is its `total_size`, which is
             // exactly plutus's `ValueTotalSize` costing measure.
             DefaultFunction::ValueData => ExBudget {

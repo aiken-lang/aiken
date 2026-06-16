@@ -1156,6 +1156,17 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             );
 
             (tipo, 4)
+        }
+        DefaultFunction::LookupCoin => {
+            // The `Value` UPLC constant type has no surface-level Aiken
+            // representation; it is modelled as `data` here so the builtin can
+            // still be enumerated for the type environment.
+            let tipo = Type::function(
+                vec![Type::byte_array(), Type::byte_array(), Type::data()],
+                Type::int(),
+            );
+
+            (tipo, 3)
         } // DefaultFunction::ExpModInteger => {
           //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 

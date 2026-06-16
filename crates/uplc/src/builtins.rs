@@ -147,6 +147,7 @@ pub enum DefaultFunction {
     ValueData = 98,
     UnValueData = 99,
     InsertCoin = 94,
+    LookupCoin = 95,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -352,6 +353,7 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::ValueData as u8 => Ok(DefaultFunction::ValueData),
             v if v == DefaultFunction::UnValueData as u8 => Ok(DefaultFunction::UnValueData),
             v if v == DefaultFunction::InsertCoin as u8 => Ok(DefaultFunction::InsertCoin),
+            v if v == DefaultFunction::LookupCoin as u8 => Ok(DefaultFunction::LookupCoin),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -461,6 +463,7 @@ impl FromStr for DefaultFunction {
             "valueData" => Ok(ValueData),
             "unValueData" => Ok(UnValueData),
             "insertCoin" => Ok(InsertCoin),
+            "lookupCoin" => Ok(LookupCoin),
             // "expModInteger" => Ok(ExpModInteger),
             "listToArray" => Ok(ListToArray),
             // "caseList" => Ok(CaseList),
@@ -571,6 +574,7 @@ impl Display for DefaultFunction {
             ValueData => write!(f, "valueData"),
             UnValueData => write!(f, "unValueData"),
             InsertCoin => write!(f, "insertCoin"),
+            LookupCoin => write!(f, "lookupCoin"),
             // ExpModInteger => write!(f, "expModInteger"),
             ListToArray => write!(f, "listToArray"),
             // CaseList => write!(f, "caseList"),
@@ -680,6 +684,7 @@ impl DefaultFunction {
             ValueData => "value_data",
             UnValueData => "un_value_data",
             InsertCoin => "insert_coin",
+            LookupCoin => "lookup_coin",
             // ExpModInteger => "exp_mod_integer",
             ListToArray => "list_to_array",
             // CaseList => "case_list",
