@@ -284,7 +284,7 @@ impl Value {
                 Constant::ByteString(b) => total += Self::byte_string_to_ex_mem(b),
                 Constant::String(s) => {
                     total += if semantics.costs_strings_by_utf8_bytes() {
-                        s.len() as i64
+                        Self::utf8_text_to_ex_mem(s)
                     } else {
                         s.chars().count() as i64
                     };
@@ -303,6 +303,12 @@ impl Value {
         }
 
         total
+    }
+
+    fn utf8_text_to_ex_mem(s: &str) -> i64 {
+        let bytes = s.len() as i64;
+
+        if bytes == 0 { 0 } else { ((bytes - 1) / 4) + 1 }
     }
 
     fn integer_to_ex_mem(i: &BigInt) -> i64 {
@@ -670,7 +676,7 @@ mod tests {
             Rc::new(Constant::ProtoList(
                 Type::String,
                 vec![
-                    Constant::String("a".to_string()),
+                    Constant::String("abcd".to_string()),
                     Constant::String("é".to_string()),
                     Constant::ByteString(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]),
                 ],
@@ -679,7 +685,7 @@ mod tests {
 
         let value = Value::Con(nested.into());
 
-        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::C), 6);
-        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::D), 7);
+        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::C), 9);
+        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::D), 6);
     }
 }
