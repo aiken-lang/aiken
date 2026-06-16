@@ -1,0 +1,30 @@
+---
+source: crates/aiken-lang/src/parser/expr/list.rs
+description: "Code:\n\narray[1, 2, 3]"
+---
+Array {
+    location: 0..14,
+    elements: [
+        UInt {
+            location: 6..7,
+            value: "1",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+        UInt {
+            location: 9..10,
+            value: "2",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+        UInt {
+            location: 12..13,
+            value: "3",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+    ],
+}

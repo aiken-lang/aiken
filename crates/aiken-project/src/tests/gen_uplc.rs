@@ -169,6 +169,58 @@ fn acceptance_test_1_length() {
 }
 
 #[test]
+fn array_literal_length() {
+    let src = r#"
+        use aiken/builtin
+
+        test array_length() {
+          builtin.length_of_array(array[1, 2, 3]) == 3
+        }
+    "#;
+
+    let array = Term::array_values(vec![
+        Constant::Data(Data::integer(1.into())),
+        Constant::Data(Data::integer(2.into())),
+        Constant::Data(Data::integer(3.into())),
+    ]);
+
+    let uplc = Term::equals_integer()
+        .apply(Term::integer(3.into()))
+        .apply(Term::length_of_array().apply(array));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
+}
+
+#[test]
+fn array_literal_index() {
+    let src = r#"
+        use aiken/builtin
+
+        test array_index() {
+          builtin.index_array(array[1, 2, 3], 1) == 2
+        }
+    "#;
+
+    let array = Term::array_values(vec![
+        Constant::Data(Data::integer(1.into())),
+        Constant::Data(Data::integer(2.into())),
+        Constant::Data(Data::integer(3.into())),
+    ]);
+
+    let uplc = Term::equals_integer().apply(Term::integer(2.into())).apply(
+        Term::un_i_data().apply(
+            Term::index_array()
+                .apply(array)
+                .apply(Term::integer(1.into())),
+        ),
+    );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
+}
+
+#[test]
 fn acceptance_test_2_repeat() {
     let src = r#"
         pub fn repeat(x: a, n: Int) -> List<a> {

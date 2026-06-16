@@ -511,6 +511,7 @@ impl From<&Constant> for Type {
             Constant::Bls12_381G1Element(_) => Type::Bls12_381G1Element,
             Constant::Bls12_381G2Element(_) => Type::Bls12_381G2Element,
             Constant::Bls12_381MlResult(_) => Type::Bls12_381MlResult,
+            Constant::ProtoArray(t, _) => Type::Array(Rc::new(t.clone())),
         }
     }
 }

@@ -542,6 +542,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 tail,
             } => self.infer_list(elements, tail, location),
 
+            UntypedExpr::Array { location, elements } => self.infer_array(elements, location),
+
             UntypedExpr::Call {
                 location,
                 fun,
@@ -1466,6 +1468,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .type_from_annotation(ann)
                 .and_then(|t| self.instantiate(t, &mut HashMap::new(), location))?;
 
+            if !kind.is_let() && ann_typ.is_array() {
+                return Err(Error::IllegalTypeInData {
+                    tipo: ann_typ,
+                    location,
+                });
+            }
+
             self.unify(
                 ann_typ.clone(),
                 value_typ.clone(),
@@ -2056,6 +2065,33 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             tipo,
             elements: elems,
             tail,
+        })
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn infer_array(
+        &mut self,
+        elements: Vec<UntypedExpr>,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let tipo = self.new_unbound_var();
+
+        let mut elems = Vec::new();
+
+        for elem in elements.into_iter() {
+            let element = self.infer(elem)?;
+
+            self.unify(tipo.clone(), element.tipo(), location, false)?;
+
+            elems.push(element)
+        }
+
+        ensure_serialisable(false, tipo.clone(), location)?;
+
+        Ok(TypedExpr::Array {
+            location,
+            tipo: Type::array(tipo),
+            elements: elems,
         })
     }
 
@@ -2903,6 +2939,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         | UntypedExpr::If { .. }
         | UntypedExpr::UInt { .. }
         | UntypedExpr::List { .. }
+        | UntypedExpr::Array { .. }
         | UntypedExpr::PipeLine { .. }
         | UntypedExpr::RecordUpdate { .. }
         | UntypedExpr::Sequence { .. }
@@ -2965,6 +3002,13 @@ pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> R
             alias: _,
         } => {
             if !is_top_level && t.is_ml_result() {
+                return Err(Error::IllegalTypeInData {
+                    tipo: t.clone(),
+                    location,
+                });
+            }
+
+            if !is_top_level && t.is_array() {
                 return Err(Error::IllegalTypeInData {
                     tipo: t.clone(),
                     location,

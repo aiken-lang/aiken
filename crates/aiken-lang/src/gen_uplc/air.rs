@@ -55,6 +55,10 @@ pub enum Air {
         tipo: Rc<Type>,
         tail: bool,
     },
+    Array {
+        count: usize,
+        tipo: Rc<Type>,
+    },
     Tuple {
         tipo: Rc<Type>,
         count: usize,

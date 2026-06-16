@@ -133,6 +133,49 @@ fn bls12_381_ml_result_in_data_type() {
 }
 
 #[test]
+fn array_type_constructor_and_builtins() {
+    let source_code = r#"
+        use aiken/builtin
+
+        fn from_list(xs: List<Int>) -> Int {
+          let array: Array<Int> = builtin.list_to_array(xs)
+
+          builtin.index_array(array, 0) + builtin.length_of_array(array)
+        }
+    "#;
+
+    let res = check(parse(source_code));
+
+    assert!(res.is_ok(), "{res:#?}")
+}
+
+#[test]
+fn arrays_are_not_data_inhabitants() {
+    let source_code = r#"
+        type Datum {
+          xs: Array<Int>
+        }
+    "#;
+
+    let res = check(parse(source_code));
+
+    assert!(matches!(res, Err((_, Error::IllegalTypeInData { .. }))))
+}
+
+#[test]
+fn nested_arrays_are_rejected() {
+    let source_code = r#"
+        fn nested() -> Array<Array<Int>> {
+          array[array[1]]
+        }
+    "#;
+
+    let res = check(parse(source_code));
+
+    assert!(matches!(res, Err((_, Error::IllegalTypeInData { .. }))))
+}
+
+#[test]
 fn validator_illegal_return_type() {
     let source_code = r#"
       validator foo {

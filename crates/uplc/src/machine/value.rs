@@ -291,6 +291,7 @@ impl Value {
                 }
                 Constant::Unit | Constant::Bool(_) => total += 1,
                 Constant::ProtoList(_, items) => stack.extend(items.iter()),
+                Constant::ProtoArray(_, items) => total += items.len() as i64,
                 Constant::ProtoPair(_, _, l, r) => {
                     stack.push(l.as_ref());
                     stack.push(r.as_ref());

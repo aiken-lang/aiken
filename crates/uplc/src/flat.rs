@@ -568,6 +568,15 @@ impl Encode for Constant {
                     "BLS12-381 ML results are not supported for flat encoding".to_string(),
                 ));
             }
+            Constant::ProtoArray(typ, array) => {
+                let mut type_encode = vec![7, 12];
+
+                encode_type(typ, &mut type_encode);
+
+                encode_constant(&type_encode, e)?;
+
+                e.encode_list_with(array, encode_constant_value)?;
+            }
         }
 
         Ok(())
@@ -606,6 +615,10 @@ fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error>
         Constant::Bls12_381MlResult(_) => Err(en::Error::Message(
             "BLS12-381 ML results are not supported for flat encoding".to_string(),
         )),
+        Constant::ProtoArray(_, array) => {
+            e.encode_list_with(array, encode_constant_value)?;
+            Ok(())
+        }
     }
 }
 
@@ -629,6 +642,10 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
         Type::Bls12_381G1Element => bytes.push(9),
         Type::Bls12_381G2Element => bytes.push(10),
         Type::Bls12_381MlResult => bytes.push(11),
+        Type::Array(sub_typ) => {
+            bytes.extend(vec![7, 12]);
+            encode_type(sub_typ, bytes);
+        }
     }
 }
 
@@ -660,6 +677,16 @@ impl Decode<'_> for Constant {
                 let b = decode_constant_value(type2.clone().into(), d)?;
 
                 Ok(Constant::ProtoPair(type1, type2, a.into(), b.into()))
+            }
+            [7, 12, rest @ ..] => {
+                let mut rest = VecDeque::from(rest.to_vec());
+
+                let typ = decode_type(&mut rest)?;
+
+                let array: Vec<Constant> =
+                    d.decode_list_with(|d| decode_constant_value(typ.clone().into(), d))?;
+
+                Ok(Constant::ProtoArray(typ, array))
             }
             [8] => {
                 let cbor = Vec::<u8>::decode(d)?;
@@ -755,6 +782,12 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
         Type::Bls12_381MlResult => Err(de::Error::Message(
             "BLS12-381 ML results are not supported for flat decoding".to_string(),
         )),
+        Type::Array(sub_type) => {
+            let array: Vec<Constant> =
+                d.decode_list_with(|d| decode_constant_value(sub_type.clone(), d))?;
+
+            Ok(Constant::ProtoArray(sub_type.as_ref().clone(), array))
+        }
     }
 }
 
@@ -771,6 +804,7 @@ fn decode_type(types: &mut VecDeque<u8>) -> Result<Type, de::Error> {
         Some(11) => Ok(Type::Bls12_381MlResult),
         Some(7) => match types.pop_front() {
             Some(5) => Ok(Type::List(decode_type(types)?.into())),
+            Some(12) => Ok(Type::Array(decode_type(types)?.into())),
             Some(7) => match types.pop_front() {
                 Some(6) => {
                     let type1 = decode_type(types)?;
@@ -1134,6 +1168,29 @@ mod tests {
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
 
         assert_eq!(actual_program, expected_program)
+    }
+
+    #[test]
+    fn flat_round_trip_array_array_integer() {
+        let program = Program::<Name> {
+            version: (1, 1, 0),
+            term: Term::Constant(
+                Constant::ProtoArray(
+                    Type::Array(Type::Integer.into()),
+                    vec![
+                        Constant::ProtoArray(Type::Integer, vec![Constant::Integer(7.into())]),
+                        Constant::ProtoArray(Type::Integer, vec![]),
+                    ],
+                )
+                .into(),
+            ),
+        };
+
+        let bytes = program.to_flat().unwrap();
+
+        let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
+
+        assert_eq!(actual_program, program)
     }
 
     #[test]

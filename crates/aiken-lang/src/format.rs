@@ -426,6 +426,19 @@ impl<'comments> Formatter<'comments> {
                     None,
                 )
             }
+            TypedExpr::Array { elements, .. } => {
+                let comma: fn() -> Document<'a> =
+                    if elements.iter().all(TypedExpr::is_simple_expr_to_format) {
+                        || flex_break(",", ", ")
+                    } else {
+                        || break_(",", ", ")
+                    };
+
+                array(
+                    join(elements.iter().map(|e| self.const_expr(e)), comma()),
+                    elements.len(),
+                )
+            }
             TypedExpr::Var { name, .. } => name.to_doc(),
             TypedExpr::UnOp { value, op, .. } => match op {
                 UnOp::Not => docvec!["!", self.const_expr(value)],
@@ -1115,6 +1128,8 @@ impl<'comments> Formatter<'comments> {
             } => self.expr_fn(args, return_annotation.as_ref(), body),
 
             UntypedExpr::List { elements, tail, .. } => self.list(elements, tail.as_deref()),
+
+            UntypedExpr::Array { elements, .. } => self.array(elements),
 
             UntypedExpr::Call {
                 fun,
@@ -2115,6 +2130,19 @@ impl<'comments> Formatter<'comments> {
         list(elements_document, elements.len(), tail)
     }
 
+    fn array<'a>(&mut self, elements: &'a [UntypedExpr]) -> Document<'a> {
+        let comma: fn() -> Document<'a> =
+            if elements.iter().all(UntypedExpr::is_simple_expr_to_format) {
+                || flex_break(",", ", ")
+            } else {
+                || break_(",", ", ")
+            };
+        array(
+            join(elements.iter().map(|e| self.wrap_expr(e)), comma()),
+            elements.len(),
+        )
+    }
+
     pub fn pattern<'a>(&mut self, pattern: &'a UntypedPattern) -> Document<'a> {
         let comments = self.pop_comments(pattern.location().start);
         let doc = match pattern {
@@ -2333,6 +2361,10 @@ where
         .nest(INDENT)
         .append(",")
         .append(line())
+}
+
+fn array<'a>(elements: Document<'a>, length: usize) -> Document<'a> {
+    "array".to_doc().append(list(elements, length, None))
 }
 
 fn list<'a>(elements: Document<'a>, length: usize, tail: Option<Document<'a>>) -> Document<'a> {

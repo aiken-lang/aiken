@@ -5,6 +5,7 @@ use crate::{
 use std::{cell::RefCell, rc::Rc};
 
 pub const BOOL: &str = "Bool";
+pub const ARRAY: &str = "Array";
 pub const BOOL_CONSTRUCTORS: &[&str] = &["False", "True"];
 pub const BYTE_ARRAY: &str = "ByteArray";
 pub const DATA: &str = "Data";
@@ -308,6 +309,17 @@ impl Type {
             public: true,
             contains_opaque: t.contains_opaque(),
             name: LIST.to_string(),
+            module: "".to_string(),
+            args: vec![t],
+            alias: None,
+        })
+    }
+
+    pub fn array(t: Rc<Type>) -> Rc<Type> {
+        Rc::new(Type::App {
+            public: true,
+            contains_opaque: t.contains_opaque(),
+            name: ARRAY.to_string(),
             module: "".to_string(),
             args: vec![t],
             alias: None,

@@ -139,6 +139,12 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         TypeConstructor::primitive(Type::list(Type::generic_var(id_gen.next()))),
     );
 
+    // Array(a)
+    prelude.types.insert(
+        well_known::ARRAY.to_string(),
+        TypeConstructor::primitive(Type::array(Type::generic_var(id_gen.next()))),
+    );
+
     // Pair(a, b)
     let pair_left = Type::generic_var(id_gen.next());
     let pair_right = Type::generic_var(id_gen.next());
@@ -1080,6 +1086,27 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
         }
         DefaultFunction::Ripemd_160 => {
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
+
+            (tipo, 1)
+        }
+        DefaultFunction::LengthOfArray => {
+            let element = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::array(element)], Type::int());
+
+            (tipo, 1)
+        }
+        DefaultFunction::IndexArray => {
+            let element = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::array(element.clone()), Type::int()], element);
+
+            (tipo, 2)
+        }
+        DefaultFunction::ListToArray => {
+            let element = Type::generic_var(id_gen.next());
+
+            let tipo = Type::function(vec![Type::list(element.clone())], Type::array(element));
 
             (tipo, 1)
         } // DefaultFunction::ExpModInteger => {

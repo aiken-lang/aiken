@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/parser/expr/list.rs
+description: "Code:\n\narray[]"
+---
+Array {
+    location: 0..7,
+    elements: [],
+}

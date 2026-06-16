@@ -379,6 +379,14 @@ impl<'a> CodeGenerator<'a> {
                         .map(|tail| self.build(tail, module_build_name, &[])),
                 ),
 
+                TypedExpr::Array { tipo, elements, .. } => AirTree::array(
+                    elements
+                        .iter()
+                        .map(|elem| self.build(elem, module_build_name, &[]))
+                        .collect_vec(),
+                    tipo.clone(),
+                ),
+
                 TypedExpr::Call {
                     tipo, fun, args, ..
                 } => match fun.as_ref() {
@@ -1859,6 +1867,9 @@ impl<'a> CodeGenerator<'a> {
                 | UplcType::Bls12_381G1Element
                 | UplcType::Bls12_381G2Element
                 | UplcType::Bls12_381MlResult
+                // NOTE: aiken's `get_uplc_type` never yields `Array`; this arm
+                // exists only to keep the match exhaustive.
+                | UplcType::Array(_)
                 | UplcType::Data,
             ) => then,
 
@@ -4016,6 +4027,52 @@ impl<'a> CodeGenerator<'a> {
                     Some(term)
                 }
             }
+            Air::Array { count, tipo } => {
+                let mut args = vec![];
+
+                for _ in 0..count {
+                    let arg = arg_stack.pop().unwrap();
+                    args.push(arg);
+                }
+
+                let mut constants = vec![];
+                for arg in &args {
+                    if let Some(c) = extract_constant(arg) {
+                        constants.push(c);
+                    }
+                }
+
+                let array_element_type = tipo.get_inner_types()[0].clone();
+
+                if constants.len() == args.len() {
+                    Some(Term::Constant(
+                        UplcConstant::ProtoArray(
+                            UplcType::Data,
+                            builder::convert_constants_to_data(constants),
+                        )
+                        .into(),
+                    ))
+                } else {
+                    let mut list = Term::empty_list();
+
+                    for arg in args.into_iter().rev() {
+                        let list_item = builder::convert_type_to_data(
+                            arg,
+                            &array_element_type,
+                            &self.data_types,
+                        );
+                        list = Term::mk_cons().apply(list_item).apply(list);
+                    }
+
+                    let mut term: Term<Name> = DefaultFunction::ListToArray.into();
+                    term = builder::apply_builtin_forces(
+                        term,
+                        DefaultFunction::ListToArray.force_count(),
+                    );
+
+                    Some(term.apply(list))
+                }
+            }
             Air::ListAccessor {
                 names,
                 tail,
@@ -4138,6 +4195,9 @@ impl<'a> CodeGenerator<'a> {
                     DefaultFunction::HeadList if !tipo.is_pair() => {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
                     }
+                    DefaultFunction::IndexArray => {
+                        builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
+                    }
                     _ => {
                         let mut term: Term<Name> = func.into();
 
@@ -4201,6 +4261,9 @@ impl<'a> CodeGenerator<'a> {
                             Some(UplcType::Bls12_381MlResult) => {
                                 panic!("ML Result equality is not supported")
                             }
+                            Some(UplcType::Array(_)) => {
+                                panic!("Array equality is not supported")
+                            }
                         };
 
                         let binop_eq = match uplc_type {
@@ -4255,6 +4318,10 @@ impl<'a> CodeGenerator<'a> {
                                 | UplcType::String
                                 | UplcType::ByteString,
                             ) => builtin.apply(left).apply(right),
+
+                            Some(UplcType::Array(_)) => {
+                                panic!("Array equality is not supported")
+                            }
 
                             None => {
                                 let mut left = left;
@@ -4572,7 +4639,8 @@ impl<'a> CodeGenerator<'a> {
                         | UplcType::Pair(_, _)
                         | UplcType::Bls12_381G1Element
                         | UplcType::Bls12_381G2Element
-                        | UplcType::Bls12_381MlResult,
+                        | UplcType::Bls12_381MlResult
+                        | UplcType::Array(_),
                     ) => subject,
 
                     Some(UplcType::Data) => subject,
@@ -4638,7 +4706,8 @@ impl<'a> CodeGenerator<'a> {
                             | UplcType::Unit
                             | UplcType::List(_)
                             | UplcType::Pair(_, _)
-                            | UplcType::Bls12_381MlResult,
+                            | UplcType::Bls12_381MlResult
+                            | UplcType::Array(_),
                         ) => unreachable!("{:#?}", tipo),
                         Some(UplcType::Data) => unimplemented!(),
                         Some(UplcType::Integer) => Term::equals_integer()

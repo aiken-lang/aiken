@@ -241,6 +241,10 @@ pub enum AirTree {
         tail: bool,
         items: Vec<AirTree>,
     },
+    Array {
+        tipo: Rc<Type>,
+        items: Vec<AirTree>,
+    },
     Tuple {
         tipo: Rc<Type>,
         items: Vec<AirTree>,
@@ -396,6 +400,10 @@ impl AirTree {
                 items,
             }
         }
+    }
+
+    pub fn array(items: Vec<AirTree>, tipo: Rc<Type>) -> AirTree {
+        AirTree::Array { tipo, items }
     }
 
     pub fn tuple(items: Vec<AirTree>, tipo: Rc<Type>) -> AirTree {
@@ -1092,6 +1100,15 @@ impl AirTree {
                     item.create_air_vec(air_vec);
                 }
             }
+            AirTree::Array { tipo, items } => {
+                air_vec.push(Air::Array {
+                    count: items.len(),
+                    tipo: tipo.clone(),
+                });
+                for item in items {
+                    item.create_air_vec(air_vec);
+                }
+            }
             AirTree::Tuple { tipo, items } => {
                 air_vec.push(Air::Tuple {
                     tipo: tipo.clone(),
@@ -1296,6 +1313,7 @@ impl AirTree {
             AirTree::Bool { .. } => Type::bool(),
             AirTree::CurvePoint { point } => point.tipo(),
             AirTree::List { tipo, .. }
+            | AirTree::Array { tipo, .. }
             | AirTree::Tuple { tipo, .. }
             | AirTree::Pair { tipo, .. }
             | AirTree::Call { tipo, .. }
@@ -1344,6 +1362,7 @@ impl AirTree {
             | AirTree::TupleAccessor { tipo, .. }
             | AirTree::PairAccessor { tipo, .. }
             | AirTree::List { tipo, .. }
+            | AirTree::Array { tipo, .. }
             | AirTree::Tuple { tipo, .. }
             | AirTree::Call { tipo, .. }
             | AirTree::Builtin { tipo, .. }
@@ -1607,6 +1626,7 @@ impl AirTree {
             | AirTree::CurvePoint { .. }
             | AirTree::Bool { .. }
             | AirTree::List { .. }
+            | AirTree::Array { .. }
             | AirTree::Tuple { .. }
             | AirTree::Pair { .. }
             | AirTree::Void
@@ -1651,6 +1671,16 @@ impl AirTree {
                 tail: _,
                 items,
             } => {
+                for (index, item) in items.iter_mut().enumerate() {
+                    item.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        Fields::ArgsField(index),
+                        with,
+                    );
+                }
+            }
+            AirTree::Array { tipo: _, items } => {
                 for (index, item) in items.iter_mut().enumerate() {
                     item.do_traverse_tree_with(
                         tree_path,
@@ -2128,6 +2158,7 @@ impl AirTree {
                     _ => panic!("Tree Path index outside tree children nodes"),
                 },
                 AirTree::List { items, .. }
+                | AirTree::Array { items, .. }
                 | AirTree::Tuple { items, .. }
                 | AirTree::Builtin { args: items, .. }
                 | AirTree::Constr { args: items, .. } => match field {

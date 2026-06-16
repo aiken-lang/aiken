@@ -2906,6 +2906,40 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::LengthOfArray => ExBudget {
+                mem: self
+                    .pv11_builtin_costs
+                    .length_of_array
+                    .mem
+                    .cost(args[0].to_ex_mem()),
+                cpu: self
+                    .pv11_builtin_costs
+                    .length_of_array
+                    .cpu
+                    .cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ListToArray => ExBudget {
+                mem: self
+                    .pv11_builtin_costs
+                    .list_to_array
+                    .mem
+                    .cost(args[0].to_ex_mem()),
+                cpu: self
+                    .pv11_builtin_costs
+                    .list_to_array
+                    .cpu
+                    .cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::IndexArray => ExBudget {
+                mem: self.pv11_builtin_costs.index_array.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                ),
+                cpu: self.pv11_builtin_costs.index_array.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                ),
+            },
             // DefaultFunction::ExpModInteger => {
             //     let arg3 = args[2].unwrap_integer()?;
             //     if arg3.lt(&(0.into())) {
