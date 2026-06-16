@@ -266,6 +266,7 @@ impl DefaultFunction {
             | DefaultFunction::UnionValue
             | DefaultFunction::ValueData
             | DefaultFunction::UnValueData => false,
+            | DefaultFunction::ScaleValue
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -371,6 +372,7 @@ impl DefaultFunction {
             DefaultFunction::InsertCoin => 4,
             DefaultFunction::LookupCoin => 3,
             DefaultFunction::UnionValue => 2,
+            DefaultFunction::ScaleValue => 2,
             DefaultFunction::ValueData => 1,
             DefaultFunction::UnValueData => 1,
         }
@@ -475,6 +477,7 @@ impl DefaultFunction {
             DefaultFunction::InsertCoin => 0,
             DefaultFunction::LookupCoin => 0,
             DefaultFunction::UnionValue => 0,
+            DefaultFunction::ScaleValue => 0,
             DefaultFunction::ValueData => 0,
             DefaultFunction::UnValueData => 0,
         }
@@ -2186,6 +2189,39 @@ impl DefaultFunction {
                 let unioned = crate::ast::Value::from_entries(entries).map_err(Error::Value)?;
 
                 Ok(Value::value(unioned))
+            }
+            DefaultFunction::ScaleValue => {
+                let scalar = args[0].unwrap_integer()?;
+                let value = args[1].unwrap_value()?;
+
+                // Scaling by zero always yields the empty value.
+                if scalar.is_zero() {
+                    return Ok(Value::value(crate::ast::Value::empty()));
+                }
+
+                // Multiply every quantity by the scalar using arbitrary
+                // precision, then rebuild the value. `from_entries` re-validates
+                // that each resulting quantity stays within the signed 128-bit
+                // bounds and renormalizes (mirrors PlutusCore.Value.scaleValue,
+                // which fails when `scaleQuantity` overflows).
+                let entries = value
+                    .entries()
+                    .iter()
+                    .map(|(currency, tokens)| {
+                        let tokens = tokens
+                            .iter()
+                            .map(|(token, quantity)| {
+                                (token.clone(), scalar * BigInt::from(*quantity))
+                            })
+                            .collect();
+
+                        (currency.clone(), tokens)
+                    })
+                    .collect();
+
+                let scaled = crate::ast::Value::from_entries(entries).map_err(Error::Value)?;
+
+                Ok(Value::value(scaled))
             }
             DefaultFunction::ValueData => {
                 let v = args[0].unwrap_value()?;
