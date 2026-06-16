@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - YYYY-MM-DD
+
+### Fixed
+
+- **aiken-lang**: Use canonical type identity for cached `expect` decoder names to avoid collisions across modules and generic type shapes.
+
 ## v1.1.22 - 2026-05-15
 
 ### Added

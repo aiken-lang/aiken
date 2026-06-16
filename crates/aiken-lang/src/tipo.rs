@@ -7,7 +7,6 @@ use crate::{
     tipo::fields::FieldMap,
 };
 use indexmap::IndexMap;
-use itertools::Itertools;
 use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
@@ -711,31 +710,6 @@ pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Rc<Type>)
         generics_ids.append(&mut get_generic_id_and_type(tipo, param_type));
     }
     generics_ids
-}
-
-pub fn get_arg_type_name(tipo: &Type) -> String {
-    match tipo {
-        Type::App { name, args, .. } => {
-            let inner_args = args.iter().map(|arg| get_arg_type_name(arg)).collect_vec();
-            format!("{}_{}", name, inner_args.join("_"))
-        }
-        Type::Var { tipo, .. } => match tipo.borrow().clone() {
-            TypeVar::Link { tipo } => get_arg_type_name(tipo.as_ref()),
-            _ => unreachable!(),
-        },
-        Type::Tuple { elems, .. } => {
-            let inner_args = elems.iter().map(|arg| get_arg_type_name(arg)).collect_vec();
-            inner_args.join("_")
-        }
-        Type::Pair { fst, snd, .. } => {
-            let inner_args = [fst, snd]
-                .iter()
-                .map(|arg| get_arg_type_name(arg))
-                .collect_vec();
-            inner_args.join("_")
-        }
-        _ => unreachable!("WTF {:#?}", tipo),
-    }
 }
 
 pub fn convert_opaque_type(

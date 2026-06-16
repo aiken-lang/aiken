@@ -33,10 +33,9 @@ use crate::{
     line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
     tipo::{
-        ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
+        ModuleValueConstructor, PatternConstructor, Type, TypeInfo, TypeVar, ValueConstructor,
         ValueConstructorVariant, check_replaceable_opaque_type, convert_opaque_type,
-        find_and_replace_generics, get_arg_type_name, get_generic_id_and_type,
-        lookup_data_type_by_tipo,
+        find_and_replace_generics, get_generic_id_and_type, lookup_data_type_by_tipo,
     },
 };
 use builder::{
@@ -63,6 +62,89 @@ type Otherwise = Option<AirTree>;
 
 const DELAY_ERROR: fn() -> AirTree =
     || AirTree::anon_func(vec![], AirTree::error(Type::void(), false), true);
+
+fn expect_decoder_function_name(tipo: &Type, has_otherwise: bool) -> String {
+    let mut name = "__expect".to_string();
+    push_type_identity(&mut name, tipo);
+
+    if has_otherwise {
+        name.push_str("_otherwise");
+    }
+
+    name
+}
+
+fn push_type_identity(name: &mut String, tipo: &Type) {
+    match tipo {
+        Type::App {
+            module,
+            name: type_name,
+            args,
+            ..
+        } => {
+            name.push_str("_app");
+            push_key_segment(name, module);
+            push_key_segment(name, type_name);
+            push_key_count(name, args.len());
+
+            for arg in args {
+                push_type_identity(name, arg);
+            }
+        }
+        Type::Fn { args, ret, .. } => {
+            name.push_str("_fn");
+            push_key_count(name, args.len());
+
+            for arg in args {
+                push_type_identity(name, arg);
+            }
+
+            push_type_identity(name, ret);
+        }
+        Type::Var { tipo, .. } => {
+            let tipo = tipo.borrow();
+
+            match &*tipo {
+                TypeVar::Link { tipo } => push_type_identity(name, tipo),
+                TypeVar::Unbound { id } => {
+                    unreachable!(
+                        "expect decoder key requires a bound type, found unbound variable {id}"
+                    )
+                }
+                TypeVar::Generic { id } => {
+                    unreachable!(
+                        "expect decoder key requires a concrete type, found generic variable {id}"
+                    )
+                }
+            }
+        }
+        Type::Tuple { elems, .. } => {
+            name.push_str("_tuple");
+            push_key_count(name, elems.len());
+
+            for elem in elems {
+                push_type_identity(name, elem);
+            }
+        }
+        Type::Pair { fst, snd, .. } => {
+            name.push_str("_pair");
+            push_type_identity(name, fst);
+            push_type_identity(name, snd);
+        }
+    }
+}
+
+fn push_key_segment(name: &mut String, segment: &str) {
+    name.push('_');
+    name.push_str(&segment.len().to_string());
+    name.push('_');
+    name.push_str(&hex::encode(segment));
+}
+
+fn push_key_count(name: &mut String, count: usize) {
+    name.push('_');
+    name.push_str(&count.to_string());
+}
 
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
@@ -2241,12 +2323,6 @@ impl<'a> CodeGenerator<'a> {
                         unreachable!("We need a data type definition for type {:#?}", tipo)
                     });
 
-                let data_type_variant = tipo
-                    .get_inner_types()
-                    .iter()
-                    .map(|arg| get_arg_type_name(arg))
-                    .join(DISCARDED);
-
                 assert!(data_type.typed_parameters.len() == tipo.arg_types().unwrap().len());
 
                 let mono_types: IndexMap<u64, Rc<Type>> = if !data_type.typed_parameters.is_empty()
@@ -2261,14 +2337,7 @@ impl<'a> CodeGenerator<'a> {
                     IndexMap::new()
                 };
 
-                let data_type_name = if otherwise.is_some() {
-                    format!(
-                        "__expect_{}_{}_otherwise",
-                        data_type.name, data_type_variant
-                    )
-                } else {
-                    format!("__expect_{}_{}", data_type.name, data_type_variant)
-                };
+                let data_type_name = expect_decoder_function_name(tipo, otherwise.is_some());
                 let function = self.code_gen_functions.get(&data_type_name);
 
                 // mutate code_gen_funcs and defined_data_types in this if branch
