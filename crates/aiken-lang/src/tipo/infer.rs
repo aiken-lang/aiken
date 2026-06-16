@@ -585,7 +585,7 @@ fn infer_definition(
                                         });
                                     }
 
-                                    if t.is_ml_result() {
+                                    if t.is_ml_result() || t.is_array() {
                                         return Err(Error::IllegalTypeInData {
                                             location: arg.location,
                                             tipo: t.clone(),
@@ -655,7 +655,7 @@ fn infer_definition(
                         });
                     }
 
-                    if tipo.is_ml_result() {
+                    if tipo.is_ml_result() || tipo.is_array() {
                         return Err(Error::IllegalTypeInData {
                             location: *location,
                             tipo: tipo.clone(),
@@ -955,6 +955,10 @@ fn infer_sampler(
 #[allow(clippy::result_large_err)]
 fn is_valid_fuzzer(tipo: &Type, location: &Span) -> Result<(), Error> {
     match tipo {
+        Type::App { .. } if tipo.is_array() => Err(Error::IllegalTypeInData {
+            location: *location,
+            tipo: Rc::new(tipo.clone()),
+        }),
         Type::App {
             name: _name,
             module: _module,

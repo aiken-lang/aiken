@@ -139,6 +139,12 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         TypeConstructor::primitive(Type::list(Type::generic_var(id_gen.next()))),
     );
 
+    // Array(a)
+    prelude.types.insert(
+        well_known::ARRAY.to_string(),
+        TypeConstructor::primitive(Type::array(Type::generic_var(id_gen.next()))),
+    );
+
     // Pair(a, b)
     let pair_left = Type::generic_var(id_gen.next());
     let pair_right = Type::generic_var(id_gen.next());
@@ -1083,28 +1089,24 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
-        // NOTE: Arrays have no Aiken surface syntax, so array builtins are never
-        // produced by lowering Aiken source. These arms exist only to keep the
-        // match exhaustive; array arguments and results are modelled structurally
-        // as `list`s of their element types.
         DefaultFunction::LengthOfArray => {
             let element = Type::generic_var(id_gen.next());
 
-            let tipo = Type::function(vec![Type::list(element)], Type::int());
+            let tipo = Type::function(vec![Type::array(element)], Type::int());
 
             (tipo, 1)
         }
         DefaultFunction::IndexArray => {
             let element = Type::generic_var(id_gen.next());
 
-            let tipo = Type::function(vec![Type::list(element.clone()), Type::int()], element);
+            let tipo = Type::function(vec![Type::array(element.clone()), Type::int()], element);
 
             (tipo, 2)
         }
         DefaultFunction::ListToArray => {
             let element = Type::generic_var(id_gen.next());
 
-            let tipo = Type::function(vec![Type::list(element.clone())], Type::list(element));
+            let tipo = Type::function(vec![Type::list(element.clone())], Type::array(element));
 
             (tipo, 1)
         } // DefaultFunction::ExpModInteger => {

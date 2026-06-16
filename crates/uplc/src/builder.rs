@@ -79,8 +79,16 @@ where
         Term::Constant(Constant::ProtoList(Type::Data, vec![]).into())
     }
 
+    pub fn empty_array() -> Self {
+        Term::Constant(Constant::ProtoArray(Type::Data, vec![]).into())
+    }
+
     pub fn list_values(vals: Vec<Constant>) -> Self {
         Term::Constant(Constant::ProtoList(Type::Data, vals).into())
+    }
+
+    pub fn array_values(vals: Vec<Constant>) -> Self {
+        Term::Constant(Constant::ProtoArray(Type::Data, vals).into())
     }
 
     pub fn int_values(vals: Vec<Constant>) -> Self {
@@ -284,12 +292,20 @@ where
         Term::Builtin(DefaultFunction::IndexByteString)
     }
 
+    pub fn index_array() -> Self {
+        Term::Builtin(DefaultFunction::IndexArray).force()
+    }
+
     pub fn keccak_256() -> Self {
         Term::Builtin(DefaultFunction::Keccak_256)
     }
 
     pub fn length_of_bytearray() -> Self {
         Term::Builtin(DefaultFunction::LengthOfByteString)
+    }
+
+    pub fn length_of_array() -> Self {
+        Term::Builtin(DefaultFunction::LengthOfArray).force()
     }
 
     pub fn less_than_bytearray() -> Self {
@@ -310,6 +326,10 @@ where
 
     pub fn list_data() -> Self {
         Term::Builtin(DefaultFunction::ListData)
+    }
+
+    pub fn list_to_array() -> Self {
+        Term::Builtin(DefaultFunction::ListToArray).force()
     }
 
     pub fn map_data() -> Self {

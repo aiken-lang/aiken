@@ -379,6 +379,14 @@ impl<'a> CodeGenerator<'a> {
                         .map(|tail| self.build(tail, module_build_name, &[])),
                 ),
 
+                TypedExpr::Array { tipo, elements, .. } => AirTree::array(
+                    elements
+                        .iter()
+                        .map(|elem| self.build(elem, module_build_name, &[]))
+                        .collect_vec(),
+                    tipo.clone(),
+                ),
+
                 TypedExpr::Call {
                     tipo, fun, args, ..
                 } => match fun.as_ref() {
@@ -4019,6 +4027,52 @@ impl<'a> CodeGenerator<'a> {
                     Some(term)
                 }
             }
+            Air::Array { count, tipo } => {
+                let mut args = vec![];
+
+                for _ in 0..count {
+                    let arg = arg_stack.pop().unwrap();
+                    args.push(arg);
+                }
+
+                let mut constants = vec![];
+                for arg in &args {
+                    if let Some(c) = extract_constant(arg) {
+                        constants.push(c);
+                    }
+                }
+
+                let array_element_type = tipo.get_inner_types()[0].clone();
+
+                if constants.len() == args.len() {
+                    Some(Term::Constant(
+                        UplcConstant::ProtoArray(
+                            UplcType::Data,
+                            builder::convert_constants_to_data(constants),
+                        )
+                        .into(),
+                    ))
+                } else {
+                    let mut list = Term::empty_list();
+
+                    for arg in args.into_iter().rev() {
+                        let list_item = builder::convert_type_to_data(
+                            arg,
+                            &array_element_type,
+                            &self.data_types,
+                        );
+                        list = Term::mk_cons().apply(list_item).apply(list);
+                    }
+
+                    let mut term: Term<Name> = DefaultFunction::ListToArray.into();
+                    term = builder::apply_builtin_forces(
+                        term,
+                        DefaultFunction::ListToArray.force_count(),
+                    );
+
+                    Some(term.apply(list))
+                }
+            }
             Air::ListAccessor {
                 names,
                 tail,
@@ -4139,6 +4193,9 @@ impl<'a> CodeGenerator<'a> {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
                     }
                     DefaultFunction::HeadList if !tipo.is_pair() => {
+                        builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
+                    }
+                    DefaultFunction::IndexArray => {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
                     }
                     _ => {

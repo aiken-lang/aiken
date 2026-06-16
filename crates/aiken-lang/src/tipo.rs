@@ -376,6 +376,16 @@ impl Type {
         }
     }
 
+    pub fn is_array(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if well_known::ARRAY == name && module.is_empty() => {
+                true
+            }
+            Self::Var { tipo, .. } => tipo.borrow().is_array(),
+            _ => false,
+        }
+    }
+
     pub fn is_option(&self) -> bool {
         match self {
             Self::App { module, name, .. } if "Option" == name && module.is_empty() => true,
@@ -488,7 +498,7 @@ impl Type {
     }
 
     pub fn get_inner_types(&self) -> Vec<Rc<Type>> {
-        if self.is_list() {
+        if self.is_list() || self.is_array() {
             match self {
                 Self::App { args, .. } => args.clone(),
                 Self::Var { tipo, .. } => tipo.borrow().get_inner_types(),
@@ -533,6 +543,8 @@ impl Type {
             Some(UplcType::Bool)
         } else if self.is_void() {
             Some(UplcType::Unit)
+        } else if self.is_array() {
+            Some(UplcType::Array(UplcType::Data.into()))
         } else if self.is_map() {
             Some(UplcType::List(
                 UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into(),
@@ -1048,6 +1060,13 @@ impl TypeVar {
     pub fn is_list(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_list(),
+            _ => false,
+        }
+    }
+
+    pub fn is_array(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_array(),
             _ => false,
         }
     }

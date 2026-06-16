@@ -89,6 +89,12 @@ pub enum TypedExpr {
         tail: Option<Box<Self>>,
     },
 
+    Array {
+        location: Span,
+        tipo: Rc<Type>,
+        elements: Vec<Self>,
+    },
+
     Call {
         location: Span,
         tipo: Rc<Type>,
@@ -212,7 +218,7 @@ impl TypedExpr {
                 fst.is_simple_expr_to_format() && snd.is_simple_expr_to_format()
             }
             Self::Tuple { elems, .. } => elems.iter().all(|e| e.is_simple_expr_to_format()),
-            Self::List { elements, .. } if elements.len() <= 3 => {
+            Self::List { elements, .. } | Self::Array { elements, .. } if elements.len() <= 3 => {
                 elements.iter().all(|e| e.is_simple_expr_to_format())
             }
             Self::UnOp { value, .. } => value.is_simple_expr_to_format(),
@@ -304,6 +310,7 @@ impl TypedExpr {
             | Self::ErrorTerm { tipo, .. }
             | Self::When { tipo, .. }
             | Self::List { tipo, .. }
+            | Self::Array { tipo, .. }
             | Self::Call { tipo, .. }
             | Self::If { tipo, .. }
             | Self::UnOp { tipo, .. }
@@ -336,6 +343,7 @@ impl TypedExpr {
             | Self::ErrorTerm { tipo, .. }
             | Self::When { tipo, .. }
             | Self::List { tipo, .. }
+            | Self::Array { tipo, .. }
             | Self::Call { tipo, .. }
             | Self::If { tipo, .. }
             | Self::UnOp { tipo, .. }
@@ -364,6 +372,7 @@ impl TypedExpr {
             self,
             Self::UInt { .. }
                 | Self::List { .. }
+                | Self::Array { .. }
                 | Self::Tuple { .. }
                 | Self::String { .. }
                 | Self::ByteArray { .. }
@@ -385,6 +394,7 @@ impl TypedExpr {
             | TypedExpr::UInt { .. }
             | TypedExpr::Trace { .. }
             | TypedExpr::List { .. }
+            | TypedExpr::Array { .. }
             | TypedExpr::Call { .. }
             | TypedExpr::When { .. }
             | TypedExpr::ErrorTerm { .. }
@@ -431,6 +441,7 @@ impl TypedExpr {
             | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::List { location, .. }
+            | Self::Array { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
             | Self::Pair { location, .. }
@@ -469,6 +480,7 @@ impl TypedExpr {
             | Self::Call { location, .. }
             | Self::If { location, .. }
             | Self::List { location, .. }
+            | Self::Array { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
             | Self::Pair { location, .. }
@@ -543,6 +555,11 @@ impl TypedExpr {
                 .iter()
                 .find_map(|e| e.find_node(byte_index))
                 .or_else(|| tail.as_ref().and_then(|t| t.find_node(byte_index)))
+                .or(Some(Located::Expression(self))),
+
+            TypedExpr::Array { elements, .. } => elements
+                .iter()
+                .find_map(|e| e.find_node(byte_index))
                 .or(Some(Located::Expression(self))),
 
             TypedExpr::Call { fun, args, .. } => args
@@ -670,6 +687,11 @@ pub enum UntypedExpr {
         location: Span,
         elements: Vec<Self>,
         tail: Option<Box<Self>>,
+    },
+
+    Array {
+        location: Span,
+        elements: Vec<Self>,
     },
 
     Call {
@@ -927,6 +949,35 @@ impl UntypedExpr {
                 )),
             },
 
+            uplc::ast::Constant::ProtoArray(_, args) => match tipo.deref() {
+                Type::App {
+                    module,
+                    name,
+                    args: type_args,
+                    ..
+                } if module.is_empty() && name.as_str() == ast::well_known::ARRAY => {
+                    if let [inner] = &type_args[..] {
+                        Ok(UntypedExpr::Array {
+                            location: Span::empty(),
+                            elements: args
+                                .into_iter()
+                                .map(|arg| {
+                                    UntypedExpr::do_reify_constant(data_types, arg, inner.clone())
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
+                        })
+                    } else {
+                        Err(
+                            "invalid Array type annotation: the array has multiple type-parameters."
+                                .to_string(),
+                        )
+                    }
+                }
+                _ => Err(format!(
+                    "invalid type annotation. expected Array but got: {tipo:?}"
+                )),
+            },
+
             uplc::ast::Constant::ProtoPair(_, _, left, right) => match tipo.deref() {
                 Type::Pair { fst, snd, .. } => {
                     let elems = [left.as_ref(), right.as_ref()]
@@ -1003,10 +1054,6 @@ impl UntypedExpr {
                         location: Span::empty(),
                     }),
                 })
-            }
-
-            uplc::ast::Constant::ProtoArray(..) => {
-                Err("cannot reify a UPLC 'Array' constant: no Aiken syntax for it".to_string())
             }
         })
     }
@@ -1469,6 +1516,7 @@ impl UntypedExpr {
             | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::List { location, .. }
+            | Self::Array { location, .. }
             | Self::ByteArray { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
@@ -1526,7 +1574,7 @@ impl UntypedExpr {
                 fst.is_simple_expr_to_format() && snd.is_simple_expr_to_format()
             }
             Self::Tuple { elems, .. } => elems.iter().all(|e| e.is_simple_expr_to_format()),
-            Self::List { elements, .. } if elements.len() <= 3 => {
+            Self::List { elements, .. } | Self::Array { elements, .. } if elements.len() <= 3 => {
                 elements.iter().all(|e| e.is_simple_expr_to_format())
             }
             _ => false,

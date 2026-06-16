@@ -184,7 +184,7 @@ pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
         Some(UplcType::Bls12_381G1Element) => "_bls381_12_g1".to_string(),
         Some(UplcType::Bls12_381G2Element) => "_bls381_12_g2".to_string(),
         Some(UplcType::Bls12_381MlResult) => "_ml_result".to_string(),
-        Some(UplcType::Array(_)) => unreachable!("aiken types never lower to a UPLC Array"),
+        Some(UplcType::Array(_)) => "_array".to_string(),
         None if t.is_unbound() => "_unbound".to_string(),
         None if t.is_generic() => {
             unreachable!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE")

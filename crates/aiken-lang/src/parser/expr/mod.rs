@@ -31,6 +31,7 @@ pub use chained::parser as chained;
 pub use fail_todo_trace::parser as fail_todo_trace;
 pub use if_else::parser as if_else;
 pub use int::parser as int;
+pub use list::array;
 pub use list::parser as list;
 pub use pair::parser as pair;
 pub use record::parser as record;

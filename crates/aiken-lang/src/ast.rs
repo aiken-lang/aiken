@@ -1349,6 +1349,15 @@ impl Annotation {
         }
     }
 
+    pub fn array(inner: Annotation, location: Span) -> Self {
+        Annotation::Constructor {
+            name: well_known::ARRAY.to_string(),
+            module: None,
+            arguments: vec![inner],
+            location,
+        }
+    }
+
     pub fn tuple(elems: Vec<Annotation>, location: Span) -> Self {
         Annotation::Tuple { elems, location }
     }
