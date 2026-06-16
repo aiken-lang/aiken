@@ -3085,6 +3085,18 @@ impl BuiltinCosts {
                     ),
                 }
             }
+            DefaultFunction::UnionValue => ExBudget {
+                mem: self
+                    .pv11_builtin_costs
+                    .union_value
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .pv11_builtin_costs
+                    .union_value
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             // `to_ex_mem` of a `Value` constant is its `total_size`, which is
             // exactly plutus's `ValueTotalSize` costing measure.
             DefaultFunction::ValueData => ExBudget {

@@ -263,6 +263,7 @@ impl DefaultFunction {
             | DefaultFunction::Bls12_381_G1_MultiScalarMul
             | DefaultFunction::InsertCoin
             | DefaultFunction::LookupCoin
+            | DefaultFunction::UnionValue
             | DefaultFunction::ValueData
             | DefaultFunction::UnValueData => false,
             // | DefaultFunction::ExpModInteger
@@ -369,6 +370,7 @@ impl DefaultFunction {
             DefaultFunction::ListToArray => 1,
             DefaultFunction::InsertCoin => 4,
             DefaultFunction::LookupCoin => 3,
+            DefaultFunction::UnionValue => 2,
             DefaultFunction::ValueData => 1,
             DefaultFunction::UnValueData => 1,
         }
@@ -472,6 +474,7 @@ impl DefaultFunction {
             DefaultFunction::ListToArray => 1,
             DefaultFunction::InsertCoin => 0,
             DefaultFunction::LookupCoin => 0,
+            DefaultFunction::UnionValue => 0,
             DefaultFunction::ValueData => 0,
             DefaultFunction::UnValueData => 0,
         }
@@ -2155,6 +2158,34 @@ impl DefaultFunction {
                 let value = Value::array(r#type.clone(), list.clone());
 
                 Ok(value)
+            }
+            DefaultFunction::UnionValue => {
+                let arg1 = args[0].unwrap_value()?;
+                let arg2 = args[1].unwrap_value()?;
+
+                // Merge the two normalized nested maps by concatenating their
+                // entries and letting `Value::from_entries` sum quantities for
+                // matching (currency, token) pairs (with i128 overflow -> error),
+                // drop the resulting zero quantities, and renormalize. This
+                // mirrors plutus's `Value.unionValue`.
+                let entries = arg1
+                    .entries()
+                    .iter()
+                    .chain(arg2.entries().iter())
+                    .map(|(currency, tokens)| {
+                        (
+                            currency.clone(),
+                            tokens
+                                .iter()
+                                .map(|(token, quantity)| (token.clone(), BigInt::from(*quantity)))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+
+                let unioned = crate::ast::Value::from_entries(entries).map_err(Error::Value)?;
+
+                Ok(Value::value(unioned))
             }
             DefaultFunction::ValueData => {
                 let v = args[0].unwrap_value()?;
