@@ -6094,61 +6094,66 @@ mod tests {
     }
 
     #[test]
-    fn string_costing_uses_utf8_byte_length_under_d_and_e() {
+    fn string_costing_uses_utf8_text_units_under_d_and_e() {
         let costs = BuiltinCosts::v3();
-        let one_multibyte = [Value::string("é".to_string()), Value::string(String::new())];
-        let two_multibyte = [
-            Value::string("é".to_string()),
-            Value::string("é".to_string()),
+        let ascii_and_empty = [
+            Value::string("abcd".to_string()),
+            Value::string(String::new()),
         ];
+        let mixed = [
+            Value::string("abcd".to_string()),
+            Value::string("éé".to_string()),
+        ];
+
+        assert_eq!(
+            4,
+            ascii_and_empty[0].to_ex_mem_with_semantics(BuiltinSemantics::C)
+        );
+        assert_eq!(
+            1,
+            ascii_and_empty[0].to_ex_mem_with_semantics(BuiltinSemantics::E)
+        );
+        assert_eq!(
+            0,
+            ascii_and_empty[1].to_ex_mem_with_semantics(BuiltinSemantics::E)
+        );
+        assert_eq!(
+            1,
+            Value::string("é".to_string()).to_ex_mem_with_semantics(BuiltinSemantics::D)
+        );
 
         let append_c = costs
             .to_ex_budget(
                 DefaultFunction::AppendString,
-                &one_multibyte,
+                &ascii_and_empty,
                 BuiltinSemantics::C,
             )
             .unwrap();
         let append_e = costs
             .to_ex_budget(
                 DefaultFunction::AppendString,
-                &one_multibyte,
+                &ascii_and_empty,
                 BuiltinSemantics::E,
             )
             .unwrap();
-        let equals_c = costs
-            .to_ex_budget(
-                DefaultFunction::EqualsString,
-                &two_multibyte,
-                BuiltinSemantics::C,
-            )
-            .unwrap();
         let equals_d = costs
-            .to_ex_budget(
-                DefaultFunction::EqualsString,
-                &two_multibyte,
-                BuiltinSemantics::D,
-            )
-            .unwrap();
-        let encode_c = costs
-            .to_ex_budget(
-                DefaultFunction::EncodeUtf8,
-                &one_multibyte[..1],
-                BuiltinSemantics::C,
-            )
+            .to_ex_budget(DefaultFunction::EqualsString, &mixed, BuiltinSemantics::D)
             .unwrap();
         let encode_e = costs
             .to_ex_budget(
                 DefaultFunction::EncodeUtf8,
-                &one_multibyte[..1],
+                &ascii_and_empty[..1],
                 BuiltinSemantics::E,
             )
             .unwrap();
 
-        assert_eq!(59957, append_e.cpu - append_c.cpu);
-        assert_eq!(1, append_e.mem - append_c.mem);
-        assert_eq!(60594, equals_d.cpu - equals_c.cpu);
-        assert_eq!(42921, encode_e.cpu - encode_c.cpu);
-        assert_eq!(2, encode_e.mem - encode_c.mem);
+        assert_eq!(costs.append_string.cpu.cost(4, 0), append_c.cpu);
+        assert_eq!(costs.append_string.mem.cost(4, 0), append_c.mem);
+        assert_eq!(costs.append_string.cpu.cost(1, 0), append_e.cpu);
+        assert_eq!(costs.append_string.mem.cost(1, 0), append_e.mem);
+        assert_eq!(costs.equals_string.cpu.cost(1, 1), equals_d.cpu);
+        assert_eq!(costs.equals_string.mem.cost(1, 1), equals_d.mem);
+        assert_eq!(costs.encode_utf8.cpu.cost(1), encode_e.cpu);
+        assert_eq!(costs.encode_utf8.mem.cost(1), encode_e.mem);
     }
 }
