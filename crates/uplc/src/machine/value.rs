@@ -63,6 +63,12 @@ impl Value {
         Value::Con(constant.into())
     }
 
+    pub fn array(typ: Type, n: Vec<Constant>) -> Self {
+        let constant = Constant::ProtoArray(typ, n);
+
+        Value::Con(constant.into())
+    }
+
     pub fn data(d: PlutusData) -> Self {
         let constant = Constant::Data(d);
 
@@ -136,6 +142,16 @@ impl Value {
         };
 
         Ok((t, list))
+    }
+
+    pub(super) fn unwrap_array(&self) -> Result<(&Type, &Vec<Constant>), Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::ProtoArray(t, array) = inner else {
+            return Err(Error::ArrayTypeMismatch(inner.into()));
+        };
+
+        Ok((t, array))
     }
 
     pub(super) fn unwrap_data(&self) -> Result<&PlutusData, Error> {

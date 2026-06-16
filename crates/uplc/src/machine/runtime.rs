@@ -40,7 +40,6 @@ const BLST_P1_COMPRESSED_SIZE: usize = 48;
 
 const BLST_P2_COMPRESSED_SIZE: usize = 96;
 
-
 pub const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
 
 pub const CHANG_PROTOCOL_VERSION: u16 = 9;
@@ -265,9 +264,9 @@ impl DefaultFunction {
             | DefaultFunction::LookupCoin
             | DefaultFunction::UnionValue
             | DefaultFunction::ValueData
-            | DefaultFunction::UnValueData => false,
+            | DefaultFunction::UnValueData
             | DefaultFunction::ScaleValue
-            | DefaultFunction::ValueContains
+            | DefaultFunction::ValueContains => false,
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -1425,10 +1424,7 @@ impl DefaultFunction {
                 let (point_type, points) = args[1].unwrap_list()?;
 
                 if !matches!(scalar_type, Type::Integer) {
-                    return Err(Error::TypeMismatch(
-                        Type::Integer,
-                        scalar_type.clone(),
-                    ));
+                    return Err(Error::TypeMismatch(Type::Integer, scalar_type.clone()));
                 }
 
                 if !matches!(point_type, Type::Bls12_381G2Element) {
@@ -1442,10 +1438,7 @@ impl DefaultFunction {
                 // point list length) must fit within the 512-byte bound.
                 for scalar in scalars {
                     let Constant::Integer(scalar) = scalar else {
-                        return Err(Error::TypeMismatch(
-                            Type::Integer,
-                            Type::from(scalar),
-                        ));
+                        return Err(Error::TypeMismatch(Type::Integer, Type::from(scalar)));
                     };
 
                     if scalar < &MSM_SCALAR_LB || scalar > &MSM_SCALAR_UB {
@@ -1463,10 +1456,7 @@ impl DefaultFunction {
 
                 for (scalar, point) in scalars.iter().zip(points.iter()) {
                     let Constant::Integer(scalar) = scalar else {
-                        return Err(Error::TypeMismatch(
-                            Type::Integer,
-                            Type::from(scalar),
-                        ));
+                        return Err(Error::TypeMismatch(Type::Integer, Type::from(scalar)));
                     };
 
                     let Constant::Bls12_381G2Element(point) = point else {
@@ -2127,7 +2117,7 @@ impl DefaultFunction {
                     match entries.iter_mut().find(|(c, _)| c == currency) {
                         Some((_, inner)) => inner.push((token.clone(), amount.clone())),
                         None => {
-                            entries.push((currency.clone(), vec![(token.clone(), amount.clone())])
+                            entries.push((currency.clone(), vec![(token.clone(), amount.clone())]))
                         }
                     }
                 }

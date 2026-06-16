@@ -345,9 +345,7 @@ impl TryFrom<u8> for DefaultFunction {
             }
             v if v == DefaultFunction::Ripemd_160 as u8 => Ok(DefaultFunction::Ripemd_160),
             v if v == DefaultFunction::DropList as u8 => Ok(DefaultFunction::DropList),
-            v if v == DefaultFunction::LengthOfArray as u8 => {
-                Ok(DefaultFunction::LengthOfArray)
-            }
+            v if v == DefaultFunction::LengthOfArray as u8 => Ok(DefaultFunction::LengthOfArray),
             v if v == DefaultFunction::ListToArray as u8 => Ok(DefaultFunction::ListToArray),
             v if v == DefaultFunction::IndexArray as u8 => Ok(DefaultFunction::IndexArray),
             v if v == DefaultFunction::Bls12_381_G1_MultiScalarMul as u8 => {
@@ -590,6 +588,7 @@ impl Display for DefaultFunction {
             // CaseData => write!(f, "caseData"),
             ValueData => write!(f, "valueData"),
             UnValueData => write!(f, "unValueData"),
+        }
     }
 }
 
@@ -701,6 +700,7 @@ impl DefaultFunction {
             // CaseData => "case_data",
             ValueData => "value_data",
             UnValueData => "un_value_data",
+        }
         .to_string()
     }
 }

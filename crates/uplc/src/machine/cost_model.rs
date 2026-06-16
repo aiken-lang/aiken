@@ -456,6 +456,121 @@ impl Pv11BuiltinCosts {
         }
     }
 
+    fn v3_defaults() -> Self {
+        Self {
+            drop_list: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 116711,
+                    slope: 1957,
+                }),
+                mem: TwoArguments::ConstantCost(4),
+            },
+            length_of_array: CostingFun {
+                cpu: OneArgument::ConstantCost(231883),
+                mem: OneArgument::ConstantCost(10),
+            },
+            list_to_array: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1000,
+                    slope: 24838,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 7,
+                    slope: 1,
+                }),
+            },
+            index_array: CostingFun {
+                cpu: TwoArguments::ConstantCost(232010),
+                mem: TwoArguments::ConstantCost(32),
+            },
+            bls12_381_g1_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 321837444,
+                    slope: 25087669,
+                }),
+                mem: TwoArguments::ConstantCost(18),
+            },
+            bls12_381_g2_multi_scalar_mul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: 617887431,
+                    slope: 67302824,
+                }),
+                mem: TwoArguments::ConstantCost(36),
+            },
+            insert_coin: CostingFun {
+                cpu: FourArguments::LinearInU(LinearSize {
+                    intercept: 356924,
+                    slope: 18413,
+                }),
+                mem: FourArguments::LinearInU(LinearSize {
+                    intercept: 45,
+                    slope: 21,
+                }),
+            },
+            lookup_coin: CostingFun {
+                cpu: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: 219951,
+                    slope: 9444,
+                }),
+                mem: ThreeArguments::ConstantCost(1),
+            },
+            union_value: CostingFun {
+                cpu: TwoArguments::WithInteractionInXAndY(TwoVariableWithInteractionSize {
+                    coeff_00: 1000,
+                    coeff_10: 172116,
+                    coeff_01: 183150,
+                    coeff_11: 6,
+                }),
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 24,
+                    slope: 21,
+                }),
+            },
+            value_contains: CostingFun {
+                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                    constant: 213283,
+                    model: Box::new(TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                        intercept: 618401,
+                        slope1: 1998,
+                        slope2: 28258,
+                    })),
+                }),
+                mem: TwoArguments::ConstantCost(1),
+            },
+            value_data: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1000,
+                    slope: 38159,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 2,
+                    slope: 22,
+                }),
+            },
+            un_value_data: CostingFun {
+                cpu: OneArgument::QuadraticCost(QuadraticFunction {
+                    coeff_0: 1000,
+                    coeff_1: 95933,
+                    coeff_2: 1,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 1,
+                    slope: 11,
+                }),
+            },
+            scale_value: CostingFun {
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: 1000,
+                    slope: 277577,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 12,
+                    slope: 21,
+                }),
+            },
+        }
+    }
+
     fn from_van_rossem_costs(costs: &[i64]) -> Self {
         debug_assert!(costs.len() >= 350);
 
@@ -2195,7 +2310,7 @@ impl BuiltinCosts {
                 cpu: ThreeArguments::ConstantCost(30000000000),
                 mem: ThreeArguments::ConstantCost(30000000000),
             },
-            pv11_builtin_costs: Pv11BuiltinCosts::unavailable(),
+            pv11_builtin_costs: Pv11BuiltinCosts::v3_defaults(),
         }
     }
 }
@@ -2986,14 +3101,16 @@ impl BuiltinCosts {
                     .cost(args[0].to_ex_mem()),
             },
             DefaultFunction::IndexArray => ExBudget {
-                mem: self.pv11_builtin_costs.index_array.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                ),
-                cpu: self.pv11_builtin_costs.index_array.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                ),
+                mem: self
+                    .pv11_builtin_costs
+                    .index_array
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .pv11_builtin_costs
+                    .index_array
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
             DefaultFunction::Bls12_381_G1_MultiScalarMul => {
                 // The cost is linear in the *length* of the first list argument
@@ -3135,43 +3252,41 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::UnValueData => ExBudget {
-                mem: self
-                    .pv11_builtin_costs
-                    .un_value_data
-                    .mem
-                    .cost(args[0].to_ex_mem()),
-                cpu: self
-                    .pv11_builtin_costs
-                    .un_value_data
-                    .cpu
-                    .cost(args[0].to_ex_mem()),
-            },
-            // DefaultFunction::ExpModInteger => {
-            //     let arg3 = args[2].unwrap_integer()?;
-            //     if arg3.lt(&(0.into())) {
-            //         return Err(Error::OutsideNaturalBounds(arg3.clone()));
-            //     }
+            DefaultFunction::UnValueData => {
+                // `unValueData` is costed by the *node count* of the input
+                // `Data` (plutus's `DataNodeCount` measure), not the regular
+                // `to_ex_mem` memory size.
+                let size = args[0].data_node_count()?;
 
-            //     let arg3_exmem = if *arg3 == 0.into() {
-            //         1
-            //     } else {
-            //         (integer_log2(arg3.abs()) / 64) + 1
-            //     };
+                ExBudget {
+                    mem: self.pv11_builtin_costs.un_value_data.mem.cost(size),
+                    cpu: self.pv11_builtin_costs.un_value_data.cpu.cost(size),
+                }
+            } // DefaultFunction::ExpModInteger => {
+              //     let arg3 = args[2].unwrap_integer()?;
+              //     if arg3.lt(&(0.into())) {
+              //         return Err(Error::OutsideNaturalBounds(arg3.clone()));
+              //     }
 
-            //     ExBudget {
-            //         mem: self.exp_mod_int.mem.cost(
-            //             args[0].to_ex_mem(),
-            //             args[1].to_ex_mem(),
-            //             arg3_exmem,
-            //         ),
-            //         cpu: self.exp_mod_int.cpu.cost(
-            //             args[0].to_ex_mem(),
-            //             args[1].to_ex_mem(),
-            //             arg3_exmem,
-            //         ),
-            //     }
-            // }
+              //     let arg3_exmem = if *arg3 == 0.into() {
+              //         1
+              //     } else {
+              //         (integer_log2(arg3.abs()) / 64) + 1
+              //     };
+
+              //     ExBudget {
+              //         mem: self.exp_mod_int.mem.cost(
+              //             args[0].to_ex_mem(),
+              //             args[1].to_ex_mem(),
+              //             arg3_exmem,
+              //         ),
+              //         cpu: self.exp_mod_int.cpu.cost(
+              //             args[0].to_ex_mem(),
+              //             args[1].to_ex_mem(),
+              //             arg3_exmem,
+              //         ),
+              //     }
+              // }
         })
     }
 }
@@ -5756,6 +5871,8 @@ fn initialize_cost_model_with_semantics(
             },
             pv11_builtin_costs: if has_pv11_tail {
                 Pv11BuiltinCosts::from_van_rossem_costs(costs)
+            } else if matches!(version, Language::PlutusV3) {
+                Pv11BuiltinCosts::v3_defaults()
             } else {
                 Pv11BuiltinCosts::unavailable()
             },
