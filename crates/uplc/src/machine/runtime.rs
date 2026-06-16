@@ -267,6 +267,7 @@ impl DefaultFunction {
             | DefaultFunction::ValueData
             | DefaultFunction::UnValueData => false,
             | DefaultFunction::ScaleValue
+            | DefaultFunction::ValueContains
             // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
@@ -373,6 +374,7 @@ impl DefaultFunction {
             DefaultFunction::LookupCoin => 3,
             DefaultFunction::UnionValue => 2,
             DefaultFunction::ScaleValue => 2,
+            DefaultFunction::ValueContains => 2,
             DefaultFunction::ValueData => 1,
             DefaultFunction::UnValueData => 1,
         }
@@ -478,6 +480,7 @@ impl DefaultFunction {
             DefaultFunction::LookupCoin => 0,
             DefaultFunction::UnionValue => 0,
             DefaultFunction::ScaleValue => 0,
+            DefaultFunction::ValueContains => 0,
             DefaultFunction::ValueData => 0,
             DefaultFunction::UnValueData => 0,
         }
@@ -2222,6 +2225,36 @@ impl DefaultFunction {
                 let scaled = crate::ast::Value::from_entries(entries).map_err(Error::Value)?;
 
                 Ok(Value::value(scaled))
+            }
+            DefaultFunction::ValueContains => {
+                let v1 = args[0].unwrap_value()?;
+                let v2 = args[1].unwrap_value()?;
+
+                // Both values must not contain negative amounts.
+                if v1.negative_amounts() > 0 || v2.negative_amounts() > 0 {
+                    return Err(Error::EvaluationFailure);
+                }
+
+                // Short-circuit: if v2 has more total entries than v1, it can't be contained.
+                let contains = if v1.total_size() < v2.total_size() {
+                    false
+                } else {
+                    // v1 contains v2 iff for every (currency, token, quantity) in v2,
+                    // the quantity of that coin in v1 is >= quantity.
+                    v2.entries().iter().all(|(currency, inner2)| {
+                        match v1.entries().iter().find(|(c, _)| c == currency) {
+                            None => false,
+                            Some((_, inner1)) => inner2.iter().all(|(token, q2)| {
+                                match inner1.iter().find(|(t, _)| t == token) {
+                                    None => false,
+                                    Some((_, q1)) => q1 >= q2,
+                                }
+                            }),
+                        }
+                    })
+                };
+
+                Ok(Value::bool(contains))
             }
             DefaultFunction::ValueData => {
                 let v = args[0].unwrap_value()?;

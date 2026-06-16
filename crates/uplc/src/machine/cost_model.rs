@@ -3097,6 +3097,18 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::ValueContains => ExBudget {
+                mem: self
+                    .pv11_builtin_costs
+                    .value_contains
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .pv11_builtin_costs
+                    .value_contains
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::ScaleValue => ExBudget {
                 mem: self
                     .pv11_builtin_costs
