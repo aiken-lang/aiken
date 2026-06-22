@@ -56,6 +56,14 @@ impl<T> Definitions<T> {
         self.inner.get(&reference.as_key()).and_then(|v| v.as_ref())
     }
 
+
+    /// Iterate over all resolved definitions.
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &T)> {
+        self.inner
+            .iter()
+            .filter_map(|(key, value)| value.as_ref().map(|resolved| (key, resolved)))
+    }
     /// Merge two set of definitions together. Prioritize callee.
     pub fn merge(&mut self, other: &mut Definitions<T>) {
         self.inner.append(&mut other.inner);

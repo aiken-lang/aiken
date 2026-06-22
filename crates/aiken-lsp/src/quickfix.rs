@@ -355,6 +355,9 @@ fn unknown_module(
 ) -> Vec<AnnotatedEdit> {
     let mut edits = Vec::new();
 
+    // BLASTER_REVIEW_RISK(ambiguous_unknown_module_fix): this path consumes
+    // only the first suffix match from `find_module`, so valid alternative
+    // imports can be hidden here.
     if let Some(serde_json::Value::String(module_name)) = data
         && let Some(module) = compiler.project.glossary().find_module(module_name)
         && let Some(edit) = parsed_document.import(module, None)

@@ -1,0 +1,133 @@
+---
+source: crates/aiken/src/cmd/verify.rs
+expression: "&manifest"
+---
+{
+  "schema_version": 2,
+  "version": "2.0.0",
+  "aiken": {
+    "version": "vtest",
+    "commit": "deadbeef",
+    "prelude_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "fuzz_package_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "execution": {
+    "plutus_version": "v3",
+    "cek_budget": {
+      "fuel": 200000
+    },
+    "decode_policy": "decode_error_is_test_failure"
+  },
+  "compatibility_limitations": [
+    "execution.cek_budget records only the unified CEK fuel bound; CPU and memory sub-budgets are not currently exported."
+  ],
+  "tests": [
+    {
+      "id": "example_test_ok",
+      "aiken_module": "example",
+      "aiken_name": "test_ok",
+      "lean_module": "Example.TestOk",
+      "lean_theorem": "example_test_ok",
+      "lean_file": "Example/TestOk.lean",
+      "flat_file": "example_test_ok.flat",
+      "fuzzer_flat_file": "example_test_ok_fuzzer.flat",
+      "return_mode": "bool",
+      "test_mode": "normal",
+      "on_test_failure": "fail_immediately",
+      "property_uplc_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "property_harness_hash": "44444444444444444444444444444444444444444444444444444444",
+      "fuzzer_uplc_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "fuzzer_harness_hash": "66666666666666666666666666666666666666666666666666666666",
+      "fuzzer_model_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
+      "sampler": {
+        "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+        "run_kind": "seeded_generation",
+        "prng_mode": "seeded",
+        "decode_policy": "decode_error_is_test_failure"
+      },
+      "has_termination_theorem": true,
+      "has_equivalence_theorem": true,
+      "over_approximations": 2,
+      "partial_proof_note": "partial proof note",
+      "witness_proof_note": {
+        "instances": 2,
+        "witnesses": [
+          "00",
+          "01"
+        ],
+        "note": "witness-only"
+      }
+    }
+  ],
+  "skipped": [
+    {
+      "name": "example.test_skip",
+      "module": "example",
+      "reason": "unsupported shape",
+      "status": "Unsupported",
+      "certification": "unsupported",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "unknown",
+          "reason": "unsupported shape"
+        },
+        "precision": "Unknown",
+        "certificate": "Unchecked",
+        "obligations_open": [],
+        "obligations_discharged": [],
+        "lowering_path": [
+          "unsupported_generation"
+        ],
+        "widenings": [],
+        "production_allowed": false,
+        "diagnostics": [
+          "unsupported shape"
+        ]
+      }
+    }
+  ]
+}

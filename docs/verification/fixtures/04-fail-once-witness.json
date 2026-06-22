@@ -1,0 +1,143 @@
+{
+  "name": "fail-once-witness",
+  "description": "Replay-backed fail_once witness. This is a validated existential witness path, not a universal theorem and not a guarantee that the randomized runner will find the witness within a bounded number of attempts.",
+  "manifest_entry": {
+    "id": "docs_fail_once_witness",
+    "aiken_module": "docs",
+    "aiken_name": "fail_once_witness",
+    "lean_module": "AikenVerify.Proofs.Docs.fail_once_witness",
+    "lean_theorem": "docs_fail_once_witness",
+    "lean_file": "AikenVerify/Proofs/Docs/fail_once_witness.lean",
+    "flat_file": "cbor/docs_fail_once_witness.cbor",
+    "fuzzer_flat_file": "cbor/docs_fail_once_witness_fuzzer.cbor",
+    "return_mode": "bool",
+    "test_mode": "fail_once",
+    "on_test_failure": "succeed_immediately",
+    "property_uplc_hash": "b333333333333333333333333333333333333333333333333333333333333333",
+    "property_harness_hash": "b4444444444444444444444444444444444444444444444444444444",
+    "fuzzer_uplc_hash": "b555555555555555555555555555555555555555555555555555555555555555",
+    "fuzzer_harness_hash": "b6666666666666666666666666666666666666666666666666666666666",
+    "fuzzer_model_hash": "b777777777777777777777777777777777777777777777777777777777777777",
+    "domain": {
+      "relation": {
+        "kind": "witness",
+        "encoded_values": [
+          "80"
+        ]
+      },
+      "precision": "WitnessOnly",
+      "certificate": "WitnessReplay",
+      "obligations_open": [],
+      "obligations_discharged": [
+        "WitnessReplaysThroughFuzzer",
+        "WitnessSatisfiesDomain",
+        "FuzzerModelHashMatches",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "witness_replay"
+      ],
+      "widenings": [],
+      "production_allowed": true,
+      "sampler": {
+        "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+        "run_kind": "witness_replay",
+        "prng_mode": "replayed",
+        "generation_seed": 42,
+        "replay_choices_hex": "abcd",
+        "decode_policy": "decode_error_is_test_failure"
+      },
+      "diagnostics": []
+    },
+    "input_type": {
+      "aiken_type": "ByteArray",
+      "runtime_encoding": "byte_string_constant",
+      "data_encoding": "bytes",
+      "lean_encoding": "byte_string",
+      "schema_hash": "b888888888888888888888888888888888888888888888888888888888888888",
+      "schema": {
+        "kind": "byte_array"
+      }
+    },
+    "sampler": {
+      "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+      "run_kind": "witness_replay",
+      "prng_mode": "replayed",
+      "generation_seed": 42,
+      "replay_choices_hex": "abcd",
+      "decode_policy": "decode_error_is_test_failure"
+    },
+    "has_termination_theorem": false,
+    "has_equivalence_theorem": false,
+    "witness_proof_note": {
+      "instances": 1,
+      "witnesses": [
+        "80"
+      ],
+      "note": "replay-backed existential witness"
+    }
+  },
+  "theorem_result": {
+    "test_name": "docs.fail_once_witness",
+    "theorem_name": "AikenVerify.Proofs.Docs.fail_once_witness",
+    "status": "WitnessValidated",
+    "certification": "witness_replay",
+    "trust_profile": "production",
+    "domain": {
+      "relation": {
+        "kind": "witness",
+        "encoded_values": [
+          "80"
+        ]
+      },
+      "precision": "WitnessOnly",
+      "certificate": "WitnessReplay",
+      "obligations_open": [],
+      "obligations_discharged": [
+        "WitnessReplaysThroughFuzzer",
+        "WitnessSatisfiesDomain",
+        "FuzzerModelHashMatches",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "witness_replay"
+      ],
+      "widenings": [],
+      "production_allowed": true,
+      "sampler": {
+        "harness_abi": "aiken_fuzzer_prng_to_option_pair_prng_data_v1",
+        "run_kind": "witness_replay",
+        "prng_mode": "replayed",
+        "generation_seed": 42,
+        "replay_choices_hex": "abcd",
+        "decode_policy": "decode_error_is_test_failure"
+      },
+      "diagnostics": []
+    },
+    "input_type": {
+      "aiken_type": "ByteArray",
+      "runtime_encoding": "byte_string_constant",
+      "data_encoding": "bytes",
+      "lean_encoding": "byte_string",
+      "schema_hash": "b888888888888888888888888888888888888888888888888888888888888888",
+      "schema": {
+        "kind": "byte_array"
+      }
+    },
+    "proof_status": {
+      "kind": "witness_proved",
+      "instances": 1,
+      "witnesses": [
+        "80"
+      ],
+      "note": "replay-backed existential witness"
+    },
+    "explanation": "input domain: WitnessOnly (WitnessReplay)\nlowering: witness_replay"
+  }
+}

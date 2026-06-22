@@ -1,0 +1,68 @@
+---
+source: crates/aiken/src/cmd/export_tests.rs
+expression: "&tests"
+---
+{
+  "version": "1",
+  "plutus_version": "v3",
+  "property_tests": [
+    {
+      "name": "validators.sample.roundtrip",
+      "module": "validators.sample",
+      "input_path": "lib/validators/sample.ak",
+      "on_test_failure": "FailImmediately",
+      "return_mode": "void",
+      "target_kind": "validator",
+      "validator_target": {
+        "validator_module": "validators/sample",
+        "validator_name": "spend",
+        "handler_name": "spend.handler",
+        "handler_program": {
+          "hex": "f00d"
+        }
+      },
+      "test_program": {
+        "hex": "deadbeef"
+      },
+      "fuzzer_program": {
+        "hex": "cafebabe"
+      },
+      "fuzzer_type": "Fuzzer<(Int, ByteArray)>",
+      "fuzzer_output_type": {
+        "tuple": [
+          "int",
+          "byte_array"
+        ]
+      },
+      "constraint": {
+        "tuple": [
+          {
+            "int_range": {
+              "min": "0",
+              "max": "10"
+            }
+          },
+          {
+            "exact": {
+              "byte_array": [
+                222,
+                173
+              ]
+            }
+          }
+        ]
+      },
+      "semantics": {
+        "list": {
+          "element": {
+            "data_with_schema": {
+              "type_name": "sample.Payload<Int>"
+            }
+          },
+          "min_len": 1,
+          "max_len": 2
+        }
+      }
+    }
+  ]
+}

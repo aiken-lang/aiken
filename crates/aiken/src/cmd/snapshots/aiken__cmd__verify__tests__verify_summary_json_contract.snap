@@ -1,0 +1,841 @@
+---
+source: crates/aiken/src/cmd/verify.rs
+expression: "&summary"
+---
+{
+  "total": 6,
+  "proved": 1,
+  "partial": 1,
+  "witness": 1,
+  "failed": 1,
+  "timed_out": 1,
+  "unknown": 1,
+  "skipped": [
+    {
+      "name": "example.test_skip",
+      "module": "example",
+      "reason": "unsupported shape",
+      "status": "Unsupported",
+      "certification": "unsupported",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "unknown",
+          "reason": "unsupported shape"
+        },
+        "precision": "Unknown",
+        "certificate": "Unchecked",
+        "obligations_open": [],
+        "obligations_discharged": [],
+        "lowering_path": [
+          "unsupported_generation"
+        ],
+        "widenings": [],
+        "production_allowed": false,
+        "diagnostics": [
+          "unsupported shape"
+        ]
+      }
+    }
+  ],
+  "theorems": [
+    {
+      "test_name": "example.test_proved",
+      "theorem_name": "Example.test_proved",
+      "status": "SolverValidated",
+      "certification": "smt_valid_no_proof_reconstruction",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
+      },
+      "proof_status": {
+        "kind": "proved"
+      },
+      "explanation": "input domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+    },
+    {
+      "test_name": "example.test_witness",
+      "theorem_name": "Example.test_witness",
+      "status": "WitnessValidated",
+      "certification": "witness_replay",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "witness",
+          "encoded_values": [
+            "00",
+            "01"
+          ]
+        },
+        "precision": "WitnessOnly",
+        "certificate": "WitnessReplay",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "WitnessReplaysThroughFuzzer",
+          "WitnessSatisfiesDomain",
+          "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "witness_replay"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
+      },
+      "proof_status": {
+        "kind": "witness_proved",
+        "instances": 2,
+        "witnesses": [
+          "00",
+          "01"
+        ],
+        "note": "witness-only proof"
+      },
+      "explanation": "input domain: WitnessOnly (WitnessReplay)\nlowering: witness_replay"
+    },
+    {
+      "test_name": "example.test_partial",
+      "theorem_name": "Example.test_partial",
+      "status": "Partial",
+      "certification": "open_obligations",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "true_with_explicit_widening",
+          "reason": "partial proof",
+          "allowed_only_under": "unsafe-dev"
+        },
+        "precision": "Unknown",
+        "certificate": "Unchecked",
+        "obligations_open": [
+          "FuzzerReturnsImpliesDomain",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput"
+        ],
+        "obligations_discharged": [
+          "FuzzerModelHashMatches",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "placeholder_scan"
+        ],
+        "widenings": [
+          {
+            "kind": "placeholder",
+            "message": "partial proof",
+            "allowed_only_under": "unsafe-dev"
+          }
+        ],
+        "production_allowed": false,
+        "diagnostics": [
+          "partial proof"
+        ]
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
+      },
+      "proof_status": {
+        "kind": "partial",
+        "note": "partial proof"
+      },
+      "explanation": "partial proof\ninput domain: Unknown (Unchecked)\nlowering: placeholder_scan\nwidening: partial proof",
+      "over_approximations": 2
+    },
+    {
+      "test_name": "example.test_failed",
+      "theorem_name": "Example.test_failed",
+      "status": "Unknown",
+      "certification": "unknown",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
+      },
+      "proof_status": {
+        "kind": "failed",
+        "category": {
+          "kind": "build_error"
+        },
+        "reason": "build failed"
+      },
+      "explanation": "build failed\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+    },
+    {
+      "test_name": "example.test_timed_out",
+      "theorem_name": "Example.test_timed_out",
+      "status": "TimedOut",
+      "certification": "timeout",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
+      },
+      "proof_status": {
+        "kind": "timed_out",
+        "reason": "timed out"
+      },
+      "explanation": "timed out\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+    },
+    {
+      "test_name": "example.test_unknown",
+      "theorem_name": "Example.test_unknown",
+      "status": "Unknown",
+      "certification": "unknown",
+      "trust_profile": "production",
+      "domain": {
+        "relation": {
+          "kind": "and",
+          "items": [
+            {
+              "kind": "constraint",
+              "constraint": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            },
+            {
+              "kind": "semantics",
+              "semantics": {
+                "int_range": {
+                  "min": "0",
+                  "max": "255"
+                }
+              }
+            }
+          ]
+        },
+        "precision": "OverApprox",
+        "certificate": "TrustedVersionedModel",
+        "obligations_open": [],
+        "obligations_discharged": [
+          "FuzzerReturnsImpliesDomain",
+          "FuzzerModelHashMatches",
+          "ValueDecoderRoundTrip",
+          "FuzzerOutputTypeMatchesPropertyInputType",
+          "PropertyHarnessAcceptsDecodedInput",
+          "PropertyHarnessMatchesExportedUPLC"
+        ],
+        "lowering_path": [
+          "constraint_ir",
+          "known_combinator"
+        ],
+        "widenings": [],
+        "production_allowed": true,
+        "diagnostics": []
+      },
+      "input_type": {
+        "aiken_type": "Int",
+        "runtime_encoding": "integer_constant",
+        "data_encoding": "integer",
+        "lean_encoding": "integer",
+        "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+        "schema": {
+          "kind": "int"
+        }
+      },
+      "proof_status": {
+        "kind": "unknown"
+      },
+      "explanation": "Lean/Blaster completed without a trustworthy proof classification for this theorem.\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+    }
+  ],
+  "raw_output": {
+    "success": false,
+    "stdout": {
+      "tail": "stdout tail",
+      "total_bytes": 2048,
+      "truncated": true,
+      "log_path": "build/verify/logs/lake_build.stdout.log"
+    },
+    "stderr": {
+      "tail": "stderr tail",
+      "total_bytes": 1024,
+      "truncated": true,
+      "log_path": "build/verify/logs/lake_build.stderr.log"
+    },
+    "exit_code": 1,
+    "theorem_results": [
+      {
+        "test_name": "example.test_proved",
+        "theorem_name": "Example.test_proved",
+        "status": "SolverValidated",
+        "certification": "smt_valid_no_proof_reconstruction",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
+        },
+        "proof_status": {
+          "kind": "proved"
+        },
+        "explanation": "input domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+      },
+      {
+        "test_name": "example.test_witness",
+        "theorem_name": "Example.test_witness",
+        "status": "WitnessValidated",
+        "certification": "witness_replay",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "witness",
+            "encoded_values": [
+              "00",
+              "01"
+            ]
+          },
+          "precision": "WitnessOnly",
+          "certificate": "WitnessReplay",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "WitnessReplaysThroughFuzzer",
+            "WitnessSatisfiesDomain",
+            "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "witness_replay"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
+        },
+        "proof_status": {
+          "kind": "witness_proved",
+          "instances": 2,
+          "witnesses": [
+            "00",
+            "01"
+          ],
+          "note": "witness-only proof"
+        },
+        "explanation": "input domain: WitnessOnly (WitnessReplay)\nlowering: witness_replay"
+      },
+      {
+        "test_name": "example.test_partial",
+        "theorem_name": "Example.test_partial",
+        "status": "Partial",
+        "certification": "open_obligations",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "true_with_explicit_widening",
+            "reason": "partial proof",
+            "allowed_only_under": "unsafe-dev"
+          },
+          "precision": "Unknown",
+          "certificate": "Unchecked",
+          "obligations_open": [
+            "FuzzerReturnsImpliesDomain",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput"
+          ],
+          "obligations_discharged": [
+            "FuzzerModelHashMatches",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "placeholder_scan"
+          ],
+          "widenings": [
+            {
+              "kind": "placeholder",
+              "message": "partial proof",
+              "allowed_only_under": "unsafe-dev"
+            }
+          ],
+          "production_allowed": false,
+          "diagnostics": [
+            "partial proof"
+          ]
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
+        },
+        "proof_status": {
+          "kind": "partial",
+          "note": "partial proof"
+        },
+        "explanation": "partial proof\ninput domain: Unknown (Unchecked)\nlowering: placeholder_scan\nwidening: partial proof",
+        "over_approximations": 2
+      },
+      {
+        "test_name": "example.test_failed",
+        "theorem_name": "Example.test_failed",
+        "status": "Unknown",
+        "certification": "unknown",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
+        },
+        "proof_status": {
+          "kind": "failed",
+          "category": {
+            "kind": "build_error"
+          },
+          "reason": "build failed"
+        },
+        "explanation": "build failed\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+      },
+      {
+        "test_name": "example.test_timed_out",
+        "theorem_name": "Example.test_timed_out",
+        "status": "TimedOut",
+        "certification": "timeout",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
+        },
+        "proof_status": {
+          "kind": "timed_out",
+          "reason": "timed out"
+        },
+        "explanation": "timed out\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+      },
+      {
+        "test_name": "example.test_unknown",
+        "theorem_name": "Example.test_unknown",
+        "status": "Unknown",
+        "certification": "unknown",
+        "trust_profile": "production",
+        "domain": {
+          "relation": {
+            "kind": "and",
+            "items": [
+              {
+                "kind": "constraint",
+                "constraint": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              },
+              {
+                "kind": "semantics",
+                "semantics": {
+                  "int_range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              }
+            ]
+          },
+          "precision": "OverApprox",
+          "certificate": "TrustedVersionedModel",
+          "obligations_open": [],
+          "obligations_discharged": [
+            "FuzzerReturnsImpliesDomain",
+            "FuzzerModelHashMatches",
+            "ValueDecoderRoundTrip",
+            "FuzzerOutputTypeMatchesPropertyInputType",
+            "PropertyHarnessAcceptsDecodedInput",
+            "PropertyHarnessMatchesExportedUPLC"
+          ],
+          "lowering_path": [
+            "constraint_ir",
+            "known_combinator"
+          ],
+          "widenings": [],
+          "production_allowed": true,
+          "diagnostics": []
+        },
+        "input_type": {
+          "aiken_type": "Int",
+          "runtime_encoding": "integer_constant",
+          "data_encoding": "integer",
+          "lean_encoding": "integer",
+          "schema_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "schema": {
+            "kind": "int"
+          }
+        },
+        "proof_status": {
+          "kind": "unknown"
+        },
+        "explanation": "Lean/Blaster completed without a trustworthy proof classification for this theorem.\ninput domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+      }
+    ]
+  },
+  "artifacts": {
+    "manifest": "build/verify/manifest.json",
+    "lean_root": "build/verify/AikenVerify",
+    "logs": "build/verify/logs",
+    "smt2": [
+      "build/verify/Artifacts/query.smt2"
+    ]
+  },
+  "elapsed_ms": 3210,
+  "run_settings": {
+    "solver_profile": "symbolic",
+    "trust_profile": "production",
+    "timeout_secs": 300,
+    "cek_fuel": 200000
+  },
+  "cache": {
+    "workspace_preexisting": true,
+    "generated_lean": {
+      "reused_files": 4,
+      "rewritten_files": 1,
+      "note": "generated Lean files reused across reruns"
+    },
+    "compiled_uplc": {
+      "reused_files": 2,
+      "rewritten_files": 0,
+      "note": "compiled UPLC payloads reused across reruns"
+    },
+    "dependency_builds_preserved": true,
+    "dependency_builds_note": "Lake dependency builds were preserved under .lake/build.",
+    "solver_artifacts_preserved": true,
+    "solver_artifacts_note": "Existing SMT/log artifacts were preserved for reuse and inspection."
+  },
+  "command_success": false,
+  "blaster_rev": "abc123",
+  "plutus_core_rev": "pc456",
+  "allow_vacuous_subgenerators": true,
+  "two_phase_disabled": true,
+  "verify_summary_version": "3"
+}

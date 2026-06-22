@@ -1,0 +1,37 @@
+---
+source: crates/aiken-project/src/verify/tests.rs
+expression: proof
+---
+import AikenVerify.Utils
+import PlutusCore.Integer
+import PlutusCore.ByteString
+import PlutusCore.UPLC.ScriptEncoding
+import Blaster
+
+namespace AikenVerify.Proofs.My_module.test_void_fail
+open PlutusCore.Integer (Integer)
+open PlutusCore.ByteString (ByteString)
+open PlutusCore.Integer (Integer)
+open PlutusCore.UPLC.CekMachine
+open PlutusCore.UPLC.Term (Term Const Program)
+open AikenVerify.Utils
+
+#import_uplc prog_my_module__test_void_fail_78744c06 PlutusV3 single_cbor_hex "./cbor/my_module__test_void_fail_78744c06.cbor"
+
+set_option maxRecDepth 16384
+
+-- Manifest-driven mode and execution metadata.
+private abbrev testReturnMode : ReturnMode := .void
+private abbrev testMode : TestMode := .fail
+private abbrev testDecodePolicy : DecodePolicy := .decodeErrorIsTestFailure
+private abbrev testOutcome (args : List Term) : TestEvalOutcome :=
+  RunProperty testReturnMode prog_my_module__test_void_fail_78744c06 args
+
+theorem test_void_fail :
+  ∀ (x : Integer),
+  (0 <= x ∧ x <= 255)
+  →
+  PropertyFails testReturnMode testDecodePolicy (testOutcome (intArg x)) :=
+  by blaster
+
+end AikenVerify.Proofs.My_module.test_void_fail

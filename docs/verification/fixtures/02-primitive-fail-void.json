@@ -1,0 +1,141 @@
+{
+  "name": "primitive-fail-void",
+  "description": "Universal fail theorem with a Void-returning property. SolverValidated means the generated theorem proved the property always fails under the reported domain, not that Lean reconstructed a kernel certificate.",
+  "manifest_entry": {
+    "id": "docs_primitive_fail_void",
+    "aiken_module": "docs",
+    "aiken_name": "primitive_fail_void",
+    "lean_module": "AikenVerify.Proofs.Docs.primitive_fail_void",
+    "lean_theorem": "docs_primitive_fail_void",
+    "lean_file": "AikenVerify/Proofs/Docs/primitive_fail_void.lean",
+    "flat_file": "cbor/docs_primitive_fail_void.cbor",
+    "fuzzer_flat_file": "cbor/docs_primitive_fail_void_fuzzer.cbor",
+    "return_mode": "void",
+    "test_mode": "fail",
+    "on_test_failure": "fail_immediately",
+    "property_uplc_hash": "9333333333333333333333333333333333333333333333333333333333333333",
+    "property_harness_hash": "94444444444444444444444444444444444444444444444444444444",
+    "fuzzer_uplc_hash": "9555555555555555555555555555555555555555555555555555555555555555",
+    "fuzzer_harness_hash": "96666666666666666666666666666666666666666666666666666666",
+    "fuzzer_model_hash": "9777777777777777777777777777777777777777777777777777777777777777",
+    "domain": {
+      "relation": {
+        "kind": "and",
+        "items": [
+          {
+            "kind": "constraint",
+            "constraint": {
+              "int_range": {
+                "min": "0",
+                "max": "1024"
+              }
+            }
+          },
+          {
+            "kind": "semantics",
+            "semantics": {
+              "int_range": {
+                "min": "0",
+                "max": "1024"
+              }
+            }
+          }
+        ]
+      },
+      "precision": "OverApprox",
+      "certificate": "TrustedVersionedModel",
+      "obligations_open": [],
+      "obligations_discharged": [
+        "FuzzerReturnsImpliesDomain",
+        "FuzzerModelHashMatches",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "constraint_ir",
+        "known_combinator"
+      ],
+      "widenings": [],
+      "production_allowed": true,
+      "diagnostics": []
+    },
+    "input_type": {
+      "aiken_type": "Int",
+      "runtime_encoding": "integer_constant",
+      "data_encoding": "integer",
+      "lean_encoding": "integer",
+      "schema_hash": "9888888888888888888888888888888888888888888888888888888888888888",
+      "schema": {
+        "kind": "int"
+      }
+    },
+    "has_termination_theorem": false,
+    "has_equivalence_theorem": false
+  },
+  "theorem_result": {
+    "test_name": "docs.primitive_fail_void",
+    "theorem_name": "AikenVerify.Proofs.Docs.primitive_fail_void",
+    "status": "SolverValidated",
+    "certification": "smt_valid_no_proof_reconstruction",
+    "trust_profile": "production",
+    "domain": {
+      "relation": {
+        "kind": "and",
+        "items": [
+          {
+            "kind": "constraint",
+            "constraint": {
+              "int_range": {
+                "min": "0",
+                "max": "1024"
+              }
+            }
+          },
+          {
+            "kind": "semantics",
+            "semantics": {
+              "int_range": {
+                "min": "0",
+                "max": "1024"
+              }
+            }
+          }
+        ]
+      },
+      "precision": "OverApprox",
+      "certificate": "TrustedVersionedModel",
+      "obligations_open": [],
+      "obligations_discharged": [
+        "FuzzerReturnsImpliesDomain",
+        "FuzzerModelHashMatches",
+        "ValueDecoderRoundTrip",
+        "FuzzerOutputTypeMatchesPropertyInputType",
+        "PropertyHarnessAcceptsDecodedInput",
+        "PropertyHarnessMatchesExportedUPLC"
+      ],
+      "lowering_path": [
+        "constraint_ir",
+        "known_combinator"
+      ],
+      "widenings": [],
+      "production_allowed": true,
+      "diagnostics": []
+    },
+    "input_type": {
+      "aiken_type": "Int",
+      "runtime_encoding": "integer_constant",
+      "data_encoding": "integer",
+      "lean_encoding": "integer",
+      "schema_hash": "9888888888888888888888888888888888888888888888888888888888888888",
+      "schema": {
+        "kind": "int"
+      }
+    },
+    "proof_status": {
+      "kind": "proved"
+    },
+    "explanation": "input domain: OverApprox (TrustedVersionedModel)\nlowering: constraint_ir -> known_combinator"
+  }
+}

@@ -180,6 +180,9 @@ impl Glossary {
     }
 
     /// Check whether a module is in the glossary
+    // BLASTER_REVIEW_RISK(suffix_module_match): suffix matching returns only
+    // the first hit here, so ambiguous leaf names can resolve to the wrong
+    // module.
     pub fn find_module(&self, needle: &str) -> Option<&str> {
         self.0
             .keys()
