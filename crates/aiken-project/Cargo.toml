@@ -36,7 +36,7 @@ pallas-codec.workspace = true
 pallas-crypto.workspace = true
 pallas-primitives.workspace = true
 pallas-traverse.workspace = true
-petgraph = "0.6.3"
+petgraph = "0.8.3"
 pulldown-cmark = { version = "0.12.0", default-features = false, features = [
     "html",
 ] }
