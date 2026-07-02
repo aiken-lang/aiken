@@ -6538,3 +6538,8 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
     assert_uplc(src, program_verbose, true, true);
     assert_uplc(src, program_silent, true, false);
 }
+
+// (Regression test for https://github.com/aiken-lang/aiken/issues/1314 — the
+// canonical `fail_annotated_module_constant_does_not_panic_during_codegen`
+// test lives near the top of this file. This module ends here.)
+
