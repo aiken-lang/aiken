@@ -9,6 +9,7 @@
 ### Fixed
 
 - **uplc**: Refresh default cost models parameters and fix discrepancies between the various semantics and languages. @KtorZ
+- **uplc**: Avoid panic (and return a clean error) when evaluating a `ConstrData` builtin receives a constructor tag outside the valid u64 range. Fixes [#1359](https://github.com/aiken-lang/aiken/issues/1359). @knoal
 - **aiken-lang**: Preserve typed `expect` assignments during unused-binding cleanup so `Data` validation still runs even when the bound name is unused. Fixes [#1325](https://github.com/aiken-lang/aiken/issues/1325). @knoal
 - **aiken-lang**: Emit a parse error instead panicking when a `@tag(...)` decorator value exceeds `usize::MAX`. Fixes [#1319](https://github.com/aiken-lang/aiken/issues/1319). @SAY-5, @KtorZ
 - **aiken-lang**: Use canonical type identity for cached `expect` decoder names to avoid collisions across modules and generic type shapes. Fixes [#1331](https://github.com/aiken-lang/aiken/issues/1331). @Riley-Kilgore
