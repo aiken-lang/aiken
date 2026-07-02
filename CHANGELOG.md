@@ -1,10 +1,10 @@
 # Changelog
 
-## [next]
+## [next] - 2026-07-23
 
 ### Fixed
 
-- **aiken-lang**: Avoid compiler panics when module-constant folding hits `fail`/`todo`; keep the compiled term so fail-marked tests observe the expected runtime failure instead. Fixes [#1314](https://github.com/aiken-lang/aiken/issues/1314). @knoal
+- **aiken-lang**: Avoid compiler panic when module-constant folding evaluates a `fail`/`todo` RHS — handle `Error::EvaluationFailure` by preserving the unevaluated term so the fail surfaces at runtime instead of during codegen. Other eval errors still surface as compiler panics so genuine bugs are not masked. Fixes [#1314](https://github.com/aiken-lang/aiken/issues/1314). @knoal
 
 ## v1.1.22 - 2026-05-15
 
