@@ -6491,3 +6491,58 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
     assert_uplc(src, program_verbose, true, true);
     assert_uplc(src, program_silent, true, false);
 }
+
+// Regression test for https://github.com/aiken-lang/aiken/issues/1314
+// Module constants whose RHS is fail/todo must not panic during codegen;
+// the compiled term should contain the fail so that runtime tests properly fail.
+#[test]
+fn fail_annotated_module_constant_does_not_panic_during_codegen() {
+    let src = r#"
+        fn helper_fail_bool() -> Bool {
+          fail @"constant helper bool"
+        }
+
+        const broken_fail: Bool =
+          helper_fail_bool()
+
+        test use_fail_constant() fail {
+          broken_fail
+        }
+    "#;
+
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(src)));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+
+    let checked_module = modules.values().next().expect("expected checked module");
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("expected test definition");
+
+    // Must not panic during codegen — the fix handles Error::EvaluationFailure
+    // by falling back to the unevaluated term instead of panicking.
+    let program = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        generator.generate_raw(&test.body, &[], &checked_module.name)
+    }))
+    .expect("code generation for fail-constant test should not panic");
+
+    let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+    let eval = debruijn_program.eval(ExBudget::default());
+
+    // The test should fail at runtime (not during codegen), so eval should
+    // indicate failure (either Error::EvaluationFailure or Term::Error).
+    assert!(
+        eval.result().is_err()
+            || matches!(eval.result(), Ok(Term::Error)),
+        "expected fail-constant test to fail at runtime; got: {:?}",
+        eval.result()
+    );
+}
