@@ -592,12 +592,22 @@ impl DefaultFunction {
                 let skip: usize = if arg1.lt(&0.into()) {
                     0
                 } else {
-                    arg1.try_into().unwrap()
+                    arg1.try_into().map_err(|_| {
+                        Error::DeserialisationError(
+                            format!("slice offset {} does not fit in usize", arg1),
+                            args[0].clone(),
+                        )
+                    })?
                 };
                 let take: usize = if arg2.lt(&0.into()) {
                     0
                 } else {
-                    arg2.try_into().unwrap()
+                    arg2.try_into().map_err(|_| {
+                        Error::DeserialisationError(
+                            format!("slice length {} does not fit in usize", arg2),
+                            args[1].clone(),
+                        )
+                    })?
                 };
 
                 let ret: Vec<u8> = arg3.iter().skip(skip).take(take).cloned().collect();
@@ -617,7 +627,12 @@ impl DefaultFunction {
                 let arg1 = args[0].unwrap_byte_string()?;
                 let arg2 = args[1].unwrap_integer()?;
 
-                let index: i128 = arg2.try_into().unwrap();
+                let index: i128 = arg2.try_into().map_err(|_| {
+                    Error::DeserialisationError(
+                        format!("byte string index {} does not fit in i128", arg2),
+                        args[1].clone(),
+                    )
+                })?;
 
                 if 0 <= index && index < arg1.len() as i128 {
                     let ret = arg1[index as usize];
@@ -922,7 +937,12 @@ impl DefaultFunction {
                     })
                     .collect();
 
-                let i: u64 = i.try_into().unwrap();
+                let i: u64 = i.try_into().map_err(|_| {
+                    Error::DeserialisationError(
+                        format!("constructor index {} does not fit in u64", i),
+                        args[0].clone(),
+                    )
+                })?;
 
                 let constr_data = Data::constr(i, data_list);
 

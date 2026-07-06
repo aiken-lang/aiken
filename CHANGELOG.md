@@ -1,5 +1,11 @@
 # Changelog
 
+## [next]
+
+### Fixed
+
+- **uplc**: Fixed `ConstrData`, `IndexByteString`, and `SliceByteString` UPLC builtins panicking with `unwrap()` on `try_into()` when receiving oversized integer arguments (e.g., malformed CBOR). They now return a proper `DeserialisationError`. Fixes [#1359](https://github.com/aiken-lang/aiken/issues/1359).
+
 ## v1.1.23 - 2026-06-26
 
 ### Added
