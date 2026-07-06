@@ -6,7 +6,8 @@
 
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
 - **uplc**: Convert `bls12_381_g1_multi_scalar_mul` / `bls12_381_g2_multi_scalar_mul` arguments from Aiken's data-encoded lists to the typed `List<Int>` and `List<G1Element>` / `List<G2Element>` constants expected by the builtins, like already done for `write_bits`. Fixes [#1378](https://github.com/aiken-lang/aiken/issues/1378). @perturbing
-
+- **uplc**: Avoid panicking on out-of-range ConstrData constructor tags (above `u64::MAX` or negative). Returns a typed `Error::ConstrTagOutOfRange` error instead. Fixes [#1359](https://github.com/aiken-lang/aiken/issues/1359).
+- **uplc**: Avoid panicking on oversized integer arguments to `IndexByteString` and `SliceByteString` (e.g., malformed CBOR). Returns a `Error::DeserialisationError` instead. Fixes [#1359](https://github.com/aiken-lang/aiken/issues/1359).
 
 ## v1.1.23 - 2026-06-26
 
