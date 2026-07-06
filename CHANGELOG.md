@@ -15,6 +15,10 @@
 
 ## v1.1.22 - 2026-05-15
 
+### Fixed
+
+- **aiken-lang**: Fixed compiler panic when evaluating a module constant whose initializer calls a `Bool`-annotated `fail` or `todo` helper. Instead of panicking with `Failed to evaluate constant: EvaluationFailure`, the constant is now treated as a UPLC error term, allowing `fail`-marked tests that reference it to be handled correctly by the test runner. Fixes [#1314](https://github.com/aiken-lang/aiken/issues/1314).
+
 ### Added
 
 - **aiken-lang**: Allow test assertions to _"see through"_ backpassing, to provide better insights on failing tests using a continuation passing style. @KtorZ

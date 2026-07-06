@@ -54,7 +54,7 @@ use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
-    machine::cost_model::ExBudget,
+    machine::{Error as UplcError, cost_model::ExBudget},
     optimize::{aiken_optimize_and_intern, interner::CodeGenInterner, shrinker::NO_INLINE},
 };
 
@@ -3831,14 +3831,11 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.clean_up_no_inlines().try_into().unwrap();
 
-                    Some(
-                        eval_program
-                            .eval(ExBudget::max())
-                            .result()
-                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
-                            .try_into()
-                            .unwrap(),
-                    )
+                    Some(match eval_program.eval(ExBudget::max()).result() {
+                        Ok(term) => term.try_into().unwrap(),
+                        Err(UplcError::EvaluationFailure) => Term::Error,
+                        Err(e) => panic!("Failed to evaluate constant: {e:#?}"),
+                    })
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
