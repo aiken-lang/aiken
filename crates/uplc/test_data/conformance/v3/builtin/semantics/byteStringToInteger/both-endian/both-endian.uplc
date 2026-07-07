@@ -6,4 +6,3 @@
   [(builtin byteStringToInteger) (con bool True)  (con bytestring #67ee2255ba34ef237a099e9d8b8292)]
  ]
 )
-
