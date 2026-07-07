@@ -3834,7 +3834,7 @@ impl<'a> CodeGenerator<'a> {
                     Some(match eval_program.eval(ExBudget::max()).result() {
                         Ok(term) => term.try_into().unwrap(),
                         Err(UplcError::EvaluationFailure) => Term::Error,
-                        Err(e) => panic!("Failed to evaluate constant: {e:#?}"),
+                        Err(e) => panic!("Failed to evaluate constant: {e}"),
                     })
                 }
                 ValueConstructorVariant::ModuleFn {
