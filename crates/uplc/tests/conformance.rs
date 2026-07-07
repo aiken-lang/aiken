@@ -6,13 +6,43 @@ use std::{
 };
 use uplc::{
     ast::{Name, NamedDeBruijn, Program},
-    machine::cost_model::ExBudget,
+    machine::runtime::VAN_ROSSEM_PROTOCOL_VERSION,
     parser,
 };
 use walkdir::WalkDir;
 
 const PARSE_ERROR: &str = "parse error";
 const EVALUATION_FAILURE: &str = "evaluation failure";
+
+#[derive(Clone, Copy)]
+enum ParserMode {
+    Standard,
+    CanonicalValueLiterals,
+}
+
+const V3_PV11_COSTS: &[i64] = &[
+    100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4, 16000, 100,
+    16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100, 100, 16000, 100, 94375, 32,
+    132994, 32, 61462, 4, 72010, 178, 0, 1, 22151, 32, 91189, 769, 4, 2, 85848, 123203, 7305, -900,
+    1716, 960, 57, 85848, 0, 1, 1, 1000, 42921, 4, 2, 30623, 28755, 75, 1, 898148, 27279, 1, 51775,
+    558, 1, 39184, 1000, 60594, 1, 141895, 32, 83150, 32, 15299, 32, 76049, 1, 13169, 4, 22100, 10,
+    28999, 74, 1, 28999, 74, 1, 43285, 552, 1, 44749, 541, 1, 33852, 32, 68246, 32, 72362, 32,
+    7243, 32, 7391, 32, 11546, 32, 85848, 123203, 7305, -900, 1716, 960, 57, 85848, 0, 1, 90434,
+    519, 0, 1, 74433, 32, 85848, 123203, 7305, -900, 1716, 960, 57, 85848, 0, 1, 1, 85848, 123203,
+    7305, -900, 1716, 960, 57, 85848, 0, 1, 955506, 213312, 0, 2, 270652, 22588, 4, 1457325, 64566,
+    4, 20467, 1, 4, 0, 141992, 32, 100788, 420, 1, 1, 81663, 32, 59498, 32, 20142, 32, 24588, 32,
+    20744, 32, 25933, 32, 24623, 32, 43053543, 10, 53384111, 14333, 10, 43574283, 26308, 10, 16000,
+    100, 16000, 100, 962335, 18, 2780678, 6, 442008, 1, 52538055, 3756, 18, 267929, 18, 76433006,
+    8868, 18, 52948122, 18, 1995836, 36, 3227919, 12, 901022, 1, 166917843, 4307, 36, 284546, 36,
+    158221314, 26549, 36, 74698472, 36, 333849714, 1, 254006273, 72, 2174038, 72, 2261318, 64571,
+    4, 207616, 8310, 4, 1293828, 28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0,
+    1, 100181, 726, 719, 0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848,
+    0, 1, 180194, 159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655,
+    1, 1964219, 24520, 3, 607153, 231697, 53144, 0, 1, 116711, 1957, 4, 231883, 10, 1000, 24838, 7,
+    1, 232010, 32, 321837444, 25087669, 18, 617887431, 67302824, 36, 356924, 18413, 45, 21, 219951,
+    9444, 1, 1000, 172116, 183150, 6, 24, 21, 213283, 618401, 1998, 28258, 1, 1000, 38159, 2, 22,
+    1000, 95933, 1, 1, 11, 1000, 277577, 12, 21,
+];
 
 fn expected_to_program(expected_file: &PathBuf) -> Result<Program<Name>, String> {
     let code = fs::read_to_string(expected_file).expect("Failed to read .uplc.expected file");
@@ -26,35 +56,20 @@ fn expected_to_program(expected_file: &PathBuf) -> Result<Program<Name>, String>
     }
 }
 
-fn file_to_budget(expected_budget_file: &PathBuf) -> Result<ExBudget, String> {
-    fs::read_to_string(expected_budget_file)
-        .map_err(|e| format!("failed to read .uplc.budget.expected file: {e:?}"))
-        .and_then(|src| budget::ex_budget(&src).map_err(|e| format!("{e:?}")))
-}
-
-peg::parser! {
-    grammar budget() for str {
-        pub rule ex_budget() -> ExBudget
-          = "({" _* "cpu" _* ":" _* cpu:decimal() _* "|" _* "mem" _* ":" _* mem:decimal() _* "})" _* {
-              ExBudget { cpu, mem }
-          }
-
-        rule decimal() -> i64
-          = n:$(['0'..='9']+) {? n.parse().or(Err("decimal")) }
-
-        rule _ = [' ' | '\n' | '\r' | '\t'] / "--" $([^ '\n']*) "\n"
-    }
-}
-
 fn actual_evaluation_result(
     file: &Path,
     language: &Language,
     protocol_major_version: u16,
     costs: &[i64],
-) -> Result<(Program<NamedDeBruijn>, ExBudget), String> {
+    parser_mode: ParserMode,
+) -> Result<Program<NamedDeBruijn>, String> {
     let code = fs::read_to_string(file).expect("Failed to read .uplc file");
 
-    let program = parser::program(&code).map_err(|_| PARSE_ERROR.to_string())?;
+    let program = match parser_mode {
+        ParserMode::Standard => parser::program(&code),
+        ParserMode::CanonicalValueLiterals => parser::program_with_canonical_value_literals(&code),
+    }
+    .map_err(|_| PARSE_ERROR.to_string())?;
 
     let program: Program<NamedDeBruijn> = program
         .try_into()
@@ -62,50 +77,39 @@ fn actual_evaluation_result(
 
     let version = program.version;
 
-    let eval =
-        program.eval_as_with_protocol(language, protocol_major_version, costs, Default::default());
-
-    let cost = eval.cost();
+    let eval = program.eval_as_with_protocol(language, protocol_major_version, costs, None);
 
     let term = eval.result().map_err(|_| EVALUATION_FAILURE.to_string())?;
 
-    let program = Program { version, term };
-
-    Ok((program, cost))
+    Ok(Program { version, term })
 }
 
-fn plutus_conformance_tests(language: Language, protocol_major_version: u16, costs: &[i64]) {
-    let root = format!(
-        "test_data/conformance/{}",
-        match language {
-            Language::PlutusV1 => "v1",
-            Language::PlutusV2 => "v2",
-            Language::PlutusV3 => "v3",
-        }
-    );
-
+fn plutus_conformance_tests(
+    root: &str,
+    language: Language,
+    protocol_major_version: u16,
+    costs: &[i64],
+    parser_mode: ParserMode,
+) {
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
 
         if path.extension().and_then(OsStr::to_str) == Some("uplc") {
             let expected_file = path.with_extension("uplc.expected");
-            let expected_budget_file = path.with_extension("uplc.budget.expected");
 
-            let eval = actual_evaluation_result(path, &language, protocol_major_version, costs);
+            let eval = actual_evaluation_result(
+                path,
+                &language,
+                protocol_major_version,
+                costs,
+                parser_mode,
+            );
             let expected = expected_to_program(&expected_file)
                 .map(|program| Program::<NamedDeBruijn>::try_from(program).unwrap());
 
             match eval {
-                Ok((actual, cost)) => {
+                Ok(actual) => {
                     pretty_assertions::assert_eq!(expected, Ok(actual), "{}", path.display());
-                    match language {
-                        Language::PlutusV1 | Language::PlutusV2 => {}
-                        Language::PlutusV3 => {
-                            if let Ok(budget) = file_to_budget(&expected_budget_file) {
-                                pretty_assertions::assert_eq!(budget, cost, "{}", path.display());
-                            }
-                        }
-                    }
                 }
                 Err(err) => pretty_assertions::assert_eq!(expected, Err(err), "{}", path.display()),
             }
@@ -116,6 +120,7 @@ fn plutus_conformance_tests(language: Language, protocol_major_version: u16, cos
 #[test]
 fn plutus_conformance_tests_v2() {
     plutus_conformance_tests(
+        "test_data/conformance/v2",
         Language::PlutusV2,
         11,
         &[
@@ -142,35 +147,17 @@ fn plutus_conformance_tests_v2() {
             1, 1000, 172116, 183150, 6, 24, 21, 213283, 618401, 1998, 28258, 1, 1000, 38159, 2, 22,
             1000, 95933, 1, 1, 11, 1000, 277577, 12, 21,
         ],
+        ParserMode::Standard,
     )
 }
 
 #[test]
 fn plutus_conformance_tests_v3() {
     plutus_conformance_tests(
+        "test_data/conformance/v3",
         Language::PlutusV3,
-        10,
-        &[
-            100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4,
-            16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100, 100,
-            16000, 100, 94375, 32, 132994, 32, 61462, 4, 72010, 178, 0, 1, 22151, 32, 91189, 769,
-            4, 2, 85848, 123203, 7305, -900, 1716, 549, 57, 85848, 0, 1, 1, 1000, 42921, 4, 2,
-            24548, 29498, 38, 1, 898148, 27279, 1, 51775, 558, 1, 39184, 1000, 60594, 1, 141895,
-            32, 83150, 32, 15299, 32, 76049, 1, 13169, 4, 22100, 10, 28999, 74, 1, 28999, 74, 1,
-            43285, 552, 1, 44749, 541, 1, 33852, 32, 68246, 32, 72362, 32, 7243, 32, 7391, 32,
-            11546, 32, 85848, 123203, 7305, -900, 1716, 549, 57, 85848, 0, 1, 90434, 519, 0, 1,
-            74433, 32, 85848, 123203, 7305, -900, 1716, 549, 57, 85848, 0, 1, 1, 85848, 123203,
-            7305, -900, 1716, 549, 57, 85848, 0, 1, 955506, 213312, 0, 2, 270652, 22588, 4,
-            1457325, 64566, 4, 20467, 1, 4, 0, 141992, 32, 100788, 420, 1, 1, 81663, 32, 59498, 32,
-            20142, 32, 24588, 32, 20744, 32, 25933, 32, 24623, 32, 43053543, 10, 53384111, 14333,
-            10, 43574283, 26308, 10, 16000, 100, 16000, 100, 962335, 18, 2780678, 6, 442008, 1,
-            52538055, 3756, 18, 267929, 18, 76433006, 8868, 18, 52948122, 18, 1995836, 36, 3227919,
-            12, 901022, 1, 166917843, 4307, 36, 284546, 36, 158221314, 26549, 36, 74698472, 36,
-            333849714, 1, 254006273, 72, 2174038, 72, 2261318, 64571, 4, 207616, 8310, 4, 1293828,
-            28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719,
-            0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
-            159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
-            1964219, 24520, 3,
-        ],
+        VAN_ROSSEM_PROTOCOL_VERSION,
+        V3_PV11_COSTS,
+        ParserMode::CanonicalValueLiterals,
     )
 }

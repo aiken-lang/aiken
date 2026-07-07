@@ -13,7 +13,7 @@ use bitvec::{order::Msb0, vec::BitVec};
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_integer::Integer;
-use num_traits::{FromPrimitive, Signed, Zero};
+use num_traits::{FromPrimitive, Signed, ToPrimitive, Zero};
 use once_cell::sync::Lazy;
 use pallas_primitives::conway::{Language, PlutusData};
 use std::{mem::size_of, ops::Deref, rc::Rc};
@@ -28,6 +28,17 @@ static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
         ],
     )
 });
+
+// The maximum size of a scalar for the BLS12-381 multiScalarMul functions is
+// 512 bytes = 4096 bits, so valid scalars lie in [-(2^4095), 2^4095 - 1].
+// See PlutusCore.Crypto.BLS12_381.Bounds.
+static MSM_SCALAR_UB: Lazy<BigInt> = Lazy::new(|| (BigInt::from(1) << 4095u32) - 1);
+
+static MSM_SCALAR_LB: Lazy<BigInt> = Lazy::new(|| -(BigInt::from(1) << 4095u32));
+
+static EXP_MOD_INTEGER_UB: Lazy<BigInt> = Lazy::new(|| (BigInt::from(1) << 8191u32) - 1);
+
+static EXP_MOD_INTEGER_LB: Lazy<BigInt> = Lazy::new(|| -(BigInt::from(1) << 8191u32));
 
 const BLST_P1_COMPRESSED_SIZE: usize = 48;
 
@@ -220,6 +231,7 @@ impl DefaultFunction {
             | DefaultFunction::Bls12_381_G2_Add
             | DefaultFunction::Bls12_381_G2_Neg
             | DefaultFunction::Bls12_381_G2_ScalarMul
+            | DefaultFunction::Bls12_381_G2_MultiScalarMul
             | DefaultFunction::Bls12_381_G2_Equal
             | DefaultFunction::Bls12_381_G2_Compress
             | DefaultFunction::Bls12_381_G2_Uncompress
@@ -240,8 +252,10 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
-            // | DefaultFunction::ExpModInteger
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::DropList
+            | DefaultFunction::Bls12_381_G1_MultiScalarMul
+            | DefaultFunction::ExpModInteger => false,
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
         }
@@ -315,6 +329,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Add => 2,
             DefaultFunction::Bls12_381_G2_Neg => 1,
             DefaultFunction::Bls12_381_G2_ScalarMul => 2,
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => 2,
             DefaultFunction::Bls12_381_G2_Equal => 2,
             DefaultFunction::Bls12_381_G2_Compress => 1,
             DefaultFunction::Bls12_381_G2_Uncompress => 1,
@@ -336,7 +351,9 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
-            // DefaultFunction::ExpModInteger => 3,
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => 2,
+            DefaultFunction::ExpModInteger => 3,
+            DefaultFunction::DropList => 2,
         }
     }
 
@@ -408,6 +425,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Add => 0,
             DefaultFunction::Bls12_381_G2_Neg => 0,
             DefaultFunction::Bls12_381_G2_ScalarMul => 0,
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => 0,
             DefaultFunction::Bls12_381_G2_Equal => 0,
             DefaultFunction::Bls12_381_G2_Compress => 0,
             DefaultFunction::Bls12_381_G2_Uncompress => 0,
@@ -429,7 +447,9 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
-            // DefaultFunction::ExpModInteger => 0,
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => 0,
+            DefaultFunction::ExpModInteger => 0,
+            DefaultFunction::DropList => 1,
         }
     }
 
@@ -1367,6 +1387,87 @@ impl DefaultFunction {
 
                 Ok(Value::Con(constant.into()))
             }
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+                let (_, scalars) = args[0].unwrap_list()?;
+                let (_, points) = args[1].unwrap_list()?;
+
+                // Every scalar (in the full first list, regardless of the
+                // point list length) must fit within the 512-byte bound.
+                for scalar in scalars {
+                    let Constant::Integer(scalar) = scalar else {
+                        return Err(Error::TypeMismatch(Type::Integer, Type::from(scalar)));
+                    };
+
+                    if scalar < &MSM_SCALAR_LB || scalar > &MSM_SCALAR_UB {
+                        return Err(Error::MsmScalarOutOfBounds);
+                    }
+                }
+
+                // The result is the sum of scalar_i * point_i over the inputs.
+                // As with Haskell's `zip`, the inputs are truncated to the
+                // length of the shorter list.
+                let size_scalar = size_of::<blst::blst_scalar>();
+
+                let mut scalar_bytes: Vec<u8> = Vec::with_capacity(scalars.len() * size_scalar);
+                let mut blst_points: Vec<blst::blst_p2> = Vec::with_capacity(points.len());
+
+                for (scalar, point) in scalars.iter().zip(points.iter()) {
+                    let Constant::Integer(scalar) = scalar else {
+                        return Err(Error::TypeMismatch(Type::Integer, Type::from(scalar)));
+                    };
+
+                    let Constant::Bls12_381G2Element(point) = point else {
+                        return Err(Error::TypeMismatch(
+                            Type::Bls12_381G2Element,
+                            Type::from(point),
+                        ));
+                    };
+
+                    // blst's Pippenger implementation does not accept the point
+                    // at infinity. Such points contribute nothing to the sum
+                    // (scalar * identity == identity), so we drop them.
+                    if unsafe { blst::blst_p2_is_inf(point.as_ref()) } {
+                        continue;
+                    }
+
+                    let scalar = scalar.mod_floor(&SCALAR_PERIOD);
+
+                    let (_, mut be_bytes) = scalar.to_bytes_be();
+
+                    if size_scalar > be_bytes.len() {
+                        let diff = size_scalar - be_bytes.len();
+
+                        let mut new_vec = vec![0; diff];
+
+                        new_vec.append(&mut be_bytes);
+
+                        be_bytes = new_vec;
+                    }
+
+                    let mut blst_scalar = blst::blst_scalar::default();
+
+                    unsafe {
+                        blst::blst_scalar_from_bendian(
+                            &mut blst_scalar as *mut _,
+                            be_bytes.as_ptr() as *const _,
+                        );
+                    }
+
+                    scalar_bytes.extend_from_slice(&blst_scalar.b);
+                    blst_points.push(*point.as_ref());
+                }
+
+                let out = if blst_points.is_empty() {
+                    // Empty inputs yield the group identity (point at infinity).
+                    blst::blst_p2::default()
+                } else {
+                    blst::p2_affines::from(&blst_points).mult(&scalar_bytes, size_scalar * 8)
+                };
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
             DefaultFunction::Bls12_381_G2_Equal => {
                 let arg1 = args[0].unwrap_bls12_381_g2_element()?;
                 let arg2 = args[1].unwrap_bls12_381_g2_element()?;
@@ -1717,6 +1818,10 @@ impl DefaultFunction {
                 let bytes = args[0].unwrap_byte_string()?;
                 let shift = args[1].unwrap_integer()?;
 
+                if matches!(semantics, BuiltinSemantics::E) && shift.to_i64().is_none() {
+                    return Err(Error::EvaluationFailure);
+                }
+
                 let byte_length = bytes.len();
 
                 if BigInt::from_usize(byte_length).unwrap() * 8 <= shift.abs() {
@@ -1740,6 +1845,10 @@ impl DefaultFunction {
             DefaultFunction::RotateByteString => {
                 let bytes = args[0].unwrap_byte_string()?;
                 let shift = args[1].unwrap_integer()?;
+
+                if matches!(semantics, BuiltinSemantics::E) && shift.to_i64().is_none() {
+                    return Err(Error::EvaluationFailure);
+                }
 
                 let byte_length = bytes.len();
 
@@ -1811,9 +1920,186 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
-            } // DefaultFunction::ExpModInteger => todo!(),
+            }
+            DefaultFunction::ExpModInteger => {
+                let base = args[0].unwrap_integer()?;
+                let exponent = args[1].unwrap_integer()?;
+                let modulus = args[2].unwrap_integer()?;
+
+                Ok(Value::integer(exp_mod_integer(base, exponent, modulus)?))
+            }
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+                let (_, scalars) = args[0].unwrap_list()?;
+                let (_, points) = args[1].unwrap_list()?;
+
+                // Validate that every scalar (in the *whole* first list, before
+                // zipping) lies within the allowed bound, matching Plutus'
+                // `any msmScalarOutOfBounds ss`.
+                let mut scalar_values = Vec::with_capacity(scalars.len());
+
+                for constant in scalars {
+                    let Constant::Integer(scalar) = constant else {
+                        return Err(Error::TypeMismatch(Type::Integer, constant.into()));
+                    };
+
+                    if scalar < &MSM_SCALAR_LB || scalar > &MSM_SCALAR_UB {
+                        return Err(Error::MsmScalarOutOfBounds);
+                    }
+
+                    scalar_values.push(scalar);
+                }
+
+                let mut point_values = Vec::with_capacity(points.len());
+
+                for constant in points {
+                    let Constant::Bls12_381G1Element(point) = constant else {
+                        return Err(Error::TypeMismatch(
+                            Type::Bls12_381G1Element,
+                            constant.into(),
+                        ));
+                    };
+
+                    point_values.push(point.as_ref());
+                }
+
+                let size_scalar = size_of::<blst::blst_scalar>();
+
+                // Accumulator starts at the group identity (point at infinity).
+                let mut acc = blst::blst_p1::default();
+
+                // `zip` truncates to the shorter list, matching Plutus' denotation.
+                for (scalar, point) in scalar_values.iter().zip(point_values.iter()) {
+                    let scalar = scalar.mod_floor(&SCALAR_PERIOD);
+
+                    let (_, mut scalar_bytes) = scalar.to_bytes_be();
+
+                    if size_scalar > scalar_bytes.len() {
+                        let diff = size_scalar - scalar_bytes.len();
+
+                        let mut new_vec = vec![0; diff];
+
+                        new_vec.append(&mut scalar_bytes);
+
+                        scalar_bytes = new_vec;
+                    }
+
+                    let mut term = blst::blst_p1::default();
+                    let mut blst_scalar = blst::blst_scalar::default();
+
+                    unsafe {
+                        blst::blst_scalar_from_bendian(
+                            &mut blst_scalar as *mut _,
+                            scalar_bytes.as_ptr() as *const _,
+                        );
+
+                        blst::blst_p1_mult(
+                            &mut term as *mut _,
+                            *point as *const _,
+                            blst_scalar.b.as_ptr() as *const _,
+                            size_scalar * 8,
+                        );
+
+                        blst::blst_p1_add_or_double(
+                            &mut acc as *mut _,
+                            &acc as *const _,
+                            &term as *const _,
+                        );
+                    }
+                }
+
+                let constant = Constant::Bls12_381G1Element(acc.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::DropList => {
+                let n = args[0].unwrap_integer()?;
+                let (r#type, list) = args[1].unwrap_list()?;
+
+                // Drop the first `n` elements of the list. A non-positive `n`
+                // leaves the list unchanged, while an `n` greater than or equal
+                // to the length yields the empty list. Mirrors Plutus' `drop`
+                // semantics over an `Int`-bounded count.
+                let dropped = if n <= &0.into() {
+                    list.clone()
+                } else {
+                    let n = usize::try_from(n).unwrap_or(usize::MAX);
+
+                    if n >= list.len() {
+                        vec![]
+                    } else {
+                        list[n..].to_vec()
+                    }
+                };
+
+                let value = Value::list(r#type.clone(), dropped);
+
+                Ok(value)
+            }
         }
     }
+}
+
+fn exp_mod_integer(base: &BigInt, exponent: &BigInt, modulus: &BigInt) -> Result<BigInt, Error> {
+    if modulus <= &BigInt::zero() || modulus > &EXP_MOD_INTEGER_UB {
+        return Err(Error::OutsideNaturalBounds(modulus.clone()));
+    }
+
+    if modulus == &BigInt::from(1) {
+        return Ok(BigInt::zero());
+    }
+
+    if base.is_zero() && exponent.is_negative() {
+        return Err(Error::ExpModIntegerNoInverse(base.clone(), modulus.clone()));
+    }
+
+    if exp_mod_integer_out_of_bounds(base) || exp_mod_integer_out_of_bounds(exponent) {
+        return Err(Error::OverflowError);
+    }
+
+    if exponent.is_negative() {
+        let Some(inverse) = modular_inverse(base, modulus) else {
+            return Err(Error::ExpModIntegerNoInverse(base.clone(), modulus.clone()));
+        };
+
+        let positive_exponent = -exponent;
+
+        Ok(inverse.modpow(&positive_exponent, modulus))
+    } else {
+        Ok(base.modpow(exponent, modulus))
+    }
+}
+
+fn exp_mod_integer_out_of_bounds(value: &BigInt) -> bool {
+    value < &EXP_MOD_INTEGER_LB || value > &EXP_MOD_INTEGER_UB
+}
+
+fn modular_inverse(base: &BigInt, modulus: &BigInt) -> Option<BigInt> {
+    let mut t = BigInt::zero();
+    let mut new_t = BigInt::from(1);
+    let mut r = modulus.clone();
+    let mut new_r = base.mod_floor(modulus);
+
+    while !new_r.is_zero() {
+        let quotient = &r / &new_r;
+
+        let tmp_t = t - &quotient * &new_t;
+        t = new_t;
+        new_t = tmp_t;
+
+        let tmp_r = r - quotient * &new_r;
+        r = new_r;
+        new_r = tmp_r;
+    }
+
+    if r != BigInt::from(1) {
+        return None;
+    }
+
+    if t.is_negative() {
+        t += modulus;
+    }
+
+    Some(t)
 }
 
 pub trait Compressable {
@@ -1943,11 +2229,16 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<V
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()))
 }
 
-/// Unlike the Haskell implementation the schnorr verification function in Aiken doesn't allow for arbitrary message sizes (at the moment).
-/// The message needs to be 32 bytes (ideally prehashed, but not a requirement).
+/// Plutus delegates Schnorr verification to libsecp256k1's BIP-340 verifier,
+/// which accepts arbitrary message lengths. The high-level Rust wrapper only
+/// accepts 32-byte `Message`s, so call the FFI verifier directly.
 #[cfg(not(target_family = "wasm"))]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
-    use secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
+    use secp256k1::{
+        Secp256k1, XOnlyPublicKey,
+        ffi::{self, CPtr},
+        schnorr::Signature,
+    };
 
     let secp = Secp256k1::verification_only();
 
@@ -1955,11 +2246,17 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 
     let signature = Signature::from_slice(signature)?;
 
-    let message = Message::from_slice(message)?;
+    let valid = unsafe {
+        ffi::secp256k1_schnorrsig_verify(
+            secp.ctx().as_ptr(),
+            signature.as_c_ptr(),
+            message.as_c_ptr(),
+            message.len(),
+            public_key.as_c_ptr(),
+        )
+    };
 
-    let valid = secp.verify_schnorr(&signature, &message, &public_key);
-
-    Ok(Value::Con(Constant::Bool(valid.is_ok()).into()))
+    Ok(Value::Con(Constant::Bool(valid == 1).into()))
 }
 
 #[cfg(target_family = "wasm")]
@@ -1990,9 +2287,97 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::{BuiltinSemantics, convert_constr_to_tag, convert_tag_to_constr};
+    use super::{BuiltinSemantics, Error, convert_constr_to_tag, convert_tag_to_constr};
     use crate::{builtins::DefaultFunction, machine::value::Value};
+    use num_bigint::BigInt;
     use pallas_primitives::conway::Language;
+
+    #[test]
+    fn exp_mod_integer_handles_positive_and_negative_exponents() {
+        let positive = [
+            Value::integer(4.into()),
+            Value::integer(13.into()),
+            Value::integer(497.into()),
+        ];
+
+        assert_eq!(
+            DefaultFunction::ExpModInteger
+                .call(BuiltinSemantics::C, &positive, &mut vec![])
+                .unwrap(),
+            Value::integer(445.into())
+        );
+
+        let inverse = [
+            Value::integer(3.into()),
+            Value::integer((-1).into()),
+            Value::integer(11.into()),
+        ];
+
+        assert_eq!(
+            DefaultFunction::ExpModInteger
+                .call(BuiltinSemantics::C, &inverse, &mut vec![])
+                .unwrap(),
+            Value::integer(4.into())
+        );
+    }
+
+    #[test]
+    fn exp_mod_integer_surfaces_invalid_inputs() {
+        let no_inverse = [
+            Value::integer(2.into()),
+            Value::integer((-1).into()),
+            Value::integer(4.into()),
+        ];
+
+        assert!(matches!(
+            DefaultFunction::ExpModInteger.call(BuiltinSemantics::C, &no_inverse, &mut vec![]),
+            Err(Error::ExpModIntegerNoInverse(_, _))
+        ));
+
+        let zero_modulus = [
+            Value::integer(1.into()),
+            Value::integer(1.into()),
+            Value::integer(0.into()),
+        ];
+
+        assert!(matches!(
+            DefaultFunction::ExpModInteger.call(BuiltinSemantics::C, &zero_modulus, &mut vec![]),
+            Err(Error::OutsideNaturalBounds(_))
+        ));
+
+        let too_large = BigInt::from(1) << 8191u32;
+        let out_of_bounds_modulus = [
+            Value::integer(1.into()),
+            Value::integer(1.into()),
+            Value::integer(too_large.clone()),
+        ];
+
+        assert!(matches!(
+            DefaultFunction::ExpModInteger.call(
+                BuiltinSemantics::C,
+                &out_of_bounds_modulus,
+                &mut vec![],
+            ),
+            Err(Error::OutsideNaturalBounds(_))
+        ));
+
+        let modulus_one_short_circuits = [
+            Value::integer(too_large.clone()),
+            Value::integer(too_large),
+            Value::integer(1.into()),
+        ];
+
+        assert_eq!(
+            DefaultFunction::ExpModInteger
+                .call(
+                    BuiltinSemantics::C,
+                    &modulus_one_short_circuits,
+                    &mut vec![],
+                )
+                .unwrap(),
+            Value::integer(0.into())
+        );
+    }
 
     #[test]
     fn protocol_versions_select_ledger_semantics() {

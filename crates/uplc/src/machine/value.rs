@@ -306,9 +306,7 @@ impl Value {
     }
 
     fn utf8_text_to_ex_mem(s: &str) -> i64 {
-        let bytes = s.len() as i64;
-
-        if bytes == 0 { 0 } else { ((bytes - 1) / 4) + 1 }
+        (s.len() as i64) / 4
     }
 
     fn integer_to_ex_mem(i: &BigInt) -> i64 {
@@ -686,6 +684,6 @@ mod tests {
         let value = Value::Con(nested.into());
 
         assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::C), 9);
-        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::D), 6);
+        assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::D), 5);
     }
 }

@@ -899,7 +899,8 @@ impl Program<NamedDeBruijn> {
     }
 
     /// Evaluate a Program as a specific PlutusVersion and protocol version,
-    /// using the default cost model for the chosen PlutusVersion.
+    /// using the local protocol-aware default cost model for the chosen
+    /// PlutusVersion.
     pub fn eval_version_with_protocol(
         self,
         initial_budget: ExBudget,
@@ -909,7 +910,7 @@ impl Program<NamedDeBruijn> {
         let mut machine = Machine::new_with_protocol(
             version.clone(),
             protocol_major_version,
-            CostModel::default(),
+            CostModel::default_for_language_and_protocol(version, protocol_major_version),
             initial_budget,
             200,
         );

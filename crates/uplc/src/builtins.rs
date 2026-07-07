@@ -131,10 +131,14 @@ pub enum DefaultFunction {
     FindFirstSetBit = 85,
     // Ripemd_160
     Ripemd_160 = 86,
-    // ExpModInteger = 87,
+    ExpModInteger = 87,
+    DropList = 88,
     // Match
-    // CaseList = 88,
-    // CaseData = 89,
+    // CaseList = xx,
+    // CaseData = xx,
+    // BLS12-381 multi-scalar multiplication
+    Bls12_381_G1_MultiScalarMul = 92,
+    Bls12_381_G2_MultiScalarMul = 93,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -276,6 +280,9 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G2_ScalarMul as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_ScalarMul)
             }
+            v if v == DefaultFunction::Bls12_381_G2_MultiScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_MultiScalarMul)
+            }
             v if v == DefaultFunction::Bls12_381_G2_Equal as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_Equal)
             }
@@ -325,6 +332,11 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::FindFirstSetBit)
             }
             v if v == DefaultFunction::Ripemd_160 as u8 => Ok(DefaultFunction::Ripemd_160),
+            v if v == DefaultFunction::ExpModInteger as u8 => Ok(DefaultFunction::ExpModInteger),
+            v if v == DefaultFunction::DropList as u8 => Ok(DefaultFunction::DropList),
+            v if v == DefaultFunction::Bls12_381_G1_MultiScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_MultiScalarMul)
+            }
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -405,6 +417,7 @@ impl FromStr for DefaultFunction {
             "bls12_381_G2_add" => Ok(Bls12_381_G2_Add),
             "bls12_381_G2_neg" => Ok(Bls12_381_G2_Neg),
             "bls12_381_G2_scalarMul" => Ok(Bls12_381_G2_ScalarMul),
+            "bls12_381_G2_multiScalarMul" => Ok(Bls12_381_G2_MultiScalarMul),
             "bls12_381_G2_equal" => Ok(Bls12_381_G2_Equal),
             "bls12_381_G2_compress" => Ok(Bls12_381_G2_Compress),
             "bls12_381_G2_uncompress" => Ok(Bls12_381_G2_Uncompress),
@@ -426,7 +439,9 @@ impl FromStr for DefaultFunction {
             "countSetBits" => Ok(CountSetBits),
             "findFirstSetBit" => Ok(FindFirstSetBit),
             "ripemd_160" => Ok(Ripemd_160),
-            // "expModInteger" => Ok(ExpModInteger),
+            "dropList" => Ok(DropList),
+            "bls12_381_G1_multiScalarMul" => Ok(Bls12_381_G1_MultiScalarMul),
+            "expModInteger" => Ok(ExpModInteger),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
             rest => Err(format!("Default Function not found - {rest}")),
@@ -505,6 +520,7 @@ impl Display for DefaultFunction {
             Bls12_381_G2_Add => write!(f, "bls12_381_G2_add"),
             Bls12_381_G2_Neg => write!(f, "bls12_381_G2_neg"),
             Bls12_381_G2_ScalarMul => write!(f, "bls12_381_G2_scalarMul"),
+            Bls12_381_G2_MultiScalarMul => write!(f, "bls12_381_G2_multiScalarMul"),
             Bls12_381_G2_Equal => write!(f, "bls12_381_G2_equal"),
             Bls12_381_G2_Compress => write!(f, "bls12_381_G2_compress"),
             Bls12_381_G2_Uncompress => write!(f, "bls12_381_G2_uncompress"),
@@ -526,7 +542,9 @@ impl Display for DefaultFunction {
             CountSetBits => write!(f, "countSetBits"),
             FindFirstSetBit => write!(f, "findFirstSetBit"),
             Ripemd_160 => write!(f, "ripemd_160"),
-            // ExpModInteger => write!(f, "expModInteger"),
+            DropList => write!(f, "dropList"),
+            Bls12_381_G1_MultiScalarMul => write!(f, "bls12_381_G1_multiScalarMul"),
+            ExpModInteger => write!(f, "expModInteger"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
         }
@@ -604,6 +622,7 @@ impl DefaultFunction {
             Bls12_381_G2_Add => "bls12_381_g2_add",
             Bls12_381_G2_Neg => "bls12_381_g2_neg",
             Bls12_381_G2_ScalarMul => "bls12_381_g2_scalar_mul",
+            Bls12_381_G2_MultiScalarMul => "bls12_381_g2_multi_scalar_mul",
             Bls12_381_G2_Equal => "bls12_381_g2_equal",
             Bls12_381_G2_Compress => "bls12_381_g2_compress",
             Bls12_381_G2_Uncompress => "bls12_381_g2_uncompress",
@@ -625,7 +644,9 @@ impl DefaultFunction {
             CountSetBits => "count_set_bits",
             FindFirstSetBit => "find_first_set_bit",
             Ripemd_160 => "ripemd_160",
-            // ExpModInteger => "exp_mod_integer",
+            DropList => "drop_list",
+            Bls12_381_G1_MultiScalarMul => "bls12_381_g1_multi_scalar_mul",
+            ExpModInteger => "exp_mod_integer",
             // CaseList => "case_list",
             // CaseData => "case_data",
         }
