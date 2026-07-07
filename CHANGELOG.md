@@ -1,6 +1,6 @@
 # Changelog
 
-## [next] - YYYY-MM-DD
+## [next]
 
 ### Fixed
 
