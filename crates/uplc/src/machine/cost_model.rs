@@ -1,10 +1,13 @@
+use super::value::integer_log2;
 use super::{Error, Value, runtime::BuiltinSemantics};
 use crate::builtins::DefaultFunction;
+use num_bigint::BigInt;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
 use std::collections::HashMap;
 use strum::{Display, EnumIter};
 
+// Existing default cost models use a large sentinel for builtins that are not
 // available in a language version.
 const UNAVAILABLE_BUILTIN_COST_PLACEHOLDER: i64 = 30000000000;
 
@@ -15,7 +18,6 @@ pub struct ExBudget {
     pub cpu: i64,
 }
 
-// Existing default cost models use a large sentinel for builtins that are not
 impl ExBudget {
     pub fn default_startup_cost() -> Self {
         Self { mem: 100, cpu: 100 }
@@ -94,6 +96,23 @@ impl CostModel {
             machine_costs: MachineCosts::v3(),
             builtin_costs: BuiltinCosts::v3(),
         }
+    }
+
+    /// Local hard-coded default cost model with builtin semantics selected for
+    /// the requested protocol version. This is not ledger-supplied protocol
+    /// params; callers with explicit params should use
+    /// `initialize_cost_model_with_protocol` instead.
+    pub fn default_for_language_and_protocol(
+        version: &Language,
+        protocol_major_version: u16,
+    ) -> Self {
+        let costs = match version {
+            Language::PlutusV1 => &BuiltinCosts::DEFAULT_V1[..],
+            Language::PlutusV2 => &BuiltinCosts::DEFAULT_V2[..],
+            Language::PlutusV3 => &BuiltinCosts::DEFAULT_V3[..],
+        };
+
+        initialize_cost_model_with_protocol(version, protocol_major_version, costs)
     }
 }
 
@@ -1786,6 +1805,23 @@ impl Default for BuiltinCosts {
     }
 }
 
+fn list_len_or_value_ex_mem(arg: &Value) -> i64 {
+    match arg.unwrap_list() {
+        Ok((_, items)) => items.len() as i64,
+        Err(_) => arg.to_ex_mem(),
+    }
+}
+
+fn literal_abs_as_i64_saturating(literal: &BigInt) -> i64 {
+    let abs = literal.abs();
+
+    if abs > BigInt::from(i64::MAX) {
+        i64::MAX
+    } else {
+        abs.try_into().expect("literal bounded to i64::MAX")
+    }
+}
+
 impl BuiltinCosts {
     pub fn to_ex_budget(
         &self,
@@ -2282,6 +2318,24 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+                // The cost is linear in the *length* of the first list argument
+                // (number of scalars), matching Plutus' ExMemoryUsage for lists.
+                // For malformed inputs, fall back to the value's generic memory
+                // usage so we don't silently under-cost the error path.
+                let scalars_len = list_len_or_value_ex_mem(&args[0]);
+
+                ExBudget {
+                    mem: self
+                        .bls12_381_g1_multi_scalar_mul
+                        .mem
+                        .cost(scalars_len, args[1].to_ex_mem()),
+                    cpu: self
+                        .bls12_381_g1_multi_scalar_mul
+                        .cpu
+                        .cost(scalars_len, args[1].to_ex_mem()),
+                }
+            }
             DefaultFunction::Bls12_381_G2_Add => ExBudget {
                 mem: self
                     .bls12_381_g2_add
@@ -2334,6 +2388,25 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+                // The cost model measures the scalar list (first argument) by
+                // its length (number of elements), not by its summed memory.
+                // For malformed inputs, fall back to generic value memory usage
+                // instead of silently charging as if the list were empty.
+                let scalars_len = list_len_or_value_ex_mem(&args[0]);
+                let points_len = list_len_or_value_ex_mem(&args[1]);
+
+                ExBudget {
+                    mem: self
+                        .bls12_381_g2_multi_scalar_mul
+                        .mem
+                        .cost(scalars_len, points_len),
+                    cpu: self
+                        .bls12_381_g2_multi_scalar_mul
+                        .cpu
+                        .cost(scalars_len, points_len),
+                }
+            }
             DefaultFunction::Bls12_381_MillerLoop => ExBudget {
                 mem: self
                     .bls12_381_miller_loop
@@ -2466,11 +2539,7 @@ impl BuiltinCosts {
             }
             DefaultFunction::ShiftByteString => {
                 let literal = args[1].unwrap_integer()?;
-
-                let arg1: i64 = u64::try_from(literal.abs())
-                    .unwrap()
-                    .try_into()
-                    .unwrap_or(i64::MAX);
+                let arg1 = literal_abs_as_i64_saturating(literal);
 
                 ExBudget {
                     mem: self.shift_byte_string.mem.cost(args[0].to_ex_mem(), arg1),
@@ -2479,11 +2548,7 @@ impl BuiltinCosts {
             }
             DefaultFunction::RotateByteString => {
                 let literal = args[1].unwrap_integer()?;
-
-                let arg1: i64 = u64::try_from(literal.abs())
-                    .unwrap()
-                    .try_into()
-                    .unwrap_or(i64::MAX);
+                let arg1 = literal_abs_as_i64_saturating(literal);
 
                 ExBudget {
                     mem: self.rotate_byte_string.mem.cost(args[0].to_ex_mem(), arg1),
@@ -2502,6 +2567,34 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
+            DefaultFunction::DropList => {
+                // `dropList`'s first argument is costed *literally*: the size fed
+                // to the cost function is `|n|` (the absolute literal value),
+                // saturated to `i64::MAX`, rather than the integer's word size.
+                let literal = args[0].unwrap_integer()?;
+                let arg0 = literal_abs_as_i64_saturating(literal);
+                let arg1 = args[1].to_ex_mem();
+
+                ExBudget {
+                    mem: self.drop_list.mem.cost(arg0, arg1),
+                    cpu: self.drop_list.cpu.cost(arg0, arg1),
+                }
+            }
+            DefaultFunction::ExpModInteger => {
+                let modulus = args[2].unwrap_integer()?;
+                if modulus <= &0.into() || integer_log2(modulus.clone()) >= 8191 {
+                    return Err(Error::OutsideNaturalBounds(modulus.clone()));
+                }
+
+                let x = args[0].to_ex_mem();
+                let y = args[1].to_ex_mem();
+                let z = args[2].to_ex_mem();
+
+                ExBudget {
+                    mem: self.exp_mod_int.mem.cost(x, y, z),
+                    cpu: self.exp_mod_int.cpu.cost(x, y, z),
+                }
+            }
         })
     }
 }
@@ -3584,9 +3677,12 @@ impl TwoArguments {
     pub fn cost(&self, x: i64, y: i64) -> i64 {
         match self {
             TwoArguments::ConstantCost(c) => *c,
-            TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
-            TwoArguments::LinearInY(l) => l.slope * y + l.intercept,
-            TwoArguments::LinearInY2(l) => l.slope * y + l.intercept,
+            // Saturating arithmetic mirrors Plutus' `SatInt` costing integers, so
+            // that a literally-costed argument (e.g. `dropList`'s count) whose
+            // value approaches `i64::MAX` clamps instead of overflowing.
+            TwoArguments::LinearInX(l) => l.slope.saturating_mul(x).saturating_add(l.intercept),
+            TwoArguments::LinearInY(l) => l.slope.saturating_mul(y).saturating_add(l.intercept),
+            TwoArguments::LinearInY2(l) => l.slope.saturating_mul(y).saturating_add(l.intercept),
             TwoArguments::LinearInXAndY(l) => l.slope1 * x + l.slope2 * y + l.intercept,
             TwoArguments::WithInteractionInXAndY(l) => {
                 l.coeff_00 + l.coeff_10 * x + l.coeff_01 * y + l.coeff_11 * x * y
@@ -3863,6 +3959,7 @@ impl TryFrom<u8> for StepKind {
 mod tests {
     use super::*;
     use crate::{
+        ast::{Constant, Type},
         builtins::DefaultFunction,
         machine::{runtime::BuiltinSemantics, value::Value},
     };
@@ -3930,6 +4027,74 @@ mod tests {
             after_chang.builtin_costs.multiply_integer.cpu,
             language_only.builtin_costs.multiply_integer.cpu
         );
+    }
+
+    #[test]
+    fn default_for_language_and_protocol_selects_pre_chang_costing_for_v1_and_v2() {
+        for language in [Language::PlutusV1, Language::PlutusV2] {
+            let before_chang = CostModel::default_for_language_and_protocol(&language, 8);
+            let after_chang = CostModel::default_for_language_and_protocol(&language, 9);
+
+            assert_eq!(
+                TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 90434,
+                    slope: 519,
+                }),
+                before_chang.builtin_costs.multiply_integer.cpu
+            );
+            assert_eq!(
+                TwoArguments::MultipliedSizes(MultipliedSizes {
+                    intercept: 90434,
+                    slope: 519,
+                }),
+                after_chang.builtin_costs.multiply_integer.cpu
+            );
+        }
+    }
+
+    #[test]
+    fn default_for_language_and_protocol_selects_pv11_costing_for_v1_and_v2() {
+        for language in [Language::PlutusV1, Language::PlutusV2] {
+            let builtin_costs =
+                &CostModel::default_for_language_and_protocol(&language, 11).builtin_costs;
+
+            assert_eq!(
+                TwoArguments::AboveAndBelowDiagonal(ConstantOrTwoArguments {
+                    constant: 85848,
+                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: 228465,
+                        slope: 122,
+                    })),
+                }),
+                builtin_costs.divide_integer.cpu
+            );
+            assert_eq!(
+                TwoArguments::LinearInY2(SubtractedSizes {
+                    intercept: 0,
+                    slope: 1,
+                    minimum: 1,
+                }),
+                builtin_costs.remainder_integer.mem
+            );
+            assert_eq!(
+                TwoArguments::LinearInY2(SubtractedSizes {
+                    intercept: 0,
+                    slope: 1,
+                    minimum: 1,
+                }),
+                builtin_costs.mod_integer.mem
+            );
+            assert_eq!(
+                TwoArguments::AboveAndBelowDiagonal(ConstantOrTwoArguments {
+                    constant: 85848,
+                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: 228465,
+                        slope: 122,
+                    })),
+                }),
+                builtin_costs.mod_integer.cpu
+            );
+        }
     }
 
     #[test]
@@ -4036,6 +4201,45 @@ mod tests {
     }
 
     #[test]
+    fn literal_cost_helpers_saturate_and_do_not_undercharge_malformed_lists() {
+        let too_large = BigInt::from(u64::MAX) + BigInt::from(1u8);
+
+        assert_eq!(i64::MAX, literal_abs_as_i64_saturating(&too_large));
+        assert_eq!(
+            i64::MAX,
+            literal_abs_as_i64_saturating(&(-too_large.clone()))
+        );
+
+        let malformed = Value::bool(true);
+        let proper_list = Value::list(
+            Type::Integer,
+            vec![Constant::Integer(1.into()), Constant::Integer(2.into())],
+        );
+
+        assert_eq!(1, list_len_or_value_ex_mem(&malformed));
+        assert_eq!(2, list_len_or_value_ex_mem(&proper_list));
+    }
+
+    #[test]
+    fn drop_list_costing_saturates_huge_literal_arguments() {
+        let costs: Vec<i64> = (0..350).collect();
+        let builtin_costs =
+            initialize_cost_model_with_protocol(&Language::PlutusV3, 11, &costs).builtin_costs;
+        let huge = BigInt::from(u64::MAX) + BigInt::from(1u8);
+
+        let budget = builtin_costs
+            .to_ex_budget(
+                DefaultFunction::DropList,
+                &[Value::integer(huge), Value::bool(true)],
+                BuiltinSemantics::E,
+            )
+            .unwrap();
+
+        assert_eq!(304, budget.mem);
+        assert_eq!(i64::MAX, budget.cpu);
+    }
+
+    #[test]
     fn string_costing_uses_utf8_text_units_under_d_and_e() {
         let costs = BuiltinCosts::v3();
         let ascii_and_empty = [
@@ -4060,7 +4264,7 @@ mod tests {
             ascii_and_empty[1].to_ex_mem_with_semantics(BuiltinSemantics::E)
         );
         assert_eq!(
-            1,
+            0,
             Value::string("é".to_string()).to_ex_mem_with_semantics(BuiltinSemantics::D)
         );
 

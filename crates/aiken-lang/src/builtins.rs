@@ -932,6 +932,14 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 2)
         }
+        DefaultFunction::Bls12_381_G1_MultiScalarMul => {
+            let tipo = Type::function(
+                vec![Type::list(Type::int()), Type::list(Type::g1_element())],
+                Type::g1_element(),
+            );
+
+            (tipo, 2)
+        }
 
         DefaultFunction::Bls12_381_G2_Add => {
             let tipo = Type::function(
@@ -1082,11 +1090,27 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
-        } // DefaultFunction::ExpModInteger => {
-          //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
+        }
+        DefaultFunction::Bls12_381_G2_MultiScalarMul => {
+            let tipo = Type::function(
+                vec![Type::list(Type::int()), Type::list(Type::g2_element())],
+                Type::g2_element(),
+            );
 
-          //     (tipo, 3)
-          // }
+            (tipo, 2)
+        }
+        DefaultFunction::DropList => {
+            let ret = Type::list(Type::generic_var(id_gen.next()));
+
+            let tipo = Type::function(vec![Type::int(), ret.clone()], ret);
+
+            (tipo, 2)
+        }
+        DefaultFunction::ExpModInteger => {
+            let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
+
+            (tipo, 3)
+        }
     };
 
     ValueConstructor::public(

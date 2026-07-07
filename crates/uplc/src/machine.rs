@@ -1,6 +1,7 @@
 use std::{fmt::Display, rc::Rc};
 
 use crate::ast::{Constant, NamedDeBruijn, Term, Type};
+use num_traits::ToPrimitive;
 
 pub mod cost_model;
 mod discharge;
@@ -43,7 +44,8 @@ enum Context {
 }
 
 pub const TERM_COUNT: usize = 9;
-pub const BUILTIN_COUNT: usize = 87;
+// Builtin tags are sparse; this is the highest tag plus one for debug counters.
+pub const BUILTIN_COUNT: usize = 101;
 
 #[derive(Debug, Clone)]
 pub enum Trace {
@@ -346,6 +348,53 @@ impl Machine {
                         Value::Constr { tag, fields },
                     )),
                 },
+                Value::Con(constant) => {
+                    if !matches!(self.semantics, BuiltinSemantics::E) {
+                        return Err(Error::NonConstrScrutinized(Value::Con(constant)));
+                    }
+
+                    let (tag, fields, max_branches) = match constant.as_ref() {
+                        Constant::Unit => (0, vec![], 1),
+                        Constant::Bool(false) => (0, vec![], 2),
+                        Constant::Bool(true) => (1, vec![], 2),
+                        Constant::Integer(integer) => {
+                            let Some(tag) = integer.to_usize() else {
+                                return Err(Error::MissingCaseBranch(
+                                    branches,
+                                    Value::Con(constant),
+                                ));
+                            };
+
+                            (tag, vec![], usize::MAX)
+                        }
+                        Constant::ProtoList(_, items) if items.is_empty() => (1, vec![], 2),
+                        Constant::ProtoList(item_type, items) => {
+                            let head = items[0].clone();
+                            let tail = Constant::ProtoList(item_type.clone(), items[1..].to_vec());
+
+                            (0, vec![Value::Con(head.into()), Value::Con(tail.into())], 2)
+                        }
+                        Constant::ProtoPair(_, _, first, second) => (
+                            0,
+                            vec![Value::Con(first.clone()), Value::Con(second.clone())],
+                            1,
+                        ),
+                        _ => return Err(Error::NonConstrScrutinized(Value::Con(constant))),
+                    };
+
+                    if branches.len() > max_branches {
+                        return Err(Error::MissingCaseBranch(branches, Value::Con(constant)));
+                    }
+
+                    match branches.get(tag) {
+                        Some(t) => Ok(MachineState::Compute(
+                            transfer_arg_stack(fields, *ctx),
+                            env,
+                            t.clone(),
+                        )),
+                        None => Err(Error::MissingCaseBranch(branches, Value::Con(constant))),
+                    }
+                }
                 v => Err(Error::NonConstrScrutinized(v)),
             },
         }
