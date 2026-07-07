@@ -144,7 +144,6 @@ pub enum Error {
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]
     HashToCurveDstTooBig,
-<<<<<<< HEAD
     #[error("Scalar exceeds 512-byte bound for multiScalarMul")]
     MsmScalarOutOfBounds,
     #[error("constructor tag is not a valid unsigned 64-bit integer: {0}")]
