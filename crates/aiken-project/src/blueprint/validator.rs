@@ -318,6 +318,7 @@ impl Validator<SerializableProgram> {
                     Declaration::Inline(schema) => Annotated {
                         title: head.title.clone(),
                         description: None,
+                        alias: None,
                         annotated: schema.as_ref().clone(),
                     },
                     Declaration::Referenced(link) => definitions
@@ -326,6 +327,7 @@ impl Validator<SerializableProgram> {
                             Ok(Annotated {
                                 title: s.title.clone().or_else(|| head.title.clone()),
                                 description: s.description.clone(),
+                                alias: None,
                                 annotated: s.annotated.clone(),
                             })
                         })
@@ -767,6 +769,26 @@ mod tests {
 
             validator recursive_types {
               spend(datum: Option<MyDatum>, redeemer: MyRedeemer<Asset>, output_reference: Data, transaction: Data) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn aliased_custom_type_metadata() {
+        assert_validator!(
+            r#"
+            pub type Credential {
+                VerificationKey(ByteArray)
+                Script(ByteArray)
+            }
+
+            pub type PaymentCredential = Credential
+
+            validator placeholder {
+              spend(_datum: Option<Data>, _redeemer: PaymentCredential, _utxo: Data, _self: Data,) {
                 True
               }
             }
