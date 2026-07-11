@@ -16,6 +16,31 @@ enum TestType {
     Validator(TypedValidator),
 }
 
+fn eval_logs(source_code: &str, tracing: Tracing) -> Vec<String> {
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
+
+    let mut generator = project.new_generator(tracing);
+
+    let checked_module = modules.values().next().expect("missing checked module");
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("missing test definition");
+
+    let program = generator.generate_raw(&test.body, &[], &checked_module.name);
+    let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+    let eval = debruijn_program.eval(ExBudget::default());
+
+    eval.logs().into_iter().map(|log| log.to_string()).collect()
+}
+
 fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbose_mode: bool) {
     let mut project = TestProject::new();
 
@@ -6423,6 +6448,50 @@ fn dangling_trace_expect_in_trace() {
         .delayed_trace(Term::string("foo"));
 
     assert_uplc(src, program, false, true)
+}
+
+#[test]
+fn expect_comment_trace_uses_user_defined_filter() {
+    let src = r#"
+        test foo() {
+          /// Something
+          expect False
+
+          True
+        }
+    "#;
+
+    assert_eq!(
+        eval_logs(src, Tracing::UserDefined(TraceLevel::Verbose)),
+        vec!["<expected> Something"]
+    );
+
+    assert_eq!(
+        eval_logs(src, Tracing::UserDefined(TraceLevel::Compact)),
+        vec!["Something"]
+    );
+}
+
+#[test]
+fn expect_comment_trace_uses_compiler_generated_filter() {
+    let src = r#"
+        test foo() {
+          /// Something
+          expect False
+
+          True
+        }
+    "#;
+
+    assert_eq!(
+        eval_logs(src, Tracing::CompilerGenerated(TraceLevel::Verbose)),
+        vec!["expect False"]
+    );
+
+    assert_eq!(
+        eval_logs(src, Tracing::CompilerGenerated(TraceLevel::Compact)),
+        vec!["L4;11"]
+    );
 }
 
 #[test]
