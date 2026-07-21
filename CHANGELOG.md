@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.24 - UNRELEASED
+
+### Fixed
+
+- **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
+
 ## v1.1.23 - 2026-06-26
 
 ### Added

@@ -75,6 +75,11 @@ impl UntypedModule {
             )?;
         }
 
+        // Refresh the registry after constructor and accessor hydration. Types are marked as they
+        // are registered, and this catches nested records whose dependency is marked later in
+        // source order.
+        environment.collect_opaque_types();
+
         // Infer the types of each definition in the module
         // We first infer all the constants so they can be used in functions defined
         // anywhere in the module.
@@ -154,6 +159,7 @@ impl UntypedModule {
         let Environment {
             module_types: types,
             module_types_constructors: types_constructors,
+            opaque_types,
             module_values: values,
             accessors,
             annotations,
@@ -170,6 +176,7 @@ impl UntypedModule {
                 name: module_name,
                 types,
                 types_constructors,
+                opaque_types,
                 values,
                 accessors,
                 annotations,
@@ -592,13 +599,6 @@ fn infer_definition(
                                         });
                                     }
 
-                                    if t.contains_opaque() {
-                                        let parent = environment
-                                            .get_type_constructor_mut(&name, location)?;
-
-                                        Rc::make_mut(&mut parent.tipo).set_opaque(true)
-                                    }
-
                                     Ok(RecordConstructorArg {
                                         label: arg.label,
                                         annotation: arg.annotation,
@@ -853,7 +853,6 @@ fn infer_fuzzer(
                 name,
                 args,
                 public: _,
-                contains_opaque: _,
                 alias: _,
             } if module.is_empty() && name == "Option" && args.len() == 1 => {
                 match args.first().expect("args.len() == 1").borrow() {
@@ -960,7 +959,6 @@ fn is_valid_fuzzer(tipo: &Type, location: &Span) -> Result<(), Error> {
             module: _module,
             args,
             public: _,
-            contains_opaque: _,
             alias: _,
         } => args
             .iter()

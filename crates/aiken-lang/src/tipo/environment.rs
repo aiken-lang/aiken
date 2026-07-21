@@ -52,6 +52,9 @@ pub struct Environment<'a> {
     /// Mapping from types to constructor names in the current module (or the prelude)
     pub module_types_constructors: HashMap<String, Vec<String>>,
 
+    /// Nominal types whose values may contain opaque data.
+    pub opaque_types: HashSet<(String, String)>,
+
     /// Values defined in the current module (or the prelude)
     pub module_values: HashMap<String, ValueConstructor>,
 
@@ -759,6 +762,101 @@ impl<'a> Environment<'a> {
         );
     }
 
+    fn register_opaque_type(&mut self, module: &str, name: &str) {
+        self.opaque_types
+            .insert((module.to_string(), name.to_string()));
+    }
+
+    fn is_known_opaque(&self, qualifier: &(String, String)) -> bool {
+        self.opaque_types.contains(qualifier)
+            || self
+                .importable_modules
+                .values()
+                .any(|module| module.opaque_types.contains(qualifier))
+    }
+
+    fn contains_opaque(&self, tipo: &Type) -> bool {
+        match tipo {
+            Type::App {
+                module, name, args, ..
+            } => {
+                self.is_known_opaque(&(module.clone(), name.clone()))
+                    || args.iter().any(|arg| self.contains_opaque(arg))
+            }
+
+            Type::Var { tipo, .. } => {
+                if let TypeVar::Link { tipo } = tipo.borrow().deref() {
+                    self.contains_opaque(tipo)
+                } else {
+                    false
+                }
+            }
+
+            Type::Tuple { elems, .. } => elems.iter().any(|elem| self.contains_opaque(elem)),
+
+            Type::Pair { fst, snd, .. } => self.contains_opaque(fst) || self.contains_opaque(snd),
+
+            Type::Fn { .. } => false,
+        }
+    }
+
+    // Data constructor fields are hydrated after type aliases and function
+    // signatures are registered, so opaque containment is derived from the
+    // fully registered type/value metadata rather than cached Type flags.
+    pub fn collect_opaque_types(&mut self) {
+        loop {
+            let initial_len = self.opaque_types.len();
+
+            let mut opaque_types = HashSet::new();
+
+            self.collect_opaque_types_from_values(&self.module_values, &mut opaque_types);
+            self.collect_opaque_types_from_values(&self.scope, &mut opaque_types);
+
+            for (module, name) in opaque_types {
+                self.register_opaque_type(&module, &name);
+            }
+
+            if self.opaque_types.len() == initial_len {
+                break;
+            }
+        }
+    }
+
+    fn collect_opaque_types_from_values(
+        &self,
+        values: &HashMap<String, ValueConstructor>,
+        opaque_types: &mut HashSet<(String, String)>,
+    ) {
+        for value in values.values() {
+            let ValueConstructorVariant::Record { module, .. } = &value.variant else {
+                continue;
+            };
+
+            if module.as_str() != self.current_module.as_str() {
+                continue;
+            }
+
+            match value.tipo.as_ref() {
+                Type::Fn { args, ret, .. } => {
+                    if let Some(qualifier) = ret.qualifier() {
+                        if qualifier.0.as_str() != self.current_module.as_str()
+                            || self.opaque_types.contains(&qualifier)
+                        {
+                            continue;
+                        }
+
+                        if args.iter().any(|arg| self.contains_opaque(arg)) {
+                            opaque_types.insert(qualifier);
+                        }
+                    }
+                }
+
+                Type::App { .. } => {}
+                Type::Var { .. } | Type::Tuple { .. } | Type::Pair { .. } => {}
+            }
+        }
+    }
+
     /// Instantiate converts generic variables into unbound ones.
     pub fn instantiate(
         &mut self,
@@ -769,22 +867,22 @@ impl<'a> Environment<'a> {
         match t.deref() {
             Type::App {
                 public,
-                contains_opaque: opaque,
                 name,
                 module,
                 args,
                 alias,
             } => {
-                let args = args
+                let args: Vec<Rc<Type>> = args
                     .iter()
                     .map(|t| self.instantiate(t.clone(), ids, hydrator))
                     .collect();
 
+                let qualifier = (module.clone(), name.clone());
+
                 Rc::new(Type::App {
                     public: *public,
-                    contains_opaque: *opaque,
-                    name: name.clone(),
-                    module: module.clone(),
+                    module: qualifier.0,
+                    name: qualifier.1,
                     alias: alias.clone(),
                     args,
                 })
@@ -931,6 +1029,7 @@ impl<'a> Environment<'a> {
             inferred_functions: HashMap::new(),
             module_types: prelude.types.clone(),
             module_types_constructors: prelude.types_constructors.clone(),
+            opaque_types: HashSet::new(),
             module_values: HashMap::new(),
             module_functions: HashMap::new(),
             module_validators: HashMap::new(),
@@ -1248,14 +1347,17 @@ impl<'a> Environment<'a> {
 
                 let parameters = self.make_type_vars(parameters, location, &mut hydrator)?;
 
-                let tipo = Rc::new(Type::App {
+                if *opaque {
+                    self.register_opaque_type(module, name);
+                }
+
+                let tipo = Type::App {
                     public: *public,
-                    contains_opaque: *opaque,
                     module: module.to_owned(),
                     name: name.clone(),
                     args: parameters.clone(),
                     alias: None,
-                });
+                };
 
                 hydrators.insert(name.to_string(), hydrator);
 
@@ -1266,7 +1368,7 @@ impl<'a> Environment<'a> {
                         module: module.to_owned(),
                         public: *public,
                         parameters,
-                        tipo,
+                        tipo: Rc::new(tipo),
                     },
                 )?;
 
@@ -1299,19 +1401,7 @@ impl<'a> Environment<'a> {
                 hydrator.disallow_new_type_variables();
 
                 // Create the type that the alias resolves to
-                let tipo = hydrator
-                    .type_from_annotation(resolved_type, self)?
-                    .as_ref()
-                    .to_owned()
-                    .set_alias(Some(
-                        TypeAliasAnnotation {
-                            alias: name.to_string(),
-                            module: Some(module.to_string()),
-                            parameters: args.to_vec(),
-                            annotation: resolved_type.clone(),
-                        }
-                        .into(),
-                    ));
+                let tipo = Rc::unwrap_or_clone(hydrator.type_from_annotation(resolved_type, self)?);
 
                 self.insert_type_constructor(
                     name.clone(),
@@ -1320,7 +1410,15 @@ impl<'a> Environment<'a> {
                         module: module.to_owned(),
                         public: *public,
                         parameters,
-                        tipo,
+                        tipo: tipo.set_alias(Some(
+                            TypeAliasAnnotation {
+                                alias: name.to_string(),
+                                module: Some(module.to_string()),
+                                parameters: args.to_vec(),
+                                annotation: resolved_type.clone(),
+                            }
+                            .into(),
+                        )),
                     },
                 )?;
 
@@ -1705,20 +1803,19 @@ impl<'a> Environment<'a> {
             return Ok(());
         }
 
-        // TODO: maybe we also care to check is_link?
-        if allow_cast
-            && (lhs.is_data() || rhs.is_data())
-            && !(lhs.is_unbound() || rhs.is_unbound())
-            && !(lhs.is_function() || rhs.is_function())
-            && !(lhs.is_generic() || rhs.is_generic())
-            && !(lhs.is_string() || rhs.is_string())
-            && !lhs.contains_opaque()
-        {
-            return Ok(());
-        }
+        if allow_cast {
+            if self.contains_opaque(&lhs) {
+                return Err(Error::ExpectOnOpaqueType { location });
+            }
 
-        if allow_cast && lhs.contains_opaque() {
-            return Err(Error::ExpectOnOpaqueType { location });
+            if (lhs.is_data() || rhs.is_data())
+                && !(lhs.is_unbound() || rhs.is_unbound())
+                && !(lhs.is_function() || rhs.is_function())
+                && !(lhs.is_generic() || rhs.is_generic())
+                && !(lhs.is_string() || rhs.is_string())
+            {
+                return Ok(());
+            }
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.
@@ -1792,7 +1889,6 @@ impl<'a> Environment<'a> {
                     name: n1,
                     args: args1,
                     public: _,
-                    contains_opaque: _,
                     alias: _,
                 },
                 Type::App {
@@ -1800,7 +1896,6 @@ impl<'a> Environment<'a> {
                     name: n2,
                     args: args2,
                     public: _,
-                    contains_opaque: _,
                     alias: _,
                 },
             ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
@@ -2061,7 +2156,6 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
             name: _,
             public: _,
             alias: _,
-            contains_opaque: _,
         } => {
             for arg in args {
                 unify_unbound_type(arg.clone(), own_id, location)?
@@ -2226,20 +2320,18 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
 
         Type::App {
             public,
-            contains_opaque: opaque,
             module,
             name,
             args,
             alias,
         } => {
-            let args = args
+            let args: Vec<Rc<Type>> = args
                 .iter()
                 .map(|t| generalise(t.clone(), ctx_level))
                 .collect();
 
             Rc::new(Type::App {
                 public: *public,
-                contains_opaque: *opaque,
                 module: module.clone(),
                 name: name.clone(),
                 args,

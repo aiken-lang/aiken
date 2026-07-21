@@ -61,7 +61,6 @@ impl Type {
     pub fn data() -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             name: DATA.to_string(),
             module: "".to_string(),
             args: vec![],
@@ -72,7 +71,6 @@ impl Type {
     pub fn int() -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             name: INT.to_string(),
             module: "".to_string(),
             args: vec![],
@@ -84,7 +82,6 @@ impl Type {
         Rc::new(Type::App {
             args: vec![],
             public: true,
-            contains_opaque: false,
             name: BOOL.to_string(),
             module: "".to_string(),
             alias: None,
@@ -95,7 +92,6 @@ impl Type {
         Rc::new(Type::App {
             args: vec![],
             public: true,
-            contains_opaque: false,
             name: BYTE_ARRAY.to_string(),
             module: "".to_string(),
             alias: None,
@@ -105,7 +101,6 @@ impl Type {
     pub fn g1_element() -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             module: "".to_string(),
             name: G1_ELEMENT.to_string(),
             args: vec![],
@@ -116,7 +111,6 @@ impl Type {
     pub fn g2_element() -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             module: "".to_string(),
             name: G2_ELEMENT.to_string(),
             args: vec![],
@@ -127,7 +121,6 @@ impl Type {
     pub fn miller_loop_result() -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             module: "".to_string(),
             name: MILLER_LOOP_RESULT.to_string(),
             args: vec![],
@@ -151,7 +144,6 @@ impl Type {
         Rc::new(Type::App {
             args: vec![],
             public: true,
-            contains_opaque: false,
             name: SCRIPT_PURPOSE.to_string(),
             module: "".to_string(),
             alias: None,
@@ -162,7 +154,6 @@ impl Type {
         Rc::new(Type::App {
             args: vec![],
             public: true,
-            contains_opaque: false,
             name: SCRIPT_CONTEXT.to_string(),
             module: "".to_string(),
             alias: None,
@@ -173,7 +164,6 @@ impl Type {
         Rc::new(Type::App {
             args: vec![],
             public: true,
-            contains_opaque: false,
             name: PRNG.to_string(),
             module: "".to_string(),
             alias: None,
@@ -272,7 +262,6 @@ impl Type {
     pub fn map(k: Rc<Type>, v: Rc<Type>) -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             module: "".to_string(),
             name: LIST.to_string(),
             args: vec![Type::pair(k, v)],
@@ -306,7 +295,6 @@ impl Type {
     pub fn list(t: Rc<Type>) -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: t.contains_opaque(),
             name: LIST.to_string(),
             module: "".to_string(),
             args: vec![t],
@@ -318,7 +306,6 @@ impl Type {
         Rc::new(Type::App {
             args: vec![],
             public: true,
-            contains_opaque: false,
             name: STRING.to_string(),
             module: "".to_string(),
             alias: None,
@@ -329,7 +316,6 @@ impl Type {
         Rc::new(Type::App {
             args: vec![],
             public: true,
-            contains_opaque: false,
             name: VOID.to_string(),
             module: "".to_string(),
             alias: None,
@@ -339,7 +325,6 @@ impl Type {
     pub fn option(a: Rc<Type>) -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: a.contains_opaque(),
             name: OPTION.to_string(),
             module: "".to_string(),
             args: vec![a],
@@ -350,7 +335,6 @@ impl Type {
     pub fn never() -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             name: NEVER.to_string(),
             module: "".to_string(),
             args: vec![],
@@ -361,7 +345,6 @@ impl Type {
     pub fn ordering() -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             name: ORDERING.to_string(),
             module: "".to_string(),
             args: vec![],
@@ -392,7 +375,6 @@ impl Type {
     pub fn wrapped_redeemer(redeemer: Rc<Type>) -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            contains_opaque: false,
             module: "".to_string(),
             name: REDEEMER_WRAPPER.to_string(),
             args: vec![redeemer],
