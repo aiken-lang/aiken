@@ -7,6 +7,7 @@ use std::rc::Rc;
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
+    builtins::DefaultFunction,
     machine::{cost_model::ExBudget, runtime::Compressable},
     optimize::{self},
 };
@@ -6056,6 +6057,68 @@ fn mk_cons_direct_invoke_3() {
 }
 
 #[test]
+fn primitive_value_builtin_pipeline() {
+    let src = r#"
+        use aiken/builtin.{insert_coin, lookup_coin}
+
+        test value_builtin_pipeline() {
+            let empty: Value = #<Value>[]
+            lookup_coin(#"aa", #"bb", insert_coin(#"aa", #"bb", 42, empty)) == 42
+        }
+    "#;
+
+    let empty_value = Term::Constant(Constant::Value(uplc::ast::Value::empty()).into());
+    let inserted_value = Term::Builtin(DefaultFunction::InsertCoin)
+        .apply(Term::byte_string(vec![0xaa]))
+        .apply(Term::byte_string(vec![0xbb]))
+        .apply(Term::integer(42.into()))
+        .apply(empty_value);
+    let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
+        .apply(Term::byte_string(vec![0xaa]))
+        .apply(Term::byte_string(vec![0xbb]))
+        .apply(inserted_value);
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::integer(42.into()))
+            .apply(observed_quantity),
+        false,
+        true,
+    )
+}
+
+#[test]
+fn primitive_value_module_constant() {
+    let src = r#"
+        use aiken/builtin.{lookup_coin}
+
+        pub const value: Value = #<Value>[(#"aa", [(#"bb", 42)])]
+
+        test value_module_constant() {
+            lookup_coin(#"aa", #"bb", value) == 42
+        }
+    "#;
+
+    let value =
+        uplc::ast::Value::from_canonical_entries(vec![(vec![0xaa], vec![(vec![0xbb], 42.into())])])
+            .unwrap();
+    let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
+        .apply(Term::byte_string(vec![0xaa]))
+        .apply(Term::byte_string(vec![0xbb]))
+        .apply(Term::Constant(Constant::Value(value).into()));
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::integer(42.into()))
+            .apply(observed_quantity),
+        false,
+        true,
+    )
+}
+
+#[test]
 fn mk_nil_pair_data() {
     let src = r#"
         use aiken/builtin.{new_pairs}
@@ -6490,4 +6553,24 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
 
     assert_uplc(src, program_verbose, true, true);
     assert_uplc(src, program_silent, true, false);
+}
+
+#[test]
+fn strict_value_expect_uses_un_value_data_in_verbose_mode() {
+    let src = r#"
+        test malformed_value_expect() {
+          let malformed: Data = 0
+          expect _: Value = malformed
+        }
+    "#;
+
+    let program = Term::unit()
+        .lambda("__discard_expect___id_1")
+        .lambda("__debug_wrapped")
+        .apply(Term::Builtin(DefaultFunction::Trace).force())
+        .apply(
+            Term::Builtin(DefaultFunction::UnValueData).apply(Term::data(Data::integer(0.into()))),
+        );
+
+    assert_uplc(src, program, true, true);
 }

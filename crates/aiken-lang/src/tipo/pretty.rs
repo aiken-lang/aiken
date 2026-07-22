@@ -473,7 +473,10 @@ mod tests {
         );
         assert_string!(
             Type::Var {
-                tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2231 })),
+                tipo: Rc::new(RefCell::new(TypeVar::Unbound {
+                    id: 2231,
+                    equality: false,
+                })),
                 alias: None,
             },
             "?",
@@ -481,11 +484,17 @@ mod tests {
         assert_string!(
             Type::function(
                 vec![Rc::new(Type::Var {
-                    tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 78 })),
+                    tipo: Rc::new(RefCell::new(TypeVar::Unbound {
+                        id: 78,
+                        equality: false,
+                    })),
                     alias: None,
                 })],
                 Rc::new(Type::Var {
-                    tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2 })),
+                    tipo: Rc::new(RefCell::new(TypeVar::Unbound {
+                        id: 2,
+                        equality: false,
+                    })),
                     alias: None,
                 }),
             ),
@@ -494,11 +503,17 @@ mod tests {
         assert_string!(
             Type::function(
                 vec![Rc::new(Type::Var {
-                    tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 78 })),
+                    tipo: Rc::new(RefCell::new(TypeVar::Generic {
+                        id: 78,
+                        equality: false,
+                    })),
                     alias: None,
                 })],
                 Rc::new(Type::Var {
-                    tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 2 })),
+                    tipo: Rc::new(RefCell::new(TypeVar::Generic {
+                        id: 2,
+                        equality: false,
+                    })),
                     alias: None,
                 }),
             ),
@@ -598,7 +613,10 @@ mod tests {
                                 alias: None,
                             }),
                             Rc::new(Type::Var {
-                                tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 0 })),
+                                tipo: Rc::new(RefCell::new(TypeVar::Generic {
+                                    id: 0,
+                                    equality: false,
+                                })),
                                 alias: None,
                             }),
                         ],

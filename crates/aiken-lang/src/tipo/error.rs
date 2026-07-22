@@ -367,16 +367,16 @@ Use an intermediate public representation instead, then re-construct the opaque 
         tipo: Rc<Type>,
     },
 
-    #[error("I noticed an inadequate use of '=='.\n")]
+    #[error("I noticed an unsupported use of equality.\n")]
     #[diagnostic(code("illegal::comparison"))]
     #[diagnostic(help(
-        r#"I can compare any value that is serializable to {Data}. This excludes values that are functions, {Fuzzer} or {MillerLoopResult} for example."#,
-        Data = "Data".if_supports_color(Stdout, |s| s.cyan()),
+        r#"Equality is available for serialisable values whose runtime representation supports a total comparison. It is not defined for functions, {Fuzzer}, {MillerLoopResult}, or {Value}, including types that contain {Value}."#,
         Fuzzer = "Fuzzer".if_supports_color(Stdout, |s| s.cyan()),
         MillerLoopResult = "MillerLoopResult".if_supports_color(Stdout, |s| s.cyan()),
+        Value = "Value".if_supports_color(Stdout, |s| s.cyan()),
     ))]
     IllegalComparison {
-        #[label("non-serialisable operands")]
+        #[label("operands do not support equality")]
         location: Span,
     },
 

@@ -9,7 +9,9 @@ use crate::{
         UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
     },
     docvec,
-    expr::{DEFAULT_ERROR_STR, DEFAULT_TODO_STR, FnStyle, TypedExpr, UntypedExpr},
+    expr::{
+        DEFAULT_ERROR_STR, DEFAULT_TODO_STR, FnStyle, TypedExpr, UntypedExpr, ValueLiteralSpans,
+    },
     parser::{
         extra::{Comment, ModuleExtra},
         token::Base,
@@ -378,6 +380,7 @@ impl<'comments> Formatter<'comments> {
         match value {
             TypedExpr::UInt { value, base, .. } => self.int(value, base),
             TypedExpr::String { value, .. } => self.string(value),
+            TypedExpr::Value { value, .. } => self.value(value),
             TypedExpr::ByteArray {
                 bytes,
                 preferred_format,
@@ -912,6 +915,95 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
+    pub fn value<'a>(&mut self, entries: &'a uplc::ast::ValueEntries) -> Document<'a> {
+        self.value_with_spans(entries, None)
+    }
+
+    fn value_with_spans<'a>(
+        &mut self,
+        entries: &'a uplc::ast::ValueEntries,
+        spans: Option<&ValueLiteralSpans>,
+    ) -> Document<'a> {
+        debug_assert!(
+            spans.is_none_or(|spans| entries.len() == spans.entries.len()),
+            "Value literal payload and source spans must remain aligned",
+        );
+
+        let mut entries_docs = Vec::with_capacity(entries.len());
+
+        for (entry_index, (currency, tokens)) in entries.iter().enumerate() {
+            let entry_spans = spans.and_then(|spans| spans.entries.get(entry_index));
+            let entry_comments = entry_spans.map(|spans| self.pop_comments(spans.tuple.start));
+            let currency_comments =
+                entry_spans.map(|spans| self.pop_comments(spans.currency.start));
+            let currency_doc = match currency_comments {
+                Some(comments) => commented(value_key(currency), comments),
+                None => value_key(currency),
+            };
+            let token_list_comments =
+                entry_spans.map(|spans| self.pop_comments(spans.token_list.start));
+
+            debug_assert!(
+                entry_spans.is_none_or(|spans| tokens.len() == spans.tokens.len()),
+                "Value token payload and source spans must remain aligned",
+            );
+
+            let mut token_docs = Vec::with_capacity(tokens.len());
+
+            for (token_index, (token, quantity)) in tokens.iter().enumerate() {
+                let token_spans = entry_spans.and_then(|spans| spans.tokens.get(token_index));
+                let tuple_comments = token_spans.map(|spans| self.pop_comments(spans.tuple.start));
+                let token_comments = token_spans.map(|spans| self.pop_comments(spans.token.start));
+                let token_doc = match token_comments {
+                    Some(comments) => commented(value_key(token), comments),
+                    None => value_key(token),
+                };
+                let quantity_comments =
+                    token_spans.map(|spans| self.pop_comments(spans.quantity.start));
+                let quantity_doc = Document::String(quantity.to_string());
+                let quantity_doc = match quantity_comments {
+                    Some(comments) => commented(quantity_doc, comments),
+                    None => quantity_doc,
+                };
+                let trailing_comments = token_spans
+                    .and_then(|spans| printed_comments(self.pop_comments(spans.tuple.end), false));
+                let tuple_doc = value_tuple([token_doc, quantity_doc], trailing_comments);
+                let tuple_doc = match tuple_comments {
+                    Some(comments) => commented(tuple_doc, comments),
+                    None => tuple_doc,
+                };
+
+                token_docs.push(tuple_doc);
+            }
+
+            let tokens_doc = join(token_docs, break_(",", ", "));
+            let trailing_comments = entry_spans
+                .and_then(|spans| printed_comments(self.pop_comments(spans.token_list.end), false));
+            let tokens_doc = value_list(tokens_doc, tokens.len(), trailing_comments);
+            let tokens_doc = match token_list_comments {
+                Some(comments) => commented(tokens_doc, comments),
+                None => tokens_doc,
+            };
+            let trailing_comments = entry_spans
+                .and_then(|spans| printed_comments(self.pop_comments(spans.tuple.end), false));
+            let entry_doc = value_tuple([currency_doc, tokens_doc], trailing_comments);
+            let entry_doc = match entry_comments {
+                Some(comments) => commented(entry_doc, comments),
+                None => entry_doc,
+            };
+
+            entries_docs.push(entry_doc);
+        }
+
+        let entries_doc = join(entries_docs, break_(",", ", "));
+        let trailing_comments =
+            spans.and_then(|spans| printed_comments(self.pop_comments(spans.list.end), false));
+
+        "#<Value>"
+            .to_doc()
+            .append(value_list(entries_doc, entries.len(), trailing_comments))
+    }
+
     pub fn bytearray<'a>(
         &mut self,
         bytes: &[(u8, Span)],
@@ -1035,6 +1127,7 @@ impl<'comments> Formatter<'comments> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
+            UntypedExpr::Value { value, spans, .. } => self.value_with_spans(value, Some(spans)),
             UntypedExpr::ByteArray {
                 bytes,
                 preferred_format,
@@ -2286,6 +2379,58 @@ impl<'a> Documentable<'a> for &'a BinOp {
         }
         .to_doc()
     }
+}
+
+fn value_key<'a>(bytes: &[u8]) -> Document<'a> {
+    Document::String(format!("#\"{}\"", hex::encode(bytes)))
+}
+
+fn value_tuple<'a>(
+    args: [Document<'a>; 2],
+    trailing_comments: Option<Document<'a>>,
+) -> Document<'a> {
+    let contents = break_("(", "(").append(join(args, break_(",", ", ")));
+
+    match trailing_comments {
+        Some(comments) => contents
+            .append(line())
+            .append(comments)
+            .nest(INDENT)
+            .append(line())
+            .append(")")
+            .force_break(),
+        None => contents
+            .nest(INDENT)
+            .append(break_("", ""))
+            .append(")")
+            .group(),
+    }
+}
+
+fn value_list<'a>(
+    elements: Document<'a>,
+    length: usize,
+    trailing_comments: Option<Document<'a>>,
+) -> Document<'a> {
+    let Some(comments) = trailing_comments else {
+        return list(elements, length, None);
+    };
+
+    let contents = if length == 0 {
+        break_("[", "[").append(comments)
+    } else {
+        break_("[", "[")
+            .append(elements)
+            .append(",")
+            .append(line())
+            .append(comments)
+    };
+
+    contents
+        .nest(INDENT)
+        .append(line())
+        .append("]")
+        .force_break()
 }
 
 pub fn wrap_args<'a, I>(args: I) -> Document<'a>

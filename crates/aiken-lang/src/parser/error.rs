@@ -162,6 +162,15 @@ impl ParseError {
         }
     }
 
+    pub fn invalid_value_literal(span: Span, reason: String) -> Self {
+        Self {
+            kind: Box::new(ErrorKind::InvalidValueLiteral { reason }),
+            span,
+            expected: HashSet::new(),
+            label: Some("invalid Value literal"),
+        }
+    }
+
     pub fn match_on_curve(span: Span) -> Self {
         Self {
             kind: Box::new(ErrorKind::PatternMatchOnCurvePoint),
@@ -280,6 +289,10 @@ pub enum ErrorKind {
             .if_supports_color(Stdout, |s| s.bright_purple())
     }))]
     MalformedBase16StringLiteral,
+
+    #[error("I tripped over an invalid Value literal.")]
+    #[diagnostic(help("{reason}"))]
+    InvalidValueLiteral { reason: String },
 
     #[error("I came across a bytearray declared using two different notations.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#bytearray"))]

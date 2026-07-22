@@ -2,11 +2,14 @@
 
 ## v1.1.24 - UNRELEASED
 
+### Added
+
+- **aiken-lang**: Add first-class UPLC `Value` support, exposed in Aiken as `Value`. This adds `insert_coin`, `lookup_coin`, `union_value`, `value_contains`, `value_data`, `un_value_data`, and `scale_value` to `aiken/builtin`, with canonical Plutus V3 conformance coverage. Aiken now supports strict canonical nested literals such as `#<Value>[(#"aa", [(#"bb", 42)])]`, lowering them directly to UPLC `Value` constants.
+
 ### Fixed
 
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
 - **uplc**: Convert `bls12_381_g1_multi_scalar_mul` / `bls12_381_g2_multi_scalar_mul` arguments from Aiken's data-encoded lists to the typed `List<Int>` and `List<G1Element>` / `List<G2Element>` constants expected by the builtins, like already done for `write_bits`. Fixes [#1378](https://github.com/aiken-lang/aiken/issues/1378). @perturbing
-
 
 ## v1.1.23 - 2026-06-26
 

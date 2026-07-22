@@ -5,8 +5,8 @@ use crate::{
 };
 
 use itertools::Itertools;
-use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
-use uplc::{builder::INNER_EXPECT_ON_LIST, builtins::DefaultFunction};
+use std::{borrow::BorrowMut, rc::Rc, slice::Iter, sync::Arc};
+use uplc::{ast::ValueEntries, builder::INNER_EXPECT_ON_LIST, builtins::DefaultFunction};
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum Fields {
@@ -230,6 +230,10 @@ pub enum AirTree {
     ByteArray {
         bytes: Vec<u8>,
     },
+    Value {
+        value: Arc<ValueEntries>,
+        tipo: Rc<Type>,
+    },
     CurvePoint {
         point: Curve,
     },
@@ -370,6 +374,10 @@ impl AirTree {
 
     pub fn byte_array(bytes: Vec<u8>) -> AirTree {
         AirTree::ByteArray { bytes }
+    }
+
+    pub fn value(value: Arc<ValueEntries>, tipo: Rc<Type>) -> AirTree {
+        AirTree::Value { value, tipo }
     }
 
     pub fn curve(point: Curve) -> AirTree {
@@ -1080,6 +1088,9 @@ impl AirTree {
             AirTree::ByteArray { bytes } => air_vec.push(Air::ByteArray {
                 bytes: bytes.clone(),
             }),
+            AirTree::Value { value, .. } => air_vec.push(Air::Value {
+                value: value.clone(),
+            }),
             AirTree::CurvePoint { point } => air_vec.push(Air::CurvePoint { point: *point }),
             AirTree::Bool { value } => air_vec.push(Air::Bool { value: *value }),
             AirTree::List { tipo, tail, items } => {
@@ -1295,6 +1306,7 @@ impl AirTree {
             AirTree::ByteArray { .. } => Type::byte_array(),
             AirTree::Bool { .. } => Type::bool(),
             AirTree::CurvePoint { point } => point.tipo(),
+            AirTree::Value { tipo, .. } => tipo.clone(),
             AirTree::List { tipo, .. }
             | AirTree::Tuple { tipo, .. }
             | AirTree::Pair { tipo, .. }
@@ -1344,6 +1356,7 @@ impl AirTree {
             | AirTree::TupleAccessor { tipo, .. }
             | AirTree::PairAccessor { tipo, .. }
             | AirTree::List { tipo, .. }
+            | AirTree::Value { tipo, .. }
             | AirTree::Tuple { tipo, .. }
             | AirTree::Call { tipo, .. }
             | AirTree::Builtin { tipo, .. }
@@ -1604,6 +1617,7 @@ impl AirTree {
             | AirTree::Int { .. }
             | AirTree::String { .. }
             | AirTree::ByteArray { .. }
+            | AirTree::Value { .. }
             | AirTree::CurvePoint { .. }
             | AirTree::Bool { .. }
             | AirTree::List { .. }
@@ -1902,6 +1916,7 @@ impl AirTree {
             AirTree::Int { .. }
             | AirTree::String { .. }
             | AirTree::ByteArray { .. }
+            | AirTree::Value { .. }
             | AirTree::CurvePoint { .. }
             | AirTree::Bool { .. }
             | AirTree::Void
@@ -2261,6 +2276,7 @@ impl AirTree {
                 AirTree::Int { .. }
                 | AirTree::String { .. }
                 | AirTree::ByteArray { .. }
+                | AirTree::Value { .. }
                 | AirTree::CurvePoint { .. }
                 | AirTree::Bool { .. }
                 | AirTree::Void

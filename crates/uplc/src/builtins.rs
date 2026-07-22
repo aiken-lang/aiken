@@ -139,6 +139,14 @@ pub enum DefaultFunction {
     // BLS12-381 multi-scalar multiplication
     Bls12_381_G1_MultiScalarMul = 92,
     Bls12_381_G2_MultiScalarMul = 93,
+    // Values
+    InsertCoin = 94,
+    LookupCoin = 95,
+    UnionValue = 96,
+    ValueContains = 97,
+    ValueData = 98,
+    UnValueData = 99,
+    ScaleValue = 100,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -337,6 +345,13 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G1_MultiScalarMul as u8 => {
                 Ok(DefaultFunction::Bls12_381_G1_MultiScalarMul)
             }
+            v if v == DefaultFunction::InsertCoin as u8 => Ok(DefaultFunction::InsertCoin),
+            v if v == DefaultFunction::LookupCoin as u8 => Ok(DefaultFunction::LookupCoin),
+            v if v == DefaultFunction::UnionValue as u8 => Ok(DefaultFunction::UnionValue),
+            v if v == DefaultFunction::ValueContains as u8 => Ok(DefaultFunction::ValueContains),
+            v if v == DefaultFunction::ValueData as u8 => Ok(DefaultFunction::ValueData),
+            v if v == DefaultFunction::UnValueData as u8 => Ok(DefaultFunction::UnValueData),
+            v if v == DefaultFunction::ScaleValue as u8 => Ok(DefaultFunction::ScaleValue),
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -442,6 +457,13 @@ impl FromStr for DefaultFunction {
             "dropList" => Ok(DropList),
             "bls12_381_G1_multiScalarMul" => Ok(Bls12_381_G1_MultiScalarMul),
             "expModInteger" => Ok(ExpModInteger),
+            "insertCoin" => Ok(InsertCoin),
+            "lookupCoin" => Ok(LookupCoin),
+            "unionValue" => Ok(UnionValue),
+            "valueContains" => Ok(ValueContains),
+            "valueData" => Ok(ValueData),
+            "unValueData" => Ok(UnValueData),
+            "scaleValue" => Ok(ScaleValue),
             // "caseList" => Ok(CaseList),
             // "caseData" => Ok(CaseData),
             rest => Err(format!("Default Function not found - {rest}")),
@@ -545,6 +567,13 @@ impl Display for DefaultFunction {
             DropList => write!(f, "dropList"),
             Bls12_381_G1_MultiScalarMul => write!(f, "bls12_381_G1_multiScalarMul"),
             ExpModInteger => write!(f, "expModInteger"),
+            InsertCoin => write!(f, "insertCoin"),
+            LookupCoin => write!(f, "lookupCoin"),
+            UnionValue => write!(f, "unionValue"),
+            ValueContains => write!(f, "valueContains"),
+            ValueData => write!(f, "valueData"),
+            UnValueData => write!(f, "unValueData"),
+            ScaleValue => write!(f, "scaleValue"),
             // CaseList => write!(f, "caseList"),
             // CaseData => write!(f, "caseData"),
         }
@@ -552,6 +581,21 @@ impl Display for DefaultFunction {
 }
 
 impl DefaultFunction {
+    /// The CIP-0153 value builtins, only available from Plutus V3 /
+    /// protocol version 11 (Van Rossem) onwards.
+    pub fn is_value_builtin(&self) -> bool {
+        matches!(
+            self,
+            DefaultFunction::InsertCoin
+                | DefaultFunction::LookupCoin
+                | DefaultFunction::UnionValue
+                | DefaultFunction::ValueContains
+                | DefaultFunction::ValueData
+                | DefaultFunction::UnValueData
+                | DefaultFunction::ScaleValue
+        )
+    }
+
     pub fn aiken_name(&self) -> String {
         use DefaultFunction::*;
 
@@ -647,6 +691,13 @@ impl DefaultFunction {
             DropList => "drop_list",
             Bls12_381_G1_MultiScalarMul => "bls12_381_g1_multi_scalar_mul",
             ExpModInteger => "exp_mod_integer",
+            InsertCoin => "insert_coin",
+            LookupCoin => "lookup_coin",
+            UnionValue => "union_value",
+            ValueContains => "value_contains",
+            ValueData => "value_data",
+            UnValueData => "un_value_data",
+            ScaleValue => "scale_value",
             // CaseList => "case_list",
             // CaseData => "case_data",
         }
