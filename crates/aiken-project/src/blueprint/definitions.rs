@@ -227,7 +227,7 @@ impl Definitions<Annotated<Schema>> {
             if let Some(k) = unused {
                 usage.remove(&k);
                 self.inner.remove(k.as_key().as_str());
-                for (_, v) in usage.iter_mut() {
+                for v in usage.values_mut() {
                     v.remove(&k);
                 }
             }
@@ -302,10 +302,8 @@ impl Definitions<Annotated<Schema>> {
             }
         }
 
-        for (_, entry) in self.inner.iter_mut() {
-            if let Some(annotated) = entry {
-                schema_to_data(&mut annotated.annotated);
-            }
+        for annotated in self.inner.values_mut().flatten() {
+            schema_to_data(&mut annotated.annotated);
         }
     }
 }

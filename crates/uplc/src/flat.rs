@@ -919,7 +919,7 @@ impl Binder<'_> for NamedDeBruijn {
     }
 
     fn text(&self) -> String {
-        format!("{}_{}", &self.text, self.index)
+        format!("{}_{}", self.text, self.index)
     }
 }
 
