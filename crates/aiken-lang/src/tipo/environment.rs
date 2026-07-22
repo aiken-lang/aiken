@@ -775,7 +775,7 @@ impl<'a> Environment<'a> {
                 .any(|module| module.opaque_types.contains(qualifier))
     }
 
-    fn contains_opaque(&self, tipo: &Type) -> bool {
+    pub(crate) fn contains_opaque(&self, tipo: &Type) -> bool {
         match tipo {
             Type::App {
                 module, name, args, ..

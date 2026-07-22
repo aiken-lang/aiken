@@ -49,10 +49,12 @@ fn check_module(
             );
         }
 
+        let module_kind = module.kind;
+
         let typed_module = module
             .infer(
                 &id_gen,
-                kind,
+                module_kind,
                 DEFAULT_PACKAGE,
                 &module_types,
                 Tracing::All(TraceLevel::Verbose),
@@ -105,6 +107,14 @@ fn check_validator(
     ast: UntypedModule,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
     check_module(ast, Vec::new(), ModuleKind::Validator, Tracing::verbose())
+}
+
+#[allow(clippy::result_large_err)]
+fn check_validator_with_deps(
+    ast: UntypedModule,
+    extra: Vec<UntypedModule>,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, extra, ModuleKind::Validator, Tracing::verbose())
 }
 
 #[test]
@@ -3511,6 +3521,134 @@ fn validator_public() {
     "#;
 
     assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn validator_forbid_opaque_type_in_datum_abi() {
+    let source_code = r#"
+        pub opaque type Datum {
+          inner: Int,
+        }
+
+        validator foo {
+          spend(datum: Option<Datum>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_opaque_type_in_redeemer_abi() {
+    let source_code = r#"
+        pub opaque type Redeemer {
+          inner: Int,
+        }
+
+        validator foo {
+          mint(redeemer: Redeemer, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_pair_containing_opaque_type_in_redeemer_abi() {
+    let source_code = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        validator foo {
+          mint(redeemer: Pair<Thing, Int>, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_tuple_containing_opaque_type_in_datum_abi() {
+    let source_code = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        validator foo {
+          spend(datum: Option<(Thing, Int)>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_opaque_type_in_data_annotation_abi() {
+    let source_code = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        validator foo {
+          spend(datum: Option<Data<Thing>>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_imported_record_containing_opaque_type_in_redeemer_abi() {
+    let dependency = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        pub type Redeemer {
+          pair: Pair<Thing, Int>,
+        }
+    "#;
+
+    let source_code = r#"
+        use thing.{Redeemer}
+
+        validator foo {
+          mint(redeemer: Redeemer, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator_with_deps(parse(source_code), vec![parse_as(dependency, "thing")]),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
 }
 
 #[test]

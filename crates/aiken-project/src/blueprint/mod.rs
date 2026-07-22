@@ -112,8 +112,7 @@ impl Blueprint {
                         .map(|_| ())
                         .unwrap_or_else(|e| match e.context() {
                             schema::ErrorContext::UnsupportedType
-                            | schema::ErrorContext::UnexpectedFunction
-                            | schema::ErrorContext::IllegalOpaqueType => (),
+                            | schema::ErrorContext::UnexpectedFunction => (),
                             _ => unreachable!("failed to export type={type_construtor:?}: {e}"),
                         });
                 }

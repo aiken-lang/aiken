@@ -9,8 +9,8 @@ use aiken_lang::{
 use hex::FromHexError;
 use indoc::formatdoc;
 use miette::{
-    Diagnostic, EyreContext, LabeledSpan, MietteHandler, MietteHandlerOpts, NamedSource, RgbColors,
-    SourceCode,
+    DebugReportHandler, Diagnostic, EyreContext, LabeledSpan, MietteHandler, MietteHandlerOpts,
+    NamedSource, RgbColors, SourceCode,
 };
 use ordinal::Ordinal;
 use owo_colors::{

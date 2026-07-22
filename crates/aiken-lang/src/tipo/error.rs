@@ -310,7 +310,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
     },
 
     #[error("I caught an opaque type possibly breaking its abstraction boundary.\n")]
-    #[diagnostic(code("illegal::expect_on_opaque"))]
+    #[diagnostic(code("illegal::expect_opaque_type"))]
     #[diagnostic(url("https://aiken-lang.org/language-tour/modules#opaque-types"))]
     #[diagnostic(help(
         "This expression is trying to convert something unknown into an opaque type. An opaque type is a data-type which hides its internal details; usually because it enforces some specific invariant on its internal structure. For example, you might define a {Natural} type that holds an {Integer} but ensures that it never gets negative.\n\nA direct consequence means that it isn't generally possible, nor safe, to turn *any* value into an opaque type. Instead, use the constructors and methods provided for lifting values into that opaque type while ensuring that any structural invariant is checked for.",
@@ -320,6 +320,26 @@ You can use '{discard}' and numbers to distinguish between similar names.
     ExpectOnOpaqueType {
         #[label("reckless opaque cast")]
         location: Span,
+    },
+
+    #[error("I caught an opaque type in an exported interface.\n")]
+    #[diagnostic(code("illegal::opaque_type_in_abi"))]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/modules#opaque-types"))]
+    #[diagnostic(help(
+        r#"Opaque types cannot appear in an exposed interface such as a validator's datum or redeemer type or an exported function. Indeed, an opaque type hides its implementation details, usually because it enforces an invariant that cannot be safely reconstructed from arbitrary Plutus Data.
+
+The problematic interface type is:
+
+╰─▶ {tipo}
+
+Use an intermediate public representation instead, then re-construct the opaque value through safe constructors or functions that preserve its invariants."#,
+        tipo = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red()),
+    ))]
+    IllegalOpaqueType {
+        #[label("opaque type in {position}")]
+        location: Span,
+        position: String,
+        tipo: Rc<Type>,
     },
 
     #[error("I found a type definition that has a function type in it. This is not allowed.\n")]
@@ -1236,6 +1256,7 @@ impl ExtraData for Error {
             | Error::GenericLeftAtBoundary { .. }
             | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ExpectOnOpaqueType { .. }
+            | Error::IllegalOpaqueType { .. }
             | Error::ValidatorMustReturnBool { .. }
             | Error::UnknownPurpose { .. }
             | Error::UnknownValidatorHandler { .. }

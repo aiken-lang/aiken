@@ -10,9 +10,9 @@ use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, DataType, Decorator, DecoratorKind, Definition,
         Function, ModuleConstant, ModuleKind, RecordConstructor, RecordConstructorArg, Tracing,
-        TypeAlias, TypedArg, TypedDataType, TypedDefinition, TypedModule, TypedValidator,
-        UntypedArg, UntypedDefinition, UntypedModule, UntypedPattern, UntypedValidator, Use,
-        Validator,
+        TypeAlias, TypedArg, TypedDataType, TypedDefinition, TypedFunction, TypedModule,
+        TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, UntypedPattern,
+        UntypedValidator, Use, Validator,
     },
     expr::{TypedExpr, UntypedAssignmentKind, UntypedExpr},
     parser::token::Token,
@@ -292,6 +292,8 @@ fn infer_definition(
                                 arg.tipo = Type::data();
                             }
                         }
+
+                        check_validator_abi(environment, &typed_fun)?;
 
                         Ok(typed_fun)
                     })?;
@@ -821,6 +823,86 @@ where
     }
 
     Ok(((typed_via, inferred_inner_type), arg.arg.annotation.clone()))
+}
+
+#[allow(clippy::result_large_err)]
+fn check_validator_abi(
+    environment: &Environment<'_>,
+    handler: &TypedFunction,
+) -> Result<(), Error> {
+    let redeemer_index = if handler.is_spend() {
+        let datum = handler.arguments.first().expect("spend datum must exist");
+
+        check_validator_abi_arg(environment, datum, "datum")?;
+
+        1
+    } else {
+        0
+    };
+
+    let redeemer = handler
+        .arguments
+        .get(redeemer_index)
+        .expect("validator redeemer must exist");
+
+    check_validator_abi_arg(environment, redeemer, "redeemer")
+}
+
+#[allow(clippy::result_large_err)]
+fn check_validator_abi_arg(
+    environment: &Environment<'_>,
+    arg: &TypedArg,
+    position: &str,
+) -> Result<(), Error> {
+    let tipo = Type::collapse_links(arg.tipo.clone());
+
+    let opaque = if environment.contains_opaque(&tipo) {
+        Some(tipo)
+    } else {
+        arg.annotation
+            .as_ref()
+            .and_then(|annotation| find_opaque_in_annotation(environment, annotation))
+    };
+
+    match opaque {
+        Some(tipo) => Err(Error::IllegalOpaqueType {
+            location: arg.location,
+            position: position.to_string(),
+            tipo,
+        }),
+        None => Ok(()),
+    }
+}
+
+fn find_opaque_in_annotation(
+    environment: &Environment<'_>,
+    annotation: &Annotation,
+) -> Option<Rc<Type>> {
+    if let Some(tipo) = environment.annotations.get(annotation)
+        && environment.contains_opaque(tipo)
+    {
+        return Some(tipo.clone());
+    }
+
+    match annotation {
+        Annotation::Constructor { arguments, .. } => arguments
+            .iter()
+            .find_map(|annotation| find_opaque_in_annotation(environment, annotation)),
+
+        Annotation::Fn { arguments, ret, .. } => arguments
+            .iter()
+            .find_map(|annotation| find_opaque_in_annotation(environment, annotation))
+            .or_else(|| find_opaque_in_annotation(environment, ret)),
+
+        Annotation::Tuple { elems, .. } => elems
+            .iter()
+            .find_map(|annotation| find_opaque_in_annotation(environment, annotation)),
+
+        Annotation::Pair { fst, snd, .. } => find_opaque_in_annotation(environment, fst)
+            .or_else(|| find_opaque_in_annotation(environment, snd)),
+
+        Annotation::Var { .. } | Annotation::Hole { .. } => None,
+    }
 }
 
 #[allow(clippy::result_large_err)]
