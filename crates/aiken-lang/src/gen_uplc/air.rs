@@ -2,8 +2,8 @@ use crate::{
     ast::{BinOp, Curve, UnOp},
     tipo::{Type, ValueConstructor},
 };
-use std::rc::Rc;
-use uplc::builtins::DefaultFunction;
+use std::{rc::Rc, sync::Arc};
+use uplc::{ast::ValueEntries, builtins::DefaultFunction};
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ExpectLevel {
@@ -43,6 +43,9 @@ pub enum Air {
     },
     ByteArray {
         bytes: Vec<u8>,
+    },
+    Value {
+        value: Arc<ValueEntries>,
     },
     CurvePoint {
         point: Curve,

@@ -51,7 +51,7 @@ use std::{collections::HashMap, rc::Rc};
 use stick_break_set::{Builtins, TreeSet};
 use tree::Fields;
 use uplc::{
-    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
+    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType, Value},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
@@ -106,12 +106,12 @@ fn push_type_identity(name: &mut String, tipo: &Type) {
 
             match &*tipo {
                 TypeVar::Link { tipo } => push_type_identity(name, tipo),
-                TypeVar::Unbound { id } => {
+                TypeVar::Unbound { id, .. } => {
                     unreachable!(
                         "expect decoder key requires a bound type, found unbound variable {id}"
                     )
                 }
-                TypeVar::Generic { id } => {
+                TypeVar::Generic { id, .. } => {
                     unreachable!(
                         "expect decoder key requires a concrete type, found generic variable {id}"
                     )
@@ -296,6 +296,22 @@ impl<'a> CodeGenerator<'a> {
         Program { version, term }
     }
 
+    fn try_fold_constant(&self, term: Term<Name>) -> Option<Term<Name>> {
+        let mut program = self.new_program(term);
+        let mut interner = CodeGenInterner::new();
+        interner.program(&mut program);
+        let eval_program: Program<NamedDeBruijn> =
+            program.clean_up_no_inlines().try_into().unwrap();
+
+        match eval_program.eval(ExBudget::default()).result() {
+            Ok(evaluated_term) => Some(evaluated_term.try_into().unwrap()),
+            Err(uplc::machine::Error::ValueBuiltin(
+                uplc::ast::ValueError::ValueDataInputTooLarge(_),
+            )) => None,
+            Err(error) => panic!("constant folding failed unexpectedly: {error}"),
+        }
+    }
+
     fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
         term = self.special_functions.apply_used_functions(term);
 
@@ -399,6 +415,7 @@ impl<'a> CodeGenerator<'a> {
                 TypedExpr::UInt { value, .. } => AirTree::int(value),
                 TypedExpr::String { value, .. } => AirTree::string(value),
                 TypedExpr::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
+                TypedExpr::Value { tipo, value, .. } => AirTree::value(value.clone(), tipo.clone()),
                 TypedExpr::Sequence { expressions, .. }
                 | TypedExpr::Pipeline { expressions, .. } => {
                     let (expr, dangling_expressions) = expressions
@@ -1072,7 +1089,13 @@ impl<'a> CodeGenerator<'a> {
         // Cast value to or from data so we don't have to worry from this point onward
         let assign_casted_value = |name, value, then| {
             if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
-                if let Some(otherwise) = props.otherwise.as_ref() {
+                if tipo.is_value() {
+                    AirTree::let_assignment(
+                        name,
+                        AirTree::cast_from_data(value, tipo.clone(), true),
+                        then,
+                    )
+                } else if let Some(otherwise) = props.otherwise.as_ref() {
                     AirTree::soft_cast_assignment(
                         name,
                         tipo.clone(),
@@ -1941,6 +1964,7 @@ impl<'a> CodeGenerator<'a> {
                 | UplcType::Bls12_381G1Element
                 | UplcType::Bls12_381G2Element
                 | UplcType::Bls12_381MlResult
+                | UplcType::Value
                 | UplcType::Data,
             ) => then,
 
@@ -3782,6 +3806,16 @@ impl<'a> CodeGenerator<'a> {
             Air::Int { value } => Some(Term::integer(value.parse().unwrap())),
             Air::String { value } => Some(Term::string(value)),
             Air::ByteArray { bytes } => Some(Term::byte_string(bytes)),
+            Air::Value { value } => {
+                let value = Value::from_canonical_bounded_entries(value.as_ref().clone())
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "internal invariant violated: parser-validated Value literal is not canonical during UPLC generation: {error}"
+                        )
+                    });
+
+                Some(Term::Constant(UplcConstant::Value(value).into()))
+            }
             Air::Bool { value } => Some(Term::bool(value)),
             Air::CurvePoint { point, .. } => match point {
                 Curve::Bls12_381(Bls12_381Point::G1(g1)) => Some(Term::bls12_381_g1(g1)),
@@ -4016,8 +4050,8 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                if constants.len() == args.len() && !tail {
-                    let list = if tipo.is_map() {
+                let constant_list = if constants.len() == args.len() && !tail {
+                    if tipo.is_map() {
                         let mut convert_keys = vec![];
                         let mut convert_values = vec![];
                         for constant in constants {
@@ -4030,37 +4064,42 @@ impl<'a> CodeGenerator<'a> {
                             }
                         }
 
-                        let convert_keys = builder::convert_constants_to_data(convert_keys);
-                        let convert_values = builder::convert_constants_to_data(convert_values);
-
-                        Term::Constant(
-                            UplcConstant::ProtoList(
-                                UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
-                                convert_keys
-                                    .into_iter()
-                                    .zip(convert_values)
-                                    .map(|(key, value)| {
-                                        UplcConstant::ProtoPair(
-                                            UplcType::Data,
-                                            UplcType::Data,
-                                            key.into(),
-                                            value.into(),
-                                        )
-                                    })
-                                    .collect_vec(),
-                            )
-                            .into(),
-                        )
+                        match (
+                            builder::convert_constants_to_data(convert_keys),
+                            builder::convert_constants_to_data(convert_values),
+                        ) {
+                            (Some(convert_keys), Some(convert_values)) => Some(Term::Constant(
+                                UplcConstant::ProtoList(
+                                    UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
+                                    convert_keys
+                                        .into_iter()
+                                        .zip(convert_values)
+                                        .map(|(key, value)| {
+                                            UplcConstant::ProtoPair(
+                                                UplcType::Data,
+                                                UplcType::Data,
+                                                key.into(),
+                                                value.into(),
+                                            )
+                                        })
+                                        .collect_vec(),
+                                )
+                                .into(),
+                            )),
+                            _ => None,
+                        }
                     } else {
-                        Term::Constant(
-                            UplcConstant::ProtoList(
-                                UplcType::Data,
-                                builder::convert_constants_to_data(constants),
+                        builder::convert_constants_to_data(constants).map(|constants| {
+                            Term::Constant(
+                                UplcConstant::ProtoList(UplcType::Data, constants).into(),
                             )
-                            .into(),
-                        )
-                    };
+                        })
+                    }
+                } else {
+                    None
+                };
 
+                if let Some(list) = constant_list {
                     Some(list)
                 } else {
                     let mut term = if tail {
@@ -4267,6 +4306,11 @@ impl<'a> CodeGenerator<'a> {
                             Some(UplcType::Bool | UplcType::Unit) => Term::unit(),
                             Some(UplcType::List(_) | UplcType::Pair(_, _) | UplcType::Data)
                             | None => Term::equals_data(),
+                            Some(UplcType::Value) => {
+                                unreachable!(
+                                    "Value equality is rejected during binary-op type inference"
+                                )
+                            }
                             Some(UplcType::Bls12_381MlResult) => {
                                 panic!("ML Result equality is not supported")
                             }
@@ -4314,6 +4358,11 @@ impl<'a> CodeGenerator<'a> {
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
                                     ))
+                            }
+                            Some(UplcType::Value) => {
+                                unreachable!(
+                                    "Value equality is rejected during binary-op type inference"
+                                )
                             }
                             Some(
                                 UplcType::Data
@@ -4581,31 +4630,18 @@ impl<'a> CodeGenerator<'a> {
                 Some(term)
             }
             Air::CastToData { tipo } => {
-                let mut term = arg_stack.pop().unwrap();
+                let term = arg_stack.pop().unwrap();
+                let fold_constant = extract_constant(term.pierce_no_inlines_ref()).is_some();
+                let mut converted_term =
+                    builder::convert_type_to_data(term, &tipo, &self.data_types);
 
-                if extract_constant(term.pierce_no_inlines_ref()).is_some() {
-                    term = builder::convert_type_to_data(term, &tipo, &self.data_types);
-
-                    let mut program = self.new_program(term);
-
-                    let mut interner = CodeGenInterner::new();
-
-                    interner.program(&mut program);
-
-                    let eval_program: Program<NamedDeBruijn> =
-                        program.clean_up_no_inlines().try_into().unwrap();
-
-                    let evaluated_term: Term<NamedDeBruijn> = eval_program
-                        .eval(ExBudget::default())
-                        .result()
-                        .expect("Evaluated on wrapping a constant into data and got an error");
-
-                    term = evaluated_term.try_into().unwrap();
-                } else {
-                    term = builder::convert_type_to_data(term, &tipo, &self.data_types);
+                if fold_constant
+                    && let Some(evaluated_term) = self.try_fold_constant(converted_term.clone())
+                {
+                    converted_term = evaluated_term;
                 }
 
-                Some(term)
+                Some(converted_term)
             }
             Air::AssertBool { is_true } => {
                 let value = arg_stack.pop().unwrap();
@@ -4641,7 +4677,8 @@ impl<'a> CodeGenerator<'a> {
                         | UplcType::Pair(_, _)
                         | UplcType::Bls12_381G1Element
                         | UplcType::Bls12_381G2Element
-                        | UplcType::Bls12_381MlResult,
+                        | UplcType::Bls12_381MlResult
+                        | UplcType::Value,
                     ) => subject,
 
                     Some(UplcType::Data) => subject,
@@ -4707,7 +4744,8 @@ impl<'a> CodeGenerator<'a> {
                             | UplcType::Unit
                             | UplcType::List(_)
                             | UplcType::Pair(_, _)
-                            | UplcType::Bls12_381MlResult,
+                            | UplcType::Bls12_381MlResult
+                            | UplcType::Value,
                         ) => unreachable!("{:#?}", tipo),
                         Some(UplcType::Data) => unimplemented!(),
                         Some(UplcType::Integer) => Term::equals_integer()
@@ -4792,25 +4830,12 @@ impl<'a> CodeGenerator<'a> {
                         .apply(term);
                 }
 
-                if arg_vec.iter().all(|item| {
-                    let maybe_const = extract_constant(item.pierce_no_inlines_ref());
-                    maybe_const.is_some()
-                }) {
-                    let mut program = self.new_program(term);
-
-                    let mut interner = CodeGenInterner::new();
-
-                    interner.program(&mut program);
-
-                    let eval_program: Program<NamedDeBruijn> =
-                        program.clean_up_no_inlines().try_into().unwrap();
-
-                    let evaluated_term: Term<NamedDeBruijn> = eval_program
-                        .eval(ExBudget::default())
-                        .result()
-                        .expect("Evaluated a constant record with args and got an error");
-
-                    term = evaluated_term.try_into().unwrap();
+                if arg_vec
+                    .iter()
+                    .all(|item| extract_constant(item.pierce_no_inlines_ref()).is_some())
+                    && let Some(evaluated_term) = self.try_fold_constant(term.clone())
+                {
+                    term = evaluated_term;
                 }
 
                 Some(term)
@@ -4915,12 +4940,15 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                if constants.len() == args.len() {
-                    let data_constants = builder::convert_constants_to_data(constants);
+                let constant_tuple = if constants.len() == args.len() {
+                    builder::convert_constants_to_data(constants).map(|constants| {
+                        Term::Constant(UplcConstant::ProtoList(UplcType::Data, constants).into())
+                    })
+                } else {
+                    None
+                };
 
-                    let term = Term::Constant(
-                        UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
-                    );
+                if let Some(term) = constant_tuple {
                     Some(term)
                 } else {
                     let mut term = Term::empty_list();
@@ -4936,35 +4964,38 @@ impl<'a> CodeGenerator<'a> {
                 let fst = arg_stack.pop().unwrap();
                 let snd = arg_stack.pop().unwrap();
 
-                match (extract_constant(&fst), extract_constant(&snd)) {
-                    (Some(fst), Some(snd)) => {
-                        let mut pair_fields = builder::convert_constants_to_data(vec![fst, snd]);
-                        let term = Term::Constant(
-                            UplcConstant::ProtoPair(
-                                UplcType::Data,
-                                UplcType::Data,
-                                pair_fields.remove(0).into(),
-                                pair_fields.remove(0).into(),
+                let constant_pair = match (extract_constant(&fst), extract_constant(&snd)) {
+                    (Some(fst), Some(snd)) => builder::convert_constants_to_data(vec![fst, snd])
+                        .map(|mut pair_fields| {
+                            Term::Constant(
+                                UplcConstant::ProtoPair(
+                                    UplcType::Data,
+                                    UplcType::Data,
+                                    pair_fields.remove(0).into(),
+                                    pair_fields.remove(0).into(),
+                                )
+                                .into(),
                             )
-                            .into(),
-                        );
-                        Some(term)
-                    }
-                    _ => {
-                        let term = Term::mk_pair_data()
-                            .apply(builder::convert_type_to_data(
-                                fst,
-                                &tipo.get_inner_types()[0],
-                                &self.data_types,
-                            ))
-                            .apply(builder::convert_type_to_data(
-                                snd,
-                                &tipo.get_inner_types()[1],
-                                &self.data_types,
-                            ));
+                        }),
+                    _ => None,
+                };
 
-                        Some(term)
-                    }
+                if let Some(term) = constant_pair {
+                    Some(term)
+                } else {
+                    let term = Term::mk_pair_data()
+                        .apply(builder::convert_type_to_data(
+                            fst,
+                            &tipo.get_inner_types()[0],
+                            &self.data_types,
+                        ))
+                        .apply(builder::convert_type_to_data(
+                            snd,
+                            &tipo.get_inner_types()[1],
+                            &self.data_types,
+                        ));
+
+                    Some(term)
                 }
             }
             Air::RecordUpdate {
@@ -5319,6 +5350,248 @@ fn handle_assigns(
             );
 
             builtins_to_add.produce_air(prev_subject_name, prev_tipo, assignment)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn value_literal_lowers_to_a_direct_value_constant() {
+        let entries = vec![(vec![0xaa], vec![(vec![0xbb], 42)])];
+        let expression = TypedExpr::Value {
+            location: Span::empty(),
+            tipo: Type::value(),
+            value: Arc::new(entries.clone()),
+        };
+        let mut generator = CodeGenerator::new(
+            PlutusVersion::V3,
+            IndexMap::new(),
+            IndexMap::new(),
+            IndexMap::new(),
+            IndexMap::new(),
+            IndexMap::new(),
+            Tracing::silent(),
+        );
+
+        let program = generator.generate_raw(&expression, &[], "");
+
+        let Term::Constant(constant) = program.term else {
+            panic!("Value literal did not lower to a direct UPLC constant")
+        };
+        let UplcConstant::Value(value) = constant.as_ref() else {
+            panic!("Value literal lowered to a non-Value UPLC constant")
+        };
+
+        assert_eq!(value.clone().into_entries(), entries);
+    }
+
+    fn empty_generator() -> CodeGenerator<'static> {
+        CodeGenerator::new(
+            PlutusVersion::V3,
+            IndexMap::new(),
+            IndexMap::new(),
+            IndexMap::new(),
+            IndexMap::new(),
+            IndexMap::new(),
+            Tracing::silent(),
+        )
+    }
+
+    fn value_entries(size: usize) -> Arc<uplc::ast::ValueEntries> {
+        Arc::new(vec![(
+            vec![],
+            (0..size)
+                .map(|index| ((index as u64).to_be_bytes().to_vec(), 1))
+                .collect(),
+        )])
+    }
+
+    fn value_term(generator: &mut CodeGenerator<'_>, size: usize) -> Term<Name> {
+        generator
+            .gen_uplc(
+                Air::Value {
+                    value: value_entries(size),
+                },
+                &mut vec![],
+            )
+            .expect("Value AIR should produce a term")
+    }
+
+    fn value_data_term(generator: &mut CodeGenerator<'_>, size: usize) -> Term<Name> {
+        let value = value_term(generator, size);
+
+        generator
+            .gen_uplc(
+                Air::CastToData {
+                    tipo: Type::value(),
+                },
+                &mut vec![value],
+            )
+            .expect("CastToData AIR should produce a term")
+    }
+
+    fn value_list_term(generator: &mut CodeGenerator<'_>, size: usize) -> Term<Name> {
+        let value = value_term(generator, size);
+
+        generator
+            .gen_uplc(
+                Air::List {
+                    count: 1,
+                    tipo: Type::list(Type::value()),
+                    tail: false,
+                },
+                &mut vec![value],
+            )
+            .expect("List AIR should produce a term")
+    }
+
+    fn value_tuple_term(generator: &mut CodeGenerator<'_>, size: usize) -> Term<Name> {
+        let value = value_term(generator, size);
+
+        generator
+            .gen_uplc(
+                Air::Tuple {
+                    count: 2,
+                    tipo: Type::tuple(vec![Type::value(), Type::value()]),
+                },
+                &mut vec![value.clone(), value],
+            )
+            .expect("Tuple AIR should produce a term")
+    }
+
+    fn value_pair_term(generator: &mut CodeGenerator<'_>, size: usize) -> Term<Name> {
+        let value = value_term(generator, size);
+
+        generator
+            .gen_uplc(
+                Air::Pair {
+                    tipo: Type::pair(Type::value(), Type::value()),
+                },
+                &mut vec![value.clone(), value],
+            )
+            .expect("Pair AIR should produce a term")
+    }
+
+    fn value_constr_term(generator: &mut CodeGenerator<'_>, size: usize) -> Term<Name> {
+        let value = value_term(generator, size);
+
+        generator
+            .gen_uplc(
+                Air::Constr {
+                    tag: Some(0),
+                    count: 1,
+                    tipo: Type::function(vec![Type::value()], Type::data()),
+                },
+                &mut vec![value],
+            )
+            .expect("Constr AIR should produce a term")
+    }
+
+    fn contains_value_data(term: &Term<Name>) -> bool {
+        match term {
+            Term::Builtin(DefaultFunction::ValueData) => true,
+            Term::Delay(term) | Term::Force(term) => contains_value_data(term),
+            Term::Lambda { body, .. } => contains_value_data(body),
+            Term::Apply { function, argument } => {
+                contains_value_data(function) || contains_value_data(argument)
+            }
+            Term::Constr { fields, .. } => fields.iter().any(contains_value_data),
+            Term::Case { constr, branches } => {
+                contains_value_data(constr) || branches.iter().any(contains_value_data)
+            }
+            Term::Var(_) | Term::Constant(_) | Term::Error | Term::Builtin(_) => false,
+        }
+    }
+
+    fn evaluate(
+        generator: &CodeGenerator<'_>,
+        term: Term<Name>,
+    ) -> Result<Term<NamedDeBruijn>, uplc::machine::Error> {
+        let mut program = generator.new_program(term);
+        CodeGenInterner::new().program(&mut program);
+        let program: Program<NamedDeBruijn> = program.clean_up_no_inlines().try_into().unwrap();
+
+        program.eval(ExBudget::max()).result()
+    }
+
+    fn oversized_value_data_error() -> uplc::machine::Error {
+        uplc::machine::Error::ValueBuiltin(uplc::ast::ValueError::ValueDataInputTooLarge(
+            uplc::ast::VALUE_DATA_MAX_SIZE + 1,
+        ))
+    }
+
+    #[test]
+    fn value_data_folding_respects_40_000_entry_boundary() {
+        let mut generator = empty_generator();
+        let under_limit = value_data_term(&mut generator, uplc::ast::VALUE_DATA_MAX_SIZE - 1);
+        assert!(matches!(
+            under_limit,
+            Term::Constant(constant)
+                if matches!(constant.as_ref(), UplcConstant::Data(_))
+        ));
+
+        let legal = value_data_term(&mut generator, uplc::ast::VALUE_DATA_MAX_SIZE);
+
+        assert!(matches!(
+            legal,
+            Term::Constant(constant)
+                if matches!(constant.as_ref(), UplcConstant::Data(_))
+        ));
+
+        let oversized = value_data_term(&mut generator, uplc::ast::VALUE_DATA_MAX_SIZE + 1);
+
+        assert!(contains_value_data(&oversized));
+        assert_eq!(
+            evaluate(&generator, oversized),
+            Err(oversized_value_data_error())
+        );
+    }
+    fn is_data_constant(constant: &UplcConstant) -> bool {
+        matches!(constant, UplcConstant::Data(_))
+    }
+
+    fn is_data_list_constant(constant: &UplcConstant) -> bool {
+        matches!(constant, UplcConstant::ProtoList(UplcType::Data, _))
+    }
+
+    fn is_pair_constant(constant: &UplcConstant) -> bool {
+        matches!(constant, UplcConstant::ProtoPair(..))
+    }
+
+    #[test]
+    fn container_folding_retains_oversized_value_data_failure() {
+        type BuildTerm = fn(&mut CodeGenerator<'_>, usize) -> Term<Name>;
+        type IsExpectedConstant = fn(&UplcConstant) -> bool;
+
+        let cases: [(&str, BuildTerm, IsExpectedConstant); 4] = [
+            ("list", value_list_term, is_data_list_constant),
+            ("tuple", value_tuple_term, is_data_list_constant),
+            ("pair", value_pair_term, is_pair_constant),
+            ("constructor", value_constr_term, is_data_constant),
+        ];
+
+        for (case, build_term, is_expected_constant) in cases {
+            let mut generator = empty_generator();
+            let legal = build_term(&mut generator, uplc::ast::VALUE_DATA_MAX_SIZE);
+            assert!(
+                matches!(
+                    legal,
+                    Term::Constant(constant) if is_expected_constant(constant.as_ref())
+                ),
+                "{case}"
+            );
+
+            let oversized = build_term(&mut generator, uplc::ast::VALUE_DATA_MAX_SIZE + 1);
+            assert!(contains_value_data(&oversized), "{case}");
+            assert_eq!(
+                evaluate(&generator, oversized),
+                Err(oversized_value_data_error()),
+                "{case}"
+            );
         }
     }
 }

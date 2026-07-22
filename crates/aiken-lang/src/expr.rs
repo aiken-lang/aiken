@@ -15,10 +15,10 @@ pub(crate) use crate::{
 };
 use indexmap::IndexMap;
 use pallas_primitives::alonzo::{Constr, PlutusData};
-use std::{fmt::Debug, ops::Deref, rc::Rc};
+use std::{fmt::Debug, ops::Deref, rc::Rc, sync::Arc};
 use uplc::{
     KeyValuePairs,
-    ast::Data,
+    ast::{Data, ValueEntries},
     machine::{runtime::convert_tag_to_constr, value::from_pallas_bigint},
 };
 use vec1::Vec1;
@@ -36,6 +36,12 @@ pub enum TypedExpr {
         location: Span,
         tipo: Rc<Type>,
         value: String,
+    },
+
+    Value {
+        location: Span,
+        tipo: Rc<Type>,
+        value: Arc<ValueEntries>,
     },
 
     ByteArray {
@@ -205,9 +211,11 @@ impl<T> From<Vec1Ref<T>> for Vec1<T> {
 impl TypedExpr {
     pub fn is_simple_expr_to_format(&self) -> bool {
         match self {
-            Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. } | Self::Var { .. } => {
-                true
-            }
+            Self::String { .. }
+            | Self::UInt { .. }
+            | Self::ByteArray { .. }
+            | Self::Value { .. }
+            | Self::Var { .. } => true,
             Self::Pair { fst, snd, .. } => {
                 fst.is_simple_expr_to_format() && snd.is_simple_expr_to_format()
             }
@@ -312,6 +320,7 @@ impl TypedExpr {
             | Self::Pair { tipo, .. }
             | Self::String { tipo, .. }
             | Self::ByteArray { tipo, .. }
+            | Self::Value { tipo, .. }
             | Self::TupleIndex { tipo, .. }
             | Self::Assignment { tipo, .. }
             | Self::ModuleSelect { tipo, .. }
@@ -344,6 +353,7 @@ impl TypedExpr {
             | Self::Pair { tipo, .. }
             | Self::String { tipo, .. }
             | Self::ByteArray { tipo, .. }
+            | Self::Value { tipo, .. }
             | Self::TupleIndex { tipo, .. }
             | Self::Assignment { tipo, .. }
             | Self::ModuleSelect { tipo, .. }
@@ -367,6 +377,7 @@ impl TypedExpr {
                 | Self::Tuple { .. }
                 | Self::String { .. }
                 | Self::ByteArray { .. }
+                | Self::Value { .. }
         )
     }
 
@@ -396,6 +407,7 @@ impl TypedExpr {
             | TypedExpr::Sequence { .. }
             | TypedExpr::Pipeline { .. }
             | TypedExpr::ByteArray { .. }
+            | TypedExpr::Value { .. }
             | TypedExpr::Assignment { .. }
             | TypedExpr::TupleIndex { .. }
             | TypedExpr::RecordAccess { .. }
@@ -438,6 +450,7 @@ impl TypedExpr {
             | Self::UnOp { location, .. }
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
+            | Self::Value { location, .. }
             | Self::Assignment { location, .. }
             | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
@@ -477,6 +490,7 @@ impl TypedExpr {
             | Self::Sequence { location, .. }
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
+            | Self::Value { location, .. }
             | Self::Assignment { location, .. }
             | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
@@ -499,6 +513,7 @@ impl TypedExpr {
             | TypedExpr::UInt { .. }
             | TypedExpr::String { .. }
             | TypedExpr::ByteArray { .. }
+            | TypedExpr::Value { .. }
             | TypedExpr::ModuleSelect { .. }
             | TypedExpr::CurvePoint { .. } => Some(Located::Expression(self)),
 
@@ -636,6 +651,53 @@ pub enum FnStyle {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ValueLiteralSpans {
+    pub list: Span,
+    pub entries: Vec<ValueEntrySpans>,
+}
+
+impl ValueLiteralSpans {
+    pub fn empty(entries: &ValueEntries) -> Self {
+        let empty = Span::empty();
+
+        Self {
+            list: empty,
+            entries: entries
+                .iter()
+                .map(|(_, tokens)| ValueEntrySpans {
+                    tuple: empty,
+                    currency: empty,
+                    token_list: empty,
+                    tokens: vec![
+                        ValueTokenSpans {
+                            tuple: empty,
+                            token: empty,
+                            quantity: empty,
+                        };
+                        tokens.len()
+                    ],
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValueEntrySpans {
+    pub tuple: Span,
+    pub currency: Span,
+    pub token_list: Span,
+    pub tokens: Vec<ValueTokenSpans>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ValueTokenSpans {
+    pub tuple: Span,
+    pub token: Span,
+    pub quantity: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum UntypedExpr {
     UInt {
         location: Span,
@@ -646,6 +708,12 @@ pub enum UntypedExpr {
     String {
         location: Span,
         value: String,
+    },
+
+    Value {
+        location: Span,
+        value: Arc<ValueEntries>,
+        spans: ValueLiteralSpans,
     },
 
     Sequence {
@@ -1004,6 +1072,17 @@ impl UntypedExpr {
                     }),
                 })
             }
+
+            uplc::ast::Constant::Value(value) => {
+                let value = Arc::new(value.into_entries());
+                let spans = ValueLiteralSpans::empty(value.as_ref());
+
+                Ok(UntypedExpr::Value {
+                    location: Span::empty(),
+                    value,
+                    spans,
+                })
+            }
         })
     }
 
@@ -1252,7 +1331,7 @@ impl UntypedExpr {
                                     // for this type instance.
                                     if let Type::Var { tipo: var, .. } =
                                         Type::collapse_links(tipo.clone()).as_ref()
-                                        && let TypeVar::Generic { id } = &*var.borrow()
+                                        && let TypeVar::Generic { id, .. } = &*var.borrow()
                                     {
                                         tipo = generics.get(id).expect("unknown generic?");
                                     }
@@ -1466,6 +1545,7 @@ impl UntypedExpr {
             | Self::Call { location, .. }
             | Self::List { location, .. }
             | Self::ByteArray { location, .. }
+            | Self::Value { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
             | Self::Pair { location, .. }
@@ -1515,9 +1595,11 @@ impl UntypedExpr {
     /// will be broken down to one expr per line.
     pub fn is_simple_expr_to_format(&self) -> bool {
         match self {
-            Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. } | Self::Var { .. } => {
-                true
-            }
+            Self::String { .. }
+            | Self::UInt { .. }
+            | Self::ByteArray { .. }
+            | Self::Value { .. }
+            | Self::Var { .. } => true,
             Self::Pair { fst, snd, .. } => {
                 fst.is_simple_expr_to_format() && snd.is_simple_expr_to_format()
             }
@@ -1554,5 +1636,44 @@ impl UntypedExpr {
             .into(),
             return_annotation: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constant_value_reifies_directly_to_value_literal() {
+        let entries = vec![(vec![0xaa], vec![(vec![0xbb], -42)])];
+        let value = uplc::ast::Value::from_canonical_entries(vec![(
+            vec![0xaa],
+            vec![(vec![0xbb], (-42).into())],
+        )])
+        .expect("valid canonical Value");
+        let value_type = Rc::new(Type::App {
+            public: true,
+            contains_opaque: false,
+            module: String::new(),
+            name: ast::well_known::VALUE.to_string(),
+            args: vec![],
+            alias: None,
+        });
+
+        let reified = UntypedExpr::reify_constant(
+            &IndexMap::new(),
+            uplc::ast::Constant::Value(value),
+            value_type,
+        )
+        .expect("Value constants should reify directly");
+
+        assert_eq!(
+            reified,
+            UntypedExpr::Value {
+                location: Span::empty(),
+                value: Arc::new(entries.clone()),
+                spans: ValueLiteralSpans::empty(&entries),
+            },
+        );
     }
 }

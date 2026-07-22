@@ -4,7 +4,7 @@ use super::{
     bytearray::parser as bytearray, if_else::parser as if_else, int::parser as int,
     list::parser as list, pair::parser as pair, record::parser as record,
     record_update::parser as record_update, string::parser as string, tuple::parser as tuple,
-    var::parser as var, when::parser as when,
+    value::parser as value, var::parser as var, when::parser as when,
 };
 use crate::{
     expr::UntypedExpr,
@@ -56,6 +56,7 @@ pub fn chain_start<'a>(
         and_or_chain(expression.clone()),
         var(),
         tuple(expression.clone()),
+        value(),
         bytearray(),
         list(expression.clone()),
         anonymous_function(sequence.clone()),

@@ -286,7 +286,8 @@ impl Type {
                 | UplcType::Bls12_381G1Element
                 | UplcType::Bls12_381G2Element
                 | UplcType::Bls12_381MlResult
-                | UplcType::Data,
+                | UplcType::Data
+                | UplcType::Value,
             ) => true,
 
             None => false,
@@ -327,6 +328,29 @@ impl Type {
             }
             Self::Var { tipo, .. } => tipo.borrow().is_bytearray(),
             _ => false,
+        }
+    }
+
+    pub fn is_value(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if well_known::VALUE == name && module.is_empty() => {
+                true
+            }
+            Self::Var { tipo, .. } => tipo.borrow().is_value(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn requires_equality(&self) -> bool {
+        match self {
+            Self::Var { tipo, .. } => tipo.borrow().requires_equality(),
+            Self::App { .. } | Self::Fn { .. } | Self::Tuple { .. } | Self::Pair { .. } => false,
+        }
+    }
+
+    pub(crate) fn require_equality(&self) {
+        if let Self::Var { tipo, .. } = self {
+            tipo.borrow_mut().require_equality();
         }
     }
 
@@ -526,6 +550,8 @@ impl Type {
             Some(UplcType::Integer)
         } else if self.is_bytearray() {
             Some(UplcType::ByteString)
+        } else if self.is_value() {
+            Some(UplcType::Value)
         } else if self.is_string() {
             Some(UplcType::String)
         } else if self.is_bool() {
@@ -922,7 +948,11 @@ pub enum TypeVar {
     /// identify if two unbound variable Rust values are the same Aiken type variable
     /// instance or not.
     ///
-    Unbound { id: u64 },
+    Unbound {
+        id: u64,
+        #[serde(default)]
+        equality: bool,
+    },
     /// Link is type variable where it was an unbound variable but we worked out
     /// that it is some other type and now we point to that one.
     ///
@@ -939,7 +969,11 @@ pub enum TypeVar {
     /// // a is TypeVar::Generic
     /// ```
     ///
-    Generic { id: u64 },
+    Generic {
+        id: u64,
+        #[serde(default)]
+        equality: bool,
+    },
 }
 
 impl TypeVar {
@@ -955,6 +989,20 @@ impl TypeVar {
 
     pub fn is_unbound(&self) -> bool {
         matches!(self, Self::Unbound { .. })
+    }
+
+    fn requires_equality(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.requires_equality(),
+            Self::Unbound { equality, .. } | Self::Generic { equality, .. } => *equality,
+        }
+    }
+
+    fn require_equality(&mut self) {
+        match self {
+            Self::Link { tipo } => tipo.require_equality(),
+            Self::Unbound { equality, .. } | Self::Generic { equality, .. } => *equality = true,
+        }
     }
 
     pub fn is_or_holds_opaque(&self) -> bool {
@@ -988,6 +1036,13 @@ impl TypeVar {
     pub fn is_bytearray(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_bytearray(),
+            _ => false,
+        }
+    }
+
+    pub fn is_value(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_value(),
             _ => false,
         }
     }
@@ -1071,7 +1126,7 @@ impl TypeVar {
 
     pub fn get_generic(&self) -> Option<u64> {
         match self {
-            TypeVar::Generic { id } => Some(*id),
+            TypeVar::Generic { id, .. } => Some(*id),
             TypeVar::Link { tipo } => tipo.get_generic_id(),
             _ => None,
         }
@@ -1347,6 +1402,9 @@ pub struct TypeConstructor {
     pub module: String,
     pub parameters: Vec<Rc<Type>>,
     pub tipo: Rc<Type>,
+    #[serde(default)]
+    /// Constructor field types retained for representation-sensitive checks.
+    pub runtime_fields: Vec<Rc<Type>>,
 }
 
 impl TypeConstructor {
@@ -1355,6 +1413,7 @@ impl TypeConstructor {
             location: Span::empty(),
             parameters: tipo.collect_generics(),
             tipo,
+            runtime_fields: Vec::new(),
             module: "".to_string(),
             public: true,
         }

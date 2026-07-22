@@ -399,7 +399,7 @@ impl Reference {
             // end up creating references for 'Var' or 'Fn' in the context of blueprints.
             Type::Var { tipo, .. } => match tipo.borrow().deref() {
                 TypeVar::Link { tipo } => Self::from_type(tipo.as_ref(), type_parameters),
-                TypeVar::Generic { id } | TypeVar::Unbound { id } => {
+                TypeVar::Generic { id, .. } | TypeVar::Unbound { id, .. } => {
                     if let Some(tipo) = type_parameters.get(id) {
                         Self::from_type(tipo, type_parameters)
                     } else {

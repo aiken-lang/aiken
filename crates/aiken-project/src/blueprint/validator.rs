@@ -408,6 +408,40 @@ mod tests {
         };
     }
 
+    #[test]
+    fn value_validator_boundary_is_supported() {
+        let mut project = TestProject::new();
+        let modules = CheckedModules::singleton(project.check(project.parse(indoc::indoc! {r#"
+            use aiken/builtin.{lookup_coin}
+
+            validator thing {
+              mint(redeemer: Value, policy_id: ByteArray, transaction: Data) {
+                lookup_coin(#"", #"", redeemer) >= 0
+              }
+            }
+        "#})));
+        let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+        let (validator, def) = modules.validators().next().unwrap();
+
+        let validators = Validator::from_checked_module(
+            &modules,
+            &mut generator,
+            validator,
+            def,
+            &PlutusVersion::default(),
+        )
+        .unwrap();
+        let mint = validators.first().unwrap();
+        let redeemer = mint.redeemer.as_ref().unwrap();
+        let schema = redeemer.schema.schema(&mint.definitions).unwrap();
+
+        assert!(matches!(
+            schema,
+            Schema::Data(Data::Map(_, Declaration::Inline(values)))
+                if matches!(values.as_ref(), Data::Map(_, _))
+        ));
+    }
+
     fn fixture_definitions() -> Definitions<Annotated<Schema>> {
         let mut definitions = Definitions::new();
 
