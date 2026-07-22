@@ -172,6 +172,10 @@ impl Machine {
     pub fn run(&mut self, term: Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
         use MachineState::*;
 
+        if !self.semantics.supports_values() {
+            Self::assert_no_values(&term)?;
+        }
+
         let startup_budget = self.costs.machine_costs.get(StepKind::StartUp);
 
         self.spend_budget(startup_budget)?;
@@ -187,6 +191,47 @@ impl Machine {
                 }
             };
         }
+    }
+
+    /// The CIP-0153 value builtins and native `Value` constants only exist for
+    /// Plutus V3 from protocol version 11 (Van Rossem) onwards. Availability is
+    /// a whole-program well-formedness rule: occurrences in latent code (under
+    /// lambdas, delays or untaken branches) are rejected too, so the entire
+    /// term is validated up-front before evaluation starts.
+    fn assert_no_values(term: &Term<NamedDeBruijn>) -> Result<(), Error> {
+        let mut stack = vec![term];
+
+        while let Some(term) = stack.pop() {
+            match term {
+                Term::Delay(body) | Term::Lambda { body, .. } | Term::Force(body) => {
+                    stack.push(body.as_ref());
+                }
+                Term::Apply { function, argument } => {
+                    stack.push(function.as_ref());
+                    stack.push(argument.as_ref());
+                }
+                Term::Constant(constant) => {
+                    if constant.contains_value() {
+                        return Err(Error::ValueConstantNotAvailable);
+                    }
+                }
+                Term::Builtin(fun) => {
+                    if fun.is_value_builtin() {
+                        return Err(Error::BuiltinNotAvailable(*fun));
+                    }
+                }
+                Term::Constr { fields, .. } => {
+                    stack.extend(fields.iter());
+                }
+                Term::Case { constr, branches } => {
+                    stack.push(constr.as_ref());
+                    stack.extend(branches.iter());
+                }
+                Term::Var(_) | Term::Error => {}
+            }
+        }
+
+        Ok(())
     }
 
     fn compute(
@@ -557,6 +602,7 @@ impl From<&Constant> for Type {
                 Type::Pair(Rc::new(t1.clone()), Rc::new(t2.clone()))
             }
             Constant::Data(_) => Type::Data,
+            Constant::Value(_) => Type::Value,
             Constant::Bls12_381G1Element(_) => Type::Bls12_381G1Element,
             Constant::Bls12_381G2Element(_) => Type::Bls12_381G2Element,
             Constant::Bls12_381MlResult(_) => Type::Bls12_381MlResult,
@@ -568,11 +614,105 @@ impl From<&Constant> for Type {
 mod tests {
     use num_bigint::BigInt;
 
-    use super::{cost_model::ExBudget, runtime::Compressable};
+    use super::{Error, cost_model::ExBudget, runtime::Compressable};
     use crate::{
         ast::{Constant, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
     };
+    use pallas_primitives::conway::Language;
+
+    #[test]
+    fn value_builtins_unavailable_before_van_rossem_or_outside_v3() {
+        let program = |term: Term<NamedDeBruijn>| Program {
+            version: (1, 1, 0),
+            term,
+        };
+
+        let builtin = Term::Builtin(DefaultFunction::LookupCoin);
+        let constant: Term<NamedDeBruijn> =
+            Term::Constant(Constant::Value(crate::ast::Value::empty()).into());
+        // Availability is a whole-program rule: latent occurrences that
+        // evaluation never reaches must be rejected too.
+        let latent: Term<NamedDeBruijn> = Term::Lambda {
+            parameter_name: NamedDeBruijn {
+                text: "x".to_string(),
+                index: 0.into(),
+            }
+            .into(),
+            body: Term::Builtin(DefaultFunction::ScaleValue).into(),
+        };
+        // Public AST callers can construct type-inconsistent constants even
+        // though Flat decoding cannot. Inspect both declared types and actual
+        // elements so this cannot bypass protocol availability checks.
+        let inconsistent: Term<NamedDeBruijn> = Term::Constant(
+            Constant::ProtoList(
+                crate::ast::Type::Integer,
+                vec![Constant::Value(crate::ast::Value::empty())],
+            )
+            .into(),
+        );
+
+        for (language, protocol) in [
+            (Language::PlutusV3, 10),
+            (Language::PlutusV2, 11),
+            (Language::PlutusV1, 11),
+        ] {
+            let result = program(builtin.clone())
+                .eval_version_with_protocol(ExBudget::default(), &language, protocol)
+                .result();
+            assert!(
+                matches!(result, Err(Error::BuiltinNotAvailable(_))),
+                "expected lookupCoin to be unavailable for {language:?} at protocol {protocol}, got {result:?}"
+            );
+
+            let result = program(constant.clone())
+                .eval_version_with_protocol(ExBudget::default(), &language, protocol)
+                .result();
+            assert!(
+                matches!(result, Err(Error::ValueConstantNotAvailable)),
+                "expected Value constant to be unavailable for {language:?} at protocol {protocol}, got {result:?}"
+            );
+
+            let result = program(inconsistent.clone())
+                .eval_version_with_protocol(ExBudget::default(), &language, protocol)
+                .result();
+            assert!(
+                matches!(result, Err(Error::ValueConstantNotAvailable)),
+                "expected nested Value constant to be unavailable for {language:?} at protocol {protocol}, got {result:?}"
+            );
+
+            let result = program(latent.clone())
+                .eval_version_with_protocol(ExBudget::default(), &language, protocol)
+                .result();
+            assert!(
+                matches!(result, Err(Error::BuiltinNotAvailable(_))),
+                "expected latent scaleValue to be unavailable for {language:?} at protocol {protocol}, got {result:?}"
+            );
+
+            // Direct calls through the public runtime API are gated too.
+            let semantics =
+                super::runtime::BuiltinSemantics::for_language_and_protocol(&language, protocol);
+            let result = DefaultFunction::UnValueData.call(
+                semantics,
+                &[super::value::Value::Con(
+                    Constant::Data(crate::PlutusData::Map(crate::KeyValuePairs::Def(vec![])))
+                        .into(),
+                )],
+                &mut vec![],
+            );
+            assert!(
+                matches!(result, Err(Error::BuiltinNotAvailable(_))),
+                "expected direct unValueData call to be unavailable for {language:?} at protocol {protocol}, got {result:?}"
+            );
+        }
+
+        for term in [builtin, constant, latent] {
+            let result = program(term)
+                .eval_version_with_protocol(ExBudget::default(), &Language::PlutusV3, 11)
+                .result();
+            assert!(result.is_ok(), "{result:?}");
+        }
+    }
 
     #[test]
     fn add_big_ints() {

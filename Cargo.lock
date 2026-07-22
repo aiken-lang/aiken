@@ -3775,6 +3775,7 @@ dependencies = [
  "peg",
  "pretty 0.11.3",
  "pretty_assertions",
+ "proptest",
  "secp256k1",
  "serde",
  "serde_json",

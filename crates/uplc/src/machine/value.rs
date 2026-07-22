@@ -68,6 +68,9 @@ impl Value {
 
         Value::Con(constant.into())
     }
+    pub fn from_value(value: crate::ast::Value) -> Self {
+        Value::Con(Constant::Value(value).into())
+    }
 
     pub(super) fn unwrap_integer(&self) -> Result<&BigInt, Error> {
         let inner = self.unwrap_constant()?;
@@ -140,6 +143,15 @@ impl Value {
         };
 
         Ok(data)
+    }
+    pub(super) fn unwrap_value(&self) -> Result<&crate::ast::Value, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Value(value) = inner else {
+            return Err(Error::TypeMismatch(Type::Value, inner.into()));
+        };
+
+        Ok(value)
     }
 
     pub(super) fn unwrap_unit(&self) -> Result<(), Error> {
@@ -299,6 +311,7 @@ impl Value {
                 Constant::Bls12_381G1Element(_) => total += size_of::<blst::blst_p1>() as i64 / 8,
                 Constant::Bls12_381G2Element(_) => total += size_of::<blst::blst_p2>() as i64 / 8,
                 Constant::Bls12_381MlResult(_) => total += size_of::<blst::blst_fp12>() as i64 / 8,
+                Constant::Value(value) => total += value.total_size() as i64,
             }
         }
 
@@ -378,6 +391,28 @@ impl Value {
             }
         }
         total
+    }
+    pub(super) fn data_node_count(&self) -> Result<i64, Error> {
+        let data = self.unwrap_data()?;
+        let mut stack = VecDeque::from([data]);
+        let mut count = 0_i64;
+
+        while let Some(item) = stack.pop_front() {
+            count += 1;
+            match item {
+                PlutusData::Constr(constr) => stack.extend(constr.fields.iter()),
+                PlutusData::Map(entries) => {
+                    for (key, value) in entries.iter() {
+                        stack.push_back(key);
+                        stack.push_back(value);
+                    }
+                }
+                PlutusData::Array(items) => stack.extend(items.iter()),
+                PlutusData::BigInt(_) | PlutusData::BoundedBytes(_) => {}
+            }
+        }
+
+        Ok(count)
     }
 
     pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {

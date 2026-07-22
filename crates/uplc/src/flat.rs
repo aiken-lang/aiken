@@ -568,10 +568,31 @@ impl Encode for Constant {
                     "BLS12-381 ML results are not supported for flat encoding".to_string(),
                 ));
             }
+            Constant::Value(value) => {
+                encode_constant(&[13], e)?;
+                encode_value(value, e)?;
+            }
         }
 
         Ok(())
     }
+}
+
+fn encode_value(value: &crate::ast::Value, e: &mut Encoder) -> Result<(), en::Error> {
+    for (currency, inner) in value.iter() {
+        e.bool(true);
+        currency.encode(e)?;
+
+        for (token, quantity) in inner {
+            e.bool(true);
+            token.encode(e)?;
+            BigInt::from(*quantity).encode(e)?;
+        }
+        e.bool(false);
+    }
+    e.bool(false);
+
+    Ok(())
 }
 
 fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error> {
@@ -606,6 +627,7 @@ fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error>
         Constant::Bls12_381MlResult(_) => Err(en::Error::Message(
             "BLS12-381 ML results are not supported for flat encoding".to_string(),
         )),
+        Constant::Value(value) => encode_value(value, e),
     }
 }
 
@@ -629,6 +651,7 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
         Type::Bls12_381G1Element => bytes.push(9),
         Type::Bls12_381G2Element => bytes.push(10),
         Type::Bls12_381MlResult => bytes.push(11),
+        Type::Value => bytes.push(13),
     }
 }
 
@@ -693,11 +716,27 @@ impl Decode<'_> for Constant {
             [11] => Err(de::Error::Message(
                 "BLS12-381 ML results are not supported for flat decoding".to_string(),
             )),
+            [13] => Ok(Constant::Value(decode_value(d)?)),
             x => Err(de::Error::Message(format!(
                 "Unknown constant constructor tag: {x:?}"
             ))),
         }
     }
+}
+
+fn decode_value(d: &mut Decoder) -> Result<crate::ast::Value, de::Error> {
+    let entries = d.decode_list_with(|d| {
+        let currency = Vec::<u8>::decode(d)?;
+        let inner = d.decode_list_with(|d| {
+            let token = Vec::<u8>::decode(d)?;
+            let quantity = BigInt::decode(d)?;
+            Ok((token, quantity))
+        })?;
+        Ok((currency, inner))
+    })?;
+
+    crate::ast::Value::from_canonical_entries(entries)
+        .map_err(|error| de::Error::Message(error.to_string()))
 }
 
 fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de::Error> {
@@ -755,6 +794,7 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
         Type::Bls12_381MlResult => Err(de::Error::Message(
             "BLS12-381 ML results are not supported for flat decoding".to_string(),
         )),
+        Type::Value => Ok(Constant::Value(decode_value(d)?)),
     }
 }
 
@@ -769,6 +809,7 @@ fn decode_type(types: &mut VecDeque<u8>) -> Result<Type, de::Error> {
         Some(9) => Ok(Type::Bls12_381G1Element),
         Some(10) => Ok(Type::Bls12_381G2Element),
         Some(11) => Ok(Type::Bls12_381MlResult),
+        Some(13) => Ok(Type::Value),
         Some(7) => match types.pop_front() {
             Some(5) => Ok(Type::List(decode_type(types)?.into())),
             Some(7) => match types.pop_front() {
@@ -998,13 +1039,18 @@ pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, de::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Constant, Program, Term};
+    use super::{Constant, Program, Term, decode_value};
     use crate::{
-        ast::{DeBruijn, Name, Type},
+        ast::{BigIntValueEntries, DeBruijn, Name, Type, Value},
         parser,
     };
     use indoc::indoc;
-    use pallas_codec::flat::Flat;
+    use num_bigint::BigInt;
+    use pallas_codec::flat::{
+        Flat,
+        de::Decoder,
+        en::{Encode, Encoder},
+    };
 
     #[test]
     fn flat_encode_integer() {
@@ -1180,5 +1226,94 @@ mod tests {
         let program = parser::program(source).unwrap();
 
         assert_eq!(program.to_pretty(), source);
+    }
+    #[test]
+    fn flat_roundtrips_value_universe_tag_and_nested_payload() {
+        let value = Value::from_canonical_entries(vec![
+            (
+                vec![0x01],
+                vec![
+                    (vec![0x00], BigInt::from(i128::MIN)),
+                    (vec![0xff], BigInt::from(7)),
+                ],
+            ),
+            (
+                vec![0x02],
+                vec![
+                    (vec![], BigInt::from(-42)),
+                    (vec![0x01], BigInt::from(i128::MAX)),
+                ],
+            ),
+        ])
+        .unwrap();
+        let expected = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Constant::Value(value).into()),
+        };
+
+        let bytes = expected.to_flat().unwrap();
+        let actual = Program::<Name>::unflat(&bytes).unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    fn encode_raw_value(entries: BigIntValueEntries) -> Vec<u8> {
+        let mut encoder = Encoder::new();
+        for (currency, tokens) in entries {
+            encoder.bool(true);
+            currency.encode(&mut encoder).unwrap();
+            for (token, quantity) in tokens {
+                encoder.bool(true);
+                token.encode(&mut encoder).unwrap();
+                quantity.encode(&mut encoder).unwrap();
+            }
+            encoder.bool(false);
+        }
+        encoder.bool(false);
+
+        // Encoding an empty bytestring flushes the final partial byte. Its payload
+        // is intentionally left after the Value; the decoder below consumes only
+        // the Value payload.
+        Vec::<u8>::new().encode(&mut encoder).unwrap();
+        encoder.buffer
+    }
+
+    #[test]
+    fn flat_rejects_malformed_value_payloads() {
+        let malformed = vec![
+            vec![
+                (vec![1], vec![(vec![0], BigInt::from(1))]),
+                (vec![0], vec![(vec![0], BigInt::from(1))]),
+            ],
+            vec![
+                (vec![0], vec![(vec![0], BigInt::from(1))]),
+                (vec![0], vec![(vec![1], BigInt::from(1))]),
+            ],
+            vec![(vec![0], vec![])],
+            vec![(
+                vec![0],
+                vec![(vec![1], BigInt::from(1)), (vec![0], BigInt::from(1))],
+            )],
+            vec![(
+                vec![0],
+                vec![(vec![0], BigInt::from(1)), (vec![0], BigInt::from(2))],
+            )],
+            vec![(vec![0], vec![(vec![0], BigInt::from(0))])],
+            vec![(vec![0; 33], vec![(vec![0], BigInt::from(1))])],
+            vec![(vec![0], vec![(vec![0; 33], BigInt::from(1))])],
+            vec![(
+                vec![0],
+                vec![(vec![0], BigInt::from(i128::MAX) + BigInt::from(1))],
+            )],
+        ];
+
+        for entries in malformed {
+            let bytes = encode_raw_value(entries);
+            assert!(decode_value(&mut Decoder::new(&bytes)).is_err());
+        }
+
+        let mut truncated = encode_raw_value(vec![(vec![0], vec![(vec![0], BigInt::from(1))])]);
+        truncated.truncate(truncated.len() - 2);
+        assert!(decode_value(&mut Decoder::new(&truncated)).is_err());
     }
 }

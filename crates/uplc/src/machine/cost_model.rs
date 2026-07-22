@@ -1822,6 +1822,23 @@ fn literal_abs_as_i64_saturating(literal: &BigInt) -> i64 {
     }
 }
 
+fn value_total_size(arg: &Value) -> Result<i64, Error> {
+    Ok(arg.unwrap_value()?.total_size() as i64)
+}
+
+fn value_max_depth(arg: &Value) -> Result<i64, Error> {
+    let value = arg.unwrap_value()?;
+    let log2_plus_1 = |size: usize| {
+        if size == 0 {
+            0
+        } else {
+            (usize::BITS - size.leading_zeros()) as i64
+        }
+    };
+
+    Ok(log2_plus_1(value.outer_size()) + log2_plus_1(value.max_inner_size()))
+}
+
 impl BuiltinCosts {
     pub fn to_ex_budget(
         &self,
@@ -2593,6 +2610,82 @@ impl BuiltinCosts {
                 ExBudget {
                     mem: self.exp_mod_int.mem.cost(x, y, z),
                     cpu: self.exp_mod_int.cpu.cost(x, y, z),
+                }
+            }
+            DefaultFunction::InsertCoin => {
+                let value_size = value_max_depth(&args[3])?;
+
+                ExBudget {
+                    mem: self.insert_coin.mem.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        args[2].to_ex_mem(),
+                        value_size,
+                    ),
+                    cpu: self.insert_coin.cpu.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        args[2].to_ex_mem(),
+                        value_size,
+                    ),
+                }
+            }
+            DefaultFunction::LookupCoin => {
+                let value_size = value_max_depth(&args[2])?;
+
+                ExBudget {
+                    mem: self.lookup_coin.mem.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        value_size,
+                    ),
+                    cpu: self.lookup_coin.cpu.cost(
+                        args[0].to_ex_mem(),
+                        args[1].to_ex_mem(),
+                        value_size,
+                    ),
+                }
+            }
+            DefaultFunction::UnionValue => {
+                let left_size = value_total_size(&args[0])?;
+                let right_size = value_total_size(&args[1])?;
+
+                ExBudget {
+                    mem: self.union_value.mem.cost(left_size, right_size),
+                    cpu: self.union_value.cpu.cost(left_size, right_size),
+                }
+            }
+            DefaultFunction::ValueContains => {
+                let left_size = value_total_size(&args[0])?;
+                let right_size = value_total_size(&args[1])?;
+
+                ExBudget {
+                    mem: self.value_contains.mem.cost(left_size, right_size),
+                    cpu: self.value_contains.cpu.cost(left_size, right_size),
+                }
+            }
+            DefaultFunction::ValueData => {
+                let value_size = value_total_size(&args[0])?;
+
+                ExBudget {
+                    mem: self.value_data.mem.cost(value_size),
+                    cpu: self.value_data.cpu.cost(value_size),
+                }
+            }
+            DefaultFunction::UnValueData => {
+                let data_size = args[0].data_node_count()?;
+
+                ExBudget {
+                    mem: self.un_value_data.mem.cost(data_size),
+                    cpu: self.un_value_data.cpu.cost(data_size),
+                }
+            }
+            DefaultFunction::ScaleValue => {
+                let value_size = value_total_size(&args[1])?;
+
+                ExBudget {
+                    mem: self.scale_value.mem.cost(args[0].to_ex_mem(), value_size),
+                    cpu: self.scale_value.cpu.cost(args[0].to_ex_mem(), value_size),
                 }
             }
         })
