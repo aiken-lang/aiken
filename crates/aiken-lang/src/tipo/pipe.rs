@@ -260,7 +260,6 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
 
         // Ensure that the function accepts one argument of the correct type
         self.expr_typer
-            .environment
             .unify(
                 func.tipo(),
                 Type::function(vec![self.argument_type.clone()], return_type.clone()),

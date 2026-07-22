@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **aiken-lang**: Add first-class UPLC `Value` support, exposed in Aiken as `Value`. This adds `insert_coin`, `lookup_coin`, `union_value`, `value_contains`, `value_data`, `un_value_data`, and `scale_value` to `aiken/builtin`, with canonical Plutus V3 conformance coverage. Aiken now supports strict canonical nested literals such as `#<Value>[(#"aa", [(#"bb", 42)])]`, lowering them directly to UPLC `Value` constants.
+
 ## v1.1.23 - 2026-06-26
 
 ### Added

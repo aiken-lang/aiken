@@ -137,6 +137,12 @@ impl UntypedModule {
             }
         }
 
+        // Private types are about to be pruned from the interface; fold their
+        // runtime representation into the public types wrapping them so that
+        // downstream modules can still detect native `Value` in runtime
+        // positions (e.g. to reject equality on such types).
+        environment.expand_private_runtime_fields(&module_name);
+
         environment
             .module_types
             .retain(|_, info| info.public && info.module == module_name);

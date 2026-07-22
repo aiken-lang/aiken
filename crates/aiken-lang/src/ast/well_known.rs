@@ -28,6 +28,7 @@ pub const PRNG_CONSTRUCTORS: &[&str] = &["Seeded", "Replayed"];
 pub const REDEEMER_WRAPPER: &str = "RedeemerWrapper";
 pub const STRING: &str = "String";
 pub const VOID: &str = "Void";
+pub const VALUE: &str = "Value";
 pub const VOID_CONSTRUCTORS: &[&str] = &["Void"];
 
 pub const SCRIPT_CONTEXT: &str = "__ScriptContext";
@@ -63,6 +64,17 @@ impl Type {
             public: true,
             contains_opaque: false,
             name: DATA.to_string(),
+            module: "".to_string(),
+            args: vec![],
+            alias: None,
+        })
+    }
+
+    pub fn value() -> Rc<Type> {
+        Rc::new(Type::App {
+            public: true,
+            contains_opaque: false,
+            name: VALUE.to_string(),
             module: "".to_string(),
             args: vec![],
             alias: None,
@@ -378,13 +390,19 @@ impl Type {
     }
 
     pub fn generic_var(id: u64) -> Rc<Type> {
-        let tipo = Rc::new(RefCell::new(TypeVar::Generic { id }));
+        let tipo = Rc::new(RefCell::new(TypeVar::Generic {
+            id,
+            equality: false,
+        }));
 
         Rc::new(Type::Var { tipo, alias: None })
     }
 
     pub fn unbound_var(id: u64) -> Rc<Type> {
-        let tipo = Rc::new(RefCell::new(TypeVar::Unbound { id }));
+        let tipo = Rc::new(RefCell::new(TypeVar::Unbound {
+            id,
+            equality: false,
+        }));
 
         Rc::new(Type::Var { tipo, alias: None })
     }

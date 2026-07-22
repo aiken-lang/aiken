@@ -55,6 +55,12 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         TypeConstructor::primitive(Type::data()),
     );
 
+    // Value
+    prelude.types.insert(
+        well_known::VALUE.to_string(),
+        TypeConstructor::primitive(Type::value()),
+    );
+
     // Int
     prelude.types.insert(
         well_known::INT.to_string(),
@@ -541,6 +547,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             location: Span::empty(),
             parameters: vec![fuzzer_generic.clone()],
             tipo: Type::fuzzer(fuzzer_generic),
+            runtime_fields: Vec::new(),
             module: "".to_string(),
             public: true,
         },
@@ -557,6 +564,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             location: Span::empty(),
             parameters: vec![sampler_generic.clone()],
             tipo: Type::sampler(sampler_generic),
+            runtime_fields: Vec::new(),
             module: "".to_string(),
             public: true,
         },
@@ -1099,6 +1107,46 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 2)
         }
+        DefaultFunction::InsertCoin => {
+            let tipo = Type::function(
+                vec![
+                    Type::byte_array(),
+                    Type::byte_array(),
+                    Type::int(),
+                    Type::value(),
+                ],
+                Type::value(),
+            );
+            (tipo, 4)
+        }
+        DefaultFunction::LookupCoin => {
+            let tipo = Type::function(
+                vec![Type::byte_array(), Type::byte_array(), Type::value()],
+                Type::int(),
+            );
+            (tipo, 3)
+        }
+        DefaultFunction::UnionValue => {
+            let tipo = Type::function(vec![Type::value(), Type::value()], Type::value());
+            (tipo, 2)
+        }
+        DefaultFunction::ValueContains => {
+            let tipo = Type::function(vec![Type::value(), Type::value()], Type::bool());
+            (tipo, 2)
+        }
+        DefaultFunction::ValueData => {
+            let tipo = Type::function(vec![Type::value()], Type::data());
+            (tipo, 1)
+        }
+        DefaultFunction::UnValueData => {
+            let tipo = Type::function(vec![Type::data()], Type::value());
+            (tipo, 1)
+        }
+        DefaultFunction::ScaleValue => {
+            let tipo = Type::function(vec![Type::int(), Type::value()], Type::value());
+            (tipo, 2)
+        }
+
         DefaultFunction::DropList => {
             let ret = Type::list(Type::generic_var(id_gen.next()));
 

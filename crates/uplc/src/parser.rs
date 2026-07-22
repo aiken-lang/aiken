@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, Data, Name, Program, Term, Type},
+    ast::{Constant, Data, Name, Program, Term, Type, Value},
     builtins::DefaultFunction,
     machine::{runtime::Compressable, value::to_pallas_bigint},
 };
@@ -17,19 +17,7 @@ pub fn program(src: &str) -> Result<Program<Name>, ParseError<LineCol>> {
     let mut interner = Interner::new();
 
     // run the generated parser
-    let program = uplc::program(src, &mut interner, false)?;
-
-    Ok(program)
-}
-
-pub fn program_with_canonical_value_literals(
-    src: &str,
-) -> Result<Program<Name>, ParseError<LineCol>> {
-    // initialize the string interner to get unique name
-    let mut interner = Interner::new();
-
-    // run the generated parser
-    let program = uplc::program(src, &mut interner, true)?;
+    let program = uplc::program(src, &mut interner)?;
 
     Ok(program)
 }
@@ -39,7 +27,7 @@ pub fn term(src: &str) -> Result<Term<Name>, ParseError<LineCol>> {
     let mut interner = Interner::new();
 
     // run the generated parser
-    let term = uplc::term(src, &mut interner, false)?;
+    let term = uplc::term(src, &mut interner)?;
 
     Ok(term)
 }
@@ -77,8 +65,8 @@ pub fn escape(string: &str) -> String {
 
 peg::parser! {
     grammar uplc() for str {
-        pub rule program(interner: &mut Interner, canonical_value_literals: bool) -> Program<Name>
-          = _* "(" _* "program" _+ v:version() _+ t:term(interner, canonical_value_literals) _* ")" _* {
+        pub rule program(interner: &mut Interner) -> Program<Name>
+          = _* "(" _* "program" _+ v:version() _+ t:term(interner) _* ")" _* {
             Program {version: v, term: t}
           }
 
@@ -89,19 +77,19 @@ peg::parser! {
             (major, minor, patch)
           }
 
-        pub rule term(interner: &mut Interner, canonical_value_literals: bool) -> Term<Name>
-          = constant(canonical_value_literals)
+        pub rule term(interner: &mut Interner) -> Term<Name>
+          = constant()
           / builtin()
           / var(interner)
-          / lambda(interner, canonical_value_literals)
-          / apply(interner, canonical_value_literals)
-          / delay(interner, canonical_value_literals)
-          / force(interner, canonical_value_literals)
+          / lambda(interner)
+          / apply(interner)
+          / delay(interner)
+          / force(interner)
           / error()
-          / constr(interner, canonical_value_literals)
-          / case(interner, canonical_value_literals)
+          / constr(interner)
+          / case(interner)
 
-        rule constant(canonical_value_literals: bool) -> Term<Name>
+        rule constant() -> Term<Name>
           = "(" _* "con" _+ con:(
             constant_integer()
             / constant_bytestring()
@@ -109,6 +97,7 @@ peg::parser! {
             / constant_unit()
             / constant_bool()
             / constant_data()
+            / constant_value()
             / constant_g1_element()
             / constant_g2_element()
             / constant_list()
@@ -125,13 +114,13 @@ peg::parser! {
         rule var(interner: &mut Interner) -> Term<Name>
           = n:name(interner) { Term::Var(n.into()) }
 
-        rule lambda(interner: &mut Interner, canonical_value_literals: bool) -> Term<Name>
-          = "(" _* "lam" _+ parameter_name:name(interner) _+ t:term(interner, canonical_value_literals) _* ")" {
+        rule lambda(interner: &mut Interner) -> Term<Name>
+          = "(" _* "lam" _+ parameter_name:name(interner) _+ t:term(interner) _* ")" {
             Term::Lambda { parameter_name: parameter_name.into(), body: Rc::new(t) }
           }
 
-        rule apply(interner: &mut Interner, canonical_value_literals: bool) -> Term<Name>
-          = "[" _* initial:term(interner, canonical_value_literals) _+ terms:(t:term(interner, canonical_value_literals) _* { t })+ "]" {
+        rule apply(interner: &mut Interner) -> Term<Name>
+          = "[" _* initial:term(interner) _+ terms:(t:term(interner) _* { t })+ "]" {
             terms
                 .into_iter()
                 .fold(initial, |lhs, rhs| Term::Apply {
@@ -140,22 +129,22 @@ peg::parser! {
                 })
           }
 
-        rule delay(interner: &mut Interner, canonical_value_literals: bool) -> Term<Name>
-          = "(" _* "delay" _* t:term(interner, canonical_value_literals) _* ")" { Term::Delay(Rc::new(t)) }
+        rule delay(interner: &mut Interner) -> Term<Name>
+          = "(" _* "delay" _* t:term(interner) _* ")" { Term::Delay(Rc::new(t)) }
 
-        rule force(interner: &mut Interner, canonical_value_literals: bool) -> Term<Name>
-          = "(" _* "force" _* t:term(interner, canonical_value_literals) _* ")" { Term::Force(Rc::new(t)) }
+        rule force(interner: &mut Interner) -> Term<Name>
+          = "(" _* "force" _* t:term(interner) _* ")" { Term::Force(Rc::new(t)) }
 
         rule error() -> Term<Name>
           = "(" _* "error" _* ")" { Term::Error }
 
-        rule constr(interner: &mut Interner, canonical_value_literals: bool) -> Term<Name>
-          = "(" _* "constr" _+ tag:decimal() _* fields:(t:term(interner, canonical_value_literals) _* { t })* _* ")" {
+        rule constr(interner: &mut Interner) -> Term<Name>
+          = "(" _* "constr" _+ tag:decimal() _* fields:(t:term(interner) _* { t })* _* ")" {
             Term::Constr { tag, fields }
           }
 
-        rule case(interner: &mut Interner, canonical_value_literals: bool) -> Term<Name>
-          = "(" _* "case" _+ constr:term(interner, canonical_value_literals) _* branches:(t:term(interner, canonical_value_literals) _* { t })* _* ")" {
+        rule case(interner: &mut Interner) -> Term<Name>
+          = "(" _* "case" _+ constr:term(interner) _* branches:(t:term(interner) _* { t })* _* ")" {
             Term::Case { constr: constr.into(), branches }
           }
 
@@ -198,6 +187,29 @@ peg::parser! {
 
         rule pair(type_info: Option<(&Type, &Type)>) -> (Constant, Constant)
           = "(" _* x:typed_constant(type_info.map(|t| t.0)) comma() y:typed_constant(type_info.map(|t| t.1)) _* ")" { (x, y) }
+
+        rule constant_value() -> Constant
+          = "value" _+ entries:value_outer_list() {?
+              Value::from_canonical_entries(entries)
+                  .map(Constant::Value)
+                  .map_err(|_| "invalid value literal")
+            }
+
+        rule value_outer_list() -> Vec<(Vec<u8>, Vec<(Vec<u8>, BigInt)>)>
+          = "[" _* entries:(value_outer_entry() ** comma()) _* "]" { entries }
+
+        rule value_outer_entry() -> (Vec<u8>, Vec<(Vec<u8>, BigInt)>)
+          = "(" _* currency:bytestring() comma() tokens:value_inner_list() _* ")" {
+              (currency, tokens)
+            }
+
+        rule value_inner_list() -> Vec<(Vec<u8>, BigInt)>
+          = "[" _* entries:(value_inner_entry() ** comma()) _* "]" { entries }
+
+        rule value_inner_entry() -> (Vec<u8>, BigInt)
+          = "(" _* token:bytestring() comma() quantity:big_number() _* ")" {
+              (token, quantity)
+            }
 
         rule decimal() -> usize
           = n:$(['0'..='9']+) {? n.parse().or(Err("usize")) }
@@ -329,6 +341,16 @@ peg::parser! {
 
                 }
             }
+            / entries:value_outer_list() {?
+                match type_info {
+                    Some(Type::Value) => {
+                        Value::from_canonical_entries(entries)
+                            .map(Constant::Value)
+                            .map_err(|_| "invalid value literal")
+                    },
+                    _ => Err("found 'Value' instead of expected type")
+                }
+            }
             / ls:list(list_sub_type(type_info)) {?
                 match type_info {
                     Some(Type::List(t)) => Ok(Constant::ProtoList(t.as_ref().clone(), ls)),
@@ -357,6 +379,7 @@ peg::parser! {
           / _* "bytestring" { Type::ByteString }
           / _* "string" { Type::String }
           / _* "data" { Type::Data }
+          / _* "value" { Type::Value }
           / _* "bls12_381_G1_element" { Type::Bls12_381G1Element }
           / _* "bls12_381_G2_element" { Type::Bls12_381G2Element }
           / _* "(" _* "list" _+ t:type_info() _* ")" {
@@ -1069,6 +1092,15 @@ mod tests {
     fn parse_list_mixed_types() {
         let uplc = "(program 0.0.0 (con (list integer) [14, False]))";
         assert!(super::program(uplc).is_err())
+    }
+
+    #[test]
+    fn rejects_non_canonical_value_literals_by_default() {
+        assert!(
+            super::program("(program 1.0.0 (con value [(#bb, [(#aa, 1)]), (#aa, [(#aa, 1)])]))")
+                .is_err()
+        );
+        assert!(super::term("(con (list value) [[(#aa, [(#bb, 1), (#bb, 2)])]])").is_err());
     }
 
     // Helper function for all simple programs that involve only a direct application of a builtin

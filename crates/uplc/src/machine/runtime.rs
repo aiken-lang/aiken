@@ -94,6 +94,12 @@ impl BuiltinSemantics {
     fn cons_byte_string_range_checks(self) -> bool {
         matches!(self, BuiltinSemantics::C | BuiltinSemantics::E)
     }
+
+    /// The CIP-0153 value builtins and native `Value` constants only exist
+    /// for Plutus V3 from protocol version 11 (Van Rossem) onwards.
+    pub fn supports_values(self) -> bool {
+        matches!(self, BuiltinSemantics::E)
+    }
 }
 
 impl From<&Language> for BuiltinSemantics {
@@ -255,7 +261,14 @@ impl DefaultFunction {
             | DefaultFunction::Ripemd_160
             | DefaultFunction::DropList
             | DefaultFunction::Bls12_381_G1_MultiScalarMul
-            | DefaultFunction::ExpModInteger => false,
+            | DefaultFunction::ExpModInteger
+            | DefaultFunction::InsertCoin
+            | DefaultFunction::LookupCoin
+            | DefaultFunction::UnionValue
+            | DefaultFunction::ValueContains
+            | DefaultFunction::ValueData
+            | DefaultFunction::UnValueData
+            | DefaultFunction::ScaleValue => false,
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
         }
@@ -354,6 +367,13 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G1_MultiScalarMul => 2,
             DefaultFunction::ExpModInteger => 3,
             DefaultFunction::DropList => 2,
+            DefaultFunction::InsertCoin => 4,
+            DefaultFunction::LookupCoin => 3,
+            DefaultFunction::UnionValue => 2,
+            DefaultFunction::ValueContains => 2,
+            DefaultFunction::ValueData => 1,
+            DefaultFunction::UnValueData => 1,
+            DefaultFunction::ScaleValue => 2,
         }
     }
 
@@ -450,6 +470,13 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G1_MultiScalarMul => 0,
             DefaultFunction::ExpModInteger => 0,
             DefaultFunction::DropList => 1,
+            DefaultFunction::InsertCoin
+            | DefaultFunction::LookupCoin
+            | DefaultFunction::UnionValue
+            | DefaultFunction::ValueContains
+            | DefaultFunction::ValueData
+            | DefaultFunction::UnValueData
+            | DefaultFunction::ScaleValue => 0,
         }
     }
 
@@ -459,6 +486,10 @@ impl DefaultFunction {
         args: &[Value],
         traces: &mut Vec<Trace>,
     ) -> Result<Value, Error> {
+        if self.is_value_builtin() && !semantics.supports_values() {
+            return Err(Error::BuiltinNotAvailable(*self));
+        }
+
         match self {
             DefaultFunction::AddInteger => {
                 let arg1 = args[0].unwrap_integer()?;
@@ -2034,6 +2065,57 @@ impl DefaultFunction {
                 let value = Value::list(r#type.clone(), dropped);
 
                 Ok(value)
+            }
+            DefaultFunction::InsertCoin => {
+                let currency = args[0].unwrap_byte_string()?;
+                let token = args[1].unwrap_byte_string()?;
+                let amount = args[2].unwrap_integer()?;
+                let value = args[3].unwrap_value()?;
+                let inserted = value
+                    .insert_coin(currency, token, amount)
+                    .map_err(Error::ValueBuiltin)?;
+
+                Ok(Value::from_value(inserted))
+            }
+            DefaultFunction::LookupCoin => {
+                let currency = args[0].unwrap_byte_string()?;
+                let token = args[1].unwrap_byte_string()?;
+                let value = args[2].unwrap_value()?;
+
+                Ok(Value::integer(value.lookup_coin(currency, token).into()))
+            }
+            DefaultFunction::UnionValue => {
+                let left = args[0].unwrap_value()?;
+                let right = args[1].unwrap_value()?;
+                let union = left.union(right).map_err(Error::ValueBuiltin)?;
+
+                Ok(Value::from_value(union))
+            }
+            DefaultFunction::ValueContains => {
+                let left = args[0].unwrap_value()?;
+                let right = args[1].unwrap_value()?;
+                let contains = left.contains(right).map_err(Error::ValueBuiltin)?;
+
+                Ok(Value::bool(contains))
+            }
+            DefaultFunction::ValueData => {
+                let value = args[0].unwrap_value()?;
+                let data = value.to_data_checked().map_err(Error::ValueBuiltin)?;
+
+                Ok(Value::data(data))
+            }
+            DefaultFunction::UnValueData => {
+                let data = args[0].unwrap_data()?;
+                let value = crate::ast::Value::from_data(data).map_err(Error::ValueBuiltin)?;
+
+                Ok(Value::from_value(value))
+            }
+            DefaultFunction::ScaleValue => {
+                let scalar = args[0].unwrap_integer()?;
+                let value = args[1].unwrap_value()?;
+                let scaled = value.scale(scalar).map_err(Error::ValueBuiltin)?;
+
+                Ok(Value::from_value(scaled))
             }
         }
     }

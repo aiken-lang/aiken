@@ -18,6 +18,7 @@ mod record_update;
 mod sequence;
 pub mod string;
 mod tuple;
+mod value;
 mod var;
 pub mod when;
 
@@ -38,6 +39,7 @@ pub use record_update::parser as record_update;
 pub use sequence::parser as sequence;
 pub use string::parser as string;
 pub use tuple::parser as tuple;
+pub use value::parser as value;
 pub use var::parser as var;
 pub use when::parser as when;
 

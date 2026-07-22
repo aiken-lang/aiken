@@ -114,7 +114,7 @@ impl Export {
         };
 
         Ok(Export {
-            name: format!("{}.{}", &module.name, &func.name),
+            name: format!("{}.{}", module.name, func.name),
             doc: func.doc.clone(),
             parameters,
             return_type,

@@ -1,5 +1,13 @@
 use crate::assert_format;
 
+fn format_source(src: &str) -> String {
+    let (module, extra) =
+        crate::parser::module(src, crate::ast::ModuleKind::Lib).expect("source should parse");
+    let mut formatted = String::new();
+    crate::format::pretty(&mut formatted, module, extra, src);
+    formatted
+}
+
 #[test]
 fn format_comment_at_end_of_file() {
     assert_format!(
@@ -97,6 +105,55 @@ fn format_g2_element_constant() {
         pub const point = #<Bls12_381, G2>"b0629fa1158c2d23a10413fe91d381a84d25e31d041cd0377d25828498fd02011b35893938ced97535395e4815201e67108bcd4665e0db25d602d76fa791fab706c54abf5e1a9e44b4ac1e6badf3d2ac0328f5e30be341677c8bac5dda7682f1"
         "#
     );
+}
+
+#[test]
+fn format_value_literal_to_canonical_nested_syntax() {
+    let source = r#"const value =
+  #<Value>[
+    (#"aa", [
+      (#"bb", 42),
+    ]),
+  ]
+"#;
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        "const value = #<Value>[(#\"aa\", [(#\"bb\", 42)])]\n",
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_value_literal_preserves_nested_comments() {
+    let source = r#"const value =
+  #<Value>[
+    // outer entry
+    (#"aa", [
+      // inner entry
+      (#"bb", 42),
+    ]),
+  ]
+"#;
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"const value =
+  #<Value>[
+    // outer entry
+    (
+      #"aa",
+      [
+        // inner entry
+        (#"bb", 42),
+      ]
+    ),
+  ]
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
 }
 
 #[test]

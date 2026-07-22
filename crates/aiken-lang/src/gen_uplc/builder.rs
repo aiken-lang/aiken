@@ -184,6 +184,7 @@ pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
         Some(UplcType::Bls12_381G1Element) => "_bls381_12_g1".to_string(),
         Some(UplcType::Bls12_381G2Element) => "_bls381_12_g2".to_string(),
         Some(UplcType::Bls12_381MlResult) => "_ml_result".to_string(),
+        Some(UplcType::Value) => "_value".to_string(),
         None if t.is_unbound() => "_unbound".to_string(),
         None if t.is_generic() => {
             unreachable!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE")
@@ -502,6 +503,7 @@ pub fn known_data_to_type(
             Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
         }
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Value) => Term::Builtin(DefaultFunction::UnValueData).apply(term),
         Some(UplcType::Data) | None => {
             let list_decorator = lookup_data_type_by_tipo(data_types, field_type)
                 .map(|dt| {
@@ -542,6 +544,7 @@ pub fn unknown_data_to_type(
         }
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
 
+        Some(UplcType::Value) => Term::Builtin(DefaultFunction::UnValueData).apply(term),
         Some(UplcType::Pair(_, _)) => Term::tail_list()
             .apply(Term::tail_list().apply(Term::var("__list_data")))
             .delayed_choose_list(
@@ -611,6 +614,9 @@ pub fn softcast_data_to_type_otherwise(
             }
         }
 
+        Some(UplcType::Value) => {
+            callback(Term::Builtin(DefaultFunction::UnValueData).apply(Term::Var(val)))
+        }
         Some(UplcType::Data) => callback(Term::Var(val)),
 
         Some(UplcType::Bls12_381MlResult) => {
@@ -670,82 +676,75 @@ pub fn softcast_data_to_type_otherwise(
     })
 }
 
-pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcConstant> {
-    let mut new_constants = vec![];
-    for constant in constants {
-        let constant = match constant.as_ref() {
-            UplcConstant::Integer(i) => UplcConstant::Data(PlutusData::BigInt(to_pallas_bigint(i))),
-            UplcConstant::ByteString(b) => {
-                UplcConstant::Data(PlutusData::BoundedBytes(b.clone().into()))
-            }
-            UplcConstant::String(s) => {
-                UplcConstant::Data(PlutusData::BoundedBytes(s.as_bytes().to_vec().into()))
-            }
+pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Option<Vec<UplcConstant>> {
+    constants
+        .iter()
+        .map(|constant| convert_constant_to_data(constant))
+        .collect()
+}
 
-            UplcConstant::Bool(b) => UplcConstant::Data(Data::constr((*b).into(), vec![])),
-            UplcConstant::ProtoList(list_type, constants) => {
-                if matches!(list_type, UplcType::Pair(_, _)) {
-                    let inner_constants = constants
-                        .iter()
-                        .cloned()
-                        .map(|pair| match pair {
-                            UplcConstant::ProtoPair(_, _, left, right) => {
-                                let inner_constants = vec![left, right];
-                                let inner_constants = convert_constants_to_data(inner_constants)
-                                    .into_iter()
-                                    .map(|constant| match constant {
-                                        UplcConstant::Data(d) => d,
-                                        _ => todo!(),
-                                    })
-                                    .collect_vec();
-                                (inner_constants[0].clone(), inner_constants[1].clone())
-                            }
-                            _ => unreachable!(),
-                        })
-                        .collect_vec();
-
-                    UplcConstant::Data(PlutusData::Map(KeyValuePairs::Def(inner_constants)))
-                } else {
-                    let inner_constants =
-                        convert_constants_to_data(constants.iter().cloned().map(Rc::new).collect())
-                            .into_iter()
-                            .map(|constant| match constant {
-                                UplcConstant::Data(d) => d,
-                                _ => todo!(),
-                            })
-                            .collect_vec();
-
-                    UplcConstant::Data(Data::list(inner_constants))
-                }
-            }
-            UplcConstant::ProtoPair(_, _, left, right) => {
-                let inner_constants = vec![left.clone(), right.clone()];
-                let inner_constants = convert_constants_to_data(inner_constants)
-                    .into_iter()
-                    .map(|constant| match constant {
-                        UplcConstant::Data(d) => d,
-                        _ => todo!(),
+fn convert_constant_to_data(constant: &UplcConstant) -> Option<UplcConstant> {
+    let data = match constant {
+        UplcConstant::Integer(i) => PlutusData::BigInt(to_pallas_bigint(i)),
+        UplcConstant::ByteString(b) => PlutusData::BoundedBytes(b.clone().into()),
+        UplcConstant::String(s) => PlutusData::BoundedBytes(s.as_bytes().to_vec().into()),
+        UplcConstant::Bool(b) => Data::constr((*b).into(), vec![]),
+        UplcConstant::ProtoList(list_type, constants) => {
+            if matches!(list_type, UplcType::Pair(_, _)) {
+                let entries = constants
+                    .iter()
+                    .map(|pair| {
+                        let UplcConstant::ProtoPair(_, _, left, right) = pair else {
+                            return None;
+                        };
+                        let UplcConstant::Data(left) = convert_constant_to_data(left)? else {
+                            return None;
+                        };
+                        let UplcConstant::Data(right) = convert_constant_to_data(right)? else {
+                            return None;
+                        };
+                        Some((left, right))
                     })
-                    .collect_vec();
+                    .collect::<Option<Vec<_>>>()?;
 
-                UplcConstant::Data(Data::list(vec![
-                    inner_constants[0].clone(),
-                    inner_constants[1].clone(),
-                ]))
+                PlutusData::Map(KeyValuePairs::Def(entries))
+            } else {
+                let items = constants
+                    .iter()
+                    .map(|constant| {
+                        let UplcConstant::Data(data) = convert_constant_to_data(constant)? else {
+                            return None;
+                        };
+                        Some(data)
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+
+                Data::list(items)
             }
-            d @ UplcConstant::Data(_) => d.clone(),
-            UplcConstant::Unit => UplcConstant::Data(Data::constr(0, vec![])),
-            UplcConstant::Bls12_381G1Element(b) => UplcConstant::Data(PlutusData::BoundedBytes(
-                b.deref().clone().compress().into(),
-            )),
-            UplcConstant::Bls12_381G2Element(b) => UplcConstant::Data(PlutusData::BoundedBytes(
-                b.deref().clone().compress().into(),
-            )),
-            UplcConstant::Bls12_381MlResult(_) => panic!("Bls12_381MlResult not supported"),
-        };
-        new_constants.push(constant);
-    }
-    new_constants
+        }
+        UplcConstant::ProtoPair(_, _, left, right) => {
+            let UplcConstant::Data(left) = convert_constant_to_data(left)? else {
+                return None;
+            };
+            let UplcConstant::Data(right) = convert_constant_to_data(right)? else {
+                return None;
+            };
+
+            Data::list(vec![left, right])
+        }
+        UplcConstant::Data(data) => data.clone(),
+        UplcConstant::Unit => Data::constr(0, vec![]),
+        UplcConstant::Bls12_381G1Element(element) => {
+            PlutusData::BoundedBytes(element.deref().clone().compress().into())
+        }
+        UplcConstant::Bls12_381G2Element(element) => {
+            PlutusData::BoundedBytes(element.deref().clone().compress().into())
+        }
+        UplcConstant::Bls12_381MlResult(_) => return None,
+        UplcConstant::Value(value) => value.to_data_checked().ok()?,
+    };
+
+    Some(UplcConstant::Data(data))
 }
 
 pub fn convert_type_to_data(
@@ -769,6 +768,7 @@ pub fn convert_type_to_data(
             Term::b_data().apply(Term::bls12_381_g2_compress().apply(term))
         }
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Value) => Term::Builtin(DefaultFunction::ValueData).apply(term),
         Some(UplcType::Pair(_, _)) => Term::list_data()
             .apply(
                 Term::mk_cons()

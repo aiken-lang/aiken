@@ -261,6 +261,36 @@ impl Annotated<Schema> {
 
                         "Int" => Ok(with_title(title.as_ref(), Schema::int())),
 
+                        "Value" => {
+                            let bytes = Annotated::do_from_type(
+                                &Type::byte_array(),
+                                modules,
+                                type_parameters,
+                                definitions,
+                            )?;
+                            let integer = Annotated::do_from_type(
+                                &Type::int(),
+                                modules,
+                                type_parameters,
+                                definitions,
+                            )?;
+
+                            Ok(Annotated {
+                                title: title.or(Some("Value".to_string())),
+                                description: None,
+                                annotated: Schema::Data(Data::Map(
+                                    Declaration::Referenced(bytes.clone()),
+                                    Declaration::Inline(
+                                        Data::Map(
+                                            Declaration::Referenced(bytes),
+                                            Declaration::Referenced(integer),
+                                        )
+                                        .into(),
+                                    ),
+                                )),
+                            })
+                        }
+
                         "String" => Ok(with_title(title.as_ref(), Schema::String)),
 
                         "Void" => Ok(Annotated {
@@ -468,7 +498,7 @@ impl Annotated<Schema> {
                 TypeVar::Link { tipo } => {
                     Annotated::do_from_type(tipo, modules, type_parameters, definitions)
                 }
-                TypeVar::Generic { id } => {
+                TypeVar::Generic { id, .. } => {
                     let tipo = type_parameters
                         .get(id)
                         .ok_or_else(|| Error::new(ErrorContext::FreeTypeVariable, type_info))?
@@ -586,7 +616,7 @@ fn collect_type_parameters<'a>(
     for (index, generic) in generics.iter().enumerate() {
         match &**generic {
             Type::Var { tipo, .. } => match *tipo.borrow() {
-                TypeVar::Generic { id } => {
+                TypeVar::Generic { id, .. } => {
                     type_parameters.insert(
                         id,
                         applications
@@ -1253,6 +1283,35 @@ pub mod tests {
                 },
                 "values": {
                     "$ref": "#/definitions/ByteArray"
+                }
+            }),
+        )
+    }
+
+    #[test]
+    fn value_type_uses_nested_map_schema() {
+        let mut definitions = Definitions::new();
+        let reference =
+            Annotated::from_type(&HashMap::new(), Type::value().as_ref(), &mut definitions)
+                .unwrap();
+        let schema = definitions.lookup(&reference).unwrap();
+
+        assert_json(
+            schema,
+            json!({
+                "title": "Value",
+                "dataType": "map",
+                "keys": {
+                    "$ref": "#/definitions/ByteArray"
+                },
+                "values": {
+                    "dataType": "map",
+                    "keys": {
+                        "$ref": "#/definitions/ByteArray"
+                    },
+                    "values": {
+                        "$ref": "#/definitions/Int"
+                    }
                 }
             }),
         )

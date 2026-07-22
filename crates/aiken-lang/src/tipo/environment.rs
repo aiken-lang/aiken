@@ -3,6 +3,7 @@ use super::{
     ValueConstructorVariant,
     error::{Error, Warning},
     exhaustive::{Matrix, PatternStack, simplify},
+    find_and_replace_generics, get_generic_id_and_type,
     hydrator::Hydrator,
 };
 use crate::{
@@ -806,12 +807,15 @@ impl<'a> Environment<'a> {
                         });
                     }
 
-                    TypeVar::Generic { id } => match ids.get(id) {
+                    TypeVar::Generic { id, equality } => match ids.get(id) {
                         Some(t) => return Type::with_alias(t.clone(), alias.clone()),
                         None => {
                             if !hydrator.is_rigid(id) {
                                 // Check this in the hydrator, i.e. is it a created type
                                 let v = Type::with_alias(self.new_unbound_var(), alias.clone());
+                                if *equality {
+                                    v.require_equality();
+                                }
                                 ids.insert(*id, v.clone());
                                 return v;
                             }
@@ -1267,6 +1271,7 @@ impl<'a> Environment<'a> {
                         public: *public,
                         parameters,
                         tipo,
+                        runtime_fields: Vec::new(),
                     },
                 )?;
 
@@ -1321,6 +1326,7 @@ impl<'a> Environment<'a> {
                         public: *public,
                         parameters,
                         tipo,
+                        runtime_fields: Vec::new(),
                     },
                 )?;
 
@@ -1612,6 +1618,7 @@ impl<'a> Environment<'a> {
                 }
 
                 // Check and register constructors
+                let mut runtime_fields = Vec::new();
                 for constructor in constructors {
                     assert_unique_value_name(names, &constructor.name, &constructor.location)?;
 
@@ -1638,6 +1645,8 @@ impl<'a> Environment<'a> {
                             field_map.insert(label.clone(), i, location)?;
                         }
                     }
+
+                    runtime_fields.extend(args_types.iter().cloned());
 
                     let field_map = field_map.into_option();
 
@@ -1677,6 +1686,11 @@ impl<'a> Environment<'a> {
 
                     self.insert_variable(constructor.name.clone(), constructor_info, typ);
                 }
+
+                self.module_types
+                    .get_mut(name)
+                    .expect("Type for custom type not found after registering values")
+                    .runtime_fields = runtime_fields;
             }
 
             Definition::ModuleConstant(ModuleConstant { name, location, .. }) => {
@@ -1686,6 +1700,401 @@ impl<'a> Environment<'a> {
             Definition::Use { .. } | Definition::TypeAlias { .. } => {}
         }
         Ok(())
+    }
+
+    pub(crate) fn type_contains_runtime_value(&self, tipo: &Type) -> bool {
+        self.type_contains_runtime_value_inner(tipo, &mut BTreeSet::new())
+    }
+
+    fn type_contains_runtime_value_inner(
+        &self,
+        tipo: &Type,
+        visiting: &mut BTreeSet<String>,
+    ) -> bool {
+        match tipo {
+            Type::Var { tipo, .. } => match &*tipo.borrow() {
+                TypeVar::Link { tipo } => self.type_contains_runtime_value_inner(tipo, visiting),
+                TypeVar::Unbound { .. } | TypeVar::Generic { .. } => false,
+            },
+            Type::Fn { .. } => false,
+            Type::Tuple { elems, .. } => elems
+                .iter()
+                .any(|elem| self.type_contains_runtime_value_inner(elem, visiting)),
+            Type::Pair { fst, snd, .. } => {
+                self.type_contains_runtime_value_inner(fst, visiting)
+                    || self.type_contains_runtime_value_inner(snd, visiting)
+            }
+            Type::App {
+                module, name, args, ..
+            } => {
+                if tipo.is_value() {
+                    return true;
+                }
+
+                let identity = format!("{module}.{name}:{}", tipo.to_pretty(0));
+                if !visiting.insert(identity.clone()) {
+                    return false;
+                }
+
+                let contains_value = match self.runtime_field_types(tipo) {
+                    Some(fields) => fields
+                        .iter()
+                        .any(|field| self.type_contains_runtime_value_inner(field, visiting)),
+                    None => args
+                        .iter()
+                        .any(|arg| self.type_contains_runtime_value_inner(arg, visiting)),
+                };
+
+                visiting.remove(&identity);
+                contains_value
+            }
+        }
+    }
+
+    pub(crate) fn require_runtime_equality(&self, tipo: &Type) {
+        self.require_runtime_equality_inner(tipo, &mut BTreeSet::new());
+    }
+
+    fn require_runtime_equality_inner(&self, tipo: &Type, visiting: &mut BTreeSet<String>) {
+        match tipo {
+            Type::Var { tipo: var, .. } => {
+                let linked = match &*var.borrow() {
+                    TypeVar::Link { tipo } => Some(tipo.clone()),
+                    TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
+                };
+
+                if let Some(linked) = linked {
+                    self.require_runtime_equality_inner(&linked, visiting);
+                } else {
+                    tipo.require_equality();
+                }
+            }
+            Type::Fn { .. } => {}
+            Type::Tuple { elems, .. } => {
+                for elem in elems {
+                    self.require_runtime_equality_inner(elem, visiting);
+                }
+            }
+            Type::Pair { fst, snd, .. } => {
+                self.require_runtime_equality_inner(fst, visiting);
+                self.require_runtime_equality_inner(snd, visiting);
+            }
+            Type::App {
+                module, name, args, ..
+            } => {
+                if tipo.is_list() {
+                    for arg in args {
+                        self.require_runtime_equality_inner(arg, visiting);
+                    }
+                    return;
+                }
+
+                if tipo.get_uplc_type().is_some() {
+                    return;
+                }
+
+                let identity = format!("{module}.{name}:{}", tipo.to_pretty(0));
+                if !visiting.insert(identity.clone()) {
+                    return;
+                }
+
+                match self.runtime_field_types(tipo) {
+                    Some(fields) => {
+                        for field in fields {
+                            self.require_runtime_equality_inner(&field, visiting);
+                        }
+                    }
+                    None => {
+                        for arg in args {
+                            self.require_runtime_equality_inner(arg, visiting);
+                        }
+                    }
+                }
+
+                visiting.remove(&identity);
+            }
+        }
+    }
+
+    /// Private types get pruned from the module's public interface, yet a
+    /// public (opaque) type may still wrap one in its runtime representation.
+    /// Downstream modules resolve `runtime_fields` through the interface, so
+    /// anything only reachable through a private type would escape runtime
+    /// checks like [`Self::type_contains_runtime_value`]. Before pruning,
+    /// substitute reachable private types with their (instantiated) runtime
+    /// fields so the interface exports the actual runtime representation, e.g.
+    /// `[Hidden<Value>] → [Int]` when `Hidden` merely stores an `Int`.
+    pub(crate) fn expand_private_runtime_fields(&mut self, module_name: &str) {
+        let private_types = self
+            .module_types
+            .iter()
+            .filter(|(_, info)| !info.public && info.module == module_name)
+            .map(|(name, _)| name.clone())
+            .collect::<BTreeSet<_>>();
+
+        if private_types.is_empty() {
+            return;
+        }
+
+        let public_types = self
+            .module_types
+            .iter()
+            .filter(|(_, info)| {
+                info.public && info.module == module_name && !info.runtime_fields.is_empty()
+            })
+            .map(|(name, info)| (name.clone(), info.runtime_fields.clone()))
+            .collect::<Vec<_>>();
+
+        for (name, fields) in public_types {
+            let mut expanded = Vec::new();
+            let mut visiting = BTreeSet::new();
+            let mut touched = false;
+
+            for field in &fields {
+                self.expand_private_runtime_field(
+                    field,
+                    module_name,
+                    &private_types,
+                    &mut visiting,
+                    &mut touched,
+                    &mut expanded,
+                );
+            }
+
+            if touched {
+                self.module_types
+                    .get_mut(&name)
+                    .expect("public type disappeared while expanding runtime fields")
+                    .runtime_fields = expanded;
+            }
+        }
+    }
+
+    /// Push the runtime representation of `tipo` onto `expanded`: a private
+    /// type dissolves into its (instantiated) runtime fields, anything else is
+    /// kept with private types substituted away inside it.
+    fn expand_private_runtime_field(
+        &self,
+        tipo: &Rc<Type>,
+        module_name: &str,
+        private_types: &BTreeSet<String>,
+        visiting: &mut BTreeSet<String>,
+        touched: &mut bool,
+        expanded: &mut Vec<Rc<Type>>,
+    ) {
+        match tipo.as_ref() {
+            Type::Var { tipo: var, .. } => {
+                let linked = match &*var.borrow() {
+                    TypeVar::Link { tipo } => Some(tipo.clone()),
+                    TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
+                };
+
+                match linked {
+                    Some(linked) => self.expand_private_runtime_field(
+                        &linked,
+                        module_name,
+                        private_types,
+                        visiting,
+                        touched,
+                        expanded,
+                    ),
+                    None => expanded.push(tipo.clone()),
+                }
+            }
+            Type::App { module, name, .. }
+                if module == module_name && private_types.contains(name) =>
+            {
+                let identity = format!("{module}.{name}:{}", tipo.to_pretty(0));
+                if !visiting.insert(identity.clone()) {
+                    return;
+                }
+
+                // Follow the fields actually stored by the constructor (so
+                // phantom type arguments do not leak into the expansion),
+                // dissolving nested private types along the way. Private
+                // types live in the current module, so they always resolve;
+                // keep the nominal field as a conservative fallback otherwise.
+                match self.runtime_field_types(tipo) {
+                    Some(fields) => {
+                        *touched = true;
+
+                        for field in fields {
+                            self.expand_private_runtime_field(
+                                &field,
+                                module_name,
+                                private_types,
+                                visiting,
+                                touched,
+                                expanded,
+                            );
+                        }
+                    }
+                    None => expanded.push(tipo.clone()),
+                }
+
+                visiting.remove(&identity);
+            }
+            Type::Fn { .. } | Type::Tuple { .. } | Type::Pair { .. } | Type::App { .. } => {
+                expanded.push(self.substitute_private_runtime_types(
+                    tipo,
+                    module_name,
+                    private_types,
+                    visiting,
+                    touched,
+                ));
+            }
+        }
+    }
+
+    /// Rewrite `tipo` so that any private type occurring inside it is replaced
+    /// by its runtime representation, keeping the surrounding structure (e.g.
+    /// `List<Hidden<a>>` becomes `List<Int>` when `Hidden` stores an `Int`).
+    /// A private type with several runtime fields becomes a tuple of them.
+    fn substitute_private_runtime_types(
+        &self,
+        tipo: &Rc<Type>,
+        module_name: &str,
+        private_types: &BTreeSet<String>,
+        visiting: &mut BTreeSet<String>,
+        touched: &mut bool,
+    ) -> Rc<Type> {
+        match tipo.as_ref() {
+            Type::Var { tipo: var, .. } => {
+                let linked = match &*var.borrow() {
+                    TypeVar::Link { tipo } => Some(tipo.clone()),
+                    TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
+                };
+
+                match linked {
+                    Some(linked) => self.substitute_private_runtime_types(
+                        &linked,
+                        module_name,
+                        private_types,
+                        visiting,
+                        touched,
+                    ),
+                    None => tipo.clone(),
+                }
+            }
+            Type::Fn { .. } => tipo.clone(),
+            Type::Tuple { elems, alias } => Rc::new(Type::Tuple {
+                elems: elems
+                    .iter()
+                    .map(|elem| {
+                        self.substitute_private_runtime_types(
+                            elem,
+                            module_name,
+                            private_types,
+                            visiting,
+                            touched,
+                        )
+                    })
+                    .collect(),
+                alias: alias.clone(),
+            }),
+            Type::Pair { fst, snd, alias } => Rc::new(Type::Pair {
+                fst: self.substitute_private_runtime_types(
+                    fst,
+                    module_name,
+                    private_types,
+                    visiting,
+                    touched,
+                ),
+                snd: self.substitute_private_runtime_types(
+                    snd,
+                    module_name,
+                    private_types,
+                    visiting,
+                    touched,
+                ),
+                alias: alias.clone(),
+            }),
+            Type::App { module, name, .. }
+                if module == module_name && private_types.contains(name) =>
+            {
+                let mut fields = Vec::new();
+
+                self.expand_private_runtime_field(
+                    tipo,
+                    module_name,
+                    private_types,
+                    visiting,
+                    touched,
+                    &mut fields,
+                );
+
+                if fields.len() == 1 {
+                    fields.remove(0)
+                } else {
+                    Rc::new(Type::Tuple {
+                        elems: fields,
+                        alias: None,
+                    })
+                }
+            }
+            Type::App {
+                public,
+                contains_opaque,
+                module,
+                name,
+                args,
+                alias,
+            } => Rc::new(Type::App {
+                public: *public,
+                contains_opaque: *contains_opaque,
+                module: module.clone(),
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| {
+                        self.substitute_private_runtime_types(
+                            arg,
+                            module_name,
+                            private_types,
+                            visiting,
+                            touched,
+                        )
+                    })
+                    .collect(),
+                alias: alias.clone(),
+            }),
+        }
+    }
+
+    pub(crate) fn runtime_field_types(&self, concrete_type: &Type) -> Option<Vec<Rc<Type>>> {
+        let Type::App { module, name, .. } = concrete_type else {
+            return Some(Vec::new());
+        };
+
+        let local = self
+            .module_types
+            .get(name)
+            .filter(|constructor| constructor.module.as_str() == module);
+
+        let type_constructor = local.or_else(|| {
+            self.importable_modules
+                .get(module)
+                .and_then(|module_info| module_info.types.get(name))
+        });
+
+        let type_constructor = type_constructor?;
+
+        if type_constructor.location == Span::empty() {
+            return None;
+        }
+
+        let mono_types: indexmap::IndexMap<_, _> =
+            get_generic_id_and_type(&type_constructor.tipo, concrete_type)
+                .into_iter()
+                .collect();
+
+        Some(
+            type_constructor
+                .runtime_fields
+                .iter()
+                .map(|field| find_and_replace_generics(field, &mono_types))
+                .collect(),
+        )
     }
 
     /// Unify two types that should be the same.
@@ -1745,7 +2154,7 @@ impl<'a> Environment<'a> {
             enum Action {
                 Unify(Rc<Type>),
                 CouldNotUnify,
-                Link,
+                Link { requires_equality: bool },
             }
 
             let action = match tipo.borrow().deref() {
@@ -1753,16 +2162,21 @@ impl<'a> Environment<'a> {
                     Action::Unify(Type::with_alias(tipo.clone(), alias.clone()))
                 }
 
-                TypeVar::Unbound { id } => {
+                TypeVar::Unbound { id, equality } => {
                     unify_unbound_type(rhs.clone(), *id, location)?;
-                    Action::Link
+                    Action::Link {
+                        requires_equality: *equality,
+                    }
                 }
 
-                TypeVar::Generic { id } => {
+                TypeVar::Generic { id, equality } => {
                     if let Type::Var { tipo, alias: _ } = rhs.deref()
                         && tipo.borrow().is_unbound()
                     {
-                        *tipo.borrow_mut() = TypeVar::Generic { id: *id };
+                        *tipo.borrow_mut() = TypeVar::Generic {
+                            id: *id,
+                            equality: *equality,
+                        };
                         return Ok(());
                     }
                     Action::CouldNotUnify
@@ -1770,7 +2184,13 @@ impl<'a> Environment<'a> {
             };
 
             return match action {
-                Action::Link => {
+                Action::Link { requires_equality } => {
+                    if requires_equality {
+                        if self.type_contains_runtime_value(&rhs) {
+                            return Err(Error::IllegalComparison { location });
+                        }
+                        self.require_runtime_equality(&rhs);
+                    }
                     *tipo.borrow_mut() = TypeVar::Link { tipo: rhs };
                     Ok(())
                 }
@@ -2037,11 +2457,14 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
                 );
             }
 
-            TypeVar::Unbound { id } => {
+            TypeVar::Unbound { id, equality } => {
                 if id == &own_id {
                     return Err(Error::RecursiveType { location });
                 } else {
-                    Some(TypeVar::Unbound { id: *id })
+                    Some(TypeVar::Unbound {
+                        id: *id,
+                        equality: *equality,
+                    })
                 }
             }
 
@@ -2214,7 +2637,13 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
     match t.deref() {
         Type::Var { tipo, alias } => Type::with_alias(
             match tipo.borrow().deref() {
-                TypeVar::Unbound { id } => Type::generic_var(*id),
+                TypeVar::Unbound { id, equality } => {
+                    let generic = Type::generic_var(*id);
+                    if *equality {
+                        generic.require_equality();
+                    }
+                    generic
+                }
                 TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
                 TypeVar::Generic { .. } => Rc::new(Type::Var {
                     tipo: tipo.clone(),

@@ -107,6 +107,10 @@ fn check_validator(
     check_module(ast, Vec::new(), ModuleKind::Validator, Tracing::verbose())
 }
 
+fn assert_illegal_comparison<T, W>(result: Result<T, (W, Error)>) {
+    assert!(matches!(result, Err((_, Error::IllegalComparison { .. }))));
+}
+
 #[test]
 fn bls12_381_elements_in_data_type() {
     let source_code = r#"
@@ -235,6 +239,627 @@ fn illegal_function_comparison() {
         check_validator(parse(source_code)),
         Err((_, Error::IllegalComparison { .. }))
     ))
+}
+
+#[test]
+fn primitive_value_equality_is_illegal() {
+    let source_code = r#"
+        fn compare(left: Value, right: Value) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn primitive_value_inequality_is_illegal() {
+    let source_code = r#"
+        fn compare(data: Data, value: Value) -> Bool {
+          data != value
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn primitive_value_coexists_with_qualified_module_value() {
+    let dependency = r#"
+        pub opaque type Value {
+          inner: Int
+        }
+
+        pub const zero = Value { inner: 0 }
+    "#;
+    let source_code = r#"
+        use cardano/assets
+
+        fn native_identity(value: Value) -> Value {
+          value
+        }
+
+        fn assets_identity(value: assets.Value) -> assets.Value {
+          value
+        }
+
+        fn coexist() -> assets.Value {
+          expect _ = native_identity(#<Value>[])
+          assets_identity(assets.zero)
+        }
+    "#;
+
+    let result = check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "cardano/assets")],
+    );
+
+    assert!(result.is_ok(), "{result:#?}");
+}
+
+#[test]
+fn unqualified_cardano_assets_value_shadows_primitive_value() {
+    let dependency = r#"
+        pub opaque type Value {
+          inner: Int
+        }
+    "#;
+    let source_code = r#"
+        use cardano/assets.{Value}
+
+        fn imported_identity(value: Value) -> Value {
+          value
+        }
+
+        fn mismatch() -> Value {
+          imported_identity(#<Value>[])
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(
+            parse(source_code),
+            vec![parse_as(dependency, "cardano/assets")],
+        ),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn module_value_does_not_unify_with_primitive_value() {
+    let dependency = r#"
+        pub opaque type Value {
+          inner: Int
+        }
+
+        pub const zero = Value { inner: 0 }
+    "#;
+    let source_code = r#"
+        use cardano/assets.{zero}
+
+        fn native_identity(value: Value) -> Value {
+          value
+        }
+
+        fn mismatch() -> Value {
+          native_identity(zero)
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(
+            parse(source_code),
+            vec![parse_as(dependency, "cardano/assets")],
+        ),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn generic_equality_remains_legal_for_serialisable_types() {
+    let source_code = r#"
+        fn same(left, right) -> Bool {
+          left == right
+        }
+
+        fn compare() -> Bool {
+          same(1, 2)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn generic_equality_rejects_value_specialisation() {
+    let source_code = r#"
+        fn same(left, right) -> Bool {
+          left == right
+        }
+
+        fn compare(left: Value, right: Value) -> Bool {
+          same(left, right)
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn imported_generic_equality_rejects_value_specialisation() {
+    let dependency = r#"
+        pub fn same(left, right) -> Bool {
+          left == right
+        }
+    "#;
+
+    let source_code = r#"
+        use equality.{same}
+
+        fn compare(left: Value, right: Value) -> Bool {
+          same(left, right)
+        }
+    "#;
+
+    assert_illegal_comparison(check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "equality")],
+    ));
+}
+
+#[test]
+fn prelude_generic_equality_rejects_value_specialisation() {
+    let source_code = r#"
+        fn same(left: Option<a>, right: Option<a>) -> Bool {
+          left == right
+        }
+
+        fn compare(left: Value, right: Value) -> Bool {
+          same(Some(left), Some(right))
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn piped_generic_equality_rejects_value_specialisation() {
+    let source_code = r#"
+        fn same(value) -> Bool {
+          value == value
+        }
+
+        fn compare(value: Value) -> Bool {
+          value |> same
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn pattern_unification_preserves_generic_equality_constraint() {
+    let source_code = r#"
+        type Box<a> {
+          Box(a)
+        }
+
+        fn compare(value: Box<Value>) -> Bool {
+          fn(x) {
+            let result = x == x
+            expect Box(_) = x
+            result
+          }(value)
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn equality_rejects_value_nested_in_a_list() {
+    let source_code = r#"
+        fn compare(left: List<Value>, right: List<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn equality_rejects_value_nested_in_an_option() {
+    let source_code = r#"
+        fn compare(left: Option<Value>, right: Option<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn equality_rejects_value_nested_through_generic_wrappers() {
+    let dependency = r#"
+        pub opaque type Imported<a> {
+          Imported(a)
+        }
+    "#;
+    let source_code = r#"
+        use wrapper.{Imported}
+
+        type Local<a> {
+          Local(Option<a>)
+        }
+
+        fn compare(
+          left: Local<Imported<Value>>,
+          right: Local<Imported<Value>>,
+        ) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "wrapper")],
+    ));
+}
+
+#[test]
+fn equality_rejects_value_nested_in_a_tuple() {
+    let source_code = r#"
+        fn compare(left: (Value, Int), right: (Value, Int)) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn equality_rejects_value_nested_in_a_pair() {
+    let source_code = r#"
+        fn compare(left: Pair<Value, Int>, right: Pair<Value, Int>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn equality_allows_value_in_a_phantom_type_argument() {
+    let source_code = r#"
+        type Phantom<a> {
+          Phantom(Int)
+        }
+
+        fn compare(left: Phantom<Value>, right: Phantom<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_allows_value_in_a_recursive_phantom_type_argument() {
+    let source_code = r#"
+        type RecursivePhantom<a> {
+          End
+          Next(Int, RecursivePhantom<a>)
+        }
+
+        fn compare(
+          left: RecursivePhantom<Value>,
+          right: RecursivePhantom<Value>,
+        ) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_rejects_value_in_a_generic_record_field() {
+    let source_code = r#"
+        type Envelope<a> {
+          Envelope(a)
+        }
+
+        fn compare(left: Envelope<Value>, right: Envelope<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn equality_rejects_value_erased_by_an_opaque_wrapper() {
+    let source_code = r#"
+        opaque type Wrapped {
+          Wrapped(Value)
+        }
+
+        fn compare(left: Wrapped, right: Wrapped) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check(parse(source_code)))
+}
+
+#[test]
+fn equality_rejects_value_erased_by_an_imported_opaque_wrapper() {
+    let dependency = r#"
+        pub opaque type Wrapped {
+          Wrapped(Value)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped.{Wrapped}
+
+        fn compare(left: Wrapped, right: Wrapped) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert_illegal_comparison(check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "wrapped")],
+    ));
+}
+
+#[test]
+fn equality_rejects_value_hidden_behind_an_imported_private_wrapper() {
+    let dependency = r#"
+        type Hidden {
+          Hidden(Value)
+        }
+
+        pub opaque type Public {
+          Public(Hidden)
+        }
+
+        pub fn make(value: Value) -> Public {
+          Public(Hidden(value))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public, right: Public) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          let value = #<Value>[]
+          compare(make(value), make(value))
+        }
+    "#;
+
+    assert_illegal_comparison(check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "dep")],
+    ));
+}
+
+#[test]
+fn equality_rejects_value_hidden_behind_a_generic_imported_private_wrapper() {
+    let dependency = r#"
+        type Hidden<a> {
+          Hidden(a, Value)
+        }
+
+        pub opaque type Public<a> {
+          Public(List<Hidden<a>>)
+        }
+
+        pub fn make(value: a) -> Public<a> {
+          Public([Hidden(value, #<Value>[])])
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public<Int>, right: Public<Int>) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          compare(make(1), make(1))
+        }
+    "#;
+
+    assert_illegal_comparison(check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "dep")],
+    ));
+}
+
+// A private value-carrying type sitting in a *phantom* argument of a public
+// wrapper never makes it into the runtime representation, so equality stays
+// legal — same as the equivalent single-module program.
+#[test]
+fn equality_allows_private_value_type_in_a_phantom_argument_of_a_public_wrapper() {
+    let dependency = r#"
+        type Hidden {
+          Hidden(Value)
+        }
+
+        pub opaque type Phantom<a> {
+          Phantom(Int)
+        }
+
+        pub opaque type Public {
+          Public(Phantom<Hidden>)
+        }
+
+        pub fn make() -> Public {
+          Public(Phantom(0))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public, right: Public) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          compare(make(), make())
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok())
+}
+
+// Unlike a phantom wrapper, a wrapper that stores its type argument does put
+// the private value-carrying type into the runtime representation.
+#[test]
+fn equality_rejects_private_value_type_stored_in_a_foreign_generic_wrapper() {
+    let boxes = r#"
+        pub opaque type Box<a> {
+          Box(a)
+        }
+
+        pub fn box(inner: a) -> Box<a> {
+          Box(inner)
+        }
+    "#;
+
+    let dependency = r#"
+        use boxes.{Box, box}
+
+        type Hidden {
+          Hidden(Value)
+        }
+
+        pub opaque type Public {
+          Public(Box<Hidden>)
+        }
+
+        pub fn make(value: Value) -> Public {
+          Public(box(Hidden(value)))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public, right: Public) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          let value = #<Value>[]
+          compare(make(value), make(value))
+        }
+    "#;
+
+    assert_illegal_comparison(check_with_deps(
+        parse(source_code),
+        vec![parse_as(boxes, "boxes"), parse_as(dependency, "dep")],
+    ));
+}
+
+// A private type is invisible to downstream modules, but its runtime fields
+// are substituted into the exported interface of the public types wrapping
+// it. `Hidden<a>` only stores an `Int`, so its `Value` phantom argument never
+// reaches the runtime representation and equality stays legal.
+#[test]
+fn equality_allows_value_phantom_behind_an_imported_private_wrapper() {
+    let dependency = r#"
+        type Hidden<a> {
+          Hidden(Int)
+        }
+
+        pub opaque type Public<a> {
+          Public(Hidden<a>)
+        }
+
+        pub fn make() -> Public<a> {
+          Public(Hidden(0))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public<Value>, right: Public<Value>) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          compare(make(), make())
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok())
+}
+
+// Unlike a phantom wrapper, a private wrapper that actually stores its type
+// argument exposes it in the runtime representation, so instantiating it with
+// `Value` downstream must still be rejected.
+#[test]
+fn equality_rejects_value_stored_behind_an_imported_private_generic_wrapper() {
+    let dependency = r#"
+        type Hidden<a> {
+          Hidden(a)
+        }
+
+        pub opaque type Public<a> {
+          Public(Hidden<a>)
+        }
+
+        pub fn make(value: a) -> Public<a> {
+          Public(Hidden(value))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public<Value>, right: Public<Value>) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          let value = #<Value>[]
+          compare(make(value), make(value))
+        }
+    "#;
+
+    assert_illegal_comparison(check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "dep")],
+    ));
+}
+
+#[test]
+fn equality_allows_value_in_an_imported_opaque_phantom_argument() {
+    let dependency = r#"
+        pub opaque type Phantom<a> {
+          Phantom(Int)
+        }
+    "#;
+
+    let source_code = r#"
+        use phantom.{Phantom}
+
+        fn compare(left: Phantom<Value>, right: Phantom<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "phantom")]).is_ok())
 }
 
 #[test]
@@ -3380,6 +4005,112 @@ fn fn_multi_variant_pattern() {
         check_validator(parse(source_code)),
         Err((_, Error::NotExhaustivePatternMatch { .. }))
     ))
+}
+
+fn assert_soft_cast_from_data_is_illegal<T, W>(result: Result<T, (W, Error)>) {
+    assert!(matches!(
+        result,
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_casts_from_data_to_value_containers_are_illegal() {
+    for source_code in [
+        r#"
+            fn decode(data: Data) -> Bool {
+              if data is value: Value {
+                True
+              } else {
+                False
+              }
+            }
+        "#,
+        r#"
+            fn decode(data: Data) -> Bool {
+              if data is values: List<Value> {
+                True
+              } else {
+                False
+              }
+            }
+        "#,
+        r#"
+            fn decode(data: Data) -> Bool {
+              if data is value: Option<Value> {
+                True
+              } else {
+                False
+              }
+            }
+        "#,
+        r#"
+            type Wrapped {
+              value: Value
+            }
+
+            fn decode(data: Data) -> Bool {
+              if data is wrapped: Wrapped {
+                True
+              } else {
+                False
+              }
+            }
+        "#,
+    ] {
+        assert_soft_cast_from_data_is_illegal(check(parse(source_code)));
+    }
+}
+
+#[test]
+fn soft_cast_from_data_to_imported_opaque_value_wrapper_is_illegal() {
+    let dependency = r#"
+        pub opaque type Wrapped {
+          Wrapped(Value)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped.{Wrapped}
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: Wrapped {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert_soft_cast_from_data_is_illegal(check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "wrapped")],
+    ));
+}
+
+#[test]
+fn strict_cast_from_data_to_value_remains_legal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Value {
+          expect value: Value = data
+          value
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn explicit_un_value_data_remains_legal() {
+    let source_code = r#"
+        use aiken/builtin
+
+        fn decode(data: Data) -> Value {
+          builtin.un_value_data(data)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]

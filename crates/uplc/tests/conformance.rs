@@ -6,7 +6,7 @@ use std::{
 };
 use uplc::{
     ast::{Name, NamedDeBruijn, Program},
-    machine::runtime::VAN_ROSSEM_PROTOCOL_VERSION,
+    machine::{cost_model::ExBudget, runtime::VAN_ROSSEM_PROTOCOL_VERSION},
     parser,
 };
 use walkdir::WalkDir;
@@ -14,12 +14,15 @@ use walkdir::WalkDir;
 const PARSE_ERROR: &str = "parse error";
 const EVALUATION_FAILURE: &str = "evaluation failure";
 
-#[derive(Clone, Copy)]
-enum ParserMode {
-    Standard,
-    CanonicalValueLiterals,
-}
-
+// CIP-0153 fixtures are copied byte-for-byte from IntersectMBO/plutus revision
+// 5f785edeac0d1d89622d44344fdda07ef48e8c73 under
+// plutus-conformance/test-cases/uplc/evaluation/builtin/{constant/value,semantics/<builtin>}.
+// At that revision, regenerate this PlutusV3 parameter array with:
+// cabal run dump-cost-model-parameters -- -V 3 --untagged
+//
+// Upstream disables its generated unValueData coefficient test over a suspected top-coefficient
+// rounding discrepancy. These imported budget fixtures still exercise unValueData against that
+// exact dumped model. Run all 98 Value cases with `cargo test -p uplc --test conformance`.
 const V3_PV11_COSTS: &[i64] = &[
     100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4, 16000, 100,
     16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100, 100, 16000, 100, 94375, 32,
@@ -56,32 +59,93 @@ fn expected_to_program(expected_file: &PathBuf) -> Result<Program<Name>, String>
     }
 }
 
+fn expected_budget(expected_file: &Path) -> Result<ExBudget, String> {
+    let code = fs::read_to_string(expected_file)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", expected_file.display()));
+    let code = code.strip_suffix('\n').unwrap_or(&code);
+
+    match code {
+        PARSE_ERROR => Err(PARSE_ERROR.to_string()),
+        EVALUATION_FAILURE => Err(EVALUATION_FAILURE.to_string()),
+        _ => {
+            let fields = code
+                .strip_prefix("({cpu: ")
+                .and_then(|fields| fields.strip_suffix("})"))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "invalid budget fixture syntax in {}: {code:?}",
+                        expected_file.display()
+                    )
+                });
+            let (cpu, mem) = fields.split_once("\n| mem: ").unwrap_or_else(|| {
+                panic!(
+                    "invalid budget fixture syntax in {}: {code:?}",
+                    expected_file.display()
+                )
+            });
+            let cpu = cpu.parse().unwrap_or_else(|err| {
+                panic!("invalid CPU budget in {}: {err}", expected_file.display())
+            });
+            let mem = mem.parse().unwrap_or_else(|err| {
+                panic!(
+                    "invalid memory budget in {}: {err}",
+                    expected_file.display()
+                )
+            });
+
+            Ok(ExBudget { cpu, mem })
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ConformanceResult {
+    result: Result<Program<NamedDeBruijn>, String>,
+    budget: Result<ExBudget, String>,
+}
+
 fn actual_evaluation_result(
     file: &Path,
     language: &Language,
     protocol_major_version: u16,
     costs: &[i64],
-    parser_mode: ParserMode,
-) -> Result<Program<NamedDeBruijn>, String> {
+) -> ConformanceResult {
     let code = fs::read_to_string(file).expect("Failed to read .uplc file");
 
-    let program = match parser_mode {
-        ParserMode::Standard => parser::program(&code),
-        ParserMode::CanonicalValueLiterals => parser::program_with_canonical_value_literals(&code),
-    }
-    .map_err(|_| PARSE_ERROR.to_string())?;
+    let program = match parser::program(&code) {
+        Ok(program) => program,
+        Err(_) => {
+            return ConformanceResult {
+                result: Err(PARSE_ERROR.to_string()),
+                budget: Err(PARSE_ERROR.to_string()),
+            };
+        }
+    };
 
-    let program: Program<NamedDeBruijn> = program
-        .try_into()
-        .map_err(|_| EVALUATION_FAILURE.to_string())?;
+    let program: Program<NamedDeBruijn> = match program.try_into() {
+        Ok(program) => program,
+        Err(_) => {
+            return ConformanceResult {
+                result: Err(EVALUATION_FAILURE.to_string()),
+                budget: Err(EVALUATION_FAILURE.to_string()),
+            };
+        }
+    };
 
     let version = program.version;
-
     let eval = program.eval_as_with_protocol(language, protocol_major_version, costs, None);
+    let cost = eval.cost();
 
-    let term = eval.result().map_err(|_| EVALUATION_FAILURE.to_string())?;
-
-    Ok(Program { version, term })
+    match eval.result() {
+        Ok(term) => ConformanceResult {
+            result: Ok(Program { version, term }),
+            budget: Ok(cost),
+        },
+        Err(_) => ConformanceResult {
+            result: Err(EVALUATION_FAILURE.to_string()),
+            budget: Err(EVALUATION_FAILURE.to_string()),
+        },
+    }
 }
 
 fn plutus_conformance_tests(
@@ -89,7 +153,7 @@ fn plutus_conformance_tests(
     language: Language,
     protocol_major_version: u16,
     costs: &[i64],
-    parser_mode: ParserMode,
+    compare_budgets: bool,
 ) {
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
@@ -97,21 +161,27 @@ fn plutus_conformance_tests(
         if path.extension().and_then(OsStr::to_str) == Some("uplc") {
             let expected_file = path.with_extension("uplc.expected");
 
-            let eval = actual_evaluation_result(
-                path,
-                &language,
-                protocol_major_version,
-                costs,
-                parser_mode,
-            );
+            let actual = actual_evaluation_result(path, &language, protocol_major_version, costs);
             let expected = expected_to_program(&expected_file)
                 .map(|program| Program::<NamedDeBruijn>::try_from(program).unwrap());
 
-            match eval {
-                Ok(actual) => {
-                    pretty_assertions::assert_eq!(expected, Ok(actual), "{}", path.display());
-                }
-                Err(err) => pretty_assertions::assert_eq!(expected, Err(err), "{}", path.display()),
+            pretty_assertions::assert_eq!(
+                expected,
+                actual.result,
+                "result fixture for {}",
+                path.display()
+            );
+            if compare_budgets {
+                let budget_file = path.with_extension("uplc.budget.expected");
+                let expected_cost = expected_budget(&budget_file);
+
+                pretty_assertions::assert_eq!(
+                    expected_cost,
+                    actual.budget,
+                    "budget fixture {} for {}",
+                    budget_file.display(),
+                    path.display()
+                );
             }
         }
     }
@@ -147,7 +217,10 @@ fn plutus_conformance_tests_v2() {
             1, 1000, 172116, 183150, 6, 24, 21, 213283, 618401, 1998, 28258, 1, 1000, 38159, 2, 22,
             1000, 95933, 1, 1, 11, 1000, 277577, 12, 21,
         ],
-        ParserMode::Standard,
+        // This root combines budget fixtures from incompatible upstream cost-model revisions
+        // (legacy BLS fixtures and newer CEK/builtin fixtures). Result conformance remains valid;
+        // budget conformance is enabled for the homogeneous V3 PV11 root below.
+        false,
     )
 }
 
@@ -158,6 +231,6 @@ fn plutus_conformance_tests_v3() {
         Language::PlutusV3,
         VAN_ROSSEM_PROTOCOL_VERSION,
         V3_PV11_COSTS,
-        ParserMode::CanonicalValueLiterals,
+        true,
     )
 }
