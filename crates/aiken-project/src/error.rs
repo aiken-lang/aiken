@@ -9,8 +9,8 @@ use aiken_lang::{
 use hex::FromHexError;
 use indoc::formatdoc;
 use miette::{
-    DebugReportHandler, Diagnostic, EyreContext, LabeledSpan, MietteHandler, MietteHandlerOpts,
-    NamedSource, RgbColors, SourceCode,
+    Diagnostic, EyreContext, GraphicalReportHandler, GraphicalTheme, LabeledSpan, MietteHandler,
+    MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
 };
 use ordinal::Ordinal;
 use owo_colors::{
@@ -329,11 +329,7 @@ impl Error {
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        default_miette_handler(2)
-            .debug(self, f)
-            // Ignore error to prevent format! panics. This can happen if span points at some
-            // inaccessible location, for example by calling `report_error()` with wrong working set.
-            .or(Ok(()))
+        debug_diagnostic(self, f, 2)
     }
 }
 
@@ -838,19 +834,16 @@ impl Warning {
 
 impl Debug for Warning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        default_miette_handler(1)
-            .debug(
-                &DisplayWarning {
-                    title: &self.to_string(),
-                    source_code: self.source_code(),
-                    labels: self.labels().map(|ls| ls.collect()),
-                    help: self.help().map(|s| s.to_string()),
-                },
-                f,
-            )
-            // Ignore error to prevent format! panics. This can happen if span points at some
-            // inaccessible location, for example by calling `report_error()` with wrong working set.
-            .or(Ok(()))
+        debug_diagnostic(
+            &DisplayWarning {
+                title: &self.to_string(),
+                source_code: self.source_code(),
+                labels: self.labels().map(|ls| ls.collect()),
+                help: self.help().map(|s| s.to_string()),
+            },
+            f,
+            1,
+        )
     }
 }
 
@@ -915,4 +908,46 @@ fn default_miette_handler(context_lines: usize) -> MietteHandler {
         .terminal_links(true)
         .context_lines(context_lines)
         .build()
+}
+
+fn debug_diagnostic(
+    diagnostic: &dyn Diagnostic,
+    f: &mut std::fmt::Formatter<'_>,
+    context_lines: usize,
+) -> std::fmt::Result {
+    let result = if f.alternate() {
+        let mut report = String::new();
+
+        GraphicalReportHandler::new()
+            .with_context_lines(context_lines)
+            .with_links(false)
+            .with_theme(GraphicalTheme::unicode_nocolor())
+            .render_report(&mut report, diagnostic)
+            .and_then(|_| match strip_ansi_escapes::strip(report.as_bytes()) {
+                Ok(report) => write!(f, "{}", String::from_utf8_lossy(&report)),
+                Err(_) => write!(f, "{report}"),
+            })
+    } else {
+        default_miette_handler(context_lines).debug(diagnostic, f)
+    };
+
+    // Ignore error to prevent format! panics. This can happen if span points at some
+    // inaccessible location, for example by calling `report_error()` with wrong working set.
+    result.or(Ok(()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+
+    #[test]
+    fn alternate_debug_formatting_does_not_recurse() {
+        let error = Error::MissingManifest {
+            path: Box::new(std::path::PathBuf::from("aiken.toml")),
+        };
+
+        let report = format!("{error:#?}");
+
+        assert!(report.contains("I couldn't find any 'aiken.toml' manifest"));
+    }
 }

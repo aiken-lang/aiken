@@ -323,7 +323,7 @@ impl TypedFunction {
         } else {
             panic!(
                 "tried to get validator arity of a non-validator function {}",
-                &self.name
+                self.name
             );
         }
     }

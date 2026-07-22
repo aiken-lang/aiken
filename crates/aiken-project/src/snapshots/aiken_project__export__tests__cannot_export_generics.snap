@@ -2,7 +2,7 @@
 source: crates/aiken-project/src/export.rs
 description: "Code:\n\npub fn add(_a: a, _b: b) -> Bool {\n    True\n}\n"
 ---
-        [1m[31mError[39m[0m [31maiken::blueprint::interface[39m
+        Error aiken::blueprint::interface
 
   × I caught a free variable in the contract's interface boundary.
    ╭─[:1:12]
@@ -17,4 +17,4 @@ description: "Code:\n\npub fn add(_a: a, _b: b) -> Bool {\n    True\n}\n"
         
         I got there when trying to generate a blueprint specification of the following type:
         
-        ╰─▶ [1m[94ma[39m[0m
+        ╰─▶ a
