@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **uplc**: Tighten BLS12-381 `multiScalarMul` validation. Previously, mismatched
+  scalars/points lists were silently truncated to the shorter list (consensus-affecting),
+  and a typed list containing a non-matching element triggered an `unreachable!()` panic.
+  Now: mismatched lengths return `Error::Bls12_381ListSizeMismatch`, empty lists return
+  `Error::EmptyList`, and type-inconsistent lists return `Error::ListTypeMismatch`. PR #1349.
+
 ## v1.1.22 - 2026-05-15
 
 ### Added

@@ -142,6 +142,14 @@ pub enum Error {
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]
     HashToCurveDstTooBig,
+    #[error(
+        "BLS12-381 multiScalarMul list size mismatch\n{:>13} {}\n{:>13} {}",
+        "Expected",
+        .expected,
+        "Got",
+        .actual
+    )]
+    Bls12_381ListSizeMismatch { expected: usize, actual: usize },
     #[cfg(not(target_family = "wasm"))]
     #[error(transparent)]
     Secp256k1(#[from] secp256k1::Error),

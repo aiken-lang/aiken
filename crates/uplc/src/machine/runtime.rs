@@ -62,16 +62,15 @@ fn unwrap_bls12_381_g1_list(value: &Value) -> Result<Vec<blst::blst_p1>, Error> 
     let inner = value.unwrap_constant()?;
 
     match inner {
-        Constant::ProtoList(Type::Bls12_381G1Element, list) => Ok(list
+        Constant::ProtoList(Type::Bls12_381G1Element, list) => list
             .iter()
-            .map(|point| {
-                let Constant::Bls12_381G1Element(point) = point else {
-                    unreachable!("G1 list must only contain G1 elements")
-                };
-
-                **point
+            .map(|point| match point {
+                Constant::Bls12_381G1Element(point) => Ok(**point),
+                _ => Err(Error::ListTypeMismatch(Type::List(
+                    Type::Bls12_381G1Element.into(),
+                ))),
             })
-            .collect()),
+            .collect(),
         Constant::ProtoList(Type::Data, list) => list
             .iter()
             .map(|point| {
@@ -96,16 +95,15 @@ fn unwrap_bls12_381_g2_list(value: &Value) -> Result<Vec<blst::blst_p2>, Error> 
     let inner = value.unwrap_constant()?;
 
     match inner {
-        Constant::ProtoList(Type::Bls12_381G2Element, list) => Ok(list
+        Constant::ProtoList(Type::Bls12_381G2Element, list) => list
             .iter()
-            .map(|point| {
-                let Constant::Bls12_381G2Element(point) = point else {
-                    unreachable!("G2 list must only contain G2 elements")
-                };
-
-                **point
+            .map(|point| match point {
+                Constant::Bls12_381G2Element(point) => Ok(**point),
+                _ => Err(Error::ListTypeMismatch(Type::List(
+                    Type::Bls12_381G2Element.into(),
+                ))),
             })
-            .collect()),
+            .collect(),
         Constant::ProtoList(Type::Data, list) => list
             .iter()
             .map(|point| {
@@ -128,16 +126,13 @@ fn unwrap_bls12_381_g2_list(value: &Value) -> Result<Vec<blst::blst_p2>, Error> 
 
 fn unwrap_bls12_381_scalar_list(value: &Value) -> Result<Vec<BigInt>, Error> {
     match value.unwrap_int_list() {
-        Ok(list) => Ok(list
+        Ok(list) => list
             .iter()
-            .map(|scalar| {
-                let Constant::Integer(integer) = scalar else {
-                    unreachable!("unwrap_int_list must only contain integers")
-                };
-
-                integer.clone()
+            .map(|scalar| match scalar {
+                Constant::Integer(integer) => Ok(integer.clone()),
+                _ => Err(Error::ListTypeMismatch(Type::List(Type::Integer.into()))),
             })
-            .collect()),
+            .collect(),
         Err(_) => {
             let list = value.unwrap_data_list()?;
 
@@ -1303,6 +1298,22 @@ impl DefaultFunction {
                 let scalars = unwrap_bls12_381_scalar_list(&args[0])?;
                 let points = unwrap_bls12_381_g1_list(&args[1])?;
 
+                // Multi-scalar multiplication is undefined when either list is empty,
+                // and the two lists must agree in length to avoid silently dropping
+                // trailing scalars/points (which would be a consensus-affecting bug).
+                if scalars.is_empty() {
+                    return Err(Error::EmptyList(args[0].clone()));
+                }
+                if points.is_empty() {
+                    return Err(Error::EmptyList(args[1].clone()));
+                }
+                if scalars.len() != points.len() {
+                    return Err(Error::Bls12_381ListSizeMismatch {
+                        expected: scalars.len(),
+                        actual: points.len(),
+                    });
+                }
+
                 let size_scalar = size_of::<blst::blst_scalar>();
                 let mut out = blst::blst_p1::default();
 
@@ -1445,6 +1456,22 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_MultiScalarMul => {
                 let scalars = unwrap_bls12_381_scalar_list(&args[0])?;
                 let points = unwrap_bls12_381_g2_list(&args[1])?;
+
+                // Multi-scalar multiplication is undefined when either list is empty,
+                // and the two lists must agree in length to avoid silently dropping
+                // trailing scalars/points (which would be a consensus-affecting bug).
+                if scalars.is_empty() {
+                    return Err(Error::EmptyList(args[0].clone()));
+                }
+                if points.is_empty() {
+                    return Err(Error::EmptyList(args[1].clone()));
+                }
+                if scalars.len() != points.len() {
+                    return Err(Error::Bls12_381ListSizeMismatch {
+                        expected: scalars.len(),
+                        actual: points.len(),
+                    });
+                }
 
                 let size_scalar = size_of::<blst::blst_scalar>();
                 let mut out = blst::blst_p2::default();
@@ -2096,7 +2123,12 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::{convert_constr_to_tag, convert_tag_to_constr};
+    use super::{
+        convert_constr_to_tag, convert_tag_to_constr, unwrap_bls12_381_g1_list,
+        unwrap_bls12_381_g2_list, unwrap_bls12_381_scalar_list,
+    };
+    use crate::ast::Constant;
+    use crate::machine::value::Value;
 
     #[test]
     fn compact_tag_range() {
@@ -2143,5 +2175,149 @@ mod tests {
     #[test]
     fn to_any_tag() {
         assert_eq!(convert_tag_to_constr(102), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Regression tests for the consensus-affecting bugs fixed on #1349:
+    //
+    //   * The `unwrap_bls12_381_*_list` helpers used to panic via
+    //     `unreachable!()` if a typed list contained a non-typed element.
+    //     They now return `Error::ListTypeMismatch` instead.
+    //
+    //   * The `Bls12_381_G{1,2}_MultiScalarMul` builtins used to silently
+    //     truncate mismatched-length inputs via `Iterator::zip`, and to
+    //     operate on empty lists, both of which are undefined behaviour
+    //     for multi-scalar multiplication. They now reject these cases.
+    //
+    // These tests exercise the runtime helpers and the builtins directly
+    // because the Aiken source-level type checker rejects empty typed
+    // lists, so we cannot reach the buggy paths from valid Aiken code.
+    // -----------------------------------------------------------------------
+
+    use crate::ast::Type;
+
+    fn g1_generator_bytes() -> Vec<u8> {
+        vec![
+            0x97, 0xf1, 0xd3, 0xa7, 0x31, 0x97, 0xd7, 0x94, 0x26, 0x95, 0x63, 0x8c, 0x4f, 0xa9,
+            0xac, 0x0f, 0xc3, 0x68, 0x8c, 0x4f, 0x97, 0x74, 0xb9, 0x05, 0xa1, 0x4e, 0x3a, 0x3f,
+            0x17, 0x1b, 0xac, 0x58, 0x6c, 0x55, 0xe8, 0x3f, 0xf9, 0x7a, 0x1a, 0xef, 0xfb, 0x3a,
+            0xf0, 0x0a, 0xdb, 0x22, 0xc6, 0xbb,
+        ]
+    }
+
+    fn typed_g1_list_with_non_g1_element() -> Value {
+        // A `ProtoList(Type::Bls12_381G1Element, _)` that secretly contains
+        // an Integer. Used to exercise the unreachable!() -> ListTypeMismatch
+        // path in `unwrap_bls12_381_g1_list`.
+        Value::Con(
+            Constant::ProtoList(Type::Bls12_381G1Element, vec![Constant::Integer(1.into())]).into(),
+        )
+    }
+
+    #[test]
+    fn unwrap_g1_list_with_non_g1_element_returns_typed_error() {
+        let value = typed_g1_list_with_non_g1_element();
+        let result = unwrap_bls12_381_g1_list(&value);
+        assert!(
+            matches!(result, Err(crate::machine::Error::ListTypeMismatch(_))),
+            "expected ListTypeMismatch, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn unwrap_g2_list_with_non_g2_element_returns_typed_error() {
+        let value = Value::Con(
+            Constant::ProtoList(Type::Bls12_381G2Element, vec![Constant::Integer(1.into())]).into(),
+        );
+        let result = unwrap_bls12_381_g2_list(&value);
+        assert!(
+            matches!(result, Err(crate::machine::Error::ListTypeMismatch(_))),
+            "expected ListTypeMismatch, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn unwrap_scalar_list_with_non_integer_element_returns_typed_error() {
+        let value =
+            Value::Con(Constant::ProtoList(Type::Integer, vec![Constant::Bool(true)]).into());
+        let result = unwrap_bls12_381_scalar_list(&value);
+        assert!(
+            matches!(result, Err(crate::machine::Error::ListTypeMismatch(_))),
+            "expected ListTypeMismatch, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn msm_g1_rejects_length_mismatch_via_runtime_eval() {
+        // Build a UPLC term that calls `bls12_381_g1_multi_scalar_mul` with
+        // mismatched list lengths at the typed-list layer, then exercise the
+        // new length guard. We deliberately construct the lists at the
+        // builder level so the Aiken frontend cannot type-check them away.
+        use crate::ast::{Constant, NamedDeBruijn, Program, Term, Type};
+        use crate::machine::cost_model::ExBudget;
+        use crate::machine::runtime::Compressable;
+
+        let g1_bytes = g1_generator_bytes();
+        let g1_compressed = blst::blst_p1::uncompress(&g1_bytes).unwrap();
+        let scalars = Term::Constant(
+            Constant::ProtoList(
+                Type::Integer,
+                vec![Constant::Integer(1.into()), Constant::Integer(2.into())],
+            )
+            .into(),
+        );
+        let points = Term::Constant(
+            Constant::ProtoList(
+                Type::Bls12_381G1Element,
+                vec![Constant::Bls12_381G1Element(g1_compressed.into())],
+            )
+            .into(),
+        );
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 1, 1),
+            term: Term::bls12_381_g1_multi_scalar_mul()
+                .apply(scalars)
+                .apply(points),
+        };
+
+        let eval = program.eval(ExBudget::max());
+
+        match eval.result() {
+            Err(crate::machine::Error::Bls12_381ListSizeMismatch { expected, actual }) => {
+                assert_eq!(expected, 2);
+                assert_eq!(actual, 1);
+            }
+            other => panic!("expected Bls12_381ListSizeMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn msm_g1_rejects_empty_lists_via_runtime_eval() {
+        use crate::ast::{Constant, NamedDeBruijn, Program, Term, Type};
+        use crate::machine::runtime::Compressable;
+
+        let g1_bytes = g1_generator_bytes();
+        let g1_compressed = blst::blst_p1::uncompress(&g1_bytes).unwrap();
+        let scalars = Term::Constant(Constant::ProtoList(Type::Integer, vec![]).into());
+        let points = Term::Constant(
+            Constant::ProtoList(
+                Type::Bls12_381G1Element,
+                vec![Constant::Bls12_381G1Element(g1_compressed.into())],
+            )
+            .into(),
+        );
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 1, 1),
+            term: Term::bls12_381_g1_multi_scalar_mul()
+                .apply(scalars)
+                .apply(points),
+        };
+
+        let eval = program.eval(crate::machine::cost_model::ExBudget::max());
+
+        match eval.result() {
+            Err(crate::machine::Error::EmptyList(_)) => {}
+            other => panic!("expected EmptyList, got {other:?}"),
+        }
     }
 }

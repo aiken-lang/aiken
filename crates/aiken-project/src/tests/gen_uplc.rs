@@ -6017,6 +6017,38 @@ fn bls12_381_g2_multi_scalar_mul() {
     assert_runs(src, false, true)
 }
 
+// Regression tests for the consensus-affecting bugs flagged on #1349:
+//  - silent truncation when scalars.len() != points.len()
+//  - unreachable!() panic when a typed list contains a non-typed element
+//
+// NOTE: malformed-list and length-mismatch cases are covered by runtime-level
+// unit tests in `crates/uplc/src/machine/runtime.rs::tests` because the Aiken
+// type checker rejects `[]` literal as `List<G1Element>` / `List<G2Element>`
+// at compile time, so we cannot reach the runtime path via Aiken source.
+// Here we only exercise the happy path through the Aiken frontend to ensure
+// the happy-path codegen remains compatible with the new runtime checks.
+
+#[test]
+fn bls12_381_g1_multi_scalar_mul_happy_path_still_works() {
+    let src = r#"
+      use aiken/builtin
+
+      pub const generator_g1: G1Element =
+        #<Bls12_381, G1>"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
+
+      test msm_g1() {
+        let doubled = builtin.bls12_381_g1_scalar_mul(2, generator_g1)
+
+        builtin.bls12_381_g1_equal(
+          builtin.bls12_381_g1_multi_scalar_mul([1, 2], [generator_g1, doubled]),
+          builtin.bls12_381_g1_scalar_mul(5, generator_g1),
+        )
+      }
+    "#;
+
+    assert_runs(src, false, false)
+}
+
 #[test]
 fn qualified_prelude_functions() {
     let src = r#"
