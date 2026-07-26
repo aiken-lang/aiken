@@ -326,7 +326,7 @@ fn get_override_part<'a>(
 ) -> Result<&'a str, ScriptOverrideArgumentError> {
     parts
         .next()
-        .and_then(|s| if s.is_empty() { None } else { Some(s) })
+        .filter(|s| !s.is_empty())
         .ok_or(when_missing)
 }
 
