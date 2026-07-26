@@ -324,10 +324,7 @@ fn get_override_part<'a>(
     parts: &'_ mut std::str::Split<'a, &'a str>,
     when_missing: ScriptOverrideArgumentError,
 ) -> Result<&'a str, ScriptOverrideArgumentError> {
-    parts
-        .next()
-        .filter(|s| !s.is_empty())
-        .ok_or(when_missing)
+    parts.next().filter(|s| !s.is_empty()).ok_or(when_missing)
 }
 
 fn decode_script_hash(
