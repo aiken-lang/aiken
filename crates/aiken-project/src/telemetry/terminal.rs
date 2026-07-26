@@ -598,7 +598,7 @@ fn fmt_test(
                             .if_supports_color(Stderr, |s| s.bold())
                             .to_string()
                     },
-                    &Formatter::new()
+                    Formatter::new()
                         .expr(counterexample, false)
                         .to_pretty_string(60)
                         .lines()
