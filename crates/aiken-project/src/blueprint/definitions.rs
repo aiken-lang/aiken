@@ -302,10 +302,8 @@ impl Definitions<Annotated<Schema>> {
             }
         }
 
-        for entry in self.inner.values_mut() {
-            if let Some(annotated) = entry {
-                schema_to_data(&mut annotated.annotated);
-            }
+        for annotated in self.inner.values_mut().flatten() {
+            schema_to_data(&mut annotated.annotated);
         }
     }
 }
