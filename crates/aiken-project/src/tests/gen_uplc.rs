@@ -6540,8 +6540,7 @@ fn fail_annotated_module_constant_does_not_panic_during_codegen() {
     // The test should fail at runtime (not during codegen), so eval should
     // indicate failure (either Error::EvaluationFailure or Term::Error).
     assert!(
-        eval.result().is_err()
-            || matches!(eval.result(), Ok(Term::Error)),
+        eval.result().is_err() || matches!(eval.result(), Ok(Term::Error)),
         "expected fail-constant test to fail at runtime; got: {:?}",
         eval.result()
     );
