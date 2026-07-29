@@ -942,7 +942,10 @@ impl DefaultFunction {
                     })
                     .collect();
 
-                let i: u64 = i.try_into().map_err(|e| Error::ConstrTagOutOfRange(e.to_string()))?;
+                // Two-step conversion so the compiler infers the closure parameter
+                // type (avoids E0282 / E0271 under Rust 1.95 + edition 2024).
+                let i_result: Result<u64, _> = i.try_into();
+                let i: u64 = i_result.map_err(|e| Error::ConstrTagOutOfRange(e.to_string()))?;
 
                 let constr_data = Data::constr(i, data_list);
 
