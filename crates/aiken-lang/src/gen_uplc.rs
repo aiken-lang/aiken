@@ -3838,7 +3838,7 @@ impl<'a> CodeGenerator<'a> {
                         // term *is* an error. Use the unevaluated form so the fail/todo
                         // is preserved in the generated code and properly fails at runtime.
                         Err(uplc::machine::Error::EvaluationFailure) => {
-                            cleaned_program.term.try_into().unwrap()
+                            cleaned_program.term.clone()
                         }
                         // Any other eval error is a genuine problem — propagate it rather
                         // than silently falling back, which would change compiler behaviour.
