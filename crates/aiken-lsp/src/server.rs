@@ -475,7 +475,7 @@ impl Server {
                     None => return Ok(None),
                 };
 
-                let url = url::Url::parse(&format!("file:///{}", &module.path))
+                let url = url::Url::parse(&format!("file:///{}", module.path))
                     .expect("goto definition URL parse");
 
                 (url, &module.line_numbers)
