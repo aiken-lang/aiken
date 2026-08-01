@@ -1213,6 +1213,37 @@ impl Term<Name> {
         }
     }
 
+    /// Like `substitute_var`, but for callers that know `original` occurs at
+    /// most once (e.g. after counting occurrences with a cap of 2): the
+    /// traversal stops as soon as the substitution happened instead of
+    /// scanning the rest of the term. Returns whether a substitution was made.
+    fn substitute_single_var(&mut self, original: Rc<Name>, replace_with: &Term<Name>) -> bool {
+        match self {
+            Term::Var(name) if *name == original => {
+                *self = replace_with.clone();
+                true
+            }
+            Term::Delay(body) => Rc::make_mut(body).substitute_single_var(original, replace_with),
+            Term::Lambda {
+                parameter_name,
+                body,
+            } if *parameter_name != original => {
+                Rc::make_mut(body).substitute_single_var(original, replace_with)
+            }
+            Term::Apply { function, argument } => {
+                if Rc::make_mut(function).substitute_single_var(original.clone(), replace_with) {
+                    true
+                } else {
+                    Rc::make_mut(argument).substitute_single_var(original, replace_with)
+                }
+            }
+            Term::Force(f) => Rc::make_mut(f).substitute_single_var(original, replace_with),
+            Term::Case { .. } => todo!(),
+            Term::Constr { .. } => todo!(),
+            _ => false,
+        }
+    }
+
     fn replace_identity_usage(&mut self, original: Rc<Name>) {
         match self {
             Term::Delay(body) => {
@@ -1248,11 +1279,28 @@ impl Term<Name> {
         }
     }
 
+    /// Count occurrences of `search_for`, stopping as soon as `cap` occurrences
+    /// have been seen.
+    ///
+    /// When the returned `occurrences` is below `cap`, the traversal ran to
+    /// completion and every field of the `VarLookup` is exact. When it is `>=
+    /// cap`, the scan was aborted early and `occurrences`, `delays` and
+    /// `no_inline` are lower bounds only; callers passing a finite `cap` must
+    /// therefore only rely on distinctions below their cap (e.g. `cap = 2` to
+    /// distinguish "unused" / "used once" / "used more than once"). Pass
+    /// `usize::MAX` for an exhaustive count.
+    ///
+    /// The cap exists because this scan runs for every binder the shrinker
+    /// considers for inlining: on large programs (thousands of hoisted
+    /// definitions), exhaustive counting makes the inline pass quadratic in
+    /// program size, while the inline decisions themselves never need to know
+    /// more than "does it occur 0, 1, or more times".
     fn var_occurrences(
         &self,
         search_for: Rc<Name>,
         mut arg_stack: Vec<()>,
         mut force_stack: Vec<()>,
+        cap: usize,
     ) -> VarLookup {
         match self {
             Term::Var(name) => {
@@ -1265,7 +1313,7 @@ impl Term<Name> {
             Term::Delay(body) => {
                 let not_forced = usize::from(force_stack.pop().is_none());
 
-                body.var_occurrences(search_for, arg_stack, force_stack)
+                body.var_occurrences(search_for, arg_stack, force_stack, cap)
                     .delay_if_found(not_forced)
             }
             Term::Lambda {
@@ -1273,13 +1321,13 @@ impl Term<Name> {
                 body,
             } => {
                 if parameter_name.text == NO_INLINE {
-                    body.var_occurrences(search_for, arg_stack, force_stack)
+                    body.var_occurrences(search_for, arg_stack, force_stack, cap)
                         .no_inline_if_found()
                 } else if *parameter_name == search_for {
                     VarLookup::new()
                 } else {
                     let not_applied = usize::from(arg_stack.pop().is_none());
-                    body.var_occurrences(search_for, arg_stack, force_stack)
+                    body.var_occurrences(search_for, arg_stack, force_stack, cap)
                         .delay_if_found(not_applied)
                 }
             }
@@ -1288,11 +1336,12 @@ impl Term<Name> {
                 arg_stack.push(());
 
                 let apply_var_occurrence_stack = |term: &Term<Name>, arg_stack: Vec<()>| {
-                    term.var_occurrences(search_for.clone(), arg_stack, force_stack)
+                    term.var_occurrences(search_for.clone(), arg_stack, force_stack, cap)
                 };
 
-                let apply_var_occurrence_no_stack =
-                    |term: &Term<Name>| term.var_occurrences(search_for.clone(), vec![], vec![]);
+                let apply_var_occurrence_no_stack = |term: &Term<Name>, cap: usize| {
+                    term.var_occurrences(search_for.clone(), vec![], vec![], cap)
+                };
 
                 if let Term::Apply {
                     function: next_func,
@@ -1305,17 +1354,25 @@ impl Term<Name> {
                         next_arg,
                         argument,
                         arg_stack,
+                        cap,
                         apply_var_occurrence_stack,
                         apply_var_occurrence_no_stack,
                     )
                 } else {
-                    apply_var_occurrence_stack(function, arg_stack)
-                        .combine(apply_var_occurrence_no_stack(argument))
+                    let function_lookup = apply_var_occurrence_stack(function, arg_stack);
+
+                    if function_lookup.occurrences >= cap {
+                        return function_lookup;
+                    }
+
+                    let remaining = cap - function_lookup.occurrences;
+
+                    function_lookup.combine(apply_var_occurrence_no_stack(argument, remaining))
                 }
             }
             Term::Force(x) => {
                 force_stack.push(());
-                x.var_occurrences(search_for, arg_stack, force_stack)
+                x.var_occurrences(search_for, arg_stack, force_stack, cap)
             }
             Term::Case { .. } => todo!(),
             Term::Constr { .. } => todo!(),
@@ -1332,34 +1389,48 @@ impl Term<Name> {
         then_arg: &Rc<Term<Name>>,
         else_arg: &Rc<Term<Name>>,
         mut arg_stack: Vec<()>,
+        cap: usize,
         var_occurrence_stack: impl FnOnce(&Term<Name>, Vec<()>) -> VarLookup,
-        var_occurrence_no_stack: impl Fn(&Term<Name>) -> VarLookup,
+        var_occurrence_no_stack: impl Fn(&Term<Name>, usize) -> VarLookup,
     ) -> VarLookup {
+        // Fold `lookup` with the occurrences found in `term`, unless `lookup`
+        // has already reached the cap, in which case the scan of `term` is
+        // skipped entirely (the result is saturated either way).
+        let combine_capped = |lookup: VarLookup, term: &Term<Name>| {
+            if lookup.occurrences >= cap {
+                return lookup;
+            }
+
+            let remaining = cap - lookup.occurrences;
+
+            lookup.combine(var_occurrence_no_stack(term, remaining))
+        };
+
         let Term::Apply {
             function: builtin,
             argument: condition,
         } = self
         else {
-            return var_occurrence_stack(self, arg_stack)
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg));
+            let lookup = var_occurrence_stack(self, arg_stack);
+            let lookup = combine_capped(lookup, then_arg);
+            return combine_capped(lookup, else_arg);
         };
 
         // unwrap apply and add void to arg stack!
         arg_stack.push(());
 
         let Term::Delay(else_arg) = else_arg.as_ref() else {
-            return var_occurrence_stack(builtin, arg_stack)
-                .combine(var_occurrence_no_stack(condition))
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg));
+            let lookup = var_occurrence_stack(builtin, arg_stack);
+            let lookup = combine_capped(lookup, condition);
+            let lookup = combine_capped(lookup, then_arg);
+            return combine_capped(lookup, else_arg);
         };
 
         let Term::Delay(then_arg) = then_arg.as_ref() else {
-            return var_occurrence_stack(builtin, arg_stack)
-                .combine(var_occurrence_no_stack(condition))
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg));
+            let lookup = var_occurrence_stack(builtin, arg_stack);
+            let lookup = combine_capped(lookup, condition);
+            let lookup = combine_capped(lookup, then_arg);
+            return combine_capped(lookup, else_arg);
         };
 
         match builtin.as_ref() {
@@ -1373,28 +1444,40 @@ impl Term<Name> {
                     arg_stack.pop();
                     arg_stack.pop();
 
-                    var_occurrence_no_stack(condition)
-                        .combine(var_occurrence_stack(then_arg, arg_stack))
+                    let lookup = var_occurrence_no_stack(condition, cap);
+
+                    if lookup.occurrences >= cap {
+                        return lookup;
+                    }
+
+                    lookup.combine(var_occurrence_stack(then_arg, arg_stack))
                 } else if matches!(then_arg.as_ref(), Term::Error) {
                     // Pop 3 args of arg_stack due to branch execution
                     arg_stack.pop();
                     arg_stack.pop();
                     arg_stack.pop();
 
-                    var_occurrence_no_stack(condition)
-                        .combine(var_occurrence_stack(else_arg, arg_stack))
+                    let lookup = var_occurrence_no_stack(condition, cap);
+
+                    if lookup.occurrences >= cap {
+                        return lookup;
+                    }
+
+                    lookup.combine(var_occurrence_stack(else_arg, arg_stack))
                 } else {
-                    var_occurrence_stack(builtin, arg_stack)
-                        .combine(var_occurrence_no_stack(condition))
-                        .combine(var_occurrence_no_stack(then_arg))
-                        .combine(var_occurrence_no_stack(else_arg))
+                    let lookup = var_occurrence_stack(builtin, arg_stack);
+                    let lookup = combine_capped(lookup, condition);
+                    let lookup = combine_capped(lookup, then_arg);
+                    combine_capped(lookup, else_arg)
                 }
             }
 
-            _ => var_occurrence_stack(builtin, arg_stack)
-                .combine(var_occurrence_no_stack(condition))
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg)),
+            _ => {
+                let lookup = var_occurrence_stack(builtin, arg_stack);
+                let lookup = combine_capped(lookup, condition);
+                let lookup = combine_capped(lookup, then_arg);
+                combine_capped(lookup, else_arg)
+            }
         }
     }
 
@@ -1855,9 +1938,10 @@ impl Term<Name> {
                     // Replace all applied usages of identity with the arg
                     body.replace_identity_usage(parameter_name.clone());
                     // Have to check if the body still has any occurrences of the parameter
-                    // After attempting replacement
+                    // After attempting replacement. Only `found` is inspected, so the
+                    // scan can stop at the first occurrence.
                     if !body
-                        .var_occurrences(parameter_name.clone(), vec![], vec![])
+                        .var_occurrences(parameter_name.clone(), vec![], vec![], 1)
                         .found
                     {
                         changed = true;
@@ -1897,7 +1981,10 @@ impl Term<Name> {
 
                 let body = Rc::make_mut(body);
 
-                let var_lookup = body.var_occurrences(parameter_name.clone(), vec![], vec![]);
+                // The decisions below only distinguish "unused", "used exactly
+                // once" and "used more than once", so the scan can stop as soon
+                // as a second occurrence is seen.
+                let var_lookup = body.var_occurrences(parameter_name.clone(), vec![], vec![], 2);
 
                 let must_execute_condition = var_lookup.delays == 0 && !var_lookup.no_inline;
 
@@ -1922,7 +2009,9 @@ impl Term<Name> {
                     && (must_execute_condition || cant_throw_condition)
                 {
                     changed = true;
-                    body.substitute_var(parameter_name.clone(), arg_term);
+                    // The lookup above guarantees exactly one occurrence, so
+                    // the substitution can stop at the first match.
+                    body.substitute_single_var(parameter_name.clone(), arg_term);
 
                     context.inlined_apply_ids.push(arg_id);
                     *self = std::mem::replace(body, Term::Error.force());
@@ -2736,7 +2825,7 @@ impl Program<Name> {
                             let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
 
                             if term
-                                .var_occurrences(Name::text(&name).into(), vec![], vec![])
+                                .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
                                 .found
                             {
                                 *term = term.clone().lambda(name).apply(val);
@@ -2752,7 +2841,7 @@ impl Program<Name> {
                             let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
 
                             if term
-                                .var_occurrences(Name::text(&name).into(), vec![], vec![])
+                                .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
                                 .found
                             {
                                 *term = term.clone().lambda(name).apply(val);
