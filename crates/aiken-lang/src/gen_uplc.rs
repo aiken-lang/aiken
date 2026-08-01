@@ -3117,144 +3117,142 @@ impl<'a> CodeGenerator<'a> {
         //
         // The worklist below re-enqueues a function's dependencies every time
         // the function is visited, so entries are popped, appended and removed
-        // many times over before the ordering stabilizes. To keep that
-        // affordable on large dependency graphs, the queue is a VecDeque
-        // (front insertions were O(n) on a Vec) and the accumulated ordering
-        // is kept as a tombstone vector with an index of live positions per
-        // key (each `retain` was a full scan). The sequence of visits, and
-        // hence the resulting order, is exactly the same as before.
-        let mut sorted_function_vec: Vec<Option<(FunctionAccessKey, String)>> = vec![];
-        let mut sorted_function_positions: HashMap<(FunctionAccessKey, String), Vec<usize>> =
-            HashMap::new();
-        let mut validator_hoistable: VecDeque<(FunctionAccessKey, String)> =
-            validator_hoistable.into_iter().collect();
+        // many times over before the ordering stabilizes — hundreds of
+        // thousands of visits on large dependency graphs. To keep that
+        // affordable, every (function, variant) is interned into a small
+        // integer up front and the loop runs on integers: the queue is a
+        // VecDeque (front insertion was O(n) on a Vec), the accumulated
+        // ordering is a tombstone vector with per-id live positions (each
+        // `retain` was a full scan), and dependency lists and map positions
+        // are precomputed per id. The sequence of visits, and hence the
+        // resulting order, is exactly the same as before.
+        enum SortEntry {
+            Function { deps: Vec<u32> },
+            CyclicLink { target: u32 },
+        }
 
-        let functions_to_hoist_cloned = functions_to_hoist.clone();
+        let mut id_of: HashMap<(FunctionAccessKey, String), u32> = HashMap::new();
+        let mut map_position: Vec<(usize, usize)> = vec![];
+
+        for (outer, (key, variants)) in functions_to_hoist.iter().enumerate() {
+            for (inner, (variant, _)) in variants.iter().enumerate() {
+                id_of.insert((key.clone(), variant.clone()), map_position.len() as u32);
+                map_position.push((outer, inner));
+            }
+        }
+
+        let lookup_id = |key: &FunctionAccessKey, variant: &str| -> u32 {
+            *id_of
+                .get(&(key.clone(), variant.to_string()))
+                .unwrap_or_else(|| panic!("Missing Function Variant Definition"))
+        };
+
+        // Dependency lists don't change during the ordering (only tree paths
+        // are updated), which is also why the previous version could read them
+        // from an up-front clone of the whole map.
+        let entries: Vec<SortEntry> = map_position
+            .iter()
+            .map(|(outer, inner)| {
+                let (_, variants) = functions_to_hoist.get_index(*outer).unwrap();
+                let (_, (_, function)) = variants.get_index(*inner).unwrap();
+
+                match function {
+                    HoistableFunction::Function { deps, .. }
+                    | HoistableFunction::CyclicFunction { deps, .. } => SortEntry::Function {
+                        deps: deps
+                            .iter()
+                            .map(|(dep_key, dep_variant)| lookup_id(dep_key, dep_variant))
+                            .collect(),
+                    },
+                    HoistableFunction::CyclicLink(cyclic_name) => SortEntry::CyclicLink {
+                        target: lookup_id(cyclic_name, ""),
+                    },
+                    HoistableFunction::Link(_) => todo!("Deal with Link later"),
+                }
+            })
+            .collect();
+
+        let mut queue: VecDeque<u32> = validator_hoistable
+            .iter()
+            .map(|(key, variant)| lookup_id(key, variant))
+            .collect();
+
+        let mut sorted_ids: Vec<Option<u32>> = vec![];
+        let mut sorted_positions: Vec<Vec<usize>> = vec![vec![]; entries.len()];
+
+        // Update `dep`'s tree path to the common ancestor of it and `func`'s
+        // current path.
+        let update_dep_path = |functions_to_hoist: &mut IndexMap<
+            FunctionAccessKey,
+            IndexMap<String, (TreePath, HoistableFunction)>,
+        >,
+                               func: u32,
+                               dep: u32| {
+            let (func_outer, func_inner) = map_position[func as usize];
+            let (_, variants) = functions_to_hoist.get_index(func_outer).unwrap();
+            let (_, (func_tree_path, _)) = variants.get_index(func_inner).unwrap();
+            let func_tree_path = func_tree_path.clone();
+
+            let (dep_outer, dep_inner) = map_position[dep as usize];
+            let (_, variants) = functions_to_hoist.get_index_mut(dep_outer).unwrap();
+            let (_, (dep_path, _)) = variants.get_index_mut(dep_inner).unwrap();
+
+            *dep_path = func_tree_path.common_ancestor(dep_path);
+        };
 
         let mut sorting_attempts: u64 = 0;
-        while let Some((generic_func, variant)) = validator_hoistable.pop_back() {
+        while let Some(id) = queue.pop_back() {
             assert!(
                 sorting_attempts < 5_000_000_000,
                 "Sorting dependency attempts exceeded"
             );
 
-            let function_variants = functions_to_hoist_cloned
-                .get(&generic_func)
-                .unwrap_or_else(|| panic!("Missing Function Definition"));
+            match &entries[id as usize] {
+                SortEntry::Function { deps } => {
+                    for &dep in deps {
+                        if dep != id {
+                            queue.push_front(dep);
 
-            let (_, function) = function_variants
-                .get(&variant)
-                .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
-
-            match function {
-                HoistableFunction::Function { deps, .. } => {
-                    for (dep_generic_func, dep_variant) in deps.iter() {
-                        if !(dep_generic_func == &generic_func && dep_variant == &variant) {
-                            validator_hoistable
-                                .push_front((dep_generic_func.clone(), dep_variant.clone()));
-
-                            remove_from_sorted(
-                                &mut sorted_function_vec,
-                                &mut sorted_function_positions,
-                                dep_generic_func,
-                                dep_variant,
-                            );
+                            for position in sorted_positions[dep as usize].drain(..) {
+                                sorted_ids[position] = None;
+                            }
                         }
                     }
 
                     // Fix dependencies path to be updated to common ancestor
-                    for (dep_key, dep_variant) in deps {
-                        let (func_tree_path, _) = functions_to_hoist
-                            .get(&generic_func)
-                            .unwrap()
-                            .get(&variant)
-                            .unwrap()
-                            .clone();
-
-                        let (dep_path, _) = functions_to_hoist
-                            .get_mut(dep_key)
-                            .unwrap()
-                            .get_mut(dep_variant)
-                            .unwrap();
-
-                        *dep_path = func_tree_path.common_ancestor(dep_path);
+                    for &dep in deps {
+                        update_dep_path(&mut functions_to_hoist, id, dep);
                     }
-                    push_to_sorted(
-                        &mut sorted_function_vec,
-                        &mut sorted_function_positions,
-                        (generic_func, variant),
-                    );
+
+                    sorted_positions[id as usize].push(sorted_ids.len());
+                    sorted_ids.push(Some(id));
                 }
-                HoistableFunction::Link(_) => todo!("Deal with Link later"),
-                HoistableFunction::CyclicLink(cyclic_name) => {
-                    validator_hoistable.push_front((cyclic_name.clone(), "".to_string()));
+                SortEntry::CyclicLink { target } => {
+                    let target = *target;
 
-                    remove_from_sorted(
-                        &mut sorted_function_vec,
-                        &mut sorted_function_positions,
-                        cyclic_name,
-                        "",
-                    );
+                    queue.push_front(target);
 
-                    let (func_tree_path, _) = functions_to_hoist
-                        .get(&generic_func)
-                        .unwrap()
-                        .get(&variant)
-                        .unwrap()
-                        .clone();
-
-                    let (dep_path, _) = functions_to_hoist
-                        .get_mut(cyclic_name)
-                        .unwrap()
-                        .get_mut("")
-                        .unwrap();
-
-                    *dep_path = func_tree_path.common_ancestor(dep_path);
-                }
-                HoistableFunction::CyclicFunction { deps, .. } => {
-                    for (dep_generic_func, dep_variant) in deps.iter() {
-                        if !(dep_generic_func == &generic_func && dep_variant == &variant) {
-                            validator_hoistable
-                                .push_front((dep_generic_func.clone(), dep_variant.clone()));
-
-                            remove_from_sorted(
-                                &mut sorted_function_vec,
-                                &mut sorted_function_positions,
-                                dep_generic_func,
-                                dep_variant,
-                            );
-                        }
+                    for position in sorted_positions[target as usize].drain(..) {
+                        sorted_ids[position] = None;
                     }
 
-                    // Fix dependencies path to be updated to common ancestor
-                    for (dep_key, dep_variant) in deps {
-                        let (func_tree_path, _) = functions_to_hoist
-                            .get(&generic_func)
-                            .unwrap()
-                            .get(&variant)
-                            .unwrap()
-                            .clone();
-
-                        let (dep_path, _) = functions_to_hoist
-                            .get_mut(dep_key)
-                            .unwrap()
-                            .get_mut(dep_variant)
-                            .unwrap();
-
-                        *dep_path = func_tree_path.common_ancestor(dep_path);
-                    }
-                    push_to_sorted(
-                        &mut sorted_function_vec,
-                        &mut sorted_function_positions,
-                        (generic_func, variant),
-                    );
+                    update_dep_path(&mut functions_to_hoist, id, target);
                 }
             }
 
             sorting_attempts += 1;
         }
-        let mut sorted_function_vec: Vec<(FunctionAccessKey, String)> =
-            sorted_function_vec.into_iter().flatten().collect();
+
+        let mut sorted_function_vec: Vec<(FunctionAccessKey, String)> = sorted_ids
+            .into_iter()
+            .flatten()
+            .map(|id| {
+                let (outer, inner) = map_position[id as usize];
+                let (key, variants) = functions_to_hoist.get_index(outer).unwrap();
+                let (variant, _) = variants.get_index(inner).unwrap();
+                (key.clone(), variant.clone())
+            })
+            .collect();
         sorted_function_vec.dedup();
 
         // Now we need to hoist the functions to the top of the validator
