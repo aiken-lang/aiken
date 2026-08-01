@@ -1,6 +1,6 @@
 use super::interner::CodeGenInterner;
 use crate::{
-    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
+    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type, Unique},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, INDICES_CONVERTER},
     builtins::DefaultFunction,
     machine::{cost_model::ExBudget, runtime::Compressable, value::from_pallas_bigint},
@@ -9,7 +9,7 @@ use blst::{blst_p1, blst_p2};
 use indexmap::IndexMap;
 use itertools::{FoldWhile, Itertools};
 use pallas_primitives::conway::{BigInt, PlutusData};
-use std::{cmp::Ordering, iter, ops::Neg, rc::Rc};
+use std::{cmp::Ordering, collections::HashMap, iter, ops::Neg, rc::Rc};
 use strum::IntoEnumIterator;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug, PartialOrd)]
@@ -139,6 +139,184 @@ impl VarLookup {
             }
         } else {
             self
+        }
+    }
+}
+
+/// Exact, whole-program occurrence counts for uniquely-bound names, computed
+/// once per shrinker pass and kept trustworthy through conservative
+/// invalidation.
+///
+/// The inline pass needs, for every applied lambda, whether its parameter
+/// occurs 0, 1, or more times in the body. Scanning the body per binder makes
+/// the pass quadratic on programs with long chains of hoisted definitions, so
+/// `multi_pass` precomputes the counts in one walk and `inline_reducer`
+/// consults them instead of scanning wherever a count alone decides the
+/// outcome.
+///
+/// A count is only trusted when it is guaranteed to equal what a fresh
+/// body scan would return at that moment:
+///
+/// - Names bound by more than one lambda (shadowing/duplication), sharing a
+///   `Unique` with a different text, or introduced by reducers after the
+///   precompute are never trusted (in a well-scoped program with unique
+///   names, a name's whole-program count equals its in-body count, which is
+///   why single binding is required).
+/// - Reducer steps that *move* a subtree (single-occurrence inlining,
+///   force/delay cancellation, data cast cancellation, constant folding of
+///   constant arguments) leave every count unchanged and need no bookkeeping.
+/// - Reducer steps that *drop* or *duplicate* a subtree that may contain
+///   variables (dead-argument elimination, multi-occurrence substitution,
+///   identity-function elimination) invalidate every name occurring in that
+///   subtree, so those names fall back to a real scan.
+#[derive(Debug, Clone)]
+pub struct OccurrenceTracker {
+    enabled: bool,
+    entries: HashMap<Unique, OccurrenceEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct OccurrenceEntry {
+    text: String,
+    count: usize,
+    bound: bool,
+    invalid: bool,
+}
+
+impl OccurrenceTracker {
+    pub fn disabled() -> Self {
+        OccurrenceTracker {
+            enabled: false,
+            entries: HashMap::new(),
+        }
+    }
+
+    pub fn new(term: &Term<Name>) -> Self {
+        let mut tracker = OccurrenceTracker {
+            enabled: true,
+            entries: HashMap::new(),
+        };
+
+        let mut stack = vec![term];
+
+        while let Some(t) = stack.pop() {
+            match t {
+                Term::Var(name) => {
+                    let entry = tracker.entry(name);
+                    entry.count += 1;
+                }
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    if parameter_name.text != NO_INLINE {
+                        let entry = tracker.entry(parameter_name);
+                        if entry.bound {
+                            // Two binders for the same name: in-body counts no
+                            // longer match whole-program counts.
+                            entry.invalid = true;
+                        } else {
+                            entry.bound = true;
+                        }
+                    }
+                    stack.push(body);
+                }
+                Term::Apply { function, argument } => {
+                    stack.push(function);
+                    stack.push(argument);
+                }
+                Term::Delay(body) => stack.push(body),
+                Term::Force(body) => stack.push(body),
+                Term::Case { constr, branches } => {
+                    stack.push(constr);
+                    stack.extend(branches.iter());
+                }
+                Term::Constr { fields, .. } => stack.extend(fields.iter()),
+                Term::Constant(_) | Term::Builtin(_) | Term::Error => (),
+            }
+        }
+
+        tracker
+    }
+
+    fn entry(&mut self, name: &Name) -> &mut OccurrenceEntry {
+        let entry = self
+            .entries
+            .entry(name.unique)
+            .or_insert_with(|| OccurrenceEntry {
+                text: name.text.clone(),
+                count: 0,
+                bound: false,
+                invalid: false,
+            });
+
+        if entry.text != name.text {
+            // Distinct names sharing a Unique: give up on this slot.
+            entry.invalid = true;
+        }
+
+        entry
+    }
+
+    /// The exact number of occurrences of `name`, or None when the tracker
+    /// cannot vouch for it (disabled, unknown, shadowed, or invalidated).
+    pub fn trusted_count(&self, name: &Name) -> Option<usize> {
+        if !self.enabled {
+            return None;
+        }
+
+        let entry = self.entries.get(&name.unique)?;
+
+        if entry.invalid || !entry.bound || entry.text != name.text {
+            return None;
+        }
+
+        Some(entry.count)
+    }
+
+    /// Stop trusting `name`.
+    pub fn invalidate(&mut self, name: &Name) {
+        if !self.enabled {
+            return;
+        }
+
+        self.entry(name).invalid = true;
+    }
+
+    /// Stop trusting every name that occurs anywhere in `term` (variables and
+    /// binders alike). Called when a reducer drops or duplicates `term`.
+    pub fn invalidate_term(&mut self, term: &Term<Name>) {
+        if !self.enabled {
+            return;
+        }
+
+        let mut stack = vec![term];
+
+        while let Some(t) = stack.pop() {
+            match t {
+                Term::Var(name) => self.invalidate(name),
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    if parameter_name.text != NO_INLINE {
+                        self.invalidate(parameter_name);
+                    }
+                    stack.push(body);
+                }
+                Term::Apply { function, argument } => {
+                    stack.push(function);
+                    stack.push(argument);
+                }
+                Term::Delay(body) => stack.push(body),
+                Term::Force(body) => stack.push(body),
+                Term::Case { constr, branches } => {
+                    stack.push(constr);
+                    stack.extend(branches.iter());
+                }
+                Term::Constr { fields, .. } => stack.extend(fields.iter()),
+                Term::Constant(_) | Term::Builtin(_) | Term::Error => (),
+            }
         }
     }
 }
@@ -976,6 +1154,7 @@ impl CurriedBuiltin {
 
 #[derive(Debug, Clone)]
 pub struct Context {
+    pub occurrences: OccurrenceTracker,
     pub inlined_apply_ids: Vec<usize>,
     pub constants_to_flip: Vec<usize>,
     pub write_bits_indices_arg: Vec<usize>,
@@ -1533,6 +1712,12 @@ impl Term<Name> {
                         let body = Rc::make_mut(body);
                         context.inlined_apply_ids.push(arg_id);
 
+                        // The argument is substituted at every occurrence of
+                        // the parameter (possibly zero or several copies), so
+                        // occurrence counts of names inside it are no longer
+                        // what the tracker recorded.
+                        context.occurrences.invalidate_term(&arg_term);
+
                         body.substitute_var(
                             parameter_name.clone(),
                             arg_term.pierce_no_inlines_ref(),
@@ -1953,6 +2138,13 @@ impl Term<Name> {
                 };
 
                 if *identity_var == identity_name {
+                    // The replacement below removes occurrences of the
+                    // parameter, and on success the identity function (whose
+                    // only name is its own parameter) is dropped; neither is
+                    // reflected in the tracker.
+                    context.occurrences.invalidate(parameter_name);
+                    context.occurrences.invalidate(&identity_name);
+
                     // Replace all applied usages of identity with the arg
                     body.replace_identity_usage(parameter_name.clone());
                     // Have to check if the body still has any occurrences of the parameter
@@ -1991,20 +2183,13 @@ impl Term<Name> {
                 body,
             } => {
                 // pops stack here no matter what
-                let Some(Args::Apply(arg_id, arg_term)) = arg_stack.pop() else {
+                let Some(Args::Apply(arg_id, applied_arg)) = arg_stack.pop() else {
                     return false;
                 };
 
-                let arg_term = arg_term.pierce_no_inlines_ref();
+                let arg_term = applied_arg.pierce_no_inlines_ref();
 
                 let body = Rc::make_mut(body);
-
-                // The decisions below only distinguish "unused", "used exactly
-                // once" and "used more than once", so the scan can stop as soon
-                // as a second occurrence is seen.
-                let var_lookup = body.var_occurrences(parameter_name.clone(), vec![], vec![], 2);
-
-                let must_execute_condition = var_lookup.delays == 0 && !var_lookup.no_inline;
 
                 let cant_throw_condition = matches!(
                     arg_term,
@@ -2019,6 +2204,55 @@ impl Term<Name> {
                     .builtins_map
                     .keys()
                     .any(|b| b.wrapped_name() == parameter_name.text);
+
+                // Fast path: when the tracker vouches for the parameter's
+                // occurrence count, the count alone settles three of the four
+                // decision shapes below without scanning the body:
+                //  - >= 2 occurrences: neither inlining (needs exactly 1) nor
+                //    stripping (needs 0) can fire;
+                //  - 0 occurrences: stripping fires iff the argument can't
+                //    throw (or is a force-wrapped builtin);
+                //  - exactly 1 occurrence with a can't-throw argument: inline
+                //    (delays/no_inline only matter for must-execute, which is
+                //    or-ed with can't-throw).
+                // Only "exactly 1 occurrence of a possibly-throwing argument"
+                // still needs the delays-aware scan.
+                if let Some(count) = context.occurrences.trusted_count(parameter_name) {
+                    match count {
+                        0 => {
+                            if cant_throw_condition || force_wrapped_builtin {
+                                changed = true;
+                                // The unused argument is dropped: its contents
+                                // disappear from the program, so their counts
+                                // can no longer be trusted.
+                                context.occurrences.invalidate_term(&applied_arg);
+                                context.inlined_apply_ids.push(arg_id);
+                                *self = std::mem::replace(body, Term::Error.force());
+                            }
+                            return changed;
+                        }
+                        1 if !force_wrapped_builtin && cant_throw_condition => {
+                            changed = true;
+                            // Exactly one occurrence: the argument is moved,
+                            // not duplicated or dropped, so every count stays
+                            // exact.
+                            body.substitute_single_var(parameter_name.clone(), arg_term);
+
+                            context.inlined_apply_ids.push(arg_id);
+                            *self = std::mem::replace(body, Term::Error.force());
+                            return changed;
+                        }
+                        1 => (),
+                        _ => return false,
+                    }
+                }
+
+                // The decisions below only distinguish "unused", "used exactly
+                // once" and "used more than once", so the scan can stop as soon
+                // as a second occurrence is seen.
+                let var_lookup = body.var_occurrences(parameter_name.clone(), vec![], vec![], 2);
+
+                let must_execute_condition = var_lookup.delays == 0 && !var_lookup.no_inline;
 
                 // This will inline terms that only occur once
                 // if they are guaranteed to execute or can't throw an error by themselves
@@ -2037,6 +2271,7 @@ impl Term<Name> {
                 // This will strip out unused terms that can't throw an error by themselves
                 } else if !var_lookup.found && (cant_throw_condition || force_wrapped_builtin) {
                     changed = true;
+                    context.occurrences.invalidate_term(&applied_arg);
                     context.inlined_apply_ids.push(arg_id);
                     *self = std::mem::replace(body, Term::Error.force());
                 }
@@ -2479,12 +2714,22 @@ impl Program<Name> {
         inline_lambda: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> (Self, Context) {
+        self.traverse_uplc_with_tracker(OccurrenceTracker::disabled(), inline_lambda, with)
+    }
+
+    fn traverse_uplc_with_tracker(
+        self,
+        occurrences: OccurrenceTracker,
+        inline_lambda: bool,
+        with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
+    ) -> (Self, Context) {
         let mut term = self.term;
         let scope = Scope::new();
         let arg_stack = vec![];
         let mut id_gen = IdGen::new();
 
         let mut context = Context {
+            occurrences,
             inlined_apply_ids: vec![],
             constants_to_flip: vec![],
             write_bits_indices_arg: vec![],
@@ -2571,7 +2816,15 @@ impl Program<Name> {
     }
 
     pub fn multi_pass(self) -> (Self, Context) {
-        self.traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
+        // One O(n) walk gives inline_reducer exact occurrence counts for every
+        // uniquely-bound name, replacing most per-binder body scans.
+        let occurrences = OccurrenceTracker::new(&self.term);
+
+        self.traverse_uplc_with_tracker(occurrences, true, &mut |id,
+                                                                 term,
+                                                                 arg_stack,
+                                                                 scope,
+                                                                 context| {
             let false = term.lambda_reducer(id, arg_stack.clone(), scope, context) else {
                 term.remove_inlined_ids(id, vec![], scope, context);
                 return;
