@@ -1231,10 +1231,15 @@ impl Term<Name> {
                 Rc::make_mut(body).substitute_single_var(original, replace_with)
             }
             Term::Apply { function, argument } => {
-                if Rc::make_mut(function).substitute_single_var(original.clone(), replace_with) {
+                // Argument-first for the same reason as the capped occurrence
+                // scan: with at most one occurrence in the term, the search
+                // order cannot change the result, and the occurrence typically
+                // sits in a nearby argument rather than down the function
+                // spine.
+                if Rc::make_mut(argument).substitute_single_var(original.clone(), replace_with) {
                     true
                 } else {
-                    Rc::make_mut(argument).substitute_single_var(original, replace_with)
+                    Rc::make_mut(function).substitute_single_var(original, replace_with)
                 }
             }
             Term::Force(f) => Rc::make_mut(f).substitute_single_var(original, replace_with),
@@ -1335,9 +1340,10 @@ impl Term<Name> {
                 // unwrap apply and add void to arg stack!
                 arg_stack.push(());
 
-                let apply_var_occurrence_stack = |term: &Term<Name>, arg_stack: Vec<()>| {
-                    term.var_occurrences(search_for.clone(), arg_stack, force_stack, cap)
-                };
+                let apply_var_occurrence_stack =
+                    |term: &Term<Name>, arg_stack: Vec<()>, cap: usize| {
+                        term.var_occurrences(search_for.clone(), arg_stack, force_stack, cap)
+                    };
 
                 let apply_var_occurrence_no_stack = |term: &Term<Name>, cap: usize| {
                     term.var_occurrences(search_for.clone(), vec![], vec![], cap)
@@ -1359,15 +1365,23 @@ impl Term<Name> {
                         apply_var_occurrence_no_stack,
                     )
                 } else {
-                    let function_lookup = apply_var_occurrence_stack(function, arg_stack);
+                    // Scan the argument before the function side: the lookup
+                    // is a commutative fold over the tree, so the order does
+                    // not affect the result, but on `(lambda x ..) arg` chains
+                    // (hoisted function definitions) occurrences live in
+                    // nearby arguments while the function side is the rest of
+                    // the whole program. Argument-first lets a capped scan
+                    // saturate after visiting only the nearby definitions.
+                    let argument_lookup = apply_var_occurrence_no_stack(argument, cap);
 
-                    if function_lookup.occurrences >= cap {
-                        return function_lookup;
+                    if argument_lookup.occurrences >= cap {
+                        return argument_lookup;
                     }
 
-                    let remaining = cap - function_lookup.occurrences;
+                    let remaining = cap - argument_lookup.occurrences;
 
-                    function_lookup.combine(apply_var_occurrence_no_stack(argument, remaining))
+                    apply_var_occurrence_stack(function, arg_stack, remaining)
+                        .combine(argument_lookup)
                 }
             }
             Term::Force(x) => {
@@ -1390,7 +1404,7 @@ impl Term<Name> {
         else_arg: &Rc<Term<Name>>,
         mut arg_stack: Vec<()>,
         cap: usize,
-        var_occurrence_stack: impl FnOnce(&Term<Name>, Vec<()>) -> VarLookup,
+        var_occurrence_stack: impl FnOnce(&Term<Name>, Vec<()>, usize) -> VarLookup,
         var_occurrence_no_stack: impl Fn(&Term<Name>, usize) -> VarLookup,
     ) -> VarLookup {
         // Fold `lookup` with the occurrences found in `term`, unless `lookup`
@@ -1411,7 +1425,7 @@ impl Term<Name> {
             argument: condition,
         } = self
         else {
-            let lookup = var_occurrence_stack(self, arg_stack);
+            let lookup = var_occurrence_stack(self, arg_stack, cap);
             let lookup = combine_capped(lookup, then_arg);
             return combine_capped(lookup, else_arg);
         };
@@ -1420,14 +1434,14 @@ impl Term<Name> {
         arg_stack.push(());
 
         let Term::Delay(else_arg) = else_arg.as_ref() else {
-            let lookup = var_occurrence_stack(builtin, arg_stack);
+            let lookup = var_occurrence_stack(builtin, arg_stack, cap);
             let lookup = combine_capped(lookup, condition);
             let lookup = combine_capped(lookup, then_arg);
             return combine_capped(lookup, else_arg);
         };
 
         let Term::Delay(then_arg) = then_arg.as_ref() else {
-            let lookup = var_occurrence_stack(builtin, arg_stack);
+            let lookup = var_occurrence_stack(builtin, arg_stack, cap);
             let lookup = combine_capped(lookup, condition);
             let lookup = combine_capped(lookup, then_arg);
             return combine_capped(lookup, else_arg);
@@ -1450,7 +1464,9 @@ impl Term<Name> {
                         return lookup;
                     }
 
-                    lookup.combine(var_occurrence_stack(then_arg, arg_stack))
+                    let remaining = cap - lookup.occurrences;
+
+                    lookup.combine(var_occurrence_stack(then_arg, arg_stack, remaining))
                 } else if matches!(then_arg.as_ref(), Term::Error) {
                     // Pop 3 args of arg_stack due to branch execution
                     arg_stack.pop();
@@ -1463,9 +1479,11 @@ impl Term<Name> {
                         return lookup;
                     }
 
-                    lookup.combine(var_occurrence_stack(else_arg, arg_stack))
+                    let remaining = cap - lookup.occurrences;
+
+                    lookup.combine(var_occurrence_stack(else_arg, arg_stack, remaining))
                 } else {
-                    let lookup = var_occurrence_stack(builtin, arg_stack);
+                    let lookup = var_occurrence_stack(builtin, arg_stack, cap);
                     let lookup = combine_capped(lookup, condition);
                     let lookup = combine_capped(lookup, then_arg);
                     combine_capped(lookup, else_arg)
@@ -1473,7 +1491,7 @@ impl Term<Name> {
             }
 
             _ => {
-                let lookup = var_occurrence_stack(builtin, arg_stack);
+                let lookup = var_occurrence_stack(builtin, arg_stack, cap);
                 let lookup = combine_capped(lookup, condition);
                 let lookup = combine_capped(lookup, then_arg);
                 combine_capped(lookup, else_arg)
