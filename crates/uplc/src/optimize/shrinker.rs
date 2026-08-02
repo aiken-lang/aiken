@@ -1727,7 +1727,7 @@ impl Term<Name> {
     fn lambda_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -1737,9 +1737,10 @@ impl Term<Name> {
                 parameter_name,
                 body,
             } => {
-                // pops stack here no matter what
-                if let Some(Args::Apply(arg_id, arg_term)) = arg_stack.pop() {
-                    let replace = match &arg_term {
+                // reads the top of the stack here no matter what
+                if let Some(Args::Apply(arg_id, arg_term)) = arg_stack.last() {
+                    let arg_id = *arg_id;
+                    let replace = match arg_term {
                         // Do nothing for String consts
                         Term::Constant(c) if matches!(c.as_ref(), Constant::String(_)) => false,
                         // Inline Delay Error terms since total size is only 1 byte
@@ -1762,7 +1763,7 @@ impl Term<Name> {
                         // the parameter (possibly zero or several copies), so
                         // occurrence counts of names inside it are no longer
                         // what the tracker recorded.
-                        context.occurrences.invalidate_term(&arg_term);
+                        context.occurrences.invalidate_term(arg_term);
 
                         body.substitute_var(
                             parameter_name.clone(),
@@ -2153,7 +2154,7 @@ impl Term<Name> {
     fn identity_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -2165,16 +2166,16 @@ impl Term<Name> {
                 body,
             } => {
                 let body = Rc::make_mut(body);
-                // pops stack here no matter what
+                // reads the top of the stack here no matter what
 
-                let Some(Args::Apply(arg_id, identity_func)) = arg_stack.pop() else {
+                let Some(Args::Apply(arg_id, identity_func)) = arg_stack.last() else {
                     return false;
                 };
 
                 let Term::Lambda {
                     parameter_name: identity_name,
                     body: identity_body,
-                } = identity_func.pierce_no_inlines()
+                } = identity_func.pierce_no_inlines_ref()
                 else {
                     return false;
                 };
@@ -2183,13 +2184,13 @@ impl Term<Name> {
                     return false;
                 };
 
-                if *identity_var == identity_name {
+                if identity_var == identity_name {
                     // The replacement below removes occurrences of the
                     // parameter, and on success the identity function (whose
                     // only name is its own parameter) is dropped; neither is
                     // reflected in the tracker.
                     context.occurrences.invalidate(parameter_name);
-                    context.occurrences.invalidate(&identity_name);
+                    context.occurrences.invalidate(identity_name);
 
                     // Replace all applied usages of identity with the arg
                     body.replace_identity_usage(parameter_name.clone());
@@ -2201,7 +2202,7 @@ impl Term<Name> {
                         .found
                     {
                         changed = true;
-                        context.inlined_apply_ids.push(arg_id);
+                        context.inlined_apply_ids.push(*arg_id);
                         *self = std::mem::replace(body, Term::Error.force());
                     }
                 }
@@ -2217,7 +2218,7 @@ impl Term<Name> {
     fn inline_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -2228,11 +2229,12 @@ impl Term<Name> {
                 parameter_name,
                 body,
             } => {
-                // pops stack here no matter what
-                let Some(Args::Apply(arg_id, applied_arg)) = arg_stack.pop() else {
+                // reads the top of the stack here no matter what
+                let Some(Args::Apply(arg_id, applied_arg)) = arg_stack.last() else {
                     return false;
                 };
 
+                let arg_id = *arg_id;
                 let arg_term = applied_arg.pierce_no_inlines_ref();
 
                 let body = Rc::make_mut(body);
@@ -2273,7 +2275,7 @@ impl Term<Name> {
                                 // The unused argument is dropped: its contents
                                 // disappear from the program, so their counts
                                 // can no longer be trusted.
-                                context.occurrences.invalidate_term(&applied_arg);
+                                context.occurrences.invalidate_term(applied_arg);
                                 context.inlined_apply_ids.push(arg_id);
                                 *self = std::mem::replace(body, Term::Error.force());
                             }
@@ -2332,7 +2334,7 @@ impl Term<Name> {
                 // This will strip out unused terms that can't throw an error by themselves
                 } else if !var_lookup.found && (cant_throw_condition || force_wrapped_builtin) {
                     changed = true;
-                    context.occurrences.invalidate_term(&applied_arg);
+                    context.occurrences.invalidate_term(applied_arg);
                     context.inlined_apply_ids.push(arg_id);
                     *self = std::mem::replace(body, Term::Error.force());
                 }
@@ -2348,15 +2350,15 @@ impl Term<Name> {
     fn force_delay_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
         let mut changed = false;
         if let Term::Delay(d) = self {
-            if let Some(Args::Force(id)) = arg_stack.pop() {
+            if let Some(Args::Force(id)) = arg_stack.last() {
                 changed = true;
-                context.inlined_apply_ids.push(id);
+                context.inlined_apply_ids.push(*id);
                 *self = std::mem::replace(Rc::make_mut(d), Term::Error.force())
             } else if let Term::Force(var) = d.as_ref()
                 && let Term::Var(_) = var.as_ref()
@@ -2422,7 +2424,7 @@ impl Term<Name> {
     fn cast_data_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -2430,11 +2432,13 @@ impl Term<Name> {
 
         match self {
             Term::Builtin(first_function) => {
-                let Some(Args::Apply(arg_id, mut arg_term)) = arg_stack.pop() else {
+                let Some(Args::Apply(arg_id, arg_term)) = arg_stack.last() else {
                     return false;
                 };
 
-                match &mut arg_term {
+                let arg_id = *arg_id;
+
+                match arg_term {
                     Term::Apply { function, argument } => {
                         if let Term::Builtin(second_function) = function.as_ref() {
                             match (first_function, second_function) {
@@ -2448,10 +2452,7 @@ impl Term<Name> {
                                 | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
                                     changed = true;
                                     context.inlined_apply_ids.push(arg_id);
-                                    *self = std::mem::replace(
-                                        Rc::make_mut(argument),
-                                        Term::Error.force(),
-                                    );
+                                    *self = argument.as_ref().clone();
                                 }
                                 _ => {}
                             }
@@ -2575,7 +2576,7 @@ impl Term<Name> {
     fn builtin_eval_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -2583,33 +2584,26 @@ impl Term<Name> {
 
         match self {
             Term::Builtin(func) => {
-                arg_stack = arg_stack
-                    .into_iter()
-                    .filter(|args| matches!(args, Args::Apply(_, _)))
-                    .collect_vec();
-
-                let args = arg_stack
+                let applies = arg_stack
                     .iter()
-                    .map(|args| {
-                        let Args::Apply(_, term) = args else {
-                            unreachable!()
-                        };
-
-                        term.pierce_no_inlines_ref()
+                    .filter_map(|args| match args {
+                        Args::Apply(arg_id, term) => Some((*arg_id, term)),
+                        _ => None,
                     })
                     .collect_vec();
-                if arg_stack.len() == func.arity() && func.is_error_safe(&args) {
+
+                let args = applies
+                    .iter()
+                    .map(|(_, term)| term.pierce_no_inlines_ref())
+                    .collect_vec();
+                if applies.len() == func.arity() && func.is_error_safe(&args) {
                     changed = true;
                     let applied_term =
-                        arg_stack
+                        applies
                             .into_iter()
-                            .fold(Term::Builtin(*func), |acc, item| {
-                                let Args::Apply(arg_id, arg) = item else {
-                                    unreachable!()
-                                };
-
+                            .fold(Term::Builtin(*func), |acc, (arg_id, arg)| {
                                 context.inlined_apply_ids.push(arg_id);
-                                acc.apply(arg.pierce_no_inlines().clone())
+                                acc.apply(arg.pierce_no_inlines_ref().clone())
                             });
 
                     // The check above is to make sure the program is error safe
@@ -2700,24 +2694,6 @@ impl Term<Name> {
         }
 
         term
-    }
-
-    fn pierce_no_inlines(mut self) -> Self {
-        let term = &mut self;
-
-        while let Term::Lambda {
-            parameter_name,
-            body,
-        } = term
-        {
-            if parameter_name.as_ref().text == NO_INLINE {
-                *term = std::mem::replace(Rc::make_mut(body), Term::Error.force());
-            } else {
-                break;
-            }
-        }
-
-        std::mem::replace(term, Term::Error.force())
     }
 
     fn is_a_builtin_wrapper(&self) -> bool {
@@ -2889,45 +2865,46 @@ impl Program<Name> {
         // uniquely-bound name, replacing most per-binder body scans.
         let occurrences = OccurrenceTracker::new(&self.term);
 
-        self.traverse_uplc_with_tracker(occurrences, true, false, &mut |id,
-                                                                 term,
-                                                                 arg_stack,
-                                                                 scope,
-                                                                 context| {
-            let false = term.lambda_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+        self.traverse_uplc_with_tracker(
+            occurrences,
+            true,
+            false,
+            &mut |id, term, arg_stack, scope, context| {
+                let false = term.lambda_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.identity_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.identity_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.inline_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.inline_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.force_delay_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.force_delay_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.cast_data_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.cast_data_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.builtin_eval_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.builtin_eval_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            term.convert_arithmetic_ops(id, arg_stack, scope, context);
-            term.flip_constants(id, vec![], scope, context);
-            term.remove_inlined_ids(id, vec![], scope, context);
-        })
+                term.convert_arithmetic_ops(id, arg_stack, scope, context);
+                term.flip_constants(id, vec![], scope, context);
+                term.remove_inlined_ids(id, vec![], scope, context);
+            },
+        )
     }
 
     pub fn run_one_opt(
@@ -2935,12 +2912,15 @@ impl Program<Name> {
         inline_lambda: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> Self {
-        let (mut program, context) =
-            self.traverse_uplc_with(inline_lambda, false, &mut |id, term, arg_stack, scope, context| {
+        let (mut program, context) = self.traverse_uplc_with(
+            inline_lambda,
+            false,
+            &mut |id, term, arg_stack, scope, context| {
                 with(id, term, arg_stack, scope, context);
                 term.flip_constants(id, vec![], scope, context);
                 term.remove_inlined_ids(id, vec![], scope, context);
-            });
+            },
+        );
 
         if context.write_bits_convert {
             program.term = program.term.data_list_to_integer_list();
@@ -2995,96 +2975,98 @@ impl Program<Name> {
 
         let mut final_ids: IndexMap<Vec<usize>, ()> = IndexMap::new();
 
-        let (step_a, _) = self.traverse_uplc_with(
-            false,
-            true,
-            &mut |_id, term, arg_stack, scope, _context| match term {
-                Term::Builtin(func) => {
-                    if let Some(arg_stack) = func.try_curry_builtin(arg_stack) {
-                        // In the case of order agnostic builtins we want to sort the args by constant first
-                        // This gives us the opportunity to curry constants that often pop up in the code
+        let (step_a, _) =
+            self.traverse_uplc_with(false, true, &mut |_id, term, arg_stack, scope, _context| {
+                match term {
+                    Term::Builtin(func) => {
+                        if let Some(arg_stack) = func.try_curry_builtin(arg_stack) {
+                            // In the case of order agnostic builtins we want to sort the args by constant first
+                            // This gives us the opportunity to curry constants that often pop up in the code
 
-                        let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
+                            let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
 
-                        // First we see if we have already curried this builtin before
-                        let mut id_vec = if let Some((index, _)) =
-                            curried_terms.iter_mut().find_position(
-                                |curried_term: &&mut CurriedBuiltin| curried_term.func == *func,
-                            ) {
-                            // We found it the builtin was curried before
-                            // So now we merge the new args into the existing curried builtin
-                            let curried_builtin = curried_terms.swap_remove(index);
+                            // First we see if we have already curried this builtin before
+                            let mut id_vec = if let Some((index, _)) =
+                                curried_terms.iter_mut().find_position(
+                                    |curried_term: &&mut CurriedBuiltin| curried_term.func == *func,
+                                ) {
+                                // We found it the builtin was curried before
+                                // So now we merge the new args into the existing curried builtin
+                                let curried_builtin = curried_terms.swap_remove(index);
 
-                            let curried_builtin =
-                                curried_builtin.merge_node_by_path(builtin_args.clone());
+                                let curried_builtin =
+                                    curried_builtin.merge_node_by_path(builtin_args.clone());
 
-                            flipped_terms
-                                .insert(scope.clone(), curried_builtin.is_flipped(&builtin_args));
-
-                            let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
-                                unreachable!();
-                            };
-
-                            curried_terms.push(curried_builtin);
-
-                            id_vec
-                        } else {
-                            // Brand new builtin so we add it to the list
-                            let curried_builtin = builtin_args.clone().args_to_curried_args(*func);
-
-                            let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
-                                unreachable!();
-                            };
-
-                            curried_terms.push(curried_builtin);
-
-                            id_vec
-                        };
-
-                        while let Some(node) = id_vec.pop() {
-                            if !matches!(node.term, Term::Constant { .. }) {
-                                continue;
-                            }
-
-                            let mut id_only_vec =
-                                id_vec.iter().map(|item| item.curried_id).collect_vec();
-
-                            id_only_vec.push(node.curried_id);
-
-                            let curry_name = CurriedName {
-                                func_name: func.aiken_name(),
-                                id_vec: id_only_vec,
-                            };
-
-                            if let Some((map_scope, _, occurrences)) =
-                                id_mapped_curry_terms.get_mut(&curry_name)
-                            {
-                                *map_scope = map_scope.common_ancestor(scope);
-                                *occurrences += 1;
-                            } else if id_vec.is_empty() {
-                                id_mapped_curry_terms.insert(
-                                    curry_name,
-                                    (scope.clone(), Term::Builtin(*func).apply(node.term), 1),
+                                flipped_terms.insert(
+                                    scope.clone(),
+                                    curried_builtin.is_flipped(&builtin_args),
                                 );
+
+                                let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
+                                    unreachable!();
+                                };
+
+                                curried_terms.push(curried_builtin);
+
+                                id_vec
                             } else {
-                                let var_name = id_vec_function_to_var(
-                                    &func.aiken_name(),
-                                    &id_vec.iter().map(|item| item.curried_id).collect_vec(),
-                                );
+                                // Brand new builtin so we add it to the list
+                                let curried_builtin =
+                                    builtin_args.clone().args_to_curried_args(*func);
 
-                                id_mapped_curry_terms.insert(
-                                    curry_name,
-                                    (scope.clone(), Term::var(var_name).apply(node.term), 1),
-                                );
+                                let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
+                                    unreachable!();
+                                };
+
+                                curried_terms.push(curried_builtin);
+
+                                id_vec
+                            };
+
+                            while let Some(node) = id_vec.pop() {
+                                if !matches!(node.term, Term::Constant { .. }) {
+                                    continue;
+                                }
+
+                                let mut id_only_vec =
+                                    id_vec.iter().map(|item| item.curried_id).collect_vec();
+
+                                id_only_vec.push(node.curried_id);
+
+                                let curry_name = CurriedName {
+                                    func_name: func.aiken_name(),
+                                    id_vec: id_only_vec,
+                                };
+
+                                if let Some((map_scope, _, occurrences)) =
+                                    id_mapped_curry_terms.get_mut(&curry_name)
+                                {
+                                    *map_scope = map_scope.common_ancestor(scope);
+                                    *occurrences += 1;
+                                } else if id_vec.is_empty() {
+                                    id_mapped_curry_terms.insert(
+                                        curry_name,
+                                        (scope.clone(), Term::Builtin(*func).apply(node.term), 1),
+                                    );
+                                } else {
+                                    let var_name = id_vec_function_to_var(
+                                        &func.aiken_name(),
+                                        &id_vec.iter().map(|item| item.curried_id).collect_vec(),
+                                    );
+
+                                    id_mapped_curry_terms.insert(
+                                        curry_name,
+                                        (scope.clone(), Term::var(var_name).apply(node.term), 1),
+                                    );
+                                }
                             }
                         }
                     }
+                    Term::Constr { .. } => todo!(),
+                    Term::Case { .. } => todo!(),
+                    _ => {}
                 }
-                Term::Constr { .. } => todo!(),
-                Term::Case { .. } => todo!(),
-                _ => {}
-            },
-        );
+            });
 
         id_mapped_curry_terms
             .into_iter()
@@ -3108,91 +3090,91 @@ impl Program<Name> {
                 }
             });
 
-        let (mut step_b, _) = step_a.traverse_uplc_with(
-            false,
-            true,
-            &mut |id, term, arg_stack, scope, _context| match term {
-                Term::Builtin(func) => {
-                    if let Some(mut arg_stack) = func.try_curry_builtin(arg_stack) {
-                        let Some(curried_builtin) =
-                            curried_terms.iter().find(|curry| curry.func == *func)
-                        else {
-                            return;
-                        };
+        let (mut step_b, _) =
+            step_a.traverse_uplc_with(false, true, &mut |id, term, arg_stack, scope, _context| {
+                match term {
+                    Term::Builtin(func) => {
+                        if let Some(mut arg_stack) = func.try_curry_builtin(arg_stack) {
+                            let Some(curried_builtin) =
+                                curried_terms.iter().find(|curry| curry.func == *func)
+                            else {
+                                return;
+                            };
 
-                        if let Some(true) = flipped_terms.get(scope) {
-                            arg_stack.reverse();
-                        }
-
-                        let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
-
-                        let Some(mut id_vec) = curried_builtin.get_id_args(builtin_args) else {
-                            return;
-                        };
-
-                        while !id_vec.is_empty() {
-                            let id_lookup = id_vec.iter().map(|item| item.curried_id).collect_vec();
-
-                            if final_ids.contains_key(&id_lookup) {
-                                break;
+                            if let Some(true) = flipped_terms.get(scope) {
+                                arg_stack.reverse();
                             }
-                            id_vec.pop();
-                        }
 
-                        if id_vec.is_empty() {
-                            return;
-                        }
+                            let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
 
-                        let name = id_vec_function_to_var(
-                            &func.aiken_name(),
-                            &id_vec.iter().map(|item| item.curried_id).collect_vec(),
-                        );
+                            let Some(mut id_vec) = curried_builtin.get_id_args(builtin_args) else {
+                                return;
+                            };
 
-                        id_vec.iter().for_each(|item| {
-                            curry_applied_ids.push(item.applied_id);
-                        });
+                            while !id_vec.is_empty() {
+                                let id_lookup =
+                                    id_vec.iter().map(|item| item.curried_id).collect_vec();
 
-                        *term = Term::var(name);
-                    }
-                }
-                Term::Apply { function, .. } => {
-                    let id = id.unwrap();
-
-                    if curry_applied_ids.contains(&id) {
-                        *term = function.as_ref().clone();
-                    }
-
-                    if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
-                        for (key, val) in insert_list.into_iter().rev() {
-                            let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
-
-                            if term
-                                .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
-                                .found
-                            {
-                                *term = term.clone().lambda(name).apply(val);
+                                if final_ids.contains_key(&id_lookup) {
+                                    break;
+                                }
+                                id_vec.pop();
                             }
+
+                            if id_vec.is_empty() {
+                                return;
+                            }
+
+                            let name = id_vec_function_to_var(
+                                &func.aiken_name(),
+                                &id_vec.iter().map(|item| item.curried_id).collect_vec(),
+                            );
+
+                            id_vec.iter().for_each(|item| {
+                                curry_applied_ids.push(item.applied_id);
+                            });
+
+                            *term = Term::var(name);
                         }
                     }
-                }
-                Term::Constr { .. } => todo!(),
-                Term::Case { .. } => todo!(),
-                _ => {
-                    if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
-                        for (key, val) in insert_list.into_iter().rev() {
-                            let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+                    Term::Apply { function, .. } => {
+                        let id = id.unwrap();
 
-                            if term
-                                .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
-                                .found
-                            {
-                                *term = term.clone().lambda(name).apply(val);
+                        if curry_applied_ids.contains(&id) {
+                            *term = function.as_ref().clone();
+                        }
+
+                        if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
+                            for (key, val) in insert_list.into_iter().rev() {
+                                let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+
+                                if term
+                                    .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
+                                    .found
+                                {
+                                    *term = term.clone().lambda(name).apply(val);
+                                }
                             }
                         }
                     }
+                    Term::Constr { .. } => todo!(),
+                    Term::Case { .. } => todo!(),
+                    _ => {
+                        if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
+                            for (key, val) in insert_list.into_iter().rev() {
+                                let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+
+                                if term
+                                    .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
+                                    .found
+                                {
+                                    *term = term.clone().lambda(name).apply(val);
+                                }
+                            }
+                        }
+                    }
                 }
-            },
-        );
+            });
 
         let mut interner = CodeGenInterner::new();
 
@@ -3279,7 +3261,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3300,7 +3282,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3319,7 +3301,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3360,7 +3342,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3506,7 +3488,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3533,7 +3515,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3584,7 +3566,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3611,7 +3593,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3640,7 +3622,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3662,7 +3644,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3699,7 +3681,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3736,7 +3718,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3757,7 +3739,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3786,7 +3768,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.cast_data_reducer(id, arg_stack, scope, context);
+                term.cast_data_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3813,7 +3795,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.cast_data_reducer(id, arg_stack, scope, context);
+                term.cast_data_reducer(id, &arg_stack, scope, context);
             })
         });
     }
