@@ -222,11 +222,22 @@ pub struct CodeGenerator<'a> {
 /// keep every generated program byte-for-byte identical to what repeated
 /// compilation produced, reusing the cached value replays the same counter
 /// increments.
+///
+/// Every use emits a deep copy of the value: `Rc` reference counts are not
+/// atomic, and programs embedding the constant may be evaluated and dropped
+/// on different threads (tests run in parallel), so they must not share
+/// allocations with each other or with this cache.
 #[derive(Clone, Debug)]
 struct CachedConstant {
-    term: Term<Name>,
+    constant: UplcConstant,
     interner_delta: usize,
     id_gen_delta: u64,
+}
+
+impl CachedConstant {
+    fn fresh_term(&self) -> Term<Name> {
+        Term::Constant(Rc::new(self.constant.deep_clone()))
+    }
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -3911,7 +3922,7 @@ impl<'a> CodeGenerator<'a> {
                         self.interner.advance(cached.interner_delta);
                         self.id_gen.advance(cached.id_gen_delta);
 
-                        return Some(cached.term.clone());
+                        return Some(cached.fresh_term());
                     }
 
                     let interner_before = self.interner.counter();
@@ -3953,15 +3964,20 @@ impl<'a> CodeGenerator<'a> {
                     // Only pure constant results are position-independent for
                     // certain; anything else (which shouldn't happen for a
                     // module constant) is recompiled per reference as before.
-                    if matches!(term, Term::Constant(_)) {
-                        self.cached_constants.insert(
-                            access_key,
-                            CachedConstant {
-                                term: term.clone(),
-                                interner_delta: self.interner.counter() - interner_before,
-                                id_gen_delta: self.id_gen.current() - id_gen_before,
-                            },
-                        );
+                    if let Term::Constant(constant) = &term {
+                        let cached = CachedConstant {
+                            constant: constant.as_ref().deep_clone(),
+                            interner_delta: self.interner.counter() - interner_before,
+                            id_gen_delta: self.id_gen.current() - id_gen_before,
+                        };
+
+                        // Emit a fresh copy here too, so the cache's own copy
+                        // never shares allocations with any program.
+                        let term = cached.fresh_term();
+
+                        self.cached_constants.insert(access_key, cached);
+
+                        return Some(term);
                     }
 
                     Some(term)

@@ -494,6 +494,44 @@ pub enum Type {
     Bls12_381MlResult,
 }
 
+impl Constant {
+    /// An equal constant sharing no allocation with `self`.
+    ///
+    /// `Rc` reference counts are not atomic, so a constant that may end up
+    /// embedded in programs handled by different threads (e.g. tests run in
+    /// parallel) must not share `Rc`s with anything else.
+    pub fn deep_clone(&self) -> Constant {
+        match self {
+            Constant::ProtoList(tipo, items) => Constant::ProtoList(
+                tipo.deep_clone(),
+                items.iter().map(|item| item.deep_clone()).collect(),
+            ),
+            Constant::ProtoPair(fst_tipo, snd_tipo, fst, snd) => Constant::ProtoPair(
+                fst_tipo.deep_clone(),
+                snd_tipo.deep_clone(),
+                Rc::new(fst.deep_clone()),
+                Rc::new(snd.deep_clone()),
+            ),
+            // The remaining variants own their contents outright.
+            other => other.clone(),
+        }
+    }
+}
+
+impl Type {
+    /// An equal type sharing no allocation with `self` (see
+    /// `Constant::deep_clone`).
+    pub fn deep_clone(&self) -> Type {
+        match self {
+            Type::List(inner) => Type::List(Rc::new(inner.deep_clone())),
+            Type::Pair(fst, snd) => {
+                Type::Pair(Rc::new(fst.deep_clone()), Rc::new(snd.deep_clone()))
+            }
+            other => other.clone(),
+        }
+    }
+}
+
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
