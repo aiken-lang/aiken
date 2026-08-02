@@ -2263,6 +2263,8 @@ impl Term<Name> {
                 //    or-ed with can't-throw).
                 // Only "exactly 1 occurrence of a possibly-throwing argument"
                 // still needs the delays-aware scan.
+                let mut known_single = false;
+
                 if let Some(count) = context.occurrences.trusted_count(parameter_name) {
                     match count {
                         0 => {
@@ -2288,15 +2290,28 @@ impl Term<Name> {
                             *self = std::mem::replace(body, Term::Error.force());
                             return changed;
                         }
-                        1 => (),
+                        // Exactly one occurrence of a possibly-throwing
+                        // argument: the delays-aware scan below is still
+                        // needed, but it can stop at the (only) occurrence —
+                        // the unwind out of the recursion accounts for the
+                        // delays and no_inline markers on that occurrence's
+                        // path, and the tracker guarantees there is no other
+                        // occurrence to accumulate.
+                        1 => known_single = true,
                         _ => return false,
                     }
                 }
 
                 // The decisions below only distinguish "unused", "used exactly
                 // once" and "used more than once", so the scan can stop as soon
-                // as a second occurrence is seen.
-                let var_lookup = body.var_occurrences(parameter_name.clone(), vec![], vec![], 2);
+                // as a second occurrence is seen (or the first, when the
+                // occurrence count is already known to be exactly one).
+                let var_lookup = body.var_occurrences(
+                    parameter_name.clone(),
+                    vec![],
+                    vec![],
+                    if known_single { 1 } else { 2 },
+                );
 
                 let must_execute_condition = var_lookup.delays == 0 && !var_lookup.no_inline;
 
