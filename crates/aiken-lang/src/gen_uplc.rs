@@ -204,6 +204,29 @@ pub struct CodeGenerator<'a> {
     /// mutable and reset as well
     interner: AirInterner,
     id_gen: IdGenerator,
+    /// compiled module constants, kept across resets
+    cached_constants: HashMap<FunctionAccessKey, CachedConstant>,
+}
+
+/// A module constant compiled down to the value it evaluates to.
+///
+/// Compiling a constant reference involves generating, optimizing and
+/// evaluating a full program (see the `ModuleConstant` case in `gen_uplc`),
+/// and used to be done for every single reference to the constant in every
+/// generated program. The resulting value is a closed constant term
+/// independent of any generator state, so it can be reused for the lifetime
+/// of the code generator.
+///
+/// The compilation also consumes ids from the generator's interner and id
+/// generator; how many of each depends only on the constant's definition. To
+/// keep every generated program byte-for-byte identical to what repeated
+/// compilation produced, reusing the cached value replays the same counter
+/// increments.
+#[derive(Clone, Debug)]
+struct CachedConstant {
+    term: Term<Name>,
+    interner_delta: usize,
+    id_gen_delta: u64,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -234,6 +257,7 @@ impl<'a> CodeGenerator<'a> {
             cyclic_functions: IndexMap::new(),
             interner: AirInterner::new(),
             id_gen: IdGenerator::new(),
+            cached_constants: HashMap::new(),
         }
     }
 
@@ -3879,6 +3903,20 @@ impl<'a> CodeGenerator<'a> {
                         function_name: name.clone(),
                     };
 
+                    // Constants evaluate to closed values that don't depend on
+                    // any generator state, so each one only needs compiling
+                    // once per code generator rather than once per reference
+                    // (see CachedConstant).
+                    if let Some(cached) = self.cached_constants.get(&access_key) {
+                        self.interner.advance(cached.interner_delta);
+                        self.id_gen.advance(cached.id_gen_delta);
+
+                        return Some(cached.term.clone());
+                    }
+
+                    let interner_before = self.interner.counter();
+                    let id_gen_before = self.id_gen.current();
+
                     let definition = self
                         .constants
                         .get(&access_key)
@@ -3905,14 +3943,28 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.clean_up_no_inlines().try_into().unwrap();
 
-                    Some(
-                        eval_program
-                            .eval(ExBudget::max())
-                            .result()
-                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
-                            .try_into()
-                            .unwrap(),
-                    )
+                    let term: Term<Name> = eval_program
+                        .eval(ExBudget::max())
+                        .result()
+                        .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                        .try_into()
+                        .unwrap();
+
+                    // Only pure constant results are position-independent for
+                    // certain; anything else (which shouldn't happen for a
+                    // module constant) is recompiled per reference as before.
+                    if matches!(term, Term::Constant(_)) {
+                        self.cached_constants.insert(
+                            access_key,
+                            CachedConstant {
+                                term: term.clone(),
+                                interner_delta: self.interner.counter() - interner_before,
+                                id_gen_delta: self.id_gen.current() - id_gen_before,
+                            },
+                        );
+                    }
+
+                    Some(term)
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
