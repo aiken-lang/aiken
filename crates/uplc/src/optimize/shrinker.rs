@@ -1172,6 +1172,7 @@ pub enum Args {
 }
 
 impl Term<Name> {
+    #[allow(clippy::too_many_arguments)]
     fn traverse_uplc_with_helper(
         &mut self,
         scope: &Scope,
@@ -1180,18 +1181,31 @@ impl Term<Name> {
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
         context: &mut Context,
         inline_lambda: bool,
+        track_scopes: bool,
     ) {
         match self {
             Term::Apply { function, argument } => {
                 let arg = Rc::make_mut(argument);
 
+                // Scopes are only consulted by builtin_curry_reducer; other
+                // traversals skip maintaining them since each push clones the
+                // whole scope path.
+                let arg_scope;
+                let arg_scope = if track_scopes {
+                    arg_scope = scope.push(ScopePath::ARG);
+                    &arg_scope
+                } else {
+                    scope
+                };
+
                 arg.traverse_uplc_with_helper(
-                    &scope.push(ScopePath::ARG),
+                    arg_scope,
                     vec![],
                     id_gen,
                     with,
                     context,
                     inline_lambda,
+                    track_scopes,
                 );
                 let apply_id = id_gen.next_id();
 
@@ -1200,13 +1214,22 @@ impl Term<Name> {
 
                 let func = Rc::make_mut(function);
 
+                let func_scope;
+                let func_scope = if track_scopes {
+                    func_scope = scope.push(ScopePath::FUNC);
+                    &func_scope
+                } else {
+                    scope
+                };
+
                 func.traverse_uplc_with_helper(
-                    &scope.push(ScopePath::FUNC),
+                    func_scope,
                     arg_stack,
                     id_gen,
                     with,
                     context,
                     inline_lambda,
+                    track_scopes,
                 );
 
                 with(Some(apply_id), self, vec![], scope, context);
@@ -1217,7 +1240,15 @@ impl Term<Name> {
 
                 arg_stack.push(Args::Force(force_id));
 
-                f.traverse_uplc_with_helper(scope, arg_stack, id_gen, with, context, inline_lambda);
+                f.traverse_uplc_with_helper(
+                    scope,
+                    arg_stack,
+                    id_gen,
+                    with,
+                    context,
+                    inline_lambda,
+                    track_scopes,
+                );
 
                 with(Some(force_id), self, vec![], scope, context);
             }
@@ -1231,7 +1262,15 @@ impl Term<Name> {
                     })
                     .unwrap_or_default();
 
-                d.traverse_uplc_with_helper(scope, arg_stack, id_gen, with, context, inline_lambda);
+                d.traverse_uplc_with_helper(
+                    scope,
+                    arg_stack,
+                    id_gen,
+                    with,
+                    context,
+                    inline_lambda,
+                    track_scopes,
+                );
 
                 with(None, self, delay_arg, scope, context);
             }
@@ -1274,6 +1313,7 @@ impl Term<Name> {
                                 with,
                                 context,
                                 inline_lambda,
+                                track_scopes,
                             );
                         }
                         other => other.traverse_uplc_with_helper(
@@ -1283,6 +1323,7 @@ impl Term<Name> {
                             with,
                             context,
                             inline_lambda,
+                            track_scopes,
                         ),
                     }
                 } else {
@@ -1295,6 +1336,7 @@ impl Term<Name> {
                         with,
                         context,
                         inline_lambda,
+                        track_scopes,
                     );
 
                     with(None, self, args, scope, context);
@@ -1310,6 +1352,7 @@ impl Term<Name> {
                     with,
                     context,
                     inline_lambda,
+                    track_scopes,
                 );
 
                 if branches.len() == 1 {
@@ -1322,6 +1365,7 @@ impl Term<Name> {
                         with,
                         context,
                         inline_lambda,
+                        track_scopes,
                     );
                 } else {
                     for branch in branches {
@@ -1332,6 +1376,7 @@ impl Term<Name> {
                             with,
                             context,
                             inline_lambda,
+                            track_scopes,
                         );
                     }
                 }
@@ -1345,6 +1390,7 @@ impl Term<Name> {
                         with,
                         context,
                         inline_lambda,
+                        track_scopes,
                     );
                 }
             }
@@ -2712,15 +2758,22 @@ impl Program<Name> {
     fn traverse_uplc_with(
         self,
         inline_lambda: bool,
+        track_scopes: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> (Self, Context) {
-        self.traverse_uplc_with_tracker(OccurrenceTracker::disabled(), inline_lambda, with)
+        self.traverse_uplc_with_tracker(
+            OccurrenceTracker::disabled(),
+            inline_lambda,
+            track_scopes,
+            with,
+        )
     }
 
     fn traverse_uplc_with_tracker(
         self,
         occurrences: OccurrenceTracker,
         inline_lambda: bool,
+        track_scopes: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> (Self, Context) {
         let mut term = self.term;
@@ -2747,6 +2800,7 @@ impl Program<Name> {
             with,
             &mut context,
             inline_lambda,
+            track_scopes,
         );
         (
             Program {
@@ -2761,11 +2815,11 @@ impl Program<Name> {
         // First pass is necessary to ensure fst_pair and snd_pair are inlined before
         // builtin_force_reducer is run
         let (program, context) = self
-            .traverse_uplc_with(false, &mut |id, term, _arg_stack, scope, context| {
+            .traverse_uplc_with(false, false, &mut |id, term, _arg_stack, scope, context| {
                 term.inline_constr_ops(id, vec![], scope, context);
             })
             .0
-            .traverse_uplc_with(false, &mut |id, term, arg_stack, scope, context| {
+            .traverse_uplc_with(false, false, &mut |id, term, arg_stack, scope, context| {
                 term.bls381_compressor(id, vec![], scope, context);
                 term.builtin_force_reducer(id, arg_stack, scope, context);
                 term.remove_inlined_ids(id, vec![], scope, context);
@@ -2820,7 +2874,7 @@ impl Program<Name> {
         // uniquely-bound name, replacing most per-binder body scans.
         let occurrences = OccurrenceTracker::new(&self.term);
 
-        self.traverse_uplc_with_tracker(occurrences, true, &mut |id,
+        self.traverse_uplc_with_tracker(occurrences, true, false, &mut |id,
                                                                  term,
                                                                  arg_stack,
                                                                  scope,
@@ -2867,7 +2921,7 @@ impl Program<Name> {
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> Self {
         let (mut program, context) =
-            self.traverse_uplc_with(inline_lambda, &mut |id, term, arg_stack, scope, context| {
+            self.traverse_uplc_with(inline_lambda, false, &mut |id, term, arg_stack, scope, context| {
                 with(id, term, arg_stack, scope, context);
                 term.flip_constants(id, vec![], scope, context);
                 term.remove_inlined_ids(id, vec![], scope, context);
@@ -2881,7 +2935,7 @@ impl Program<Name> {
     }
 
     pub fn clean_up_no_inlines(self) -> Self {
-        self.traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
+        self.traverse_uplc_with(true, false, &mut |id, term, _arg_stack, scope, context| {
             term.remove_no_inlines(id, vec![], scope, context);
         })
         .0
@@ -2889,13 +2943,13 @@ impl Program<Name> {
 
     pub fn afterwards(self) -> Self {
         let (mut program, context) =
-            self.traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
+            self.traverse_uplc_with(true, false, &mut |id, term, arg_stack, scope, context| {
                 term.write_bits_convert_arg(id, arg_stack, scope, context);
             });
 
         program = program
             .split_body_lambda_reducer()
-            .traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
+            .traverse_uplc_with(true, false, &mut |id, term, _arg_stack, scope, context| {
                 term.case_constr_apply_reducer(id, vec![], scope, context);
             })
             .0;
@@ -2928,6 +2982,7 @@ impl Program<Name> {
 
         let (step_a, _) = self.traverse_uplc_with(
             false,
+            true,
             &mut |_id, term, arg_stack, scope, _context| match term {
                 Term::Builtin(func) => {
                     if let Some(arg_stack) = func.try_curry_builtin(arg_stack) {
@@ -3040,6 +3095,7 @@ impl Program<Name> {
 
         let (mut step_b, _) = step_a.traverse_uplc_with(
             false,
+            true,
             &mut |id, term, arg_stack, scope, _context| match term {
                 Term::Builtin(func) => {
                     if let Some(mut arg_stack) = func.try_curry_builtin(arg_stack) {
