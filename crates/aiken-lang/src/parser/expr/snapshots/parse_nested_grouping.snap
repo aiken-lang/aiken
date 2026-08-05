@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/parser/expr/block.rs
+description: "Code:\n\n((x))"
+---
+Var {
+    location: 2..3,
+    name: "x",
+}

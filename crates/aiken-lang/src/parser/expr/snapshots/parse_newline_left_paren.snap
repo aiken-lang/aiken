@@ -1,0 +1,17 @@
+---
+source: crates/aiken-lang/src/parser/expr/block.rs
+description: "Code:\n\nx\n(x)"
+---
+Sequence {
+    location: 0..4,
+    expressions: [
+        Var {
+            location: 0..1,
+            name: "x",
+        },
+        Var {
+            location: 3..4,
+            name: "x",
+        },
+    ],
+}
