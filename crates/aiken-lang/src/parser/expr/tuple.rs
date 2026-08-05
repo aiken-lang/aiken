@@ -45,4 +45,24 @@ mod tests {
             "#
         );
     }
+
+    #[test]
+    fn parse_singleton_tuple() {
+        assert_expr!("(x,)");
+    }
+
+    #[test]
+    fn parse_simple_tuple() {
+        assert_expr!("(x, y)");
+    }
+
+    #[test]
+    fn parse_nested_tuple() {
+        assert_expr!("((x, y))");
+    }
+
+    #[test]
+    fn parse_tuple_with_trailing_comma() {
+        assert_expr!("(x, y,)");
+    }
 }
