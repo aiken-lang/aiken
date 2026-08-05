@@ -203,6 +203,106 @@ impl<T> From<Vec1Ref<T>> for Vec1<T> {
 }
 
 impl TypedExpr {
+    pub fn nesting_depth(&self) -> usize {
+        let mut maximum = 0;
+        let mut pending = vec![(self, 1)];
+
+        while let Some((expression, depth)) = pending.pop() {
+            maximum = maximum.max(depth);
+            let child_depth = depth + 1;
+
+            match expression {
+                Self::Sequence { expressions, .. }
+                | Self::Pipeline { expressions, .. }
+                | Self::Tuple {
+                    elems: expressions, ..
+                } => {
+                    pending.extend(
+                        expressions
+                            .iter()
+                            .map(|expression| (expression, child_depth)),
+                    );
+                }
+                Self::Fn { body, .. } => pending.push((body, child_depth)),
+                Self::List { elements, tail, .. } => {
+                    pending.extend(elements.iter().map(|expression| (expression, child_depth)));
+                    if let Some(tail) = tail {
+                        pending.push((tail, child_depth));
+                    }
+                }
+                Self::Call { fun, args, .. } => {
+                    pending.push((fun, child_depth));
+                    pending.extend(args.iter().map(|argument| (&argument.value, child_depth)));
+                }
+                Self::BinOp { left, right, .. }
+                | Self::Pair {
+                    fst: left,
+                    snd: right,
+                    ..
+                } => {
+                    pending.push((left, child_depth));
+                    pending.push((right, child_depth));
+                }
+                Self::Assignment { value, .. }
+                | Self::RecordAccess { record: value, .. }
+                | Self::TupleIndex { tuple: value, .. }
+                | Self::UnOp { value, .. } => pending.push((value, child_depth)),
+                Self::Trace { then, text, .. } => {
+                    pending.push((then, child_depth));
+                    pending.push((text, child_depth));
+                }
+                Self::When {
+                    subject, clauses, ..
+                } => {
+                    pending.push((subject, child_depth));
+                    pending.extend(clauses.iter().map(|clause| (&clause.then, child_depth)));
+                }
+                Self::If {
+                    branches,
+                    final_else,
+                    ..
+                } => {
+                    pending.push((final_else, child_depth));
+                    for branch in branches {
+                        pending.push((&branch.condition, child_depth));
+                        pending.push((&branch.body, child_depth));
+                    }
+                }
+                Self::RecordUpdate { spread, args, .. } => {
+                    pending.push((spread, child_depth));
+                    pending.extend(args.iter().map(|argument| (&argument.value, child_depth)));
+                }
+                Self::UInt { .. }
+                | Self::String { .. }
+                | Self::ByteArray { .. }
+                | Self::CurvePoint { .. }
+                | Self::Var { .. }
+                | Self::ModuleSelect { .. }
+                | Self::ErrorTerm { .. } => {}
+            }
+        }
+
+        maximum
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn stack_segment_size(&self) -> usize {
+        native_stack_segment_size(self.nesting_depth())
+    }
+
+    pub(crate) fn stack_safe_clone(&self) -> Self {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = self.stack_segment_size();
+            with_native_stack_segment(stack_size, || self.clone())
+        }
+
+        #[cfg(target_family = "wasm")]
+        {
+            self.clone()
+        }
+    }
+
     pub fn is_simple_expr_to_format(&self) -> bool {
         match self {
             Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. } | Self::Var { .. } => {
@@ -782,11 +882,164 @@ pub enum UntypedExpr {
     },
 }
 
+/// Native expression depth accepted by every recursive compiler phase. The
+/// end-to-end fixture with 6,144 nested constructor calls reaches 6,147 after
+/// its sequence, assignment, and leaf nodes are included.
+#[cfg(not(target_family = "wasm"))]
+pub const MAX_EXPRESSION_NESTING: usize = 6_147;
+
+/// WebAssembly has no segmented-stack support. Keep successful recursive paths
+/// within a conservative depth while using the same iterative over-limit
+/// cleanup as native builds.
+#[cfg(target_family = "wasm")]
+pub const MAX_EXPRESSION_NESTING: usize = 512;
+
+// The 100 KiB red zone and 1 MiB minimum are the checkpoints used by stacker
+// before entering recursive compiler phases. Depth-sized segments reserve
+// 16 KiB per AST level: the constrained-stack inference fixtures cover the
+// supported expression forms, and the 4,096-level failing CLI fixture covers
+// evaluation, assertion reification, debug rendering, and destruction. Capping
+// at the configured native limit bounds a segment below 97 MiB.
+#[cfg(not(target_family = "wasm"))]
+const NATIVE_STACK_RED_ZONE: usize = 100 * 1024;
+#[cfg(not(target_family = "wasm"))]
+const NATIVE_STACK_SEGMENT: usize = 1024 * 1024;
+#[cfg(not(target_family = "wasm"))]
+const NATIVE_STACK_BYTES_PER_LEVEL: usize = 16 * 1024;
+#[cfg(not(target_family = "wasm"))]
+const NATIVE_STACK_MAXIMUM: usize = MAX_EXPRESSION_NESTING * NATIVE_STACK_BYTES_PER_LEVEL;
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn native_stack_segment_size(depth: usize) -> usize {
+    depth
+        .saturating_mul(NATIVE_STACK_BYTES_PER_LEVEL)
+        .clamp(NATIVE_STACK_SEGMENT, NATIVE_STACK_MAXIMUM)
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn with_native_stack_growth<T>(operation: impl FnOnce() -> T) -> T {
+    stacker::maybe_grow(NATIVE_STACK_RED_ZONE, NATIVE_STACK_SEGMENT, operation)
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn with_native_stack_segment<T>(stack_size: usize, operation: impl FnOnce() -> T) -> T {
+    stacker::maybe_grow(stack_size, stack_size, operation)
+}
+
 pub const DEFAULT_TODO_STR: &str = "aiken::todo";
 
 pub const DEFAULT_ERROR_STR: &str = "aiken::error";
 
 impl UntypedExpr {
+    pub fn nesting_depth(&self) -> usize {
+        let mut maximum = 0;
+        let mut pending = vec![(self, 1)];
+
+        while let Some((expression, depth)) = pending.pop() {
+            maximum = maximum.max(depth);
+            let child_depth = depth + 1;
+
+            match expression {
+                Self::Sequence { expressions, .. }
+                | Self::Tuple {
+                    elems: expressions, ..
+                }
+                | Self::LogicalOpChain { expressions, .. } => {
+                    pending.extend(
+                        expressions
+                            .iter()
+                            .map(|expression| (expression, child_depth)),
+                    );
+                }
+                Self::PipeLine { expressions, .. } => {
+                    pending.extend(
+                        expressions
+                            .iter()
+                            .map(|expression| (expression, child_depth)),
+                    );
+                }
+                Self::Fn { body, .. } => pending.push((body, child_depth)),
+                Self::List { elements, tail, .. } => {
+                    pending.extend(elements.iter().map(|expression| (expression, child_depth)));
+                    if let Some(tail) = tail {
+                        pending.push((tail, child_depth));
+                    }
+                }
+                Self::Call { fun, arguments, .. } => {
+                    pending.push((fun, child_depth));
+                    pending.extend(
+                        arguments
+                            .iter()
+                            .map(|argument| (&argument.value, child_depth)),
+                    );
+                }
+                Self::BinOp { left, right, .. }
+                | Self::Pair {
+                    fst: left,
+                    snd: right,
+                    ..
+                } => {
+                    pending.push((left, child_depth));
+                    pending.push((right, child_depth));
+                }
+                Self::Assignment { value, .. }
+                | Self::TraceIfFalse { value, .. }
+                | Self::UnOp { value, .. } => pending.push((value, child_depth)),
+                Self::Trace {
+                    then,
+                    label,
+                    arguments,
+                    ..
+                } => {
+                    pending.push((then, child_depth));
+                    pending.push((label, child_depth));
+                    pending.extend(arguments.iter().map(|argument| (argument, child_depth)));
+                }
+                Self::When {
+                    subject, clauses, ..
+                } => {
+                    pending.push((subject, child_depth));
+                    pending.extend(clauses.iter().map(|clause| (&clause.then, child_depth)));
+                }
+                Self::If {
+                    branches,
+                    final_else,
+                    ..
+                } => {
+                    pending.push((final_else, child_depth));
+                    for branch in branches {
+                        pending.push((&branch.condition, child_depth));
+                        pending.push((&branch.body, child_depth));
+                    }
+                }
+                Self::FieldAccess { container, .. } => pending.push((container, child_depth)),
+                Self::TupleIndex { tuple, .. } => pending.push((tuple, child_depth)),
+                Self::RecordUpdate {
+                    constructor,
+                    spread,
+                    arguments,
+                    ..
+                } => {
+                    pending.push((constructor, child_depth));
+                    pending.push((&spread.base, child_depth));
+                    pending.extend(
+                        arguments
+                            .iter()
+                            .map(|argument| (&argument.value, child_depth)),
+                    );
+                }
+                Self::UInt { .. }
+                | Self::String { .. }
+                | Self::Var { .. }
+                | Self::ByteArray { .. }
+                | Self::CurvePoint { .. }
+                | Self::ErrorTerm { .. } => {}
+            }
+        }
+
+        maximum
+    }
+
     // Reify some opaque 'Constant' into an 'UntypedExpr', using a Type annotation. We also need
     // an extra map to lookup record & enum constructor's names as they're completely erased when
     // in their PlutusData form, and the Type annotation only contains type name.
@@ -1424,19 +1677,19 @@ impl UntypedExpr {
             end: next.location().end,
         };
 
-        match (self.clone(), next.clone()) {
+        match (self, next) {
             (left @ Self::Sequence { .. }, right @ Self::Sequence { .. }) => Self::Sequence {
                 location,
                 expressions: vec![left, right],
             },
             (
-                _,
+                current,
                 Self::Sequence {
                     expressions: mut next_expressions,
                     ..
                 },
             ) => {
-                let mut current_expressions = vec![self];
+                let mut current_expressions = vec![current];
 
                 current_expressions.append(&mut next_expressions);
 
@@ -1446,9 +1699,9 @@ impl UntypedExpr {
                 }
             }
 
-            (_, _) => Self::Sequence {
+            (left, right) => Self::Sequence {
                 location,
-                expressions: vec![self, next],
+                expressions: vec![left, right],
             },
         }
     }
@@ -1553,6 +1806,86 @@ impl UntypedExpr {
             }
             .into(),
             return_annotation: None,
+        }
+    }
+
+    pub(crate) fn drop_iteratively(self) {
+        let mut pending = vec![self];
+
+        while let Some(expression) = pending.pop() {
+            match expression {
+                Self::Sequence { expressions, .. }
+                | Self::Tuple {
+                    elems: expressions, ..
+                }
+                | Self::LogicalOpChain { expressions, .. } => pending.extend(expressions),
+                Self::PipeLine { expressions, .. } => pending.extend(expressions),
+                Self::Fn { body, .. } => pending.push(*body),
+                Self::List { elements, tail, .. } => {
+                    pending.extend(elements);
+                    pending.extend(tail.map(|tail| *tail));
+                }
+                Self::Call { fun, arguments, .. } => {
+                    pending.push(*fun);
+                    pending.extend(arguments.into_iter().map(|argument| argument.value));
+                }
+                Self::BinOp { left, right, .. } => {
+                    pending.push(*left);
+                    pending.push(*right);
+                }
+                Self::Pair { fst, snd, .. } => {
+                    pending.push(*fst);
+                    pending.push(*snd);
+                }
+                Self::Assignment { value, .. }
+                | Self::TraceIfFalse { value, .. }
+                | Self::UnOp { value, .. } => pending.push(*value),
+                Self::Trace {
+                    then,
+                    label,
+                    arguments,
+                    ..
+                } => {
+                    pending.push(*then);
+                    pending.push(*label);
+                    pending.extend(arguments);
+                }
+                Self::When {
+                    subject, clauses, ..
+                } => {
+                    pending.push(*subject);
+                    pending.extend(clauses.into_iter().map(|clause| clause.then));
+                }
+                Self::If {
+                    branches,
+                    final_else,
+                    ..
+                } => {
+                    pending.push(*final_else);
+                    for branch in branches {
+                        pending.push(branch.condition);
+                        pending.push(branch.body);
+                    }
+                }
+                Self::FieldAccess { container, .. } => pending.push(*container),
+                Self::TupleIndex { tuple, .. } => pending.push(*tuple),
+                Self::RecordUpdate {
+                    constructor,
+                    spread,
+                    arguments,
+                    ..
+                } => {
+                    pending.push(*constructor);
+                    pending.push(*spread.base);
+                    pending.extend(arguments.into_iter().map(|argument| argument.value));
+                }
+                Self::UInt { .. }
+                | Self::String { .. }
+                | Self::Var { .. }
+                | Self::ByteArray { .. }
+                | Self::CurvePoint { .. }
+                | Self::ErrorTerm { .. } => {}
+            }
         }
     }
 }

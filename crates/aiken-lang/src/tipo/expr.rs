@@ -8,6 +8,8 @@ use super::{
     pattern::PatternTyper,
     pipe::PipeTyper,
 };
+#[cfg(not(target_family = "wasm"))]
+use crate::expr::with_native_stack_growth;
 use crate::{
     IdGenerator,
     ast::{
@@ -19,34 +21,55 @@ use crate::{
         UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{BUILTIN, from_default_function},
-    expr::{FnStyle, TypedExpr, UntypedExpr},
+    expr::{FnStyle, MAX_EXPRESSION_NESTING, TypedExpr, UntypedExpr},
     format,
     parser::token::Base,
     tipo::{
         DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar, fields::FieldMap,
     },
 };
-use std::{
-    cmp::Ordering,
-    collections::{BTreeSet, HashMap},
-    ops::Deref,
-    rc::Rc,
-};
+
+use std::{cmp::Ordering, collections::HashMap, ops::Deref, rc::Rc};
 use vec1::Vec1;
 
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::result_large_err)]
-pub(crate) fn infer_function(
-    fun: &UntypedFunction,
+pub(crate) fn infer_registered_function(
+    name: String,
     module_name: &str,
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
     tracing: Tracing,
     top_level_scope: &ScopeResetData,
 ) -> Result<Function<Rc<Type>, TypedExpr, TypedArg>, Error> {
-    if let Some(typed_fun) = environment.inferred_functions.get(&fun.name) {
-        return Ok(typed_fun.clone());
-    };
+    if let Some(function) = environment.inferred_functions.remove(&name) {
+        return Ok(function);
+    }
 
+    let function = environment
+        .pending_functions
+        .remove(&name)
+        .unwrap_or_else(|| panic!("Could not find registered function: {name}"));
+
+    infer_function(
+        function,
+        module_name,
+        hydrators,
+        environment,
+        tracing,
+        top_level_scope,
+    )
+}
+
+#[allow(clippy::result_large_err)]
+pub(crate) fn infer_function(
+    fun: UntypedFunction,
+    module_name: &str,
+    hydrators: &mut HashMap<String, Hydrator>,
+    environment: &mut Environment<'_>,
+    tracing: Tracing,
+    top_level_scope: &ScopeResetData,
+) -> Result<Function<Rc<Type>, TypedExpr, TypedArg>, Error> {
     let Function {
         doc,
         location,
@@ -61,176 +84,121 @@ pub(crate) fn infer_function(
     } = fun;
 
     let mut extra_let_assignments = Vec::new();
-    for (i, arg) in arguments.iter().enumerate() {
-        let let_assignment = arg.by.clone().into_extra_assignment(
-            &arg.arg_name(i),
-            arg.annotation.as_ref(),
-            arg.location,
-        );
-        match let_assignment {
-            None => {}
-            Some(expr) => extra_let_assignments.push(expr),
+    for (index, argument) in arguments.iter().enumerate() {
+        if let Some(expression) = argument.by.clone().into_extra_assignment(
+            &argument.arg_name(index),
+            argument.annotation.as_ref(),
+            argument.location,
+        ) {
+            extra_let_assignments.push(expression);
         }
     }
 
-    let sequence;
-
+    let body_location = body.location();
     let body = if extra_let_assignments.is_empty() {
         body
-    } else if let UntypedExpr::Sequence { expressions, .. } = body {
-        extra_let_assignments.extend(expressions.clone());
-        sequence = UntypedExpr::Sequence {
+    } else if let UntypedExpr::Sequence {
+        expressions,
+        location,
+    } = body
+    {
+        extra_let_assignments.extend(expressions);
+        UntypedExpr::Sequence {
             expressions: extra_let_assignments,
-            location: *location,
-        };
-        &sequence
+            location,
+        }
     } else {
-        extra_let_assignments.extend([body.clone()]);
-        sequence = UntypedExpr::Sequence {
+        extra_let_assignments.push(body);
+        UntypedExpr::Sequence {
             expressions: extra_let_assignments,
-            location: body.location(),
-        };
-        &sequence
+            location: body_location,
+        }
     };
 
     let preregistered_fn = environment
-        .get_variable(name)
+        .get_variable(&name)
         .unwrap_or_else(|| panic!("Could not find preregistered type for function: {name}"));
-
     let field_map = preregistered_fn.field_map().cloned();
-
     let preregistered_type = preregistered_fn.tipo.clone();
-
     let (args_types, return_type) = preregistered_type
         .function_types()
         .unwrap_or_else(|| panic!("Preregistered type for fn {name} was not a fn"));
-
-    let warnings = environment.warnings.clone();
 
     // ━━━ open new scope ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
     let initial_scope = environment.open_new_scope();
 
     let arguments = arguments
-        .iter()
+        .into_iter()
         .zip(&args_types)
         .enumerate()
-        .map(|(ix, (arg_name, tipo))| arg_name.to_owned().set_type(tipo.clone(), ix))
+        .map(|(index, (argument, tipo))| argument.set_type(tipo.clone(), index))
         .collect();
 
     let hydrator = hydrators
-        .remove(name)
+        .remove(&name)
         .unwrap_or_else(|| panic!("Could not find hydrator for fn {name}"));
 
-    let mut expr_typer = ExprTyper::new(environment, tracing);
+    let mut expr_typer =
+        ExprTyper::new_for_function(environment, tracing, hydrators, top_level_scope);
     expr_typer.hydrator = hydrator;
-    expr_typer.not_yet_inferred = BTreeSet::from_iter(hydrators.keys().cloned());
 
-    // Infer the type using the preregistered args + return types as a starting point
-    let inferred =
-        expr_typer.infer_fn_with_known_types(arguments, body.to_owned(), Some(return_type));
-
-    // We try to always perform a deep-first inferrence. So callee are inferred before callers,
-    // since this provides better -- and necessary -- information in particular with regards to
-    // generics.
-    //
-    // In principle, the compiler requires function definitions to be processed *in order*. So if
-    // A calls B, we must have inferred B before A. This is detected during inferrence, and we
-    // raise an error about it. Here however, we backtrack from that error and infer the caller
-    // first. Then, re-attempt to infer the current function. It may takes multiple attempts, but
-    // should eventually succeed.
-    //
-    // Note that we need to close the scope before backtracking to not mess with the scope of the
-    // callee. Otherwise, identifiers present in the caller's scope may become available to the
-    // callee.
-
-    if let Err(Error::MustInferFirst { function, .. }) = inferred {
-        // Reset the environment & scope.
-        hydrators.insert(name.to_string(), expr_typer.hydrator);
-        environment.close_scope(initial_scope);
-        *environment.warnings = warnings;
-
-        // Backtrack and infer callee first.
-        let temp_scope = environment.open_new_scope();
-        environment.close_scope(top_level_scope.clone());
-        infer_function(
-            &function,
-            environment.current_module,
-            hydrators,
-            environment,
-            tracing,
-            top_level_scope,
-        )?;
-
-        environment.open_new_scope();
-        environment.close_scope(temp_scope);
-
-        // Then, try again the entire function definition.
-        return infer_function(
-            fun,
-            module_name,
-            hydrators,
-            environment,
-            tracing,
-            top_level_scope,
-        );
-    }
-
-    let (arguments, body, return_type) = inferred?;
-
-    let args_types = arguments.iter().map(|a| a.tipo.clone()).collect();
-
-    let tipo = Type::function(args_types, return_type);
-
+    let inferred = expr_typer.infer_fn_with_known_types(arguments, body, Some(return_type));
     let safe_to_generalise = !expr_typer.ungeneralised_function_used;
 
-    environment.close_scope(initial_scope);
+    expr_typer.environment.close_scope(initial_scope);
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+    let (arguments, body, return_type) = inferred?;
+    let args_types = arguments
+        .iter()
+        .map(|argument| argument.tipo.clone())
+        .collect();
+    let tipo = Type::function(args_types, return_type);
+
     // Assert that the inferred type matches the type of any recursive call
-    environment.unify(preregistered_type, tipo.clone(), *location, false)?;
+    environment.unify(preregistered_type, tipo.clone(), location, false)?;
 
     // Generalise the function if safe to do so
     let tipo = if safe_to_generalise {
-        environment.ungeneralised_functions.remove(name);
+        environment.ungeneralised_functions.remove(&name);
 
         let tipo = generalise(tipo, 0);
-
         let module_fn = ValueConstructorVariant::ModuleFn {
             name: name.clone(),
             field_map,
             module: module_name.to_owned(),
             arity: arguments.len(),
-            location: *location,
+            location,
             builtin: None,
         };
 
-        environment.insert_variable(name.clone(), module_fn, tipo.clone());
-
+        environment.insert_module_function(
+            name.clone(),
+            ValueConstructor {
+                public,
+                variant: module_fn,
+                tipo: tipo.clone(),
+            },
+        );
         tipo
     } else {
         tipo
     };
 
-    let inferred_fn = Function {
-        doc: doc.clone(),
-        location: *location,
-        name: name.clone(),
-        public: *public,
+    Ok(Function {
+        doc,
+        location,
+        name,
+        public,
         arguments,
-        return_annotation: return_annotation.clone(),
+        return_annotation,
         return_type: tipo
             .return_type()
             .expect("Could not find return type for fn"),
         body,
-        on_test_failure: on_test_failure.clone(),
-        end_position: *end_position,
-    };
-
-    environment
-        .inferred_functions
-        .insert(name.to_string(), inferred_fn.clone());
-
-    Ok(inferred_fn)
+        on_test_failure,
+        end_position,
+    })
 }
 
 #[derive(Debug)]
@@ -244,23 +212,44 @@ pub(crate) struct ExprTyper<'a, 'b> {
     // Type hydrator for creating types from annotations
     pub(crate) hydrator: Hydrator,
 
-    // A static set of remaining function names that are known but not yet inferred
-    pub(crate) not_yet_inferred: BTreeSet<String>,
+    function_hydrators: Option<&'a mut HashMap<String, Hydrator>>,
+    top_level_scope: Option<&'a ScopeResetData>,
 
     // We keep track of whether any ungeneralised functions have been used
     // to determine whether it is safe to generalise this expression after
     // it has been inferred.
     pub(crate) ungeneralised_function_used: bool,
+
+    inference_depth: usize,
 }
 
 impl<'a, 'b> ExprTyper<'a, 'b> {
     pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {
         Self {
             hydrator: Hydrator::new(),
-            not_yet_inferred: BTreeSet::new(),
+            function_hydrators: None,
+            top_level_scope: None,
             environment,
             tracing,
             ungeneralised_function_used: false,
+            inference_depth: 0,
+        }
+    }
+
+    fn new_for_function(
+        environment: &'a mut Environment<'b>,
+        tracing: Tracing,
+        function_hydrators: &'a mut HashMap<String, Hydrator>,
+        top_level_scope: &'a ScopeResetData,
+    ) -> Self {
+        Self {
+            hydrator: Hydrator::new(),
+            function_hydrators: Some(function_hydrators),
+            top_level_scope: Some(top_level_scope),
+            environment,
+            tracing,
+            ungeneralised_function_used: false,
+            inference_depth: 0,
         }
     }
 
@@ -451,6 +440,36 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     /// returning an error.
     #[allow(clippy::result_large_err)]
     pub fn infer(&mut self, expr: UntypedExpr) -> Result<TypedExpr, Error> {
+        if self.inference_depth == 0 {
+            let depth = expr.nesting_depth();
+
+            if depth > MAX_EXPRESSION_NESTING {
+                let error = Error::ExpressionNestingLimitExceeded {
+                    location: expr.location(),
+                    depth,
+                    limit: MAX_EXPRESSION_NESTING,
+                };
+
+                expr.drop_iteratively();
+
+                return Err(error);
+            }
+        }
+
+        self.inference_depth += 1;
+
+        #[cfg(not(target_family = "wasm"))]
+        let inferred = with_native_stack_growth(|| self.infer_inner(expr));
+
+        #[cfg(target_family = "wasm")]
+        let inferred = self.infer_inner(expr);
+
+        self.inference_depth -= 1;
+        inferred
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn infer_inner(&mut self, expr: UntypedExpr) -> Result<TypedExpr, Error> {
         match expr {
             UntypedExpr::ErrorTerm { location } => Ok(self.infer_error_term(location)),
 
@@ -812,7 +831,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         args: Vec<UntypedRecordUpdateArg>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let (module, name): (Option<Namespace>, String) = match self.infer(constructor.clone())? {
+        let constructor_location = constructor.location();
+        let (module, name): (Option<Namespace>, String) = match self.infer(constructor)? {
             TypedExpr::ModuleSelect {
                 module_alias,
                 label,
@@ -845,7 +865,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             } => (field_map, *constructors_count),
             _ => {
                 return Err(Error::RecordUpdateInvalidConstructor {
-                    location: constructor.location(),
+                    location: constructor_location,
                 });
             }
         };
@@ -855,7 +875,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // could be one of the other variants.
         if constructors_count != 1 {
             return Err(Error::UpdateMultiConstructorType {
-                location: constructor.location(),
+                location: constructor_location,
             });
         }
 
@@ -864,7 +884,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             Type::Fn { ret, .. } => ret,
             _ => {
                 return Err(Error::RecordUpdateInvalidConstructor {
-                    location: constructor.location(),
+                    location: constructor_location,
                 });
             }
         };
@@ -892,7 +912,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 });
             }
 
-            let value = self.infer(value.clone())?;
+            let value = self.infer(value)?;
             let spread_field =
                 self.infer_known_record_access(spread.clone(), label.to_string(), location)?;
 
@@ -1031,7 +1051,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                         .any(|(_, constructor)| constructor.public);
                                     let export_functions = self
                                         .environment
-                                        .module_functions
+                                        .pending_functions
                                         .iter()
                                         .any(|(_, function)| function.public);
                                     let export_validators =
@@ -1454,7 +1474,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         comment: Option<String>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let typed_value = self.infer(untyped_value.clone())?;
+        let value_location = untyped_value.location();
+        let pattern_location = untyped_pattern.location();
+        let is_backpassing = matches!(
+            &untyped_value,
+            UntypedExpr::Var { name, .. } if name == ast::BACKPASS_VARIABLE
+        );
+        let typed_value = self.infer(untyped_value)?;
 
         let mut value_typ = typed_value.tipo();
 
@@ -1484,27 +1510,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             )
         } else if value_is_data && !kind.is_let() {
             let cast_data_no_ann = || {
-                let ann = Annotation::Constructor {
-                    location: Span::empty(),
-                    module: None,
-                    name: "Type".to_string(),
-                    arguments: vec![],
-                };
-
                 Err(Error::CastDataNoAnn {
                     location,
-                    value: Box::new(UntypedExpr::Assignment {
-                        location,
-                        value: untyped_value.clone().into(),
-                        patterns: AssignmentPattern::new(
-                            untyped_pattern.clone(),
-                            Some(ann),
-                            Span::empty(),
-                        )
-                        .into(),
-                        comment: comment.clone(),
-                        kind,
-                    }),
+                    pattern_location,
                 })
             };
 
@@ -1597,36 +1605,24 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                 end: location.start + kind.location_offset(),
                             },
                             pattern_location: untyped_pattern.location(),
-                            value_location: untyped_value.location(),
-                            sample: Box::new(match untyped_value {
-                                UntypedExpr::Var { name, .. } if name == ast::BACKPASS_VARIABLE => {
-                                    UntypedExpr::Assignment {
-                                        location: Span::empty(),
-                                        value: Box::new(UntypedExpr::Var {
-                                            name: "...".to_string(),
-                                            location: Span::empty(),
-                                        }),
-                                        patterns: AssignmentPattern::new(
-                                            untyped_pattern,
-                                            None,
-                                            Span::empty(),
-                                        )
-                                        .into(),
-                                        comment: None,
-                                        kind: AssignmentKind::Let { backpassing: true },
-                                    }
-                                }
-                                _ => UntypedExpr::Assignment {
+                            value_location,
+                            sample: Box::new(UntypedExpr::Assignment {
+                                location: Span::empty(),
+                                value: Box::new(UntypedExpr::Var {
+                                    name: "...".to_string(),
                                     location: Span::empty(),
-                                    value: Box::new(untyped_value),
-                                    patterns: AssignmentPattern::new(
-                                        untyped_pattern,
-                                        None,
-                                        Span::empty(),
-                                    )
-                                    .into(),
-                                    comment: None,
-                                    kind: AssignmentKind::let_(),
+                                }),
+                                patterns: AssignmentPattern::new(
+                                    untyped_pattern,
+                                    None,
+                                    Span::empty(),
+                                )
+                                .into(),
+                                comment: None,
+                                kind: if is_backpassing {
+                                    AssignmentKind::Let { backpassing: true }
+                                } else {
+                                    AssignmentKind::let_()
                                 },
                             }),
                         });
@@ -1824,7 +1820,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     #[allow(clippy::result_large_err)]
     fn infer_if_branch(&mut self, branch: UntypedIfBranch) -> Result<TypedIfBranch, Error> {
-        let (condition, body, is) = match branch.is {
+        let UntypedIfBranch {
+            condition,
+            body,
+            is,
+            location,
+        } = branch;
+        let condition_location = condition.location();
+        let body_location = body.location();
+
+        let (condition, body, is) = match is {
             Some(is) => self.in_new_scope(|typer| {
                 let AssignmentPattern {
                     pattern,
@@ -1839,7 +1844,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     ..
                 } = typer.infer_assignment(
                     pattern,
-                    branch.condition.clone(),
+                    condition,
                     AssignmentKind::is(),
                     &annotation,
                     None,
@@ -1851,23 +1856,22 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
                 if !value.tipo().is_data() {
                     typer.environment.warnings.push(Warning::UseWhenInstead {
-                        location: branch.condition.location().union(location),
+                        location: condition_location.union(location),
                     })
                 }
 
-                let body = if let Some(filler) = recover_from_no_assignment(
-                    assert_no_assignment(&branch.body),
-                    branch.body.location(),
-                )? {
-                    typer.infer(branch.body.clone())?.and_then(filler)
+                let body = if let Some(filler) =
+                    recover_from_no_assignment(assert_no_assignment(&body), body_location)?
+                {
+                    typer.infer(body)?.and_then(filler)
                 } else {
-                    typer.infer(branch.body.clone())?
+                    typer.infer(body)?
                 };
 
                 Ok((*value, body, Some((pattern, tipo))))
             })?,
             None => {
-                let condition = self.infer(branch.condition.clone())?;
+                let condition = self.infer(condition)?;
 
                 self.unify(
                     Type::bool(),
@@ -1876,13 +1880,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     false,
                 )?;
 
-                let body = if let Some(filler) = recover_from_no_assignment(
-                    assert_no_assignment(&branch.body),
-                    branch.body.location(),
-                )? {
-                    self.infer(branch.body.clone())?.and_then(filler)
+                let body = if let Some(filler) =
+                    recover_from_no_assignment(assert_no_assignment(&body), body_location)?
+                {
+                    self.infer(body)?.and_then(filler)
                 } else {
-                    self.infer(branch.body.clone())?
+                    self.infer(body)?
                 };
 
                 (condition, body, None)
@@ -1893,7 +1896,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             body,
             condition,
             is,
-            location: branch.location,
+            location,
         })
     }
 
@@ -2129,16 +2132,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             unreachable!("backpass misuse: breakpoint isn't an Assignment ?!");
         };
 
+        let value_location = value.location();
         if continuation.is_empty() {
             return Err(Error::LastExpressionIsAssignment {
                 location,
-                expr: Box::new(*value),
+                value_location,
                 patterns: patterns.clone(),
                 kind,
             });
         }
-
-        let value_location = value.location();
 
         let call_location = Span {
             start: location.start,
@@ -2637,6 +2639,45 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 
     #[allow(clippy::result_large_err)]
+    fn infer_pending_function(&mut self, name: &str) -> Result<bool, Error> {
+        if self.function_hydrators.is_none() || self.top_level_scope.is_none() {
+            return Ok(false);
+        }
+
+        let Some(function) = self.environment.pending_functions.remove(name) else {
+            return Ok(false);
+        };
+
+        let module_name = self.environment.current_module.clone();
+        let top_level_scope = self
+            .top_level_scope
+            .expect("function inference has a top-level scope");
+        let suspended = self.environment.suspend_scopes(top_level_scope);
+        let function_hydrators = self
+            .function_hydrators
+            .as_deref_mut()
+            .expect("function inference has registered hydrators");
+
+        let inferred = infer_function(
+            function,
+            &module_name,
+            function_hydrators,
+            self.environment,
+            self.tracing,
+            top_level_scope,
+        );
+
+        self.environment.resume_scopes(suspended);
+
+        let function = inferred?;
+        self.environment
+            .inferred_functions
+            .insert(name.to_string(), function);
+
+        Ok(true)
+    }
+
+    #[allow(clippy::result_large_err)]
     pub fn infer_value_constructor(
         &mut self,
         module: &Option<String>,
@@ -2646,7 +2687,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let constructor = match module {
             // Look in the current scope for a binding with this name
             None => {
-                let constructor =
+                let mut constructor =
                     self.environment
                         .get_variable(name)
                         .cloned()
@@ -2659,7 +2700,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                         .environment
                                         .local_value_names()
                                         .into_iter()
-                                        .filter(|s| TypeConstructor::might_be(s))
+                                        .filter(|value| TypeConstructor::might_be(value))
                                         .collect::<Vec<_>>(),
                                 }
                             } else {
@@ -2670,7 +2711,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                         .environment
                                         .local_value_names()
                                         .into_iter()
-                                        .filter(|s| !TypeConstructor::might_be(s))
+                                        .filter(|value| !TypeConstructor::might_be(value))
                                         .collect::<Vec<_>>(),
                                 }
                             }
@@ -2679,37 +2720,25 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 if let ValueConstructorVariant::ModuleFn { name: fn_name, .. } =
                     &constructor.variant
                 {
-                    // Note whether we are using an ungeneralised function so that we can
-                    // tell if it is safe to generalise this function after inference has
-                    // completed.
-                    let is_ungeneralised = self.environment.ungeneralised_functions.contains(name);
+                    let fn_name = fn_name.clone();
 
-                    self.ungeneralised_function_used =
-                        self.ungeneralised_function_used || is_ungeneralised;
-
-                    // In case we use another function, infer it first before going further.
-                    // This ensures we have as much information possible about the function
-                    // when we start inferring expressions using it (i.e. calls).
-                    //
-                    // In a way, this achieves a cheap topological processing of definitions
-                    // where we infer used definitions first. And as a consequence, it solves
-                    // issues where expressions would be wrongly assigned generic variables
-                    // from other definitions.
-                    if let Some(fun) = self.environment.module_functions.remove(fn_name) {
-                        // NOTE: Recursive functions should not run into this multiple time.
-                        // If we have no hydrator for this function, it means that we have already
-                        // encountered it.
-                        if self.not_yet_inferred.contains(&fun.name) {
-                            return Err(Error::MustInferFirst {
-                                function: Box::new(fun.clone()),
-                            });
-                        }
+                    // Infer callees before using their types. The pending-function map owns the
+                    // complete AST, so neither the callee nor the caller body needs to be cloned.
+                    if self.infer_pending_function(&fn_name)? {
+                        constructor = self
+                            .environment
+                            .get_variable(name)
+                            .cloned()
+                            .expect("inferred function remains registered");
                     }
+
+                    // Acyclic pending callees may have been generalised during inference. Only
+                    // record a dependency when the refreshed constructor is still monomorphic.
+                    self.ungeneralised_function_used |=
+                        self.environment.ungeneralised_functions.contains(name);
                 }
 
-                // Register the value as seen for detection of unused values
                 self.environment.increment_usage(name);
-
                 constructor
             }
 
@@ -2771,27 +2800,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         clauses: Vec<UntypedClause>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        // if there is only one clause we want to present a warning
-        // that suggests that a `let` binding should be used instead.
-        let mut sample = None;
-
-        if clauses.len() == 1 && clauses[0].patterns.len() == 1 {
-            sample = Some(Warning::SingleWhenClause {
+        // If there is only one clause, suggest a `let` binding instead. Keep only
+        // spans here: cloning a deeply nested subject can exhaust the native stack.
+        let single_clause_warning = if clauses.len() == 1 && clauses[0].patterns.len() == 1 {
+            Some(Warning::SingleWhenClause {
                 location: clauses[0].patterns[0].location(),
-                sample: Box::new(UntypedExpr::Assignment {
-                    location: Span::empty(),
-                    value: Box::new(subject.clone()),
-                    patterns: AssignmentPattern::new(
-                        clauses[0].patterns[0].clone(),
-                        None,
-                        Span::empty(),
-                    )
-                    .into(),
-                    kind: AssignmentKind::let_(),
-                    comment: None,
-                }),
-            });
-        }
+                value_location: subject.location(),
+            })
+        } else {
+            None
+        };
 
         let typed_subject = self.infer(subject)?;
         let subject_type = typed_subject.tipo();
@@ -2814,8 +2832,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         self.check_when_exhaustiveness(&typed_clauses, location)?;
 
-        if let Some(sample) = sample {
-            self.environment.warnings.push(sample);
+        if let Some(warning) = single_clause_warning {
+            self.environment.warnings.push(warning);
         }
 
         Ok(TypedExpr::When {
@@ -2883,13 +2901,13 @@ fn recover_from_no_assignment(
 fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
     match expr {
         UntypedExpr::Assignment {
-            value,
             patterns,
             kind,
+            value,
             ..
         } => Err(Error::LastExpressionIsAssignment {
             location: expr.location(),
-            expr: Box::new(*value.clone()),
+            value_location: value.location(),
             patterns: patterns.clone(),
             kind: *kind,
         }),
@@ -2922,14 +2940,16 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
 #[allow(clippy::result_large_err)]
 fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
     if !matches!(expr, TypedExpr::Assignment { .. }) {
+        let location = expr.location();
+
         if expr.tipo().is_void() {
             return Ok(TypedExpr::Assignment {
-                location: expr.location(),
+                location,
                 tipo: Type::void(),
-                value: expr.clone().into(),
+                value: expr.into(),
                 pattern: Pattern::Constructor {
                     is_record: false,
-                    location: expr.location(),
+                    location,
                     name: "Void".to_string(),
                     constructor: PatternConstructor::Record {
                         name: "Void".to_string(),
@@ -2945,9 +2965,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
             });
         }
 
-        return Err(Error::ImplicitlyDiscardedExpression {
-            location: expr.location(),
-        });
+        return Err(Error::ImplicitlyDiscardedExpression { location });
     }
 
     Ok(expr)

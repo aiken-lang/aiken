@@ -4,12 +4,9 @@
 
 use super::Type;
 use crate::{
-    ast::{
-        Annotation, BinOp, CallArg, LogicalOpChainKind, Namespace, Span, UntypedFunction,
-        UntypedPattern,
-    },
+    ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Namespace, Span, UntypedPattern},
     error::ExtraData,
-    expr::{self, AssignmentPattern, UntypedAssignmentKind, UntypedExpr},
+    expr::{AssignmentPattern, UntypedAssignmentKind, UntypedExpr},
     format::Formatter,
     levenshtein,
     pretty::Documentable,
@@ -75,11 +72,12 @@ pub enum Error {
 
     #[error("I discovered a type cast from Data without an annotation.")]
     #[diagnostic(code("illegal::type_cast"))]
-    #[diagnostic(help("Try adding an annotation...\n\n{}", format_suggestion(value)))]
+    #[diagnostic(help("Try adding a type annotation to the assignment pattern."))]
     CastDataNoAnn {
-        #[label("missing annotation")]
+        #[label("cast from Data")]
         location: Span,
-        value: Box<UntypedExpr>,
+        #[label("add a concrete type here")]
+        pattern_location: Span,
     },
 
     #[error("I struggled to unify the types of two expressions.\n")]
@@ -523,17 +521,13 @@ Perhaps, try the following:
     #[error("I discovered a block which is ending with an assignment.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#named-functions"))]
     #[diagnostic(code("illegal::return"))]
-    #[diagnostic(help(r#"In Aiken, code blocks (such as function bodies) must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
-
-If you really meant to return that last expression, try to replace it with the following:
-
-{sample}"#
-        , sample = format_suggestion(expr)
+    #[diagnostic(help(
+        "In Aiken, code blocks (such as function bodies) must return an explicit result in the form of an expression. Add the value you want to return after this assignment."
     ))]
     LastExpressionIsAssignment {
         #[label("let-binding as last expression")]
         location: Span,
-        expr: Box<expr::UntypedExpr>,
+        value_location: Span,
         patterns: Vec1<AssignmentPattern>,
         kind: UntypedAssignmentKind,
     },
@@ -1118,8 +1112,17 @@ The best thing to do from here is to remove it."#))]
         location: Span,
     },
 
-    #[error("Cannot infer caller without inferring callee first")]
-    MustInferFirst { function: Box<UntypedFunction> },
+    #[error("Expression nesting exceeds the supported limit.")]
+    #[diagnostic(code("too_deep::expression"))]
+    #[diagnostic(help(
+        "This expression is nested {depth} levels deep, but the supported limit is {limit}. Construct the value through a helper function or reduce the literal nesting."
+    ))]
+    ExpressionNestingLimitExceeded {
+        #[label("nested {depth} levels deep")]
+        location: Span,
+        depth: usize,
+        limit: usize,
+    },
 
     #[error("I found a validator handler referring to an unknown purpose.\n")]
     #[diagnostic(code("unknown::purpose"))]
@@ -1234,6 +1237,7 @@ impl ExtraData for Error {
             | Error::IncorrectTestArity { .. }
             | Error::IllegalTestType { .. }
             | Error::GenericLeftAtBoundary { .. }
+            | Error::ExpressionNestingLimitExceeded { .. }
             | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ExpectOnOpaqueType { .. }
             | Error::ValidatorMustReturnBool { .. }
@@ -1241,7 +1245,6 @@ impl ExtraData for Error {
             | Error::UnknownValidatorHandler { .. }
             | Error::UnexpectedValidatorFallback { .. }
             | Error::IncorrectBenchmarkArity { .. }
-            | Error::MustInferFirst { .. }
             | Error::DecoratorValidation { .. }
             | Error::ConflictingDecorators { .. }
             | Error::DecoratorTagOverlap { .. }
@@ -1670,15 +1673,15 @@ pub enum Warning {
     #[diagnostic(
         code("single_when_clause"),
         help(
-            "Prefer using a {} binding like so...\n\n{}",
+            "Prefer using a {} binding instead.",
             "let".if_supports_color(Stderr, |s| s.purple()),
-            format_suggestion(sample)
         )
     )]
     SingleWhenClause {
-        #[label("use let")]
+        #[label("bind this pattern")]
         location: Span,
-        sample: Box<UntypedExpr>,
+        #[label("to this value")]
+        value_location: Span,
     },
 
     #[error(

@@ -1092,10 +1092,12 @@ fn assignement_last_expr_if_first_branch() {
         }
     "#;
 
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::LastExpressionIsAssignment { .. }))
-    ))
+    let Err((_, Error::LastExpressionIsAssignment { value_location, .. })) =
+        check(parse(source_code))
+    else {
+        panic!("expected last-assignment error");
+    };
+    assert_eq!(&source_code[value_location.start..value_location.end], "1");
 }
 
 #[test]
@@ -3346,6 +3348,119 @@ fn mutually_recursive_1() {
     "#;
 
     assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn acyclic_forward_dependency_is_generalised_before_use() {
+    let source_code = r#"
+        fn use_later_identity(value) {
+            later_identity(value)
+        }
+
+        fn later_identity(value) {
+            value
+        }
+
+        test use_forward_dependency_at_multiple_types() {
+            use_later_identity(1) == 1 && use_later_identity(True)
+        }
+    "#;
+
+    check(parse(source_code)).expect("acyclic forward dependency should type check");
+}
+
+#[test]
+fn pending_function_inference_preserves_shadowing_caller_binding() {
+    let source_code = r#"
+        fn caller(third) {
+            second() + third
+        }
+
+        fn second() {
+            third()
+        }
+
+        fn third() {
+            41
+        }
+
+        test caller_local_shadowing() {
+            caller(1) == 42
+        }
+    "#;
+
+    check(parse(source_code)).expect("caller argument should continue to shadow module function");
+}
+
+#[test]
+fn pending_function_generalisation_survives_local_shadowing() {
+    let source_code = r#"
+        fn caller(identity) {
+            later() + identity
+        }
+
+        fn later() {
+            identity(1)
+        }
+
+        fn identity(value) {
+            value
+        }
+
+        test identity_remains_polymorphic() {
+            caller(0) == 1
+                && identity(1) == 1
+                && identity(True)
+        }
+    "#;
+
+    check(parse(source_code)).expect("shadowed pending module function should remain polymorphic");
+}
+
+#[test]
+fn direct_recursion_remains_ungeneralised_during_inference() {
+    let source_code = r#"
+        fn directly_recursive(value, recurse) {
+            if recurse {
+                directly_recursive(value, False)
+            } else {
+                value
+            }
+        }
+
+        test use_direct_recursion() {
+            directly_recursive(1, True) == 1
+        }
+    "#;
+
+    check(parse(source_code)).expect("direct recursion should type check");
+}
+
+#[test]
+fn mutual_recursion_remains_ungeneralised_during_inference() {
+    let source_code = r#"
+        fn mutually_recursive_left(value, recurse) {
+            if recurse {
+                mutually_recursive_right(value, False)
+            } else {
+                value
+            }
+        }
+
+        fn mutually_recursive_right(value, recurse) {
+            if recurse {
+                mutually_recursive_left(value, False)
+            } else {
+                value
+            }
+        }
+
+        test use_mutual_recursion() {
+            mutually_recursive_left(1, True) == 1
+        }
+    "#;
+
+    check(parse(source_code)).expect("mutual recursion should type check");
 }
 
 #[test]

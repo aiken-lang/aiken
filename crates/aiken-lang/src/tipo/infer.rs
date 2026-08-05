@@ -2,7 +2,7 @@ use super::{
     TypeInfo, ValueConstructor, ValueConstructorVariant,
     environment::{EntityKind, Environment},
     error::{Error, UnifyErrorSituation, Warning},
-    expr::ExprTyper,
+    expr::{ExprTyper, infer_function, infer_registered_function},
     hydrator::Hydrator,
 };
 use crate::{
@@ -16,7 +16,7 @@ use crate::{
     },
     expr::{TypedExpr, UntypedAssignmentKind, UntypedExpr},
     parser::token::Token,
-    tipo::{Span, Type, TypeVar, expr::infer_function},
+    tipo::{Span, Type, TypeVar},
 };
 use std::{
     borrow::Borrow,
@@ -25,6 +25,11 @@ use std::{
     ops::Deref,
     rc::Rc,
 };
+
+enum DefinitionToInfer {
+    Function(String),
+    Other(Box<UntypedDefinition>),
+}
 
 impl UntypedModule {
     #[allow(clippy::too_many_arguments)]
@@ -80,26 +85,68 @@ impl UntypedModule {
         // anywhere in the module.
         let mut definitions = Vec::with_capacity(self.definitions.len());
         let mut consts = vec![];
-        let mut not_consts = vec![];
+        let mut definitions_to_infer = vec![];
 
-        for def in self.definitions().cloned() {
+        drop(type_names);
+        drop(value_names);
+
+        for def in std::mem::take(&mut self.definitions) {
             match def {
-                Definition::ModuleConstant { .. } => consts.push(def),
-                Definition::Validator { .. } if kind.is_validator() => not_consts.push(def),
-                Definition::Validator { .. } => (),
-                Definition::Fn { .. }
-                | Definition::Test { .. }
+                Definition::ModuleConstant { .. } => {
+                    consts.push(def);
+                }
+                Definition::Validator { .. } if kind.is_validator() => {
+                    definitions_to_infer.push(DefinitionToInfer::Other(Box::new(def)));
+                }
+                Definition::Validator { .. } => {}
+                Definition::Fn(function) => {
+                    let name = function.name.clone();
+                    environment.pending_functions.insert(name.clone(), function);
+                    definitions_to_infer.push(DefinitionToInfer::Function(name));
+                }
+                Definition::Test { .. }
                 | Definition::Benchmark { .. }
                 | Definition::TypeAlias { .. }
                 | Definition::DataType { .. }
-                | Definition::Use { .. } => not_consts.push(def),
+                | Definition::Use { .. } => {
+                    definitions_to_infer.push(DefinitionToInfer::Other(Box::new(def)));
+                }
             }
         }
 
-        for def in consts.into_iter().chain(not_consts) {
-            let definition =
-                infer_definition(def, &module_name, &mut hydrators, &mut environment, tracing)?;
+        for definition in consts {
+            definitions.push(infer_definition(
+                definition,
+                &module_name,
+                &mut hydrators,
+                &mut environment,
+                tracing,
+            )?);
+        }
 
+        for def in definitions_to_infer {
+            let definition = match def {
+                DefinitionToInfer::Function(name) => {
+                    let top_level_scope = environment.open_new_scope();
+                    let inferred = infer_registered_function(
+                        name,
+                        &module_name,
+                        &mut hydrators,
+                        &mut environment,
+                        tracing,
+                        &top_level_scope,
+                    );
+                    environment.close_scope(top_level_scope);
+                    Definition::Fn(inferred?)
+                }
+                DefinitionToInfer::Other(definition) => infer_definition(
+                    *definition,
+                    &module_name,
+                    &mut hydrators,
+                    &mut environment,
+                    tracing,
+                )?,
+            };
             definitions.push(definition);
         }
 
@@ -192,7 +239,7 @@ fn infer_definition(
         Definition::Fn(f) => {
             let top_level_scope = environment.open_new_scope();
             let ret = Definition::Fn(infer_function(
-                &f,
+                f,
                 module_name,
                 hydrators,
                 environment,
@@ -234,7 +281,7 @@ fn infer_definition(
                         handler.name = handler_name;
 
                         let mut typed_fun = infer_function(
-                            &handler,
+                            handler,
                             module_name,
                             hydrators,
                             environment,
@@ -314,7 +361,7 @@ fn infer_definition(
                     fallback.name = fallback_name;
 
                     let mut typed_fallback = infer_function(
-                        &fallback,
+                        fallback,
                         module_name,
                         hydrators,
                         environment,
@@ -399,7 +446,7 @@ fn infer_definition(
             }?;
 
             let typed_f = infer_function(
-                &f.into(),
+                f.into(),
                 module_name,
                 hydrators,
                 environment,
@@ -482,7 +529,7 @@ fn infer_definition(
             }?;
 
             let typed_f = infer_function(
-                &f.into(),
+                f.into(),
                 module_name,
                 hydrators,
                 environment,
@@ -803,21 +850,25 @@ where
 
     // Replace the pre-registered type for the test function, to allow inferring
     // the function body with the right type arguments.
-    let scope = environment
-        .scope
-        .get_mut(&f.name)
-        .expect("Could not find preregistered type for test");
+    let function_type = environment
+        .get_variable(&f.name)
+        .expect("Could not find preregistered type for test")
+        .tipo
+        .as_ref();
     if let Type::Fn {
         ret,
         alias,
         args: _,
-    } = scope.tipo.as_ref()
+    } = function_type
     {
-        scope.tipo = Rc::new(Type::Fn {
-            ret: ret.clone(),
-            args: vec![inferred_inner_type.clone()],
-            alias: alias.clone(),
-        })
+        environment.update_module_function_type(
+            &f.name,
+            Rc::new(Type::Fn {
+                ret: ret.clone(),
+                args: vec![inferred_inner_type.clone()],
+                alias: alias.clone(),
+            }),
+        );
     }
 
     Ok(((typed_via, inferred_inner_type), arg.arg.annotation.clone()))
