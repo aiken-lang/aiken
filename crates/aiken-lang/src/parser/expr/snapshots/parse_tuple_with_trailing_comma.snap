@@ -1,0 +1,17 @@
+---
+source: crates/aiken-lang/src/parser/expr/tuple.rs
+description: "Code:\n\n(x, y,)"
+---
+Tuple {
+    location: 0..7,
+    elems: [
+        Var {
+            location: 1..2,
+            name: "x",
+        },
+        Var {
+            location: 4..5,
+            name: "y",
+        },
+    ],
+}

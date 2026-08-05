@@ -1,6 +1,7 @@
 use chumsky::prelude::*;
 
 use crate::{
+    ast::Span,
     expr::UntypedExpr,
     parser::{error::ParseError, token::Token},
 };
@@ -8,25 +9,20 @@ use crate::{
 pub fn parser(
     sequence: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
-    choice((
-        sequence
-            .clone()
-            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-        sequence.clone().delimited_by(
-            choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
-            just(Token::RightParen),
-        ),
-    ))
-    .map_with_span(|e, span| {
-        if matches!(e, UntypedExpr::Assignment { .. }) {
-            UntypedExpr::Sequence {
-                location: span,
-                expressions: vec![e],
-            }
-        } else {
-            e
+    sequence
+        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
+        .map_with_span(assignment_into_sequence)
+}
+
+pub(super) fn assignment_into_sequence(expression: UntypedExpr, location: Span) -> UntypedExpr {
+    if matches!(expression, UntypedExpr::Assignment { .. }) {
+        UntypedExpr::Sequence {
+            location,
+            expressions: vec![expression],
         }
-    })
+    } else {
+        expression
+    }
 }
 
 #[cfg(test)]
@@ -83,6 +79,44 @@ mod tests {
               True
             }
             "#
+        );
+    }
+
+    #[test]
+    fn parse_simple_grouping() {
+        assert_expr!("(x)");
+    }
+
+    #[test]
+    fn parse_nested_grouping() {
+        assert_expr!("((x))");
+    }
+
+    #[test]
+    fn parse_parenthesized_assignment() {
+        assert_expr!("(let x = 1)");
+    }
+
+    #[test]
+    fn parse_bare_parenthesized_assignment() {
+        assert_expr!("(x = 1)");
+    }
+
+    #[test]
+    fn parse_parenthesized_sequence() {
+        assert_expr!(
+            r#"(
+              let x = 1
+              x
+            )"#
+        );
+    }
+
+    #[test]
+    fn parse_newline_left_paren() {
+        assert_expr!(
+            r#"x
+            (x)"#
         );
     }
 }
