@@ -5,6 +5,9 @@ pub mod interner;
 pub mod stick_break_set;
 pub mod tree;
 
+#[cfg(not(target_family = "wasm"))]
+use crate::expr::{with_native_stack_growth, with_native_stack_segment};
+
 use self::{
     air::Air,
     builder::{
@@ -255,6 +258,26 @@ impl<'a> CodeGenerator<'a> {
         args: &[TypedArg],
         module_name: &str,
     ) -> Program<Name> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = body.stack_segment_size();
+            with_native_stack_segment(stack_size, || {
+                self.generate_raw_inner(body, args, module_name)
+            })
+        }
+
+        #[cfg(target_family = "wasm")]
+        {
+            self.generate_raw_inner(body, args, module_name)
+        }
+    }
+
+    fn generate_raw_inner(
+        &mut self,
+        body: &TypedExpr,
+        args: &[TypedArg],
+        module_name: &str,
+    ) -> Program<Name> {
         args.iter().for_each(|arg| {
             arg.get_variable_name()
                 .iter()
@@ -313,9 +336,26 @@ impl<'a> CodeGenerator<'a> {
         program
     }
 
+    fn build(
+        &mut self,
+        body: &TypedExpr,
+        module_build_name: &str,
+        context: &[TypedExpr],
+    ) -> AirTree {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            with_native_stack_growth(|| self.build_inner(body, module_build_name, context))
+        }
+
+        #[cfg(target_family = "wasm")]
+        {
+            self.build_inner(body, module_build_name, context)
+        }
+    }
+
     // TODO: pass mono types to build so monomorphization
     // happens as we build the AIR Tree rather than after
-    fn build(
+    fn build_inner(
         &mut self,
         body: &TypedExpr,
         module_build_name: &str,

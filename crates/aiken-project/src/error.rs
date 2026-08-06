@@ -26,6 +26,13 @@ use std::{
 };
 use zip::result::ZipError;
 
+const MAX_INLINE_SUGGESTION_BYTES: usize = 512;
+
+fn source_snippet(source: &str, location: Span) -> Option<&str> {
+    let snippet = source.get(location.start..location.end)?.trim();
+    (!snippet.is_empty() && snippet.len() <= MAX_INLINE_SUGGESTION_BYTES).then_some(snippet)
+}
+
 pub enum TomlLoadingContext {
     Project,
     Manifest,
@@ -304,17 +311,29 @@ impl Error {
             TestResult::UnitTestResult(UnitTestResult { test, .. }) => (
                 test.name.to_string(),
                 test.input_path.to_path_buf(),
-                test.program.to_pretty(),
+                if verbose {
+                    test.program_source()
+                } else {
+                    String::new()
+                },
             ),
             TestResult::PropertyTestResult(PropertyTestResult { test, .. }) => (
                 test.name.to_string(),
                 test.input_path.to_path_buf(),
-                test.program.to_pretty(),
+                if verbose {
+                    test.program_source()
+                } else {
+                    String::new()
+                },
             ),
             TestResult::BenchmarkResult(BenchmarkResult { bench, .. }) => (
                 bench.name.to_string(),
                 bench.input_path.to_path_buf(),
-                bench.program.to_pretty(),
+                if verbose {
+                    bench.program_source()
+                } else {
+                    String::new()
+                },
             ),
         };
 
@@ -504,7 +523,27 @@ impl Diagnostic for Error {
                 modules.join("\n- ")
             ))),
             Error::Parse { error, .. } => error.help(),
-            Error::Type { error, .. } => error.help(),
+            Error::Type { src, error, .. } => match error.as_ref() {
+                tipo::error::Error::CastDataNoAnn {
+                    pattern_location, ..
+                } => source_snippet(src, *pattern_location)
+                    .map(|pattern| {
+                        Box::new(format!(
+                            "Add a concrete type annotation to the pattern, for example:\n\n╰─▶ {pattern}: YourType"
+                        )) as Box<dyn Display>
+                    })
+                    .or_else(|| error.help()),
+                tipo::error::Error::LastExpressionIsAssignment { value_location, .. } => {
+                    source_snippet(src, *value_location)
+                        .map(|value| {
+                            Box::new(format!(
+                                "Code blocks must return an expression. Add the value to return after this assignment, for example:\n\n╰─▶ {value}"
+                            )) as Box<dyn Display>
+                        })
+                        .or_else(|| error.help())
+                }
+                _ => error.help(),
+            },
             Error::MissingManifest { .. } => Some(Box::new(
                 "Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.",
             )),
@@ -798,7 +837,20 @@ impl Diagnostic for Warning {
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
-            Warning::Type { warning, .. } => warning.help(),
+            Warning::Type { src, warning, .. } => match warning {
+                tipo::error::Warning::SingleWhenClause {
+                    location,
+                    value_location,
+                } => source_snippet(src, *location)
+                    .zip(source_snippet(src, *value_location))
+                    .map(|(pattern, value)| {
+                        Box::new(format!(
+                            "Prefer using a let binding instead:\n\n╰─▶ let {pattern} = {value}"
+                        )) as Box<dyn Display>
+                    })
+                    .or_else(|| warning.help()),
+                _ => warning.help(),
+            },
             Warning::NoValidators => None,
             Warning::CompilerVersionMismatch { demanded, .. } => Some(Box::new(format!(
                 "You may want to switch to {}",
@@ -915,4 +967,107 @@ fn default_miette_handler(context_lines: usize) -> MietteHandler {
         .terminal_links(true)
         .context_lines(context_lines)
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aiken_lang::ast::{AssignmentKind, AssignmentPattern, UntypedPattern};
+
+    fn span_of(source: &str, needle: &str) -> Span {
+        let start = source.find(needle).expect("source contains test snippet");
+        Span {
+            start,
+            end: start + needle.len(),
+        }
+    }
+
+    fn type_error(source: &str, error: tipo::error::Error) -> Error {
+        let path = PathBuf::from("test.ak");
+        let source = source.to_string();
+
+        Error::Type {
+            path: Box::new(path.clone()),
+            src: Box::new(source.clone()),
+            named: Box::new(NamedSource::new(path.display().to_string(), source)),
+            error: Box::new(error),
+        }
+    }
+
+    #[test]
+    fn cast_help_reconstructs_the_pattern_from_its_span() {
+        let source = "expect Some(value) = data";
+        let pattern_location = span_of(source, "Some(value)");
+        let error = type_error(
+            source,
+            tipo::error::Error::CastDataNoAnn {
+                location: Span {
+                    start: 0,
+                    end: source.len(),
+                },
+                pattern_location,
+            },
+        );
+
+        assert_eq!(
+            error.help().expect("cast error has help").to_string(),
+            "Add a concrete type annotation to the pattern, for example:\n\n╰─▶ Some(value): YourType"
+        );
+    }
+
+    #[test]
+    fn last_assignment_help_reconstructs_the_return_value_from_its_span() {
+        let source = "let answer = 42";
+        let pattern_location = span_of(source, "answer");
+        let value_location = span_of(source, "42");
+        let error = type_error(
+            source,
+            tipo::error::Error::LastExpressionIsAssignment {
+                location: Span {
+                    start: 0,
+                    end: source.len(),
+                },
+                value_location,
+                patterns: AssignmentPattern::new(
+                    UntypedPattern::Var {
+                        location: pattern_location,
+                        name: "answer".to_string(),
+                    },
+                    None,
+                    pattern_location,
+                )
+                .into(),
+                kind: AssignmentKind::let_(),
+            },
+        );
+
+        assert_eq!(
+            error
+                .help()
+                .expect("last-assignment error has help")
+                .to_string(),
+            "Code blocks must return an expression. Add the value to return after this assignment, for example:\n\n╰─▶ 42"
+        );
+    }
+
+    #[test]
+    fn single_when_help_reconstructs_the_binding_from_source_spans() {
+        let source = "when subject is { value -> value }";
+        let warning = Warning::from_type_warning(
+            tipo::error::Warning::SingleWhenClause {
+                location: span_of(source, "value"),
+                value_location: span_of(source, "subject"),
+            },
+            PathBuf::from("test.ak"),
+            source.to_string(),
+        );
+
+        assert_eq!(
+            warning
+                .help()
+                .expect("single-when warning has help")
+                .to_string(),
+            "Prefer using a let binding instead:\n\n╰─▶ let value = subject"
+        );
+    }
 }

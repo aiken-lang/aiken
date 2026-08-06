@@ -24,6 +24,12 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct ScopeResetData {
     local_values: HashMap<String, ValueConstructor>,
+    entity_usage_depth: usize,
+}
+
+pub(crate) struct SuspendedScopes {
+    local_values: HashMap<String, ValueConstructor>,
+    entity_usages: Vec<HashMap<String, (EntityKind, Span, bool)>>,
 }
 
 #[derive(Debug)]
@@ -55,8 +61,13 @@ pub struct Environment<'a> {
     /// Values defined in the current module (or the prelude)
     pub module_values: HashMap<String, ValueConstructor>,
 
-    /// Top-level function definitions from the module
-    pub module_functions: HashMap<String, &'a UntypedFunction>,
+    /// Top-level function definitions waiting to be inferred
+    pub pending_functions: HashMap<String, UntypedFunction>,
+    /// Authoritative constructors for functions defined in the current module.
+    ///
+    /// Lexical bindings in `scope` may shadow these while a function body is
+    /// inferred, so generalisation must not rely on the scoped copy surviving.
+    module_function_bindings: HashMap<String, ValueConstructor>,
 
     /// Top-level validator definitions from the module
     pub module_validators: HashMap<String, (Span, Vec<String>)>,
@@ -136,6 +147,12 @@ impl<'a> Environment<'a> {
         })
     }
 
+    /// Restore only lexical bindings; current-module function constructors are
+    /// retained independently in `module_function_bindings`.
+    fn restore_scope(&mut self, local_values: HashMap<String, ValueConstructor>) {
+        self.scope = local_values;
+    }
+
     pub fn close_scope(&mut self, data: ScopeResetData) {
         let unused = self
             .entity_usages
@@ -144,7 +161,7 @@ impl<'a> Environment<'a> {
 
         self.handle_unused(unused);
 
-        self.scope = data.local_values;
+        self.restore_scope(data.local_values);
     }
 
     pub fn annotate(&mut self, return_type: Rc<Type>, annotation: &Annotation) -> Rc<Type> {
@@ -289,22 +306,21 @@ impl<'a> Environment<'a> {
                     tipo
                 };
 
-                // Insert the function into the module's interface
-                self.insert_module_value(
-                    &name,
-                    ValueConstructor {
-                        public,
-                        tipo,
-                        variant: ValueConstructorVariant::ModuleFn {
-                            name: name.clone(),
-                            field_map,
-                            module: module_name.to_owned(),
-                            arity: args.len(),
-                            location,
-                            builtin: None,
-                        },
+                let constructor = ValueConstructor {
+                    public,
+                    tipo,
+                    variant: ValueConstructorVariant::ModuleFn {
+                        name: name.clone(),
+                        field_map,
+                        module: module_name.to_owned(),
+                        arity: args.len(),
+                        location,
+                        builtin: None,
                     },
-                );
+                };
+
+                self.insert_module_function(name.clone(), constructor.clone());
+                self.insert_module_value(&name, constructor);
 
                 Definition::Fn(Function {
                     doc,
@@ -588,7 +604,10 @@ impl<'a> Environment<'a> {
 
     /// Lookup a variable in the current scope.
     pub fn get_variable(&self, name: &str) -> Option<&ValueConstructor> {
-        self.scope.get(name)
+        match self.scope.get(name) {
+            Some(constructor) if constructor.is_local_variable() => Some(constructor),
+            scoped => self.module_function_bindings.get(name).or(scoped),
+        }
     }
 
     fn handle_unused(&mut self, unused: HashMap<String, (EntityKind, Span, bool)>) {
@@ -705,6 +724,30 @@ impl<'a> Environment<'a> {
 
     pub fn insert_accessors(&mut self, type_name: &str, accessors: AccessorsMap) {
         self.accessors.insert(type_name.to_string(), accessors);
+    }
+
+    /// Record the authoritative constructor for a current-module function and
+    /// keep the top-level lexical copy in sync.
+    pub(crate) fn insert_module_function(&mut self, name: String, constructor: ValueConstructor) {
+        self.scope.insert(name.clone(), constructor.clone());
+        self.module_function_bindings.insert(name, constructor);
+    }
+
+    pub(crate) fn update_module_function_type(&mut self, name: &str, tipo: Rc<Type>) {
+        self.module_function_bindings
+            .get_mut(name)
+            .expect("Could not find preregistered type for function")
+            .tipo = tipo.clone();
+
+        if let Some(constructor) = self.scope.get_mut(name)
+            && matches!(
+                &constructor.variant,
+                ValueConstructorVariant::ModuleFn { module, .. }
+                    if module == self.current_module
+            )
+        {
+            constructor.tipo = tipo;
+        }
     }
 
     /// Insert a value into the current module.
@@ -932,7 +975,8 @@ impl<'a> Environment<'a> {
             module_types: prelude.types.clone(),
             module_types_constructors: prelude.types_constructors.clone(),
             module_values: HashMap::new(),
-            module_functions: HashMap::new(),
+            pending_functions: HashMap::new(),
+            module_function_bindings: HashMap::new(),
             module_validators: HashMap::new(),
             imported_modules: HashMap::new(),
             unused_modules: HashMap::new(),
@@ -970,10 +1014,29 @@ impl<'a> Environment<'a> {
 
     pub fn open_new_scope(&mut self) -> ScopeResetData {
         let local_values = self.scope.clone();
+        let entity_usage_depth = self.entity_usages.len();
 
         self.entity_usages.push(HashMap::new());
 
-        ScopeResetData { local_values }
+        ScopeResetData {
+            local_values,
+            entity_usage_depth,
+        }
+    }
+
+    pub(crate) fn suspend_scopes(&mut self, root: &ScopeResetData) -> SuspendedScopes {
+        let local_values = std::mem::replace(&mut self.scope, root.local_values.clone());
+        let entity_usages = self.entity_usages.split_off(root.entity_usage_depth + 1);
+
+        SuspendedScopes {
+            local_values,
+            entity_usages,
+        }
+    }
+
+    pub(crate) fn resume_scopes(&mut self, suspended: SuspendedScopes) {
+        self.restore_scope(suspended.local_values);
+        self.entity_usages.extend(suspended.entity_usages);
     }
 
     pub fn previous_uid(&self) -> u64 {
@@ -1140,12 +1203,12 @@ impl<'a> Environment<'a> {
 
     /// Iterate over a module, registering any new types created by the module into the typer
     #[allow(clippy::result_large_err)]
-    pub fn register_types(
+    pub fn register_types<'definition>(
         &mut self,
-        definitions: Vec<&'a UntypedDefinition>,
+        definitions: Vec<&'definition UntypedDefinition>,
         module: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<&'definition str, &'definition Span>,
     ) -> Result<(), Error> {
         let known_types_before = names.keys().copied().collect::<Vec<_>>();
 
@@ -1222,12 +1285,12 @@ impl<'a> Environment<'a> {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn register_type(
+    pub fn register_type<'definition>(
         &mut self,
-        def: &'a UntypedDefinition,
+        def: &'definition UntypedDefinition,
         module: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<&'definition str, &'definition Span>,
     ) -> Result<(), Error> {
         match def {
             Definition::DataType(DataType {
@@ -1343,15 +1406,15 @@ impl<'a> Environment<'a> {
 
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::result_large_err)]
-    fn register_function(
+    fn register_function<'definition>(
         &mut self,
         name: &str,
         arguments: &[UntypedArg],
         return_annotation: &Option<Annotation>,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<String, &'a Span>,
-        location: &'a Span,
+        names: &mut HashMap<String, &'definition Span>,
+        location: &'definition Span,
     ) -> Result<(), Error> {
         assert_unique_value_name(names, name, location)?;
 
@@ -1385,30 +1448,33 @@ impl<'a> Environment<'a> {
         // inference of the function body.
         hydrators.insert(name.to_string(), hydrator);
 
-        // Insert the function into the environment
-        self.insert_variable(
+        // Insert the function into the module environment.
+        self.insert_module_function(
             name.to_string(),
-            ValueConstructorVariant::ModuleFn {
-                name: name.to_string(),
-                field_map,
-                module: module_name.to_owned(),
-                arity: arguments.len(),
-                location: *location,
-                builtin: None,
+            ValueConstructor {
+                public: false,
+                variant: ValueConstructorVariant::ModuleFn {
+                    name: name.to_string(),
+                    field_map,
+                    module: module_name.to_owned(),
+                    arity: arguments.len(),
+                    location: *location,
+                    builtin: None,
+                },
+                tipo,
             },
-            tipo,
         );
 
         Ok(())
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn register_values(
+    pub fn register_values<'definition>(
         &mut self,
-        def: &'a UntypedDefinition,
+        def: &'definition UntypedDefinition,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<String, &'a Span>,
+        names: &mut HashMap<String, &'definition Span>,
         kind: ModuleKind,
     ) -> Result<(), Error> {
         match def {
@@ -1422,8 +1488,6 @@ impl<'a> Environment<'a> {
                     names,
                     &fun.location,
                 )?;
-
-                self.module_functions.insert(fun.name.clone(), fun);
 
                 if !fun.public {
                     self.init_usage(fun.name.clone(), EntityKind::PrivateFunction, fun.location);

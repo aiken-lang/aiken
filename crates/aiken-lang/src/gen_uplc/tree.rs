@@ -1,3 +1,6 @@
+#[cfg(not(target_family = "wasm"))]
+use crate::expr::with_native_stack_growth;
+
 use super::air::{Air, ExpectLevel, FunctionVariants};
 use crate::{
     ast::{BinOp, Curve, Span, UnOp},
@@ -869,6 +872,18 @@ impl AirTree {
     }
 
     fn create_air_vec(&self, air_vec: &mut Vec<Air>) {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            with_native_stack_growth(|| self.create_air_vec_inner(air_vec))
+        }
+
+        #[cfg(target_family = "wasm")]
+        {
+            self.create_air_vec_inner(air_vec)
+        }
+    }
+
+    fn create_air_vec_inner(&self, air_vec: &mut Vec<Air>) {
         match self {
             AirTree::Let { name, value, then } => {
                 air_vec.push(Air::Let { name: name.clone() });

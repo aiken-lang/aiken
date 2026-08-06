@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **aiken-lang**: Compile deeply nested expressions safely on native targets up to 6,147 expression levels; WebAssembly accepts up to 512. Inputs above the platform limit now produce a normal diagnostic. Fixes [#1390](https://github.com/aiken-lang/aiken/issues/1390).
+
+### Changed
+
+- **aiken-lang** (Rust API): Replace recursive expression payloads in `Error::CastDataNoAnn`, `Error::LastExpressionIsAssignment`, and `Warning::SingleWhenClause` with source spans; remove `Error::MustInferFirst`; and add `Error::ExpressionNestingLimitExceeded`. Downstream exhaustive matches and field destructuring must be updated.
+
 ## v1.1.23 - 2026-06-26
 
 ### Added

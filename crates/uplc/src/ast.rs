@@ -41,6 +41,14 @@ pub struct Program<T> {
     pub term: Term<T>,
 }
 
+impl<T> Program<T> {
+    /// Maximum recursive depth across terms and constants embedded in this
+    /// program. The traversal itself is iterative.
+    pub fn nesting_depth(&self) -> usize {
+        uplc_nesting_depth(NestedUplc::Term(&self.term))
+    }
+}
+
 impl<T> Program<T>
 where
     T: Clone,
@@ -415,6 +423,140 @@ pub enum Constant {
     Bls12_381G1Element(Box<blst::blst_p1>),
     Bls12_381G2Element(Box<blst::blst_p2>),
     Bls12_381MlResult(Box<blst::blst_fp12>),
+}
+
+impl Constant {
+    /// Maximum recursive depth across this constant, its type descriptors, and
+    /// any nested constants or Plutus data. The traversal itself is iterative.
+    pub fn nesting_depth(&self) -> usize {
+        uplc_nesting_depth::<()>(NestedUplc::Constant(self))
+    }
+}
+
+enum NestedUplc<'a, T> {
+    Term(&'a Term<T>),
+    Constant(&'a Constant),
+    Data(&'a PlutusData),
+    Type(&'a Type),
+}
+
+/// Maximum recursive depth of a Plutus data value. The traversal is iterative.
+pub fn plutus_data_nesting_depth(root: &PlutusData) -> usize {
+    uplc_nesting_depth::<()>(NestedUplc::Data(root))
+}
+
+fn uplc_nesting_depth<T>(root: NestedUplc<'_, T>) -> usize {
+    let mut maximum = 0;
+    let mut pending = vec![(root, 1)];
+
+    while let Some((node, depth)) = pending.pop() {
+        maximum = maximum.max(depth);
+        let child_depth = depth + 1;
+
+        match node {
+            NestedUplc::Term(term) => match term {
+                Term::Delay(term) | Term::Force(term) => {
+                    pending.push((NestedUplc::Term(term.as_ref()), child_depth));
+                }
+                Term::Lambda { body, .. } => {
+                    pending.push((NestedUplc::Term(body.as_ref()), child_depth));
+                }
+                Term::Apply { function, argument } => {
+                    pending.push((NestedUplc::Term(function.as_ref()), child_depth));
+                    pending.push((NestedUplc::Term(argument.as_ref()), child_depth));
+                }
+                Term::Constant(constant) => {
+                    pending.push((NestedUplc::Constant(constant.as_ref()), child_depth));
+                }
+                Term::Constr { fields, .. } => {
+                    pending.extend(
+                        fields
+                            .iter()
+                            .map(|field| (NestedUplc::Term(field), child_depth)),
+                    );
+                }
+                Term::Case { constr, branches } => {
+                    pending.push((NestedUplc::Term(constr.as_ref()), child_depth));
+                    pending.extend(
+                        branches
+                            .iter()
+                            .map(|branch| (NestedUplc::Term(branch), child_depth)),
+                    );
+                }
+                Term::Var(_) | Term::Error | Term::Builtin(_) => {}
+            },
+            NestedUplc::Constant(constant) => match constant {
+                Constant::ProtoList(tipo, elements) => {
+                    pending.push((NestedUplc::Type(tipo), child_depth));
+                    pending.extend(
+                        elements
+                            .iter()
+                            .map(|element| (NestedUplc::Constant(element), child_depth)),
+                    );
+                }
+                Constant::ProtoPair(left_type, right_type, first, second) => {
+                    pending.push((NestedUplc::Type(left_type), child_depth));
+                    pending.push((NestedUplc::Type(right_type), child_depth));
+                    pending.push((NestedUplc::Constant(first.as_ref()), child_depth));
+                    pending.push((NestedUplc::Constant(second.as_ref()), child_depth));
+                }
+                Constant::Data(data) => {
+                    pending.push((NestedUplc::Data(data), child_depth));
+                }
+                Constant::Integer(_)
+                | Constant::ByteString(_)
+                | Constant::String(_)
+                | Constant::Unit
+                | Constant::Bool(_)
+                | Constant::Bls12_381G1Element(_)
+                | Constant::Bls12_381G2Element(_)
+                | Constant::Bls12_381MlResult(_) => {}
+            },
+            NestedUplc::Type(tipo) => match tipo {
+                Type::List(element) => {
+                    pending.push((NestedUplc::Type(element.as_ref()), child_depth));
+                }
+                Type::Pair(first, second) => {
+                    pending.push((NestedUplc::Type(first.as_ref()), child_depth));
+                    pending.push((NestedUplc::Type(second.as_ref()), child_depth));
+                }
+                Type::Bool
+                | Type::Integer
+                | Type::String
+                | Type::ByteString
+                | Type::Unit
+                | Type::Data
+                | Type::Bls12_381G1Element
+                | Type::Bls12_381G2Element
+                | Type::Bls12_381MlResult => {}
+            },
+            NestedUplc::Data(data) => match data {
+                PlutusData::Constr(Constr { fields, .. }) => {
+                    pending.extend(
+                        fields
+                            .iter()
+                            .map(|field| (NestedUplc::Data(field), child_depth)),
+                    );
+                }
+                PlutusData::Map(entries) => {
+                    for (key, value) in entries.iter() {
+                        pending.push((NestedUplc::Data(key), child_depth));
+                        pending.push((NestedUplc::Data(value), child_depth));
+                    }
+                }
+                PlutusData::Array(elements) => {
+                    pending.extend(
+                        elements
+                            .iter()
+                            .map(|element| (NestedUplc::Data(element), child_depth)),
+                    );
+                }
+                PlutusData::BigInt(_) | PlutusData::BoundedBytes(_) => {}
+            },
+        }
+    }
+
+    maximum
 }
 
 pub struct Data;
@@ -1032,9 +1174,39 @@ impl Term<NamedDeBruijn> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::Data;
+    use super::{Constant, Data, Program, Term, Type};
     use num_bigint::{BigInt, Sign};
     use pallas_codec::minicbor;
+    use std::rc::Rc;
+
+    #[test]
+    fn program_nesting_depth_includes_recursive_constants_and_data() {
+        let nested_pair = Constant::ProtoPair(
+            Type::Unit,
+            Type::Unit,
+            Rc::new(Constant::Unit),
+            Rc::new(Constant::ProtoPair(
+                Type::Unit,
+                Type::Unit,
+                Rc::new(Constant::Unit),
+                Rc::new(Constant::Unit),
+            )),
+        );
+        let nested_data =
+            Constant::Data(Data::list(vec![Data::list(vec![Data::integer(1.into())])]));
+        let nested_type =
+            Constant::ProtoList(Type::List(Rc::new(Type::List(Rc::new(Type::Unit)))), vec![]);
+
+        assert_eq!(nested_pair.nesting_depth(), 3);
+        assert_eq!(nested_data.nesting_depth(), 4);
+        assert_eq!(nested_type.nesting_depth(), 4);
+
+        let program = Program {
+            version: (1, 0, 0),
+            term: Term::<()>::Constant(Rc::new(nested_pair)),
+        };
+        assert_eq!(program.nesting_depth(), 4);
+    }
 
     // Data's negative integers are encoded with an offset of 1, as an unsigned payload. This is unlike
     // num_bigint's BigInt; so both types representations aren't quite compatible with one another.

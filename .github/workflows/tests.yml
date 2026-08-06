@@ -30,6 +30,10 @@ jobs:
           cargo install --path=crates/aiken --target=x86_64-unknown-linux-musl
           mv $(which aiken) aiken
           ldd aiken
+      - name: Run deep-expression regressions with release musl binary
+        env:
+          AIKEN_BIN: ${{ github.workspace }}/aiken
+        run: cargo test --release -p aiken --test deep_nesting
       - uses: actions/upload-artifact@v5
         with:
           name: aiken-${{ github.sha }}-${{ runner.arch }}-${{ runner.os }}

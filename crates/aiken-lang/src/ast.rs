@@ -4,6 +4,8 @@
 
 pub mod well_known;
 
+#[cfg(not(target_family = "wasm"))]
+use crate::expr::with_native_stack_segment;
 use crate::{
     ast::well_known::VALIDATOR_ELSE,
     builtins,
@@ -149,7 +151,7 @@ impl TypedModule {
                             module_name: self.name.clone(),
                             function_name: func.name.clone(),
                         },
-                        func.clone(),
+                        func.stack_safe_clone(),
                     );
                 }
 
@@ -159,7 +161,7 @@ impl TypedModule {
                             module_name: self.name.clone(),
                             function_name: test.name.clone(),
                         },
-                        test.clone().into(),
+                        test.stack_safe_clone().into(),
                     );
                 }
 
@@ -169,7 +171,7 @@ impl TypedModule {
                             module_name: self.name.clone(),
                             function_name: benchmark.name.clone(),
                         },
-                        benchmark.clone().into(),
+                        benchmark.stack_safe_clone().into(),
                     );
                 }
 
@@ -197,7 +199,7 @@ impl TypedModule {
                             module_name: self.name.clone(),
                             function_name: name.clone(),
                         },
-                        value.clone(),
+                        value.stack_safe_clone(),
                     );
                 }
 
@@ -285,6 +287,18 @@ impl<T, Expr, Arg> Function<T, Expr, Arg> {
 
     pub fn is_mint(&self) -> bool {
         self.name == HANDLER_MINT
+    }
+}
+impl<Arg: Clone> Function<Rc<Type>, TypedExpr, Arg> {
+    pub(crate) fn stack_safe_clone(&self) -> Self {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = self.body.stack_segment_size();
+            with_native_stack_segment(stack_size, || self.clone())
+        }
+
+        #[cfg(target_family = "wasm")]
+        self.clone()
     }
 }
 
@@ -791,7 +805,7 @@ impl TypedValidator {
             .iter()
             .chain(std::iter::once(&self.fallback))
             .map(|handler| {
-                let mut handler = handler.clone();
+                let mut handler = handler.stack_safe_clone();
 
                 handler.arguments = self
                     .params

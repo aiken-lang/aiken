@@ -28,7 +28,10 @@ mod test {
 
     const TEST_KIND: ModuleKind = ModuleKind::Lib;
 
-    pub fn test_from_source(src: &str) -> (Test, IndexMap<DataTypeKey, TypedDataType>) {
+    pub fn with_test_from_source<R>(
+        src: &str,
+        and_then: impl FnOnce(Test, &mut CodeGenerator<'_>, &IndexMap<DataTypeKey, TypedDataType>) -> R,
+    ) -> R {
         let id_gen = IdGenerator::new();
 
         let module_name = "";
@@ -97,16 +100,21 @@ mod test {
             Tracing::All(TraceLevel::Verbose),
         );
 
-        (
-            Test::from_function_definition(
-                &mut generator,
-                test.to_owned(),
-                module_name.to_string(),
-                PathBuf::new(),
-                RunnableKind::Test,
-            ),
-            data_types,
-        )
+        let test = Test::from_function_definition(
+            &mut generator,
+            &test,
+            module_name.to_string(),
+            PathBuf::new(),
+            RunnableKind::Test,
+        );
+
+        and_then(test, &mut generator, &data_types)
+    }
+
+    pub fn test_from_source(src: &str) -> (Test, IndexMap<DataTypeKey, TypedDataType>) {
+        with_test_from_source(src, |test, _generator, data_types| {
+            (test, data_types.clone())
+        })
     }
 
     fn property(src: &str) -> (PropertyTest, impl Fn(PlutusData) -> String) {
@@ -225,28 +233,34 @@ mod test {
     }
 
     fn unit_test(src: &str) -> Option<String> {
-        match test_from_source(src) {
-            (Test::PropertyTest(..), _) => {
+        with_test_from_source(src, |test, generator, data_types| match test {
+            Test::PropertyTest(..) => {
                 panic!("Expected to yield a UnitTest but found a PropertyTest")
             }
-            (Test::UnitTest(test), data_types) => {
+            Test::UnitTest(mut test) => {
                 let expected_failure =
                     matches!(test.on_test_failure, OnTestFailure::SucceedImmediately);
+                let assertion = test.assertion.take();
+                let data_types_refs = utils::indexmap::as_ref_values(data_types);
+                let mut result = test.run(&PlutusVersion::V3, Tracing::verbose());
 
-                let data_types_refs = utils::indexmap::as_ref_values(&data_types);
+                if let Some(assertion) = assertion {
+                    if result.success {
+                        (*assertion).discard();
+                    } else {
+                        result.assertion =
+                            Some((*assertion).evaluate(generator, &result.test.module));
+                    }
+                }
 
-                let result = test
-                    .run(&PlutusVersion::V3, Tracing::verbose())
-                    .reify(&data_types_refs);
-
-                result
-                    .assertion
-                    .map(|a| a.to_string(expected_failure, &AssertionStyleOptions::new(None)))
+                result.reify(&data_types_refs).assertion.map(|assertion| {
+                    assertion.to_string(expected_failure, &AssertionStyleOptions::new(None))
+                })
             }
-            (Test::Benchmark(..), _) => {
+            Test::Benchmark(..) => {
                 panic!("Expected to yield a PropertyTest but found a Benchmark")
             }
-        }
+        })
     }
 
     fn expect_failure<'a>(
@@ -298,6 +312,57 @@ mod test {
                 .to_string()
             ),
         );
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn deeply_nested_property_runs_on_a_small_native_stack() {
+        use std::thread;
+
+        let depth = 4_096;
+        let mut source = String::with_capacity(160 + depth * 3);
+        source.push_str(
+            "type Nested {\n  End(Int)\n  Next(Nested)\n}\n\ntest deep_property(n: Int via int()) {\n  let value = ",
+        );
+        for _ in 0..depth {
+            source.push_str("Next(");
+        }
+        source.push_str("End(n)");
+        for _ in 0..depth {
+            source.push(')');
+        }
+        source.push_str("\n  builtin.length_of_bytearray(builtin.serialise_data(value)) > 0\n}\n");
+
+        let property = thread::Builder::new()
+            .name("deep-property-compilation".to_string())
+            .stack_size(128 * 1024 * 1024)
+            .spawn(move || property(&source).0)
+            .expect("spawn deep property compilation thread")
+            .join()
+            .expect("compile deeply nested property");
+        assert!(
+            property.program.nesting_depth() > depth,
+            "generated property program depth: {}",
+            property.program.nesting_depth()
+        );
+
+        thread::Builder::new()
+            .name("deep-property-small-stack".to_string())
+            .stack_size(128 * 1024)
+            .spawn(move || {
+                let result = TestResult::<(), PlutusData>::PropertyTestResult(property.run(
+                    42,
+                    1,
+                    &PlutusVersion::default(),
+                ));
+
+                TestResult::with_native_stack(vec![result], |results| {
+                    assert!(results.first().is_some_and(TestResult::is_success));
+                });
+            })
+            .expect("spawn small-stack property thread")
+            .join()
+            .expect("run deeply nested property");
     }
 
     #[test]

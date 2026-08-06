@@ -30,6 +30,7 @@ use crate::{
     options::BlueprintExport,
     telemetry::{CoverageMode, Event},
 };
+
 use aiken_lang::{
     IdGenerator,
     ast::{
@@ -64,6 +65,8 @@ use uplc::{
     PlutusData,
     ast::{Constant, Name, Program},
 };
+#[cfg(not(target_family = "wasm"))]
+const NATIVE_PARALLEL_RUNNABLE_STACK_LIMIT: usize = 16 * 1024 * 1024;
 
 #[derive(Debug)]
 pub struct Source {
@@ -492,6 +495,17 @@ where
                     })
                     .collect();
 
+                #[cfg(not(target_family = "wasm"))]
+                TestResult::with_native_stack(tests, |tests| {
+                    self.event_listener.handle_event(Event::FinishedTests {
+                        seed,
+                        coverage_mode,
+                        tests,
+                        plain_numbers,
+                    })
+                });
+
+                #[cfg(target_family = "wasm")]
                 self.event_listener.handle_event(Event::FinishedTests {
                     seed,
                     coverage_mode,
@@ -1080,7 +1094,7 @@ where
 
             tests.push(Test::from_function_definition(
                 &mut generator,
-                test.to_owned(),
+                test,
                 module_name,
                 input_path,
                 kind,
@@ -1147,7 +1161,7 @@ where
 
     fn run_runnables(
         &self,
-        tests: Vec<Test>,
+        mut tests: Vec<Test>,
         seed: u32,
         max_success: usize,
         tracing: Tracing,
@@ -1158,10 +1172,66 @@ where
 
         let plutus_version = &self.config.plutus;
 
-        tests
-            .into_par_iter()
-            .map(|test| test.run(seed, max_success, plutus_version, tracing))
-            .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
+        let assertions = tests
+            .iter_mut()
+            .map(|test| match test {
+                Test::UnitTest(unit_test) => unit_test.assertion.take(),
+                Test::PropertyTest(_) | Test::Benchmark(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        let mut results = {
+            #[cfg(not(target_family = "wasm"))]
+            {
+                let (large, parallel): (Vec<_>, Vec<_>) =
+                    tests.into_iter().enumerate().partition(|(_, test)| {
+                        test.native_stack_size()
+                            .is_some_and(|size| size > NATIVE_PARALLEL_RUNNABLE_STACK_LIMIT)
+                    });
+
+                let mut results = parallel
+                    .into_par_iter()
+                    .map(|(index, test)| {
+                        (index, test.run(seed, max_success, plutus_version, tracing))
+                    })
+                    .collect::<Vec<_>>();
+
+                results.extend(large.into_iter().map(|(index, test)| {
+                    (index, test.run(seed, max_success, plutus_version, tracing))
+                }));
+                results.sort_unstable_by_key(|(index, _)| *index);
+                results
+                    .into_iter()
+                    .map(|(_, result)| result)
+                    .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
+            }
+
+            #[cfg(target_family = "wasm")]
+            tests
+                .into_par_iter()
+                .map(|test| test.run(seed, max_success, plutus_version, tracing))
+                .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
+        };
+
+        let mut generator = None;
+        for (result, assertion) in results.iter_mut().zip(assertions) {
+            let Some(assertion) = assertion else {
+                continue;
+            };
+
+            if let TestResult::UnitTestResult(unit_test) = result
+                && !unit_test.success
+            {
+                unit_test.assertion = Some((*assertion).evaluate(
+                    generator.get_or_insert_with(|| self.new_generator(tracing)),
+                    &unit_test.test.module,
+                ));
+            } else {
+                (*assertion).discard();
+            }
+        }
+
+        results
             .into_iter()
             .map(|test| test.reify(&data_types))
             .collect()

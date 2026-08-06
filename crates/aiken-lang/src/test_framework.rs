@@ -1,3 +1,6 @@
+#[cfg(not(target_family = "wasm"))]
+use crate::expr::{native_stack_segment_size, with_native_stack_segment};
+
 use crate::{
     ast::{
         BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TraceLevel, Tracing, TypedArg,
@@ -27,7 +30,7 @@ use std::{
     rc::Rc,
 };
 use uplc::{
-    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
+    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, plutus_data_nesting_depth},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
 };
 use vec1::{Vec1, vec1};
@@ -64,6 +67,44 @@ pub enum Test {
 
 unsafe impl Send for Test {}
 
+#[cfg(not(target_family = "wasm"))]
+fn uplc_program_stack_size<T>(program: &Program<T>) -> usize {
+    native_stack_segment_size(program.nesting_depth())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn unit_test_stack_size(test: &UnitTest) -> usize {
+    uplc_program_stack_size(&test.program)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn property_test_stack_size(test: &PropertyTest) -> usize {
+    uplc_program_stack_size(&test.program).max(uplc_program_stack_size(&test.fuzzer.program))
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn program_with_data_nesting_depth<T>(program: &Program<T>, data: &PlutusData) -> usize {
+    let applied_program_depth = program.nesting_depth().saturating_add(1);
+    let applied_data_depth = plutus_data_nesting_depth(data).saturating_add(3);
+    applied_program_depth.max(applied_data_depth)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn program_with_data_stack_size<T>(program: &Program<T>, data: &PlutusData) -> usize {
+    native_stack_segment_size(program_with_data_nesting_depth(program, data))
+}
+
+fn test_program_source(program: &Program<Name>) -> String {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let stack_size = uplc_program_stack_size(program);
+        with_native_stack_segment(stack_size, || program.to_pretty())
+    }
+
+    #[cfg(target_family = "wasm")]
+    program.to_pretty()
+}
+
 impl Test {
     pub fn unit_test(
         generator: &mut CodeGenerator<'_>,
@@ -71,33 +112,18 @@ impl Test {
         module_name: String,
         input_path: PathBuf,
     ) -> Test {
+        #[cfg(not(target_family = "wasm"))]
+        let stack_size = test.body.stack_segment_size();
+
         let program = generator.generate_raw(&test.body, &[], &module_name);
+        let body = test.body;
 
-        let assertion = match test.body.try_into() {
-            Err(..) => None,
-            Ok(Assertion { bin_op, head, tail }) => {
-                let as_constant = |generator: &mut CodeGenerator<'_>, side| {
-                    Program::<NamedDeBruijn>::try_from(generator.generate_raw(
-                        &side,
-                        &[],
-                        &module_name,
-                    ))
-                    .expect("failed to convert assertion operand to NamedDeBruijn")
-                    .eval(ExBudget::max())
-                    .unwrap_constant()
-                    .map(|cst| (cst, side.tipo()))
-                };
+        #[cfg(not(target_family = "wasm"))]
+        let assertion =
+            with_native_stack_segment(stack_size, || body.try_into().ok().map(Box::new));
 
-                // Assertion at this point is evaluated so it's not just a normal assertion
-                Some(Assertion {
-                    bin_op,
-                    head: as_constant(generator, head.expect("cannot be Err at this point")),
-                    tail: tail
-                        .expect("cannot be Err at this point")
-                        .try_mapped(|e| as_constant(generator, e)),
-                })
-            }
-        };
+        #[cfg(target_family = "wasm")]
+        let assertion = body.try_into().ok().map(Box::new);
 
         Test::UnitTest(UnitTest {
             input_path,
@@ -129,11 +155,13 @@ impl Test {
 
     pub fn from_function_definition(
         generator: &mut CodeGenerator<'_>,
-        test: TypedTest,
+        test: &TypedTest,
         module_name: String,
         input_path: PathBuf,
         kind: RunnableKind,
     ) -> Test {
+        let test = test.stack_safe_clone();
+
         if test.arguments.is_empty() {
             if matches!(kind, RunnableKind::Bench) {
                 unreachable!("benchmark must have at least one argument");
@@ -192,6 +220,16 @@ impl Test {
         }
     }
 
+    #[cfg(not(target_family = "wasm"))]
+    #[doc(hidden)]
+    pub fn native_stack_size(&self) -> Option<usize> {
+        match self {
+            Test::UnitTest(test) => Some(unit_test_stack_size(test)),
+            Test::PropertyTest(test) => Some(property_test_stack_size(test)),
+            Test::Benchmark(_) => None,
+        }
+    }
+
     pub fn run(
         self,
         seed: u32,
@@ -222,13 +260,28 @@ pub struct UnitTest {
     pub name: String,
     pub on_test_failure: OnTestFailure,
     pub program: Program<Name>,
-    pub assertion: Option<Assertion<(Constant, Rc<Type>)>>,
+    pub assertion: Option<Box<Assertion<TypedExpr>>>,
 }
 
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
     pub fn run(
+        self,
+        plutus_version: &PlutusVersion,
+        tracing: Tracing,
+    ) -> UnitTestResult<(Constant, Rc<Type>)> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = unit_test_stack_size(&self);
+            with_native_stack_segment(stack_size, || self.run_inner(plutus_version, tracing))
+        }
+
+        #[cfg(target_family = "wasm")]
+        self.run_inner(plutus_version, tracing)
+    }
+
+    fn run_inner(
         self,
         plutus_version: &PlutusVersion,
         tracing: Tracing,
@@ -256,11 +309,17 @@ impl UnitTest {
 
         UnitTestResult {
             success,
-            test: self.to_owned(),
+            test: self,
             spent_budget: eval_result.cost(),
             logs,
-            assertion: self.assertion,
+            assertion: None,
+            #[cfg(not(target_family = "wasm"))]
+            assertion_stack_size: native_stack_segment_size(0),
         }
+    }
+
+    pub fn program_source(&self) -> String {
+        test_program_source(&self.program)
     }
 }
 
@@ -362,6 +421,22 @@ impl PropertyTest {
         n: usize,
         plutus_version: &PlutusVersion,
     ) -> PropertyTestResult<PlutusData> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = property_test_stack_size(&self);
+            with_native_stack_segment(stack_size, || self.run_inner(seed, n, plutus_version))
+        }
+
+        #[cfg(target_family = "wasm")]
+        self.run_inner(seed, n, plutus_version)
+    }
+
+    fn run_inner(
+        self,
+        seed: u32,
+        n: usize,
+        plutus_version: &PlutusVersion,
+    ) -> PropertyTestResult<PlutusData> {
         let mut labels = BTreeMap::new();
         let mut remaining = n;
 
@@ -372,11 +447,9 @@ impl PropertyTest {
             plutus_version,
         ) {
             Ok(None) => (Vec::new(), Ok(None), n),
-            Ok(Some(counterexample)) => (
-                self.eval(&counterexample.value, plutus_version).logs(),
-                Ok(Some(counterexample.value)),
-                n - remaining,
-            ),
+            Ok(Some(counterexample)) => {
+                self.finish_counterexample(counterexample, n - remaining, plutus_version)
+            }
             Err(FuzzerError { logs, uplc_error }) => (logs, Err(uplc_error), n - remaining + 1),
         };
 
@@ -387,6 +460,20 @@ impl PropertyTest {
             labels,
             logs,
         }
+    }
+    fn finish_counterexample(
+        &self,
+        counterexample: Counterexample<'_>,
+        iterations: usize,
+        plutus_version: &PlutusVersion,
+    ) -> (
+        Vec<String>,
+        Result<Option<PlutusData>, uplc::machine::Error>,
+        usize,
+    ) {
+        let logs = self.eval(&counterexample.value, plutus_version).logs();
+        let Counterexample { value, .. } = counterexample;
+        (logs, Ok(Some(value)), iterations)
     }
 
     pub fn run_n_times<'a>(
@@ -406,6 +493,16 @@ impl PropertyTest {
 
         Ok(counterexample)
     }
+    fn sample_fuzzer(&self, prng: &Prng) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = program_with_data_stack_size(&self.fuzzer.program, prng.uplc_ref());
+            with_native_stack_segment(stack_size, || prng.sample(&self.fuzzer.program))
+        }
+
+        #[cfg(target_family = "wasm")]
+        prng.sample(&self.fuzzer.program)
+    }
 
     fn run_once<'a>(
         &'a self,
@@ -415,10 +512,9 @@ impl PropertyTest {
     ) -> Result<(Prng, Option<Counterexample<'a>>), FuzzerError> {
         use OnTestFailure::*;
 
-        let (next_prng, value) = prng
-            .sample(&self.fuzzer.program)?
+        let (next_prng, value) = self
+            .sample_fuzzer(&prng)?
             .expect("A seeded PRNG returned 'None' which indicates a fuzzer is ill-formed and implemented wrongly; please contact library's authors.");
-
         let result = self.eval(&value, plutus_version);
 
         for label in result.labels() {
@@ -432,7 +528,6 @@ impl PropertyTest {
         }
 
         let is_failure = result.failed(true, &plutus_version.into());
-
         let is_success = !is_failure;
 
         let keep_counterexample = match self.on_test_failure {
@@ -445,32 +540,9 @@ impl PropertyTest {
                 value,
                 choices: next_prng.choices(),
                 cache: Cache::new(|choices| {
-                    match Prng::from_choices(choices).sample(&self.fuzzer.program) {
-                        Err(..) => Status::Invalid,
-                        Ok(None) => Status::Invalid,
-                        Ok(Some((_, value))) => {
-                            let is_failure = self
-                                .eval(&value, plutus_version)
-                                .failed(true, &plutus_version.into());
-
-                            match self.on_test_failure {
-                                FailImmediately | SucceedImmediately => {
-                                    if is_failure {
-                                        Status::Keep(value)
-                                    } else {
-                                        Status::Ignore
-                                    }
-                                }
-
-                                SucceedEventually => {
-                                    if is_failure {
-                                        Status::Ignore
-                                    } else {
-                                        Status::Keep(value)
-                                    }
-                                }
-                            }
-                        }
+                    match self.sample_fuzzer(&Prng::from_choices(choices)) {
+                        Err(..) | Ok(None) => Status::Invalid,
+                        Ok(Some((_, value))) => self.status_for_value(value, plutus_version),
                     }
                 }),
             };
@@ -485,12 +557,45 @@ impl PropertyTest {
         }
     }
 
+    fn status_for_value(
+        &self,
+        value: PlutusData,
+        plutus_version: &PlutusVersion,
+    ) -> Status<PlutusData> {
+        use OnTestFailure::*;
+
+        let is_failure = self
+            .eval(&value, plutus_version)
+            .failed(true, &plutus_version.into());
+
+        match self.on_test_failure {
+            FailImmediately | SucceedImmediately if is_failure => Status::Keep(value),
+            SucceedEventually if !is_failure => Status::Keep(value),
+            _ => Status::Ignore,
+        }
+    }
+
     pub fn eval(&self, value: &PlutusData, plutus_version: &PlutusVersion) -> EvalResult {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = program_with_data_stack_size(&self.program, value);
+            with_native_stack_segment(stack_size, || self.eval_inner(value, plutus_version))
+        }
+
+        #[cfg(target_family = "wasm")]
+        self.eval_inner(value, plutus_version)
+    }
+
+    fn eval_inner(&self, value: &PlutusData, plutus_version: &PlutusVersion) -> EvalResult {
         let program = self.program.apply_data(value.clone());
 
         Program::<NamedDeBruijn>::try_from(program)
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into())
+    }
+
+    pub fn program_source(&self) -> String {
+        test_program_source(&self.program)
     }
 }
 
@@ -607,6 +712,10 @@ impl Benchmark {
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into())
     }
+
+    pub fn program_source(&self) -> String {
+        self.program.to_pretty()
+    }
 }
 
 /// ----- PRNG -----------------------------------------------------------------
@@ -645,9 +754,12 @@ impl Prng {
     const NONE: u64 = 1;
 
     pub fn uplc(&self) -> PlutusData {
+        self.uplc_ref().clone()
+    }
+
+    fn uplc_ref(&self) -> &PlutusData {
         match self {
-            Prng::Seeded { uplc, .. } => uplc.clone(),
-            Prng::Replayed { uplc, .. } => uplc.clone(),
+            Prng::Seeded { uplc, .. } | Prng::Replayed { uplc, .. } => uplc,
         }
     }
 
@@ -702,13 +814,20 @@ impl Prng {
     ) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
         let program = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc())).unwrap();
         let result = program.eval(ExBudget::max());
+        Self::from_eval_result(result)
+    }
+
+    fn from_eval_result(result: EvalResult) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
+        let EvalResult { result, traces, .. } = result;
         result
-            .result()
-            .map_err(|uplc_error| FuzzerError {
-                logs: result.logs(),
+            .map(Prng::from_result)
+            .map_err(move |uplc_error| FuzzerError {
+                logs: traces
+                    .into_iter()
+                    .filter_map(uplc::machine::Trace::unwrap_log)
+                    .collect(),
                 uplc_error,
             })
-            .map(Prng::from_result)
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
@@ -799,7 +918,12 @@ impl Counterexample<'_> {
             return true;
         }
 
-        match self.cache.get(choices) {
+        let status = self.cache.get(choices);
+        self.consider_status(choices, status)
+    }
+
+    fn consider_status(&mut self, choices: &[u8], status: Status<PlutusData>) -> bool {
+        match status {
             Status::Invalid | Status::Ignore => false,
             Status::Keep(value) => {
                 // If these new choices are shorter or smaller, then we pick them
@@ -1080,33 +1204,41 @@ where
     }
 
     pub fn get(&mut self, choices: &[u8]) -> Status<T> {
-        if let Some((prefix, status)) = self.db.get_longest_common_prefix(choices) {
-            let status = status.clone();
-            if status != Status::Invalid || prefix == choices {
-                return status;
-            }
+        if let Some(status) = self.cached(choices) {
+            return status;
         }
 
         let status = self.run.deref()(choices);
+        self.store(choices, status)
+    }
 
+    fn cached(&self, choices: &[u8]) -> Option<Status<T>> {
+        self.db
+            .get_longest_common_prefix(choices)
+            .and_then(|(prefix, status)| {
+                let status = status.clone();
+                (!matches!(status, Status::Invalid) || prefix == choices).then_some(status)
+            })
+    }
+
+    fn store(&mut self, choices: &[u8], status: Status<T>) -> Status<T> {
         // Clear longer path on non-invalid cases, as we will never reach them
         // again due to a now-shorter prefix found.
         //
         // This hopefully keeps the cache under a reasonable size as we prune
         // the tree as we discover shorter paths.
-        if status != Status::Invalid {
+        if !matches!(status, Status::Invalid) {
             let keys = self
                 .db
                 .iter_prefix(choices)
-                .map(|(k, _)| k)
+                .map(|(key, _)| key)
                 .collect::<Vec<_>>();
-            for k in keys {
-                self.db.remove(k);
+            for key in keys {
+                self.db.remove(key);
             }
         }
 
         self.db.insert(choices, status.clone());
-
         status
     }
 }
@@ -1179,6 +1311,30 @@ impl<U, T> TestResult<U, T> {
         }
     }
 
+    #[cfg(not(target_family = "wasm"))]
+    fn native_stack_size(&self) -> usize {
+        match self {
+            TestResult::UnitTestResult(UnitTestResult {
+                test,
+                assertion_stack_size,
+                ..
+            }) => unit_test_stack_size(test).max(*assertion_stack_size),
+            TestResult::PropertyTestResult(PropertyTestResult { test, .. }) => {
+                property_test_stack_size(test)
+            }
+            TestResult::BenchmarkResult(_) => native_stack_segment_size(0),
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[doc(hidden)]
+    pub fn with_native_stack<R>(tests: Vec<Self>, operation: impl FnOnce(Vec<Self>) -> R) -> R {
+        match tests.iter().map(Self::native_stack_size).max() {
+            Some(stack_size) => with_native_stack_segment(stack_size, || operation(tests)),
+            None => operation(tests),
+        }
+    }
+
     pub fn logs(&self) -> &[String] {
         match self {
             TestResult::UnitTestResult(UnitTestResult { logs, .. })
@@ -1197,6 +1353,8 @@ pub struct UnitTestResult<T> {
     pub logs: Vec<String>,
     pub test: UnitTest,
     pub assertion: Option<Assertion<T>>,
+    #[cfg(not(target_family = "wasm"))]
+    assertion_stack_size: usize,
 }
 
 unsafe impl<T> Send for UnitTestResult<T> {}
@@ -1206,32 +1364,67 @@ impl UnitTestResult<(Constant, Rc<Type>)> {
         self,
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     ) -> UnitTestResult<UntypedExpr> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let assertion_depth = self
+                .assertion
+                .as_ref()
+                .map(|assertion| {
+                    let head_depth = assertion
+                        .head
+                        .as_ref()
+                        .map(|(constant, _)| constant.nesting_depth())
+                        .unwrap_or_default();
+                    let tail_depth = assertion
+                        .tail
+                        .as_ref()
+                        .map(|constants| {
+                            constants
+                                .iter()
+                                .map(|(constant, _)| constant.nesting_depth())
+                                .max()
+                                .unwrap_or_default()
+                        })
+                        .unwrap_or_default();
+
+                    head_depth.max(tail_depth)
+                })
+                .unwrap_or_default();
+            let assertion_stack_size = native_stack_segment_size(assertion_depth);
+            let stack_size = unit_test_stack_size(&self.test).max(assertion_stack_size);
+            let mut result = self;
+            result.assertion_stack_size = assertion_stack_size;
+            with_native_stack_segment(stack_size, || result.reify_inner(data_types))
+        }
+
+        #[cfg(target_family = "wasm")]
+        self.reify_inner(data_types)
+    }
+
+    fn reify_inner(
+        self,
+        data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    ) -> UnitTestResult<UntypedExpr> {
         UnitTestResult {
             success: self.success,
             spent_budget: self.spent_budget,
             logs: self.logs,
             test: self.test,
-            assertion: self.assertion.and_then(|assertion| {
-                // No need to spend time/cpu on reifying assertions for successful
-                // tests since they aren't shown.
-                if self.success {
-                    return None;
-                }
-
-                Some(Assertion {
-                    bin_op: assertion.bin_op,
-                    head: assertion.head.map(|(cst, tipo)| {
-                        UntypedExpr::reify_constant(data_types, cst, tipo)
+            assertion: self.assertion.map(|assertion| Assertion {
+                bin_op: assertion.bin_op,
+                head: assertion.head.map(|(constant, tipo)| {
+                    UntypedExpr::reify_constant(data_types, constant, tipo)
+                        .expect("failed to reify assertion operand?")
+                }),
+                tail: assertion.tail.map(|expressions| {
+                    expressions.mapped(|(constant, tipo)| {
+                        UntypedExpr::reify_constant(data_types, constant, tipo)
                             .expect("failed to reify assertion operand?")
-                    }),
-                    tail: assertion.tail.map(|xs| {
-                        xs.mapped(|(cst, tipo)| {
-                            UntypedExpr::reify_constant(data_types, cst, tipo)
-                                .expect("failed to reify assertion operand?")
-                        })
-                    }),
-                })
+                    })
+                }),
             }),
+            #[cfg(not(target_family = "wasm"))]
+            assertion_stack_size: self.assertion_stack_size,
         }
     }
 }
@@ -1252,21 +1445,40 @@ impl PropertyTestResult<PlutusData> {
         self,
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     ) -> PropertyTestResult<UntypedExpr> {
-        PropertyTestResult {
-            counterexample: self.counterexample.map(|ok| {
-                ok.map(|counterexample| {
-                    UntypedExpr::reify_data(
-                        data_types,
-                        counterexample,
-                        self.test.fuzzer.type_info.clone(),
-                    )
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = property_test_stack_size(&self.test);
+            with_native_stack_segment(stack_size, || self.reify_inner(data_types))
+        }
+
+        #[cfg(target_family = "wasm")]
+        self.reify_inner(data_types)
+    }
+
+    fn reify_inner(
+        self,
+        data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    ) -> PropertyTestResult<UntypedExpr> {
+        let PropertyTestResult {
+            test,
+            counterexample,
+            iterations,
+            labels,
+            logs,
+        } = self;
+        let counterexample = counterexample.map(|ok| {
+            ok.map(|counterexample| {
+                UntypedExpr::reify_data(data_types, counterexample, test.fuzzer.type_info.clone())
                     .expect("failed to reify counterexample?")
-                })
-            }),
-            iterations: self.iterations,
-            test: self.test,
-            labels: self.labels,
-            logs: self.logs,
+            })
+        });
+
+        PropertyTestResult {
+            test,
+            counterexample,
+            iterations,
+            labels,
+            logs,
         }
     }
 }
@@ -1276,6 +1488,84 @@ pub struct Assertion<T> {
     pub bin_op: BinOp,
     pub head: Result<T, ()>,
     pub tail: Result<Vec1<T>, ()>,
+}
+
+impl Assertion<TypedExpr> {
+    #[cfg(not(target_family = "wasm"))]
+    fn stack_segment_size(&self) -> usize {
+        let head_depth = self
+            .head
+            .as_ref()
+            .map(TypedExpr::nesting_depth)
+            .unwrap_or_default();
+        let tail_depth = self
+            .tail
+            .as_ref()
+            .map(|expressions| {
+                expressions
+                    .iter()
+                    .map(TypedExpr::nesting_depth)
+                    .max()
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        native_stack_segment_size(head_depth.max(tail_depth))
+    }
+
+    pub fn evaluate(
+        self,
+        generator: &mut CodeGenerator<'_>,
+        module_name: &str,
+    ) -> Assertion<(Constant, Rc<Type>)> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = self.stack_segment_size();
+            with_native_stack_segment(stack_size, || self.evaluate_inner(generator, module_name))
+        }
+
+        #[cfg(target_family = "wasm")]
+        self.evaluate_inner(generator, module_name)
+    }
+
+    fn evaluate_inner(
+        self,
+        generator: &mut CodeGenerator<'_>,
+        module_name: &str,
+    ) -> Assertion<(Constant, Rc<Type>)> {
+        let Assertion { bin_op, head, tail } = self;
+        let as_constant = |generator: &mut CodeGenerator<'_>, expression: TypedExpr| {
+            let tipo = expression.tipo();
+            Program::<NamedDeBruijn>::try_from(generator.generate_raw(
+                &expression,
+                &[],
+                module_name,
+            ))
+            .expect("failed to convert assertion operand to NamedDeBruijn")
+            .eval(ExBudget::max())
+            .unwrap_constant()
+            .map(|constant| (constant, tipo))
+        };
+
+        Assertion {
+            bin_op,
+            head: as_constant(generator, head.expect("cannot be Err at this point")),
+            tail: tail
+                .expect("cannot be Err at this point")
+                .try_mapped(|expression| as_constant(generator, expression)),
+        }
+    }
+
+    pub fn discard(self) {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let stack_size = self.stack_segment_size();
+            with_native_stack_segment(stack_size, || drop(self));
+        }
+
+        #[cfg(target_family = "wasm")]
+        drop(self);
+    }
 }
 
 impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
@@ -1662,6 +1952,71 @@ unsafe impl Sync for BenchmarkResult {}
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn deeply_nested_program_constant_renders_on_a_small_native_stack() {
+        use std::thread;
+        use uplc::ast::Type as UplcType;
+
+        let mut constant = Constant::Unit;
+        for _ in 0..4_096 {
+            constant = Constant::ProtoPair(
+                UplcType::Unit,
+                UplcType::Unit,
+                Rc::new(Constant::Unit),
+                Rc::new(constant),
+            );
+        }
+
+        let test = UnitTest {
+            input_path: PathBuf::new(),
+            module: String::new(),
+            name: String::new(),
+            on_test_failure: OnTestFailure::FailImmediately,
+            program: Program::<Name> {
+                version: (1, 0, 0),
+                term: Term::Constant(Rc::new(constant)),
+            },
+            assertion: None,
+        };
+
+        thread::Builder::new()
+            .name("deep-program-constant-small-stack".to_string())
+            .stack_size(128 * 1024)
+            .spawn(move || {
+                let source = test.program_source();
+                assert!(source.contains("pair"));
+
+                let stack_size = unit_test_stack_size(&test);
+                with_native_stack_segment(stack_size, || drop(test));
+            })
+            .expect("spawn small-stack program rendering thread")
+            .join()
+            .expect("render deeply nested program constant");
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn applied_data_nesting_matches_the_constructed_program() {
+        let program = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Rc::new(Constant::Unit)),
+        };
+        let shallow = Data::list(Vec::new());
+        let mut nested = shallow.clone();
+
+        for _ in 0..8 {
+            nested = Data::list(vec![nested]);
+        }
+
+        for data in [shallow, nested] {
+            assert_eq!(
+                program_with_data_nesting_depth(&program, &data),
+                program.apply_data(data.clone()).nesting_depth(),
+            );
+        }
+    }
 
     #[test]
     fn test_cache() {
