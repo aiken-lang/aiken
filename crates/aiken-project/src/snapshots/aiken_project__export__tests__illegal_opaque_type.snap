@@ -2,24 +2,25 @@
 source: crates/aiken-project/src/export.rs
 description: "Code:\n\npub opaque type Thing {\n  a: Int\n}\n\npub fn add(a: Thing, b: Int) -> Int {\n    a.a + b\n}\n"
 ---
-Schema {
-    error: Error {
-        context: IllegalOpaqueType,
-        breadcrumbs: [
-            App {
-                public: true,
-                contains_opaque: true,
-                module: "test_module",
-                name: "Thing",
-                args: [],
-                alias: None,
-            },
-        ],
-    },
-    location: 47..55,
-    source_code: NamedSource {
-        name: "",
-        source: "<redacted>",
-        language: None,
-    ,
-}
+        Error aiken::check::illegal::opaque_type_in_abi (https://aiken-lang.org/language-tour/modules#opaque-types)
+
+  × While trying to make sense of your code...
+  ╰─▶ I caught an opaque type in an exported interface.
+      
+   ╭─[:5:12]
+ 3 │ }
+ 4 │ 
+ 5 │ pub fn add(a: Thing, b: Int) -> Int {
+   ·            ────┬───
+   ·                ╰── opaque type in function argument
+ 6 │     a.a + b
+ 7 │ }
+   ╰────
+  help: Opaque types cannot appear in an exposed interface such as a validator's datum or redeemer type or an exported function. Indeed, an opaque type hides its implementation details, usually
+        because it enforces an invariant that cannot be safely reconstructed from arbitrary Plutus Data.
+        
+        The problematic interface type is:
+        
+        ╰─▶ Thing
+        
+        Use an intermediate public representation instead, then re-construct the opaque value through safe constructors or functions that preserve its invariants.

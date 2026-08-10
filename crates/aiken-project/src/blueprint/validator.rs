@@ -628,43 +628,6 @@ mod tests {
     }
 
     #[test]
-    fn opaque_singleton_variants() {
-        assert_validator!(
-            r#"
-            pub opaque type Dict<key, value> {
-                inner: List<(ByteArray, value)>
-            }
-
-            pub type UUID { UUID }
-
-            validator opaque_singleton_variants {
-              spend(datum: Option<Data>, redeemer: Dict<UUID, Int>, output_reference: Data, transaction: Data) {
-                True
-              }
-            }
-            "#
-        );
-    }
-
-    #[test]
-    fn opaque_singleton_multi_variants() {
-        assert_validator!(
-            r#"
-            pub opaque type Rational {
-              numerator: Int,
-              denominator: Int,
-            }
-
-            validator opaque_singleton_multi_variants {
-              spend(datum: Option<Data>, redeemer: Rational, oref: Data, transaction: Data) {
-                True
-              }
-            }
-            "#
-        );
-    }
-
-    #[test]
     fn nested_data() {
         assert_validator!(
             r#"

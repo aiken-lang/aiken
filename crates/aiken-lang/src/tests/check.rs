@@ -49,10 +49,12 @@ fn check_module(
             );
         }
 
+        let module_kind = module.kind;
+
         let typed_module = module
             .infer(
                 &id_gen,
-                kind,
+                module_kind,
                 DEFAULT_PACKAGE,
                 &module_types,
                 Tracing::All(TraceLevel::Verbose),
@@ -105,6 +107,14 @@ fn check_validator(
     ast: UntypedModule,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
     check_module(ast, Vec::new(), ModuleKind::Validator, Tracing::verbose())
+}
+
+#[allow(clippy::result_large_err)]
+fn check_validator_with_deps(
+    ast: UntypedModule,
+    extra: Vec<UntypedModule>,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, extra, ModuleKind::Validator, Tracing::verbose())
 }
 
 #[test]
@@ -2139,6 +2149,313 @@ fn forbid_expect_into_opaque_type_from_data() {
 }
 
 #[test]
+fn forbid_incomplete_expect_into_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+        type Bar { a0: Int, b0: Thing }
+
+        fn bar(data: Data) {
+          expect Bar { b0, .. } = data
+          b0
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_complete_expect_into_record_containing_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+        type Bar { a0: Int, b0: Thing }
+
+        fn bar(data: Data) {
+          expect Bar { a0, b0 } = data
+          b0
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_constructor_containing_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+        type Bar {
+          Bar(Int, Thing)
+        }
+
+        fn bar(data: Data) {
+          expect Bar(_, b0) = data
+          b0
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_pair_containing_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        fn bar(data: Data) {
+          expect pair: Pair<Thing, Int> = data
+          pair
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_tuple_containing_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        fn bar(data: Data) {
+          expect tuple: (Thing, Int) = data
+          tuple
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_record_with_pair_containing_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+        type Bar { pair: Pair<Thing, Int> }
+
+        fn bar(data: Data) {
+          expect Bar { pair } = data
+          pair
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_record_with_tuple_containing_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+        type Bar { tuple: (Thing, Int) }
+
+        fn bar(data: Data) {
+          expect Bar { tuple } = data
+          tuple
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_imported_record_containing_opaque_type_from_data() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Bar { a0: Int, b0: Thing }
+    "#;
+
+    let source_code = r#"
+        use thing.{Bar}
+
+        fn bar(data: Data) {
+          expect Bar { b0, .. } = data
+          b0
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_imported_record_with_pair_containing_opaque_type_from_data() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Bar { pair: Pair<Thing, Int> }
+    "#;
+
+    let source_code = r#"
+        use thing.{Bar}
+
+        fn bar(data: Data) {
+          expect Bar { pair } = data
+          pair
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_imported_record_with_tuple_containing_opaque_type_from_data() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Bar { tuple: (Thing, Int) }
+    "#;
+
+    let source_code = r#"
+        use thing.{Bar}
+
+        fn bar(data: Data) {
+          expect Bar { tuple } = data
+          tuple
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_nested_imported_opaque_types() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+
+        pub type Outer { inner: Inner }
+        pub type Inner { thing: Thing }
+    "#;
+
+    let source_code = r#"
+        use thing.{Outer}
+
+        fn bar(data: Data) {
+          expect Outer { inner } = data
+          inner
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_nested_imported_nested_opaque_types() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+
+        pub type Outer { inner: Inner }
+        pub type Inner { thing: Thing }
+    "#;
+
+    let source_code = r#"
+        use thing.{Outer}
+
+        pub type Baz {
+            Baz1(Int)
+            Baz2(Outer)
+        }
+
+        fn baz(data: Data) {
+          expect Baz1(inner) = data
+          inner
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_alias_of_record_containing_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+        type Bar { a0: Int, b0: Thing }
+        type BarAlias =
+          Bar
+
+        fn bar(data: Data) {
+          expect a: BarAlias = data
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_imported_alias_of_record_containing_opaque_type_from_data() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Bar = Thing
+    "#;
+
+    let source_code = r#"
+        use thing.{Bar}
+
+        fn bar(data: Data) {
+          expect Bar { inner }: Bar = data
+          inner
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_nested_opaque_types() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        type Outer { inner: Inner }
+        type Inner { thing: Thing }
+
+        fn bar(data: Data) {
+          expect Outer { inner } = data
+          inner
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
 fn forbid_partial_down_casting() {
     let source_code = r#"
         type Foo {
@@ -3063,6 +3380,21 @@ fn can_down_cast_to_data_always() {
 }
 
 #[test]
+fn can_down_cast_record_containing_opaque_type_to_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+        type Bar { a0: Int, b0: Thing }
+
+        fn bar(a: Bar) {
+          let b: Data = a
+          b
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
 fn can_down_cast_to_data_on_fn_call() {
     let source_code = r#"
         pub type Foo { Foo }
@@ -3189,6 +3521,134 @@ fn validator_public() {
     "#;
 
     assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn validator_forbid_opaque_type_in_datum_abi() {
+    let source_code = r#"
+        pub opaque type Datum {
+          inner: Int,
+        }
+
+        validator foo {
+          spend(datum: Option<Datum>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_opaque_type_in_redeemer_abi() {
+    let source_code = r#"
+        pub opaque type Redeemer {
+          inner: Int,
+        }
+
+        validator foo {
+          mint(redeemer: Redeemer, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_pair_containing_opaque_type_in_redeemer_abi() {
+    let source_code = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        validator foo {
+          mint(redeemer: Pair<Thing, Int>, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_tuple_containing_opaque_type_in_datum_abi() {
+    let source_code = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        validator foo {
+          spend(datum: Option<(Thing, Int)>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_opaque_type_in_data_annotation_abi() {
+    let source_code = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        validator foo {
+          spend(datum: Option<Data<Thing>>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn validator_forbid_imported_record_containing_opaque_type_in_redeemer_abi() {
+    let dependency = r#"
+        pub opaque type Thing {
+          inner: Int,
+        }
+
+        pub type Redeemer {
+          pair: Pair<Thing, Int>,
+        }
+    "#;
+
+    let source_code = r#"
+        use thing.{Redeemer}
+
+        validator foo {
+          mint(redeemer: Redeemer, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator_with_deps(parse(source_code), vec![parse_as(dependency, "thing")]),
+        Err((_, Error::IllegalOpaqueType { .. }))
+    ))
 }
 
 #[test]

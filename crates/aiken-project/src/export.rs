@@ -11,8 +11,10 @@ use aiken_lang::{
     ast::{ArgName, Span, TypedArg, TypedFunction},
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
+    tipo::{Type, error as tipo},
 };
 use miette::NamedSource;
+use std::rc::Rc;
 use uplc::ast::SerializableProgram;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -43,13 +45,43 @@ impl Export {
         generator: &mut CodeGenerator,
         modules: &CheckedModules,
         plutus_version: &PlutusVersion,
-    ) -> Result<Export, blueprint::Error> {
+    ) -> Result<Export, crate::Error> {
         let mut definitions = Definitions::new();
+
+        let illegal_opaque_type =
+            |module: &CheckedModule, tipo: Rc<Type>, location: Span, position: &str| {
+                crate::Error::Type {
+                    path: Box::new(module.input_path.clone()),
+                    src: Box::new(module.code.clone()),
+                    named: Box::new(NamedSource::new(
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
+                    )),
+                    error: Box::new(tipo::Error::IllegalOpaqueType {
+                        tipo,
+                        location,
+                        position: position.to_string(),
+                    }),
+                }
+            };
 
         let parameters = func
             .arguments
             .iter()
             .map(|param| {
+                if let Some(qualifier) = param.tipo.qualifier()
+                    && modules
+                        .values()
+                        .any(|module| module.ast.type_info.opaque_types.contains(&qualifier))
+                {
+                    return Err(illegal_opaque_type(
+                        module,
+                        param.tipo.clone(),
+                        param.location,
+                        "function argument",
+                    ));
+                }
+
                 Annotated::from_type(
                     modules.into(),
                     blueprint::validator::tipo_or_annotation(module, param),
@@ -59,16 +91,31 @@ impl Export {
                     title: Some(param.arg_name.get_label()),
                     schema: Declaration::Referenced(schema),
                 })
-                .map_err(|error| blueprint::Error::Schema {
-                    error: Box::new(error),
-                    location: param.location,
-                    source_code: NamedSource::new(
-                        module.input_path.display().to_string(),
-                        module.code.clone(),
-                    ),
+                .map_err(|error| {
+                    crate::Error::Blueprint(Box::new(blueprint::Error::Schema {
+                        error: Box::new(error),
+                        location: param.location,
+                        source_code: NamedSource::new(
+                            module.input_path.display().to_string(),
+                            module.code.clone(),
+                        ),
+                    }))
                 })
             })
             .collect::<Result<_, _>>()?;
+
+        if let Some(qualifier) = func.return_type.qualifier()
+            && modules
+                .values()
+                .any(|module| module.ast.type_info.opaque_types.contains(&qualifier))
+        {
+            return Err(illegal_opaque_type(
+                module,
+                func.return_type.clone(),
+                func.location,
+                "function return type",
+            ));
+        }
 
         let return_type = Annotated::from_type(
             modules.into(),
@@ -93,13 +140,15 @@ impl Export {
             title: Some("return_type".to_string()),
             schema: Declaration::Referenced(schema),
         })
-        .map_err(|error| blueprint::Error::Schema {
-            error: Box::new(error),
-            location: func.location,
-            source_code: NamedSource::new(
-                module.input_path.display().to_string(),
-                module.code.clone(),
-            ),
+        .map_err(|error| {
+            crate::Error::Blueprint(Box::new(blueprint::Error::Schema {
+                error: Box::new(error),
+                location: func.location,
+                source_code: NamedSource::new(
+                    module.input_path.display().to_string(),
+                    module.code.clone(),
+                ),
+            }))
         })?;
 
         let program = generator

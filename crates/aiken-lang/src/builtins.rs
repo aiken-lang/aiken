@@ -14,7 +14,10 @@ use crate::{
 use std::{collections::BTreeSet, sync::LazyLock};
 
 use indexmap::IndexMap;
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 use strum::IntoEnumIterator;
 
 use uplc::{
@@ -44,6 +47,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         kind: ModuleKind::Lib,
         types: HashMap::new(),
         types_constructors: HashMap::new(),
+        opaque_types: HashSet::new(),
         values: HashMap::new(),
         accessors: HashMap::new(),
         annotations: HashMap::new(),
@@ -572,6 +576,7 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
         kind: ModuleKind::Lib,
         types: HashMap::new(),
         types_constructors: HashMap::new(),
+        opaque_types: HashSet::new(),
         values: HashMap::new(),
         accessors: HashMap::new(),
         annotations: HashMap::new(),

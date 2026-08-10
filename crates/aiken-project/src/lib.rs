@@ -686,7 +686,6 @@ where
             })
             .map(|(checked_module, func)| {
                 let mut generator = self.new_generator(tracing);
-
                 Export::from_function(
                     func,
                     checked_module,
@@ -694,7 +693,6 @@ where
                     &self.checked_modules,
                     &self.config.plutus,
                 )
-                .map_err(|err| Error::Blueprint(err.into()))
             })
             .transpose()?
             .ok_or_else(|| Error::ExportNotFound {
