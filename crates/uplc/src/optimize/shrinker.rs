@@ -1,7 +1,10 @@
 use super::interner::CodeGenInterner;
 use crate::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, INDICES_CONVERTER},
+    builder::{
+        CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, G1_ELEMENTS_CONVERTER, G2_ELEMENTS_CONVERTER,
+        INDICES_CONVERTER,
+    },
     builtins::DefaultFunction,
     machine::{cost_model::ExBudget, runtime::Compressable, value::from_pallas_bigint},
 };
@@ -978,11 +981,15 @@ impl CurriedBuiltin {
 pub struct Context {
     pub inlined_apply_ids: Vec<usize>,
     pub constants_to_flip: Vec<usize>,
-    pub write_bits_indices_arg: Vec<usize>,
+    pub integer_list_args: Vec<usize>,
+    pub g1_element_list_args: Vec<usize>,
+    pub g2_element_list_args: Vec<usize>,
     pub builtins_map: IndexMap<DefaultFunction, ()>,
     pub blst_p1_list: Vec<blst_p1>,
     pub blst_p2_list: Vec<blst_p2>,
-    pub write_bits_convert: bool,
+    pub integer_list_convert: bool,
+    pub g1_element_list_convert: bool,
+    pub g2_element_list_convert: bool,
     pub node_count: usize,
 }
 
@@ -1750,10 +1757,16 @@ impl Term<Name> {
             }
         }
     }
-    // List<Int> in Aiken is actually List<Data<Int>>
-    // So now we want to convert writeBits arg List<Data<Int>> to List<Int>
+    // Aiken represents lists uniformly as lists of data: List<Int> is a
+    // list<data> of iData-wrapped integers, and List<G1Element> /
+    // List<G2Element> are list<data> of bData-wrapped *compressed* points.
+    // Some builtins (writeBits, bls12_381_gX_multiScalarMul) instead expect
+    // properly typed lists (list<integer>, list<bls12_381_gX_element> of
+    // native group elements), so we convert their arguments here: integers
+    // are unIData'ed, and points are unBData'ed and uncompressed back into
+    // group elements.
     // Important: Only runs once and at the end.
-    fn write_bits_convert_arg(
+    fn typed_list_convert_arg(
         &mut self,
         id: Option<usize>,
         mut arg_stack: Vec<Args>,
@@ -1764,7 +1777,7 @@ impl Term<Name> {
             Term::Apply { argument, .. } => {
                 let id = id.unwrap();
 
-                if context.write_bits_indices_arg.contains(&id) {
+                if context.integer_list_args.contains(&id) {
                     match Rc::make_mut(argument) {
                         Term::Constant(constant) => {
                             let Constant::ProtoList(tipo, items) = Rc::make_mut(constant) else {
@@ -1776,25 +1789,43 @@ impl Term<Name> {
 
                             for item in items {
                                 let Constant::Data(PlutusData::BigInt(i)) = item else {
-                                    unreachable!();
+                                    unreachable!("unexpected item in integer list arg: {item:#?}");
                                 };
 
                                 *item = Constant::Integer(from_pallas_bigint(i));
                             }
                         }
                         arg => {
-                            context.write_bits_convert = true;
+                            context.integer_list_convert = true;
 
                             *arg = Term::var(INDICES_CONVERTER)
                                 .apply(std::mem::replace(arg, Term::Error.force()));
                         }
                     }
+                } else if context.g1_element_list_args.contains(&id) {
+                    // BLS12-381 points cannot be represented as constants in a
+                    // serialized program, so they are always converted at
+                    // runtime, even when the list of (data-encoded) points is
+                    // a constant.
+                    context.g1_element_list_convert = true;
+
+                    let arg = Rc::make_mut(argument);
+
+                    *arg = Term::var(G1_ELEMENTS_CONVERTER)
+                        .apply(std::mem::replace(arg, Term::Error.force()));
+                } else if context.g2_element_list_args.contains(&id) {
+                    context.g2_element_list_convert = true;
+
+                    let arg = Rc::make_mut(argument);
+
+                    *arg = Term::var(G2_ELEMENTS_CONVERTER)
+                        .apply(std::mem::replace(arg, Term::Error.force()));
                 }
             }
 
             Term::Builtin(DefaultFunction::WriteBits) => {
                 if arg_stack.is_empty() {
-                    context.write_bits_convert = true;
+                    context.integer_list_convert = true;
 
                     *self = Term::write_bits()
                         .apply(Term::var("__arg_1"))
@@ -1804,14 +1835,62 @@ impl Term<Name> {
                         .lambda("__arg_2")
                         .lambda("__arg_1")
                 } else {
-                    // first arg not needed
+                    // args are in application order, so the last arg (the
+                    // bool) is popped first and not needed
                     arg_stack.pop();
 
                     let Some(Args::Apply(arg_id, _)) = arg_stack.pop() else {
                         return;
                     };
 
-                    context.write_bits_indices_arg.push(arg_id);
+                    context.integer_list_args.push(arg_id);
+                }
+            }
+
+            Term::Builtin(
+                func @ (DefaultFunction::Bls12_381_G1_MultiScalarMul
+                | DefaultFunction::Bls12_381_G2_MultiScalarMul),
+            ) => {
+                let is_g1 = matches!(func, DefaultFunction::Bls12_381_G1_MultiScalarMul);
+
+                if arg_stack.is_empty() {
+                    let func = *func;
+
+                    context.integer_list_convert = true;
+
+                    let elements_converter = if is_g1 {
+                        context.g1_element_list_convert = true;
+
+                        G1_ELEMENTS_CONVERTER
+                    } else {
+                        context.g2_element_list_convert = true;
+
+                        G2_ELEMENTS_CONVERTER
+                    };
+
+                    *self = Term::Builtin(func)
+                        .apply(Term::var(INDICES_CONVERTER).apply(Term::var("__arg_1")))
+                        .apply(Term::var(elements_converter).apply(Term::var("__arg_2")))
+                        .lambda("__arg_2")
+                        .lambda("__arg_1")
+                } else {
+                    // args are in application order, so the last arg (points)
+                    // is popped first
+                    let Some(Args::Apply(points_id, _)) = arg_stack.pop() else {
+                        return;
+                    };
+
+                    if is_g1 {
+                        context.g1_element_list_args.push(points_id);
+                    } else {
+                        context.g2_element_list_args.push(points_id);
+                    }
+
+                    let Some(Args::Apply(scalars_id, _)) = arg_stack.pop() else {
+                        return;
+                    };
+
+                    context.integer_list_args.push(scalars_id);
                 }
             }
             _ => (),
@@ -2380,11 +2459,15 @@ impl Program<Name> {
         let mut context = Context {
             inlined_apply_ids: vec![],
             constants_to_flip: vec![],
-            write_bits_indices_arg: vec![],
+            integer_list_args: vec![],
+            g1_element_list_args: vec![],
+            g2_element_list_args: vec![],
             builtins_map: IndexMap::new(),
             blst_p1_list: vec![],
             blst_p2_list: vec![],
-            write_bits_convert: false,
+            integer_list_convert: false,
+            g1_element_list_convert: false,
+            g2_element_list_convert: false,
             node_count: 0,
         };
 
@@ -2513,8 +2596,16 @@ impl Program<Name> {
                 term.remove_inlined_ids(id, vec![], scope, context);
             });
 
-        if context.write_bits_convert {
+        if context.integer_list_convert {
             program.term = program.term.data_list_to_integer_list();
+        }
+
+        if context.g1_element_list_convert {
+            program.term = program.term.data_list_to_g1_element_list();
+        }
+
+        if context.g2_element_list_convert {
+            program.term = program.term.data_list_to_g2_element_list();
         }
 
         program
@@ -2530,7 +2621,7 @@ impl Program<Name> {
     pub fn afterwards(self) -> Self {
         let (mut program, context) =
             self.traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
-                term.write_bits_convert_arg(id, arg_stack, scope, context);
+                term.typed_list_convert_arg(id, arg_stack, scope, context);
             });
 
         program = program
@@ -2540,8 +2631,16 @@ impl Program<Name> {
             })
             .0;
 
-        if context.write_bits_convert {
+        if context.integer_list_convert {
             program.term = program.term.data_list_to_integer_list();
+        }
+
+        if context.g1_element_list_convert {
+            program.term = program.term.data_list_to_g1_element_list();
+        }
+
+        if context.g2_element_list_convert {
+            program.term = program.term.data_list_to_g2_element_list();
         }
 
         let mut interner = CodeGenInterner::new();
