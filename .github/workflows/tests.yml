@@ -82,6 +82,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Install Rust 1.94.1
+        run: rustup toolchain install 1.94.1 --profile minimal --component clippy
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -89,4 +91,4 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo +1.94.1 clippy --all-targets --all-features -- -D warnings
