@@ -3828,17 +3828,23 @@ impl<'a> CodeGenerator<'a> {
 
                     interner.program(&mut program);
 
-                    let eval_program: Program<NamedDeBruijn> =
-                        program.clean_up_no_inlines().try_into().unwrap();
+                    let cleaned_program = program.clean_up_no_inlines();
 
-                    Some(
-                        eval_program
-                            .eval(ExBudget::max())
-                            .result()
-                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
-                            .try_into()
-                            .unwrap(),
-                    )
+                    let eval_program: Program<NamedDeBruijn> =
+                        cleaned_program.clone().try_into().unwrap();
+
+                    Some(match eval_program.eval(ExBudget::max()).result() {
+                        // fail/todo constants: eval returns EvaluationFailure because the
+                        // term *is* an error. Use the unevaluated form so the fail/todo
+                        // is preserved in the generated code and properly fails at runtime.
+                        Err(uplc::machine::Error::EvaluationFailure) => {
+                            cleaned_program.term.clone()
+                        }
+                        // Any other eval error is a genuine problem — propagate it rather
+                        // than silently falling back, which would change compiler behaviour.
+                        Err(e) => panic!("Failed to evaluate constant: {e:#?}"),
+                        Ok(term) => term.try_into().unwrap(),
+                    })
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
