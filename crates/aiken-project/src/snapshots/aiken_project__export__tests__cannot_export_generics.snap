@@ -2,24 +2,19 @@
 source: crates/aiken-project/src/export.rs
 description: "Code:\n\npub fn add(_a: a, _b: b) -> Bool {\n    True\n}\n"
 ---
-Schema {
-    error: Error {
-        context: FreeTypeVariable,
-        breadcrumbs: [
-            Var {
-                tipo: RefCell {
-                    value: Generic {
-                        id: 73,
-                    },
-                },
-                alias: None,
-            },
-        ],
-    },
-    location: 11..16,
-    source_code: NamedSource {
-        name: "",
-        source: "<redacted>",
-        language: None,
-    ,
-}
+        Error aiken::blueprint::interface
+
+  × I caught a free variable in the contract's interface boundary.
+   ╭─[:1:12]
+ 1 │ pub fn add(_a: a, _b: b) -> Bool {
+   ·            ──┬──
+   ·              ╰── invalid validator's boundary
+ 2 │     True
+ 3 │ }
+   ╰────
+  help: There can't be any free type variable at the contract's boundary (i.e. in types used as datum and/or redeemer). Indeed, the validator can only be invoked with (very) concrete types. Since
+        there's no reflexion possible inside a validator, it simply isn't possible to have any remaining free type variable in any of the datum or redeemer.
+        
+        I got there when trying to generate a blueprint specification of the following type:
+        
+        ╰─▶ a

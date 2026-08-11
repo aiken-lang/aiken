@@ -502,15 +502,6 @@ impl Data {
         type_parameters: &mut HashMap<u64, Rc<Type>>,
         definitions: &mut Definitions<Annotated<Schema>>,
     ) -> Result<Self, Error> {
-        if data_type.opaque {
-            // NOTE: No breadcrumbs here which is *okay*, as the caller will backtrack
-            // and add the necessary type information.
-            return Err(Error {
-                context: ErrorContext::IllegalOpaqueType,
-                breadcrumbs: vec![],
-            });
-        }
-
         let mut variants = vec![];
 
         if data_type.constructors.len() == 1
@@ -1069,9 +1060,6 @@ pub enum ErrorContext {
 
     #[error("I figured you tried to export a function in your contract's binary interface.")]
     UnexpectedFunction,
-
-    #[error("I caught an opaque type trying to escape")]
-    IllegalOpaqueType,
 }
 
 impl Error {
@@ -1097,26 +1085,6 @@ impl Error {
 
     pub fn help(&self) -> String {
         match self.context {
-            ErrorContext::IllegalOpaqueType => format!(
-                r#"Opaque types cannot figure anywhere in an outward-facing type like a validator's redeemer or datum. This is because an {opaque} type hides its implementation details, and likely enforce invariants that cannot be expressed only structurally. In particular, the {opaque} type {signature} cannot be safely constructed from any Plutus Data.
-
-Hence, {opaque} types are forbidden from interface points with the off-chain world. Instead, use an intermediate representation and construct the {opaque} type at runtime using constructors and methods provided for that type (e.g. {Dict}.{from_list}, {Rational}.{new}, ...)."#,
-                opaque = "opaque".if_supports_color(Stdout, |s| s.purple()),
-                signature = Error::fmt_breadcrumbs(&[self
-                    .breadcrumbs
-                    .last()
-                    .expect("always at least one breadcrumb")
-                    .to_owned()]),
-                Dict = "Dict"
-                    .if_supports_color(Stdout, |s| s.bright_blue())
-                    .if_supports_color(Stdout, |s| s.bold()),
-                from_list = "from_list".if_supports_color(Stdout, |s| s.blue()),
-                Rational = "Rational"
-                    .if_supports_color(Stdout, |s| s.bright_blue())
-                    .if_supports_color(Stdout, |s| s.bold()),
-                new = "new".if_supports_color(Stdout, |s| s.blue()),
-            ),
-
             ErrorContext::UnsupportedType => format!(
                 r#"I do not know how to generate a portable Plutus specification for the following type:
 

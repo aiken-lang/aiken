@@ -7,7 +7,12 @@ use crate::{
     tipo::fields::FieldMap,
 };
 use indexmap::IndexMap;
-use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    ops::Deref,
+    rc::Rc,
+};
 use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
 pub(crate) mod environment;
@@ -41,7 +46,6 @@ pub enum Type {
     ///
     App {
         public: bool,
-        contains_opaque: bool,
         module: String,
         name: String,
         args: Vec<Rc<Type>>,
@@ -86,7 +90,6 @@ impl PartialEq for Type {
                 module,
                 name,
                 args,
-                contains_opaque: _,
                 alias: _,
             } => {
                 if let Type::App {
@@ -94,7 +97,6 @@ impl PartialEq for Type {
                     module: module2,
                     name: name2,
                     args: args2,
-                    contains_opaque: _,
                     alias: _,
                 } = other
                 {
@@ -190,14 +192,12 @@ impl Type {
         Rc::new(match self {
             Type::App {
                 public,
-                contains_opaque: opaque,
                 module,
                 name,
                 args,
                 alias: _,
             } => Type::App {
                 public,
-                contains_opaque: opaque,
                 module,
                 name,
                 args,
@@ -224,31 +224,6 @@ impl Type {
             },
             Type::Tuple { .. } => Some((String::new(), "Tuple".to_string())),
             Type::Pair { .. } => Some((String::new(), "Pair".to_string())),
-        }
-    }
-
-    pub fn contains_opaque(&self) -> bool {
-        match self {
-            Type::Var { tipo, .. } => tipo.borrow().is_or_holds_opaque(),
-            Type::App {
-                contains_opaque: opaque,
-                args,
-                ..
-            } => *opaque || args.iter().any(|arg| arg.contains_opaque()),
-            Type::Tuple { elems, .. } => elems.iter().any(|elem| elem.contains_opaque()),
-            Type::Fn { .. } => false,
-            Type::Pair { fst, snd, .. } => fst.contains_opaque() || snd.contains_opaque(),
-        }
-    }
-
-    pub fn set_opaque(&mut self, opaque: bool) {
-        match self {
-            Type::App {
-                contains_opaque, ..
-            } => {
-                *contains_opaque = opaque;
-            }
-            Type::Fn { .. } | Type::Var { .. } | Type::Tuple { .. } | Type::Pair { .. } => (),
         }
     }
 
@@ -560,7 +535,6 @@ impl Type {
     pub fn get_app_args(
         &self,
         public: bool,
-        opaque: bool,
         module: &str,
         name: &str,
         arity: usize,
@@ -583,7 +557,7 @@ impl Type {
             Self::Var { tipo, alias } => {
                 let args: Vec<_> = match tipo.borrow().deref() {
                     TypeVar::Link { tipo } => {
-                        return tipo.get_app_args(public, opaque, module, name, arity, environment);
+                        return tipo.get_app_args(public, module, name, arity, environment);
                     }
 
                     TypeVar::Unbound { .. } => {
@@ -598,7 +572,6 @@ impl Type {
                 *tipo.borrow_mut() = TypeVar::Link {
                     tipo: Rc::new(Self::App {
                         public,
-                        contains_opaque: opaque,
                         name: name.to_string(),
                         module: module.to_owned(),
                         args: args.clone(),
@@ -742,7 +715,6 @@ pub fn convert_opaque_type(
         match t.as_ref() {
             Type::App {
                 public,
-                contains_opaque: opaque,
                 module,
                 name,
                 args,
@@ -753,9 +725,9 @@ pub fn convert_opaque_type(
                     let arg = convert_opaque_type(arg, data_types, deep);
                     new_args.push(arg);
                 }
+
                 Type::App {
                     public: *public,
-                    contains_opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
                     args: new_args,
@@ -842,7 +814,6 @@ pub fn find_and_replace_generics(
             Type::App {
                 args,
                 public,
-                contains_opaque: opaque,
                 module,
                 name,
                 alias,
@@ -853,11 +824,10 @@ pub fn find_and_replace_generics(
                     new_args.push(arg);
                 }
                 let t = Type::App {
-                    args: new_args,
                     public: *public,
-                    contains_opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
+                    args: new_args,
                     alias: alias.clone(),
                 };
                 t.into()
@@ -955,13 +925,6 @@ impl TypeVar {
 
     pub fn is_unbound(&self) -> bool {
         matches!(self, Self::Unbound { .. })
-    }
-
-    pub fn is_or_holds_opaque(&self) -> bool {
-        match self {
-            Self::Link { tipo } => tipo.contains_opaque(),
-            _ => false,
-        }
     }
 
     pub fn is_void(&self) -> bool {
@@ -1335,6 +1298,7 @@ pub struct TypeInfo {
     pub package: String,
     pub types: HashMap<String, TypeConstructor>,
     pub types_constructors: HashMap<String, Vec<String>>,
+    pub opaque_types: HashSet<(String, String)>,
     pub values: HashMap<String, ValueConstructor>,
     pub accessors: HashMap<String, AccessorsMap>,
     pub annotations: HashMap<Annotation, Rc<Type>>,

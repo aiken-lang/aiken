@@ -10,6 +10,8 @@ pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const EXPECT_ON_LIST: &str = "__expect_on_list";
 pub const INNER_EXPECT_ON_LIST: &str = "__inner_expect_on_list";
 pub const INDICES_CONVERTER: &str = "__indices_converter";
+pub const G1_ELEMENTS_CONVERTER: &str = "__g1_elements_converter";
+pub const G2_ELEMENTS_CONVERTER: &str = "__g2_elements_converter";
 
 impl<T> Term<T>
 where
@@ -555,31 +557,55 @@ impl Term<Name> {
         )
     }
 
-    pub fn data_list_to_integer_list(self) -> Self {
-        self.lambda(INDICES_CONVERTER)
-            .apply(Term::var(INDICES_CONVERTER).apply(Term::var(INDICES_CONVERTER)))
-            .lambda(INDICES_CONVERTER)
+    /// Binds `converter_name` to a recursive function converting a list of
+    /// data into a list of `inner_type`, where each element is converted with
+    /// `convert_head`.
+    fn data_list_converter(
+        self,
+        converter_name: &str,
+        inner_type: Type,
+        convert_head: impl FnOnce(Term<Name>) -> Term<Name>,
+    ) -> Term<Name> {
+        self.lambda(converter_name)
+            .apply(Term::var(converter_name).apply(Term::var(converter_name)))
+            .lambda(converter_name)
             .apply(
                 Term::var("xs")
                     .delayed_choose_list(
-                        Term::int_values(vec![]),
+                        Term::Constant(Constant::ProtoList(inner_type, vec![]).into()),
                         Term::mk_cons()
                             .apply(Term::var("x"))
                             .apply(
-                                Term::var(INDICES_CONVERTER)
-                                    .apply(Term::var(INDICES_CONVERTER))
+                                Term::var(converter_name)
+                                    .apply(Term::var(converter_name))
                                     .apply(Term::var("rest")),
                             )
                             .lambda("rest")
                             .apply(Term::tail_list().apply(Term::var("xs")))
                             .lambda("x")
-                            .apply(
-                                Term::un_i_data().apply(Term::head_list().apply(Term::var("xs"))),
-                            ),
+                            .apply(convert_head(Term::head_list().apply(Term::var("xs")))),
                     )
                     .lambda("xs")
-                    .lambda(INDICES_CONVERTER),
+                    .lambda(converter_name),
             )
+    }
+
+    pub fn data_list_to_integer_list(self) -> Term<Name> {
+        self.data_list_converter(INDICES_CONVERTER, Type::Integer, |head| {
+            Term::un_i_data().apply(head)
+        })
+    }
+
+    pub fn data_list_to_g1_element_list(self) -> Term<Name> {
+        self.data_list_converter(G1_ELEMENTS_CONVERTER, Type::Bls12_381G1Element, |head| {
+            Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(head))
+        })
+    }
+
+    pub fn data_list_to_g2_element_list(self) -> Term<Name> {
+        self.data_list_converter(G2_ELEMENTS_CONVERTER, Type::Bls12_381G2Element, |head| {
+            Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(head))
+        })
     }
 
     /// Introduce a let-binding for a given term. The callback receives a Term::Var

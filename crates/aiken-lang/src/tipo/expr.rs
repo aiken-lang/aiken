@@ -2961,7 +2961,6 @@ pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> R
             name: _,
             module: _,
             public: _,
-            contains_opaque: _,
             alias: _,
         } => {
             if !is_top_level && t.is_ml_result() {
