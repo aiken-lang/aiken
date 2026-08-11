@@ -146,6 +146,8 @@ pub enum Error {
     HashToCurveDstTooBig,
     #[error("Scalar exceeds 512-byte bound for multiScalarMul")]
     MsmScalarOutOfBounds,
+    #[error("constructor tag is not a valid unsigned 64-bit integer: {0}")]
+    ConstrTagOutOfRange(String),
     #[cfg(not(target_family = "wasm"))]
     #[error(transparent)]
     Secp256k1(#[from] secp256k1::Error),

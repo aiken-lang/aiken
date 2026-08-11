@@ -83,59 +83,54 @@ impl ParsedDocument {
                         continue;
                     }
 
-                    match unqualified {
-                        // There's already a matching qualified import, so we have nothing to do.
-                        None => return None,
-                        Some(unqualified) => {
-                            let mut last_unqualified = None;
+                    let unqualified = unqualified?;
+                    let mut last_unqualified = None;
 
-                            // Insert lexicographically, assuming unqualified imports are already
-                            // ordered. If they are not, it doesn't really matter where we insert
-                            // anyway.
-                            for existing_unqualified in unqualified_list {
-                                last_unqualified = Some(existing_unqualified.location);
+                    // Insert lexicographically, assuming unqualified imports are already
+                    // ordered. If they are not, it doesn't really matter where we insert
+                    // anyway.
+                    for existing_unqualified in unqualified_list {
+                        last_unqualified = Some(existing_unqualified.location);
 
-                                let existing_name = existing_unqualified
-                                    .as_name
-                                    .as_ref()
-                                    .unwrap_or(&existing_unqualified.name);
+                        let existing_name = existing_unqualified
+                            .as_name
+                            .as_ref()
+                            .unwrap_or(&existing_unqualified.name);
 
-                                // The unqualified import already exist, nothing to do.
-                                if unqualified == existing_name {
-                                    return None;
-                                // Current import is lexicographically greater, we can insert before
-                                } else if unqualified < existing_name.as_str() {
-                                    return Some(self.insert_qualified_before(
-                                        import,
-                                        as_name.as_deref(),
-                                        unqualified,
-                                        existing_unqualified.location,
-                                    ));
-                                } else {
-                                    continue;
-                                }
-                            }
-
-                            return match last_unqualified {
-                                // Only happens if 'unqualified_list' is empty, in which case, we
-                                // simply create a new unqualified list of import.
-                                None => Some(self.add_new_qualified(
-                                    import,
-                                    as_name.as_deref(),
-                                    unqualified,
-                                    *unqualified_end,
-                                )),
-                                // Happens if the new qualified import is lexicographically after
-                                // all existing ones.
-                                Some(location) => Some(self.insert_qualified_after(
-                                    import,
-                                    as_name.as_deref(),
-                                    unqualified,
-                                    location,
-                                )),
-                            };
+                        // The unqualified import already exist, nothing to do.
+                        if unqualified == existing_name {
+                            return None;
+                        // Current import is lexicographically greater, we can insert before
+                        } else if unqualified < existing_name.as_str() {
+                            return Some(self.insert_qualified_before(
+                                import,
+                                as_name.as_deref(),
+                                unqualified,
+                                existing_unqualified.location,
+                            ));
+                        } else {
+                            continue;
                         }
                     }
+
+                    return match last_unqualified {
+                        // Only happens if 'unqualified_list' is empty, in which case, we
+                        // simply create a new unqualified list of import.
+                        None => Some(self.add_new_qualified(
+                            import,
+                            as_name.as_deref(),
+                            unqualified,
+                            *unqualified_end,
+                        )),
+                        // Happens if the new qualified import is lexicographically after
+                        // all existing ones.
+                        Some(location) => Some(self.insert_qualified_after(
+                            import,
+                            as_name.as_deref(),
+                            unqualified,
+                            location,
+                        )),
+                    };
                 }
                 _ => continue,
             }
