@@ -2291,7 +2291,7 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 #[cfg(test)]
 mod tests {
     use super::{BuiltinSemantics, Error, convert_constr_to_tag, convert_tag_to_constr};
-    use crate::{builtins::DefaultFunction, machine::value::Value};
+    use crate::{ast::Type, builtins::DefaultFunction, machine::value::Value};
     use num_bigint::BigInt;
     use pallas_primitives::conway::Language;
 
@@ -2322,6 +2322,24 @@ mod tests {
                 .unwrap(),
             Value::integer(4.into())
         );
+    }
+
+    #[test]
+    fn constr_data_rejects_constructor_tag_above_u64_max() {
+        // Regression for aiken-lang/aiken#1359 — evaluating
+        // `ConstrData` with a constructor tag larger than `u64::MAX`
+        // used to panic via `try_into().unwrap()`. After the fix it
+        // surfaces a typed `Error::ConstrTagOutOfRange` error instead.
+
+        let too_large = BigInt::from(u64::MAX) + BigInt::from(1u8);
+        let empty_data_list = Value::list(Type::Data, vec![]);
+
+        let args = [Value::integer(too_large), empty_data_list];
+
+        match DefaultFunction::ConstrData.call(BuiltinSemantics::C, &args, &mut vec![]) {
+            Err(Error::ConstrTagOutOfRange(_)) => {}
+            other => panic!("expected Error::ConstrTagOutOfRange, got: {:?}", other),
+        }
     }
 
     #[test]
