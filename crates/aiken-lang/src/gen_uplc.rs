@@ -3280,6 +3280,37 @@ impl<'a> CodeGenerator<'a> {
                 // now hoist full function onto validator tree
                 *node_to_edit = defined_dependencies;
 
+                // Register the hoisted function in key_to_func so DefineFunc-generated
+                // UPLC can look it up when the function is called. Without this, same-module
+                // function dependencies end up as free variables in the exported UPLC.
+                // Only do this when the function is in self.functions (not for code-gen
+                // functions, which have module_name = "" and are stored differently).
+                if self.functions.contains_key(key) {
+                    let func_key_name = if key.module_name.is_empty() {
+                        format!("{}{}", key.function_name, variant)
+                    } else {
+                        format!("{}_{}{}", key.module_name, key.function_name, variant)
+                    };
+                    let HoistableFunction::Function {
+                        body: func_body_air,
+                        ..
+                    } = function
+                    else {
+                        unreachable!()
+                    };
+                    let func_body_vec = func_body_air.to_vec();
+                    let func_term = self.uplc_code_gen(func_body_vec);
+                    let func_def = self
+                        .functions
+                        .get(key)
+                        .expect("Function must be in self.functions");
+                    self.special_functions.insert_new_function(
+                        func_key_name.clone(),
+                        func_term,
+                        func_def.return_type.clone(),
+                    );
+                }
+
                 hoisted_functions.push((key.clone(), variant.clone()));
             }
             HoistableFunction::CyclicFunction {

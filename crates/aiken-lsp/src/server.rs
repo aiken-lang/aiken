@@ -465,17 +465,17 @@ impl Server {
         let (uri, line_numbers) = match location.module {
             None => (params.text_document.uri, &line_numbers),
             Some(name) => {
-                let module = match self
+                let module = self
                     .compiler
                     .as_ref()
-                    .and_then(|compiler| compiler.sources.get(name))
-                {
-                    Some(module) => module,
+                    .and_then(|compiler| compiler.sources.get(name));
 
+                let module = match module {
+                    Some(module) => module,
                     None => return Ok(None),
                 };
 
-                let url = url::Url::parse(&format!("file:///{}", &module.path))
+                let url = url::Url::parse(&format!("file:///{}", module.path))
                     .expect("goto definition URL parse");
 
                 (url, &module.line_numbers)

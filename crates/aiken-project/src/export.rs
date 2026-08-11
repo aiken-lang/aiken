@@ -163,7 +163,7 @@ impl Export {
         };
 
         Ok(Export {
-            name: format!("{}.{}", &module.name, &func.name),
+            name: format!("{}.{}", module.name, func.name),
             doc: func.doc.clone(),
             parameters,
             return_type,
@@ -274,5 +274,51 @@ mod tests {
             }
             "#
         );
+    }
+
+    /// Regression test for https://github.com/aiken-lang/aiken/issues/1333
+    /// When exporting a function that calls a same-module helper function,
+    /// the helper must be included in the generated UPLC (not left as a free variable).
+    #[test]
+    fn export_same_module_dependency() {
+        let mut project = TestProject::new();
+
+        let code = indoc::indoc! { r#"
+            pub fn helper(x: Int) -> Bool { x > 0 }
+            pub fn main(y: Int) -> Bool { helper(y) }
+        "# };
+
+        let modules = CheckedModules::singleton(project.check(project.parse(code)));
+
+        let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+
+        // Find the `main` function specifically (not just the first export)
+        let (module, func) = modules
+            .functions()
+            .find(|(_, f)| f.name == "main")
+            .expect("Could not find `main` function");
+
+        let export = Export::from_function(
+            func,
+            module,
+            &mut generator,
+            &modules,
+            &PlutusVersion::default(),
+        );
+
+        match export {
+            Err(e) => panic!("Export failed: {:?}", e),
+            Ok(validator) => {
+                // The validator serializes to JSON; verify no free-variable runtime error
+                let json = serde_json::to_string(&validator).expect("Validator must serialize");
+                assert!(!json.is_empty(), "Validator JSON should not be empty");
+                // Verify it looks like a validator export (has compiledCode and definitions)
+                assert!(
+                    json.contains("compiledCode") && json.contains("definitions"),
+                    "Validator JSON should have compiledCode and definitions: {}",
+                    json
+                );
+            }
+        }
     }
 }

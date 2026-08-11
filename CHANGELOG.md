@@ -6,7 +6,7 @@
 
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
 - **uplc**: Convert `bls12_381_g1_multi_scalar_mul` / `bls12_381_g2_multi_scalar_mul` arguments from Aiken's data-encoded lists to the typed `List<Int>` and `List<G1Element>` / `List<G2Element>` constants expected by the builtins, like already done for `write_bits`. Fixes [#1378](https://github.com/aiken-lang/aiken/issues/1378). @perturbing
-
+- **aiken-lang**: Fixed `aiken export` producing UPLC with free variable references when a function calls a same-module private helper function. The helper function body is now correctly included in the exported UPLC. Fixes [#1333](https://github.com/aiken-lang/aiken/issues/1333). @sophia
 
 ## v1.1.23 - 2026-06-26
 
