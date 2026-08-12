@@ -1439,8 +1439,17 @@ impl Term<Name> {
             Term::Force(f) => {
                 Rc::make_mut(f).substitute_var(original, replace_with);
             }
-            Term::Case { .. } => todo!(),
-            Term::Constr { .. } => todo!(),
+            Term::Case { constr, branches } => {
+                Rc::make_mut(constr).substitute_var(original.clone(), replace_with);
+                for branch in branches {
+                    branch.substitute_var(original.clone(), replace_with);
+                }
+            }
+            Term::Constr { fields, .. } => {
+                for field in fields {
+                    field.substitute_var(original.clone(), replace_with);
+                }
+            }
             _ => (),
         }
     }
@@ -1475,8 +1484,18 @@ impl Term<Name> {
                 }
             }
             Term::Force(f) => Rc::make_mut(f).substitute_single_var(original, replace_with),
-            Term::Case { .. } => todo!(),
-            Term::Constr { .. } => todo!(),
+            Term::Case { constr, branches } => {
+                if Rc::make_mut(constr).substitute_single_var(original.clone(), replace_with) {
+                    true
+                } else {
+                    branches
+                        .iter_mut()
+                        .any(|branch| branch.substitute_single_var(original.clone(), replace_with))
+                }
+            }
+            Term::Constr { fields, .. } => fields
+                .iter_mut()
+                .any(|field| field.substitute_single_var(original.clone(), replace_with)),
             _ => false,
         }
     }
@@ -3332,6 +3351,27 @@ mod tests {
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn single_substitution_traverses_case_and_constr() {
+        let program = Program {
+            version: (1, 1, 0),
+            term: Term::constr(0, vec![Term::var("pair")])
+                .case(vec![Term::var("branch")])
+                .lambda("pair")
+                .apply(Term::integer(20.into()))
+                .lambda("branch")
+                .apply(Term::integer(30.into())),
+        };
+
+        let expected = Program {
+            version: (1, 1, 0),
+            term: Term::constr(0, vec![Term::integer(20.into())])
+                .case(vec![Term::integer(30.into())]),
+        };
+
+        compare_optimization(expected, program, |program| program.multi_pass().0);
     }
 
     #[test]
