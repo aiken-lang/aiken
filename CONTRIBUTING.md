@@ -49,6 +49,7 @@
    - runtime / evaluator changes usually benefit from targeted `uplc` tests before a full workspace run
 
    CI runs the following commands. To save time, it's good to run these on your local machine before pushing to origin.
+   (CI runs these commands with the latest version of Rust)
 
    ```
    cargo build --workspace
