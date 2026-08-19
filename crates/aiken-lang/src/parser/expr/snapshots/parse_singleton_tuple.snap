@@ -1,0 +1,5 @@
+---
+source: crates/aiken-lang/src/parser/expr/tuple.rs
+description: "Invalid code (parse error):\n\n(x,)"
+---
+I found an unexpected token ')'.

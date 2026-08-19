@@ -1,0 +1,37 @@
+---
+source: crates/aiken-lang/src/parser/expr/block.rs
+description: "Code:\n\n(\n  let x = 1\n  x\n)"
+---
+Sequence {
+    location: 4..17,
+    expressions: [
+        Assignment {
+            location: 4..13,
+            value: UInt {
+                location: 12..13,
+                value: "1",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+            patterns: [
+                AssignmentPattern {
+                    pattern: Var {
+                        location: 8..9,
+                        name: "x",
+                    },
+                    annotation: None,
+                    location: 8..9,
+                },
+            ],
+            kind: Let {
+                backpassing: false,
+            },
+            comment: None,
+        },
+        Var {
+            location: 16..17,
+            name: "x",
+        },
+    ],
+}
