@@ -28,7 +28,10 @@ mod test {
 
     const TEST_KIND: ModuleKind = ModuleKind::Lib;
 
-    pub fn test_from_source(src: &str) -> (Test, IndexMap<DataTypeKey, TypedDataType>) {
+    pub fn with_test_from_source<R>(
+        src: &str,
+        and_then: impl FnOnce(Test, &mut CodeGenerator<'_>, &IndexMap<DataTypeKey, TypedDataType>) -> R,
+    ) -> R {
         let id_gen = IdGenerator::new();
 
         let module_name = "";
@@ -97,16 +100,21 @@ mod test {
             Tracing::All(TraceLevel::Verbose),
         );
 
-        (
-            Test::from_function_definition(
-                &mut generator,
-                test.to_owned(),
-                module_name.to_string(),
-                PathBuf::new(),
-                RunnableKind::Test,
-            ),
-            data_types,
-        )
+        let test = Test::from_function_definition(
+            &mut generator,
+            test.to_owned(),
+            module_name.to_string(),
+            PathBuf::new(),
+            RunnableKind::Test,
+        );
+
+        and_then(test, &mut generator, &data_types)
+    }
+
+    pub fn test_from_source(src: &str) -> (Test, IndexMap<DataTypeKey, TypedDataType>) {
+        with_test_from_source(src, |test, _generator, data_types| {
+            (test, data_types.clone())
+        })
     }
 
     fn property(src: &str) -> (PropertyTest, impl Fn(PlutusData) -> String) {
@@ -225,28 +233,36 @@ mod test {
     }
 
     fn unit_test(src: &str) -> Option<String> {
-        match test_from_source(src) {
-            (Test::PropertyTest(..), _) => {
+        with_test_from_source(src, |test, generator, data_types| match test {
+            Test::PropertyTest(..) => {
                 panic!("Expected to yield a UnitTest but found a PropertyTest")
             }
-            (Test::UnitTest(test), data_types) => {
+            Test::UnitTest(test) => {
                 let expected_failure =
                     matches!(test.on_test_failure, OnTestFailure::SucceedImmediately);
 
-                let data_types_refs = utils::indexmap::as_ref_values(&data_types);
+                let data_types_refs = utils::indexmap::as_ref_values(data_types);
 
-                let result = test
-                    .run(&PlutusVersion::V3, Tracing::verbose())
-                    .reify(&data_types_refs);
+                let mut result = test.run(&PlutusVersion::V3, Tracing::verbose());
+
+                // Assertion operands are evaluated lazily, only for failures
+                // (mirrors Project::run_runnables).
+                if !result.success
+                    && let Some(assertion) = &result.test.assertion
+                {
+                    result.assertion = Some(assertion.evaluate(generator, &result.test.module));
+                }
+
+                let result = result.reify(&data_types_refs);
 
                 result
                     .assertion
                     .map(|a| a.to_string(expected_failure, &AssertionStyleOptions::new(None)))
             }
-            (Test::Benchmark(..), _) => {
+            Test::Benchmark(..) => {
                 panic!("Expected to yield a PropertyTest but found a Benchmark")
             }
-        }
+        })
     }
 
     fn expect_failure<'a>(

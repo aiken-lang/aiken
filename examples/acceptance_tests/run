@@ -16,7 +16,7 @@ TARGET="$WORKDIR/$(basename $1)"
 
 TMP=$(mktemp)
 VALIDATORS=$(find $TARGET -type f -path "*validators/*.ak")
-cargo run -r --quiet -- check -S $TARGET 1>$TMP 2>/dev/null
+cargo run -r -- check -S "$TARGET" >"$TMP" 2>&1
 if [ "$?" -eq "0" ]; then
   if [ -z "$VALIDATORS" ]; then
     echo "✅ $(basename $TARGET)"

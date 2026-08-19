@@ -1,6 +1,6 @@
 use super::interner::CodeGenInterner;
 use crate::{
-    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
+    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type, Unique},
     builder::{
         CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, G1_ELEMENTS_CONVERTER, G2_ELEMENTS_CONVERTER,
         INDICES_CONVERTER,
@@ -12,7 +12,7 @@ use blst::{blst_p1, blst_p2};
 use indexmap::IndexMap;
 use itertools::{FoldWhile, Itertools};
 use pallas_primitives::conway::{BigInt, PlutusData};
-use std::{cmp::Ordering, iter, ops::Neg, rc::Rc};
+use std::{cmp::Ordering, collections::HashMap, iter, ops::Neg, rc::Rc};
 use strum::IntoEnumIterator;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug, PartialOrd)]
@@ -142,6 +142,184 @@ impl VarLookup {
             }
         } else {
             self
+        }
+    }
+}
+
+/// Exact, whole-program occurrence counts for uniquely-bound names, computed
+/// once per shrinker pass and kept trustworthy through conservative
+/// invalidation.
+///
+/// The inline pass needs, for every applied lambda, whether its parameter
+/// occurs 0, 1, or more times in the body. Scanning the body per binder makes
+/// the pass quadratic on programs with long chains of hoisted definitions, so
+/// `multi_pass` precomputes the counts in one walk and `inline_reducer`
+/// consults them instead of scanning wherever a count alone decides the
+/// outcome.
+///
+/// A count is only trusted when it is guaranteed to equal what a fresh
+/// body scan would return at that moment:
+///
+/// - Names bound by more than one lambda (shadowing/duplication), sharing a
+///   `Unique` with a different text, or introduced by reducers after the
+///   precompute are never trusted (in a well-scoped program with unique
+///   names, a name's whole-program count equals its in-body count, which is
+///   why single binding is required).
+/// - Reducer steps that *move* a subtree (single-occurrence inlining,
+///   force/delay cancellation, data cast cancellation, constant folding of
+///   constant arguments) leave every count unchanged and need no bookkeeping.
+/// - Reducer steps that *drop* or *duplicate* a subtree that may contain
+///   variables (dead-argument elimination, multi-occurrence substitution,
+///   identity-function elimination) invalidate every name occurring in that
+///   subtree, so those names fall back to a real scan.
+#[derive(Debug, Clone)]
+pub struct OccurrenceTracker {
+    enabled: bool,
+    entries: HashMap<Unique, OccurrenceEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct OccurrenceEntry {
+    text: String,
+    count: usize,
+    bound: bool,
+    invalid: bool,
+}
+
+impl OccurrenceTracker {
+    pub fn disabled() -> Self {
+        OccurrenceTracker {
+            enabled: false,
+            entries: HashMap::new(),
+        }
+    }
+
+    pub fn new(term: &Term<Name>) -> Self {
+        let mut tracker = OccurrenceTracker {
+            enabled: true,
+            entries: HashMap::new(),
+        };
+
+        let mut stack = vec![term];
+
+        while let Some(t) = stack.pop() {
+            match t {
+                Term::Var(name) => {
+                    let entry = tracker.entry(name);
+                    entry.count += 1;
+                }
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    if parameter_name.text != NO_INLINE {
+                        let entry = tracker.entry(parameter_name);
+                        if entry.bound {
+                            // Two binders for the same name: in-body counts no
+                            // longer match whole-program counts.
+                            entry.invalid = true;
+                        } else {
+                            entry.bound = true;
+                        }
+                    }
+                    stack.push(body);
+                }
+                Term::Apply { function, argument } => {
+                    stack.push(function);
+                    stack.push(argument);
+                }
+                Term::Delay(body) => stack.push(body),
+                Term::Force(body) => stack.push(body),
+                Term::Case { constr, branches } => {
+                    stack.push(constr);
+                    stack.extend(branches.iter());
+                }
+                Term::Constr { fields, .. } => stack.extend(fields.iter()),
+                Term::Constant(_) | Term::Builtin(_) | Term::Error => (),
+            }
+        }
+
+        tracker
+    }
+
+    fn entry(&mut self, name: &Name) -> &mut OccurrenceEntry {
+        let entry = self
+            .entries
+            .entry(name.unique)
+            .or_insert_with(|| OccurrenceEntry {
+                text: name.text.clone(),
+                count: 0,
+                bound: false,
+                invalid: false,
+            });
+
+        if entry.text != name.text {
+            // Distinct names sharing a Unique: give up on this slot.
+            entry.invalid = true;
+        }
+
+        entry
+    }
+
+    /// The exact number of occurrences of `name`, or None when the tracker
+    /// cannot vouch for it (disabled, unknown, shadowed, or invalidated).
+    pub fn trusted_count(&self, name: &Name) -> Option<usize> {
+        if !self.enabled {
+            return None;
+        }
+
+        let entry = self.entries.get(&name.unique)?;
+
+        if entry.invalid || !entry.bound || entry.text != name.text {
+            return None;
+        }
+
+        Some(entry.count)
+    }
+
+    /// Stop trusting `name`.
+    pub fn invalidate(&mut self, name: &Name) {
+        if !self.enabled {
+            return;
+        }
+
+        self.entry(name).invalid = true;
+    }
+
+    /// Stop trusting every name that occurs anywhere in `term` (variables and
+    /// binders alike). Called when a reducer drops or duplicates `term`.
+    pub fn invalidate_term(&mut self, term: &Term<Name>) {
+        if !self.enabled {
+            return;
+        }
+
+        let mut stack = vec![term];
+
+        while let Some(t) = stack.pop() {
+            match t {
+                Term::Var(name) => self.invalidate(name),
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    if parameter_name.text != NO_INLINE {
+                        self.invalidate(parameter_name);
+                    }
+                    stack.push(body);
+                }
+                Term::Apply { function, argument } => {
+                    stack.push(function);
+                    stack.push(argument);
+                }
+                Term::Delay(body) => stack.push(body),
+                Term::Force(body) => stack.push(body),
+                Term::Case { constr, branches } => {
+                    stack.push(constr);
+                    stack.extend(branches.iter());
+                }
+                Term::Constr { fields, .. } => stack.extend(fields.iter()),
+                Term::Constant(_) | Term::Builtin(_) | Term::Error => (),
+            }
         }
     }
 }
@@ -979,6 +1157,7 @@ impl CurriedBuiltin {
 
 #[derive(Debug, Clone)]
 pub struct Context {
+    pub occurrences: OccurrenceTracker,
     pub inlined_apply_ids: Vec<usize>,
     pub constants_to_flip: Vec<usize>,
     pub integer_list_args: Vec<usize>,
@@ -1000,6 +1179,7 @@ pub enum Args {
 }
 
 impl Term<Name> {
+    #[allow(clippy::too_many_arguments)]
     fn traverse_uplc_with_helper(
         &mut self,
         scope: &Scope,
@@ -1008,18 +1188,31 @@ impl Term<Name> {
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
         context: &mut Context,
         inline_lambda: bool,
+        track_scopes: bool,
     ) {
         match self {
             Term::Apply { function, argument } => {
                 let arg = Rc::make_mut(argument);
 
+                // Scopes are only consulted by builtin_curry_reducer; other
+                // traversals skip maintaining them since each push clones the
+                // whole scope path.
+                let arg_scope;
+                let arg_scope = if track_scopes {
+                    arg_scope = scope.push(ScopePath::ARG);
+                    &arg_scope
+                } else {
+                    scope
+                };
+
                 arg.traverse_uplc_with_helper(
-                    &scope.push(ScopePath::ARG),
+                    arg_scope,
                     vec![],
                     id_gen,
                     with,
                     context,
                     inline_lambda,
+                    track_scopes,
                 );
                 let apply_id = id_gen.next_id();
 
@@ -1028,13 +1221,22 @@ impl Term<Name> {
 
                 let func = Rc::make_mut(function);
 
+                let func_scope;
+                let func_scope = if track_scopes {
+                    func_scope = scope.push(ScopePath::FUNC);
+                    &func_scope
+                } else {
+                    scope
+                };
+
                 func.traverse_uplc_with_helper(
-                    &scope.push(ScopePath::FUNC),
+                    func_scope,
                     arg_stack,
                     id_gen,
                     with,
                     context,
                     inline_lambda,
+                    track_scopes,
                 );
 
                 with(Some(apply_id), self, vec![], scope, context);
@@ -1045,7 +1247,15 @@ impl Term<Name> {
 
                 arg_stack.push(Args::Force(force_id));
 
-                f.traverse_uplc_with_helper(scope, arg_stack, id_gen, with, context, inline_lambda);
+                f.traverse_uplc_with_helper(
+                    scope,
+                    arg_stack,
+                    id_gen,
+                    with,
+                    context,
+                    inline_lambda,
+                    track_scopes,
+                );
 
                 with(Some(force_id), self, vec![], scope, context);
             }
@@ -1059,7 +1269,15 @@ impl Term<Name> {
                     })
                     .unwrap_or_default();
 
-                d.traverse_uplc_with_helper(scope, arg_stack, id_gen, with, context, inline_lambda);
+                d.traverse_uplc_with_helper(
+                    scope,
+                    arg_stack,
+                    id_gen,
+                    with,
+                    context,
+                    inline_lambda,
+                    track_scopes,
+                );
 
                 with(None, self, delay_arg, scope, context);
             }
@@ -1102,6 +1320,7 @@ impl Term<Name> {
                                 with,
                                 context,
                                 inline_lambda,
+                                track_scopes,
                             );
                         }
                         other => other.traverse_uplc_with_helper(
@@ -1111,6 +1330,7 @@ impl Term<Name> {
                             with,
                             context,
                             inline_lambda,
+                            track_scopes,
                         ),
                     }
                 } else {
@@ -1123,6 +1343,7 @@ impl Term<Name> {
                         with,
                         context,
                         inline_lambda,
+                        track_scopes,
                     );
 
                     with(None, self, args, scope, context);
@@ -1138,6 +1359,7 @@ impl Term<Name> {
                     with,
                     context,
                     inline_lambda,
+                    track_scopes,
                 );
 
                 if branches.len() == 1 {
@@ -1150,6 +1372,7 @@ impl Term<Name> {
                         with,
                         context,
                         inline_lambda,
+                        track_scopes,
                     );
                 } else {
                     for branch in branches {
@@ -1160,6 +1383,7 @@ impl Term<Name> {
                             with,
                             context,
                             inline_lambda,
+                            track_scopes,
                         );
                     }
                 }
@@ -1173,6 +1397,7 @@ impl Term<Name> {
                         with,
                         context,
                         inline_lambda,
+                        track_scopes,
                     );
                 }
             }
@@ -1214,9 +1439,64 @@ impl Term<Name> {
             Term::Force(f) => {
                 Rc::make_mut(f).substitute_var(original, replace_with);
             }
-            Term::Case { .. } => todo!(),
-            Term::Constr { .. } => todo!(),
+            Term::Case { constr, branches } => {
+                Rc::make_mut(constr).substitute_var(original.clone(), replace_with);
+                for branch in branches {
+                    branch.substitute_var(original.clone(), replace_with);
+                }
+            }
+            Term::Constr { fields, .. } => {
+                for field in fields {
+                    field.substitute_var(original.clone(), replace_with);
+                }
+            }
             _ => (),
+        }
+    }
+
+    /// Like `substitute_var`, but for callers that know `original` occurs at
+    /// most once (e.g. after counting occurrences with a cap of 2): the
+    /// traversal stops as soon as the substitution happened instead of
+    /// scanning the rest of the term. Returns whether a substitution was made.
+    fn substitute_single_var(&mut self, original: Rc<Name>, replace_with: &Term<Name>) -> bool {
+        match self {
+            Term::Var(name) if *name == original => {
+                *self = replace_with.clone();
+                true
+            }
+            Term::Delay(body) => Rc::make_mut(body).substitute_single_var(original, replace_with),
+            Term::Lambda {
+                parameter_name,
+                body,
+            } if *parameter_name != original => {
+                Rc::make_mut(body).substitute_single_var(original, replace_with)
+            }
+            Term::Apply { function, argument } => {
+                // Argument-first for the same reason as the capped occurrence
+                // scan: with at most one occurrence in the term, the search
+                // order cannot change the result, and the occurrence typically
+                // sits in a nearby argument rather than down the function
+                // spine.
+                if Rc::make_mut(argument).substitute_single_var(original.clone(), replace_with) {
+                    true
+                } else {
+                    Rc::make_mut(function).substitute_single_var(original, replace_with)
+                }
+            }
+            Term::Force(f) => Rc::make_mut(f).substitute_single_var(original, replace_with),
+            Term::Case { constr, branches } => {
+                if Rc::make_mut(constr).substitute_single_var(original.clone(), replace_with) {
+                    true
+                } else {
+                    branches
+                        .iter_mut()
+                        .any(|branch| branch.substitute_single_var(original.clone(), replace_with))
+                }
+            }
+            Term::Constr { fields, .. } => fields
+                .iter_mut()
+                .any(|field| field.substitute_single_var(original.clone(), replace_with)),
+            _ => false,
         }
     }
 
@@ -1255,11 +1535,28 @@ impl Term<Name> {
         }
     }
 
+    /// Count occurrences of `search_for`, stopping as soon as `cap` occurrences
+    /// have been seen.
+    ///
+    /// When the returned `occurrences` is below `cap`, the traversal ran to
+    /// completion and every field of the `VarLookup` is exact. When it is `>=
+    /// cap`, the scan was aborted early and `occurrences`, `delays` and
+    /// `no_inline` are lower bounds only; callers passing a finite `cap` must
+    /// therefore only rely on distinctions below their cap (e.g. `cap = 2` to
+    /// distinguish "unused" / "used once" / "used more than once"). Pass
+    /// `usize::MAX` for an exhaustive count.
+    ///
+    /// The cap exists because this scan runs for every binder the shrinker
+    /// considers for inlining: on large programs (thousands of hoisted
+    /// definitions), exhaustive counting makes the inline pass quadratic in
+    /// program size, while the inline decisions themselves never need to know
+    /// more than "does it occur 0, 1, or more times".
     fn var_occurrences(
         &self,
         search_for: Rc<Name>,
         mut arg_stack: Vec<()>,
         mut force_stack: Vec<()>,
+        cap: usize,
     ) -> VarLookup {
         match self {
             Term::Var(name) => {
@@ -1272,7 +1569,7 @@ impl Term<Name> {
             Term::Delay(body) => {
                 let not_forced = usize::from(force_stack.pop().is_none());
 
-                body.var_occurrences(search_for, arg_stack, force_stack)
+                body.var_occurrences(search_for, arg_stack, force_stack, cap)
                     .delay_if_found(not_forced)
             }
             Term::Lambda {
@@ -1280,13 +1577,13 @@ impl Term<Name> {
                 body,
             } => {
                 if parameter_name.text == NO_INLINE {
-                    body.var_occurrences(search_for, arg_stack, force_stack)
+                    body.var_occurrences(search_for, arg_stack, force_stack, cap)
                         .no_inline_if_found()
                 } else if *parameter_name == search_for {
                     VarLookup::new()
                 } else {
                     let not_applied = usize::from(arg_stack.pop().is_none());
-                    body.var_occurrences(search_for, arg_stack, force_stack)
+                    body.var_occurrences(search_for, arg_stack, force_stack, cap)
                         .delay_if_found(not_applied)
                 }
             }
@@ -1294,12 +1591,14 @@ impl Term<Name> {
                 // unwrap apply and add void to arg stack!
                 arg_stack.push(());
 
-                let apply_var_occurrence_stack = |term: &Term<Name>, arg_stack: Vec<()>| {
-                    term.var_occurrences(search_for.clone(), arg_stack, force_stack)
-                };
+                let apply_var_occurrence_stack =
+                    |term: &Term<Name>, arg_stack: Vec<()>, cap: usize| {
+                        term.var_occurrences(search_for.clone(), arg_stack, force_stack, cap)
+                    };
 
-                let apply_var_occurrence_no_stack =
-                    |term: &Term<Name>| term.var_occurrences(search_for.clone(), vec![], vec![]);
+                let apply_var_occurrence_no_stack = |term: &Term<Name>, cap: usize| {
+                    term.var_occurrences(search_for.clone(), vec![], vec![], cap)
+                };
 
                 if let Term::Apply {
                     function: next_func,
@@ -1312,17 +1611,33 @@ impl Term<Name> {
                         next_arg,
                         argument,
                         arg_stack,
+                        cap,
                         apply_var_occurrence_stack,
                         apply_var_occurrence_no_stack,
                     )
                 } else {
-                    apply_var_occurrence_stack(function, arg_stack)
-                        .combine(apply_var_occurrence_no_stack(argument))
+                    // Scan the argument before the function side: the lookup
+                    // is a commutative fold over the tree, so the order does
+                    // not affect the result, but on `(lambda x ..) arg` chains
+                    // (hoisted function definitions) occurrences live in
+                    // nearby arguments while the function side is the rest of
+                    // the whole program. Argument-first lets a capped scan
+                    // saturate after visiting only the nearby definitions.
+                    let argument_lookup = apply_var_occurrence_no_stack(argument, cap);
+
+                    if argument_lookup.occurrences >= cap {
+                        return argument_lookup;
+                    }
+
+                    let remaining = cap - argument_lookup.occurrences;
+
+                    apply_var_occurrence_stack(function, arg_stack, remaining)
+                        .combine(argument_lookup)
                 }
             }
             Term::Force(x) => {
                 force_stack.push(());
-                x.var_occurrences(search_for, arg_stack, force_stack)
+                x.var_occurrences(search_for, arg_stack, force_stack, cap)
             }
             Term::Case { .. } => todo!(),
             Term::Constr { .. } => todo!(),
@@ -1339,34 +1654,48 @@ impl Term<Name> {
         then_arg: &Rc<Term<Name>>,
         else_arg: &Rc<Term<Name>>,
         mut arg_stack: Vec<()>,
-        var_occurrence_stack: impl FnOnce(&Term<Name>, Vec<()>) -> VarLookup,
-        var_occurrence_no_stack: impl Fn(&Term<Name>) -> VarLookup,
+        cap: usize,
+        var_occurrence_stack: impl FnOnce(&Term<Name>, Vec<()>, usize) -> VarLookup,
+        var_occurrence_no_stack: impl Fn(&Term<Name>, usize) -> VarLookup,
     ) -> VarLookup {
+        // Fold `lookup` with the occurrences found in `term`, unless `lookup`
+        // has already reached the cap, in which case the scan of `term` is
+        // skipped entirely (the result is saturated either way).
+        let combine_capped = |lookup: VarLookup, term: &Term<Name>| {
+            if lookup.occurrences >= cap {
+                return lookup;
+            }
+
+            let remaining = cap - lookup.occurrences;
+
+            lookup.combine(var_occurrence_no_stack(term, remaining))
+        };
+
         let Term::Apply {
             function: builtin,
             argument: condition,
         } = self
         else {
-            return var_occurrence_stack(self, arg_stack)
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg));
+            let lookup = var_occurrence_stack(self, arg_stack, cap);
+            let lookup = combine_capped(lookup, then_arg);
+            return combine_capped(lookup, else_arg);
         };
 
         // unwrap apply and add void to arg stack!
         arg_stack.push(());
 
         let Term::Delay(else_arg) = else_arg.as_ref() else {
-            return var_occurrence_stack(builtin, arg_stack)
-                .combine(var_occurrence_no_stack(condition))
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg));
+            let lookup = var_occurrence_stack(builtin, arg_stack, cap);
+            let lookup = combine_capped(lookup, condition);
+            let lookup = combine_capped(lookup, then_arg);
+            return combine_capped(lookup, else_arg);
         };
 
         let Term::Delay(then_arg) = then_arg.as_ref() else {
-            return var_occurrence_stack(builtin, arg_stack)
-                .combine(var_occurrence_no_stack(condition))
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg));
+            let lookup = var_occurrence_stack(builtin, arg_stack, cap);
+            let lookup = combine_capped(lookup, condition);
+            let lookup = combine_capped(lookup, then_arg);
+            return combine_capped(lookup, else_arg);
         };
 
         match builtin.as_ref() {
@@ -1380,35 +1709,51 @@ impl Term<Name> {
                     arg_stack.pop();
                     arg_stack.pop();
 
-                    var_occurrence_no_stack(condition)
-                        .combine(var_occurrence_stack(then_arg, arg_stack))
+                    let lookup = var_occurrence_no_stack(condition, cap);
+
+                    if lookup.occurrences >= cap {
+                        return lookup;
+                    }
+
+                    let remaining = cap - lookup.occurrences;
+
+                    lookup.combine(var_occurrence_stack(then_arg, arg_stack, remaining))
                 } else if matches!(then_arg.as_ref(), Term::Error) {
                     // Pop 3 args of arg_stack due to branch execution
                     arg_stack.pop();
                     arg_stack.pop();
                     arg_stack.pop();
 
-                    var_occurrence_no_stack(condition)
-                        .combine(var_occurrence_stack(else_arg, arg_stack))
+                    let lookup = var_occurrence_no_stack(condition, cap);
+
+                    if lookup.occurrences >= cap {
+                        return lookup;
+                    }
+
+                    let remaining = cap - lookup.occurrences;
+
+                    lookup.combine(var_occurrence_stack(else_arg, arg_stack, remaining))
                 } else {
-                    var_occurrence_stack(builtin, arg_stack)
-                        .combine(var_occurrence_no_stack(condition))
-                        .combine(var_occurrence_no_stack(then_arg))
-                        .combine(var_occurrence_no_stack(else_arg))
+                    let lookup = var_occurrence_stack(builtin, arg_stack, cap);
+                    let lookup = combine_capped(lookup, condition);
+                    let lookup = combine_capped(lookup, then_arg);
+                    combine_capped(lookup, else_arg)
                 }
             }
 
-            _ => var_occurrence_stack(builtin, arg_stack)
-                .combine(var_occurrence_no_stack(condition))
-                .combine(var_occurrence_no_stack(then_arg))
-                .combine(var_occurrence_no_stack(else_arg)),
+            _ => {
+                let lookup = var_occurrence_stack(builtin, arg_stack, cap);
+                let lookup = combine_capped(lookup, condition);
+                let lookup = combine_capped(lookup, then_arg);
+                combine_capped(lookup, else_arg)
+            }
         }
     }
 
     fn lambda_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -1418,9 +1763,10 @@ impl Term<Name> {
                 parameter_name,
                 body,
             } => {
-                // pops stack here no matter what
-                if let Some(Args::Apply(arg_id, arg_term)) = arg_stack.pop() {
-                    let replace = match &arg_term {
+                // reads the top of the stack here no matter what
+                if let Some(Args::Apply(arg_id, arg_term)) = arg_stack.last() {
+                    let arg_id = *arg_id;
+                    let replace = match arg_term {
                         // Do nothing for String consts
                         Term::Constant(c) if matches!(c.as_ref(), Constant::String(_)) => false,
                         // Inline Delay Error terms since total size is only 1 byte
@@ -1438,6 +1784,12 @@ impl Term<Name> {
                     if replace {
                         let body = Rc::make_mut(body);
                         context.inlined_apply_ids.push(arg_id);
+
+                        // The argument is substituted at every occurrence of
+                        // the parameter (possibly zero or several copies), so
+                        // occurrence counts of names inside it are no longer
+                        // what the tracker recorded.
+                        context.occurrences.invalidate_term(arg_term);
 
                         body.substitute_var(
                             parameter_name.clone(),
@@ -1900,7 +2252,7 @@ impl Term<Name> {
     fn identity_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -1912,16 +2264,16 @@ impl Term<Name> {
                 body,
             } => {
                 let body = Rc::make_mut(body);
-                // pops stack here no matter what
+                // reads the top of the stack here no matter what
 
-                let Some(Args::Apply(arg_id, identity_func)) = arg_stack.pop() else {
+                let Some(Args::Apply(arg_id, identity_func)) = arg_stack.last() else {
                     return false;
                 };
 
                 let Term::Lambda {
                     parameter_name: identity_name,
                     body: identity_body,
-                } = identity_func.pierce_no_inlines()
+                } = identity_func.pierce_no_inlines_ref()
                 else {
                     return false;
                 };
@@ -1930,17 +2282,25 @@ impl Term<Name> {
                     return false;
                 };
 
-                if *identity_var == identity_name {
+                if identity_var == identity_name {
+                    // The replacement below removes occurrences of the
+                    // parameter, and on success the identity function (whose
+                    // only name is its own parameter) is dropped; neither is
+                    // reflected in the tracker.
+                    context.occurrences.invalidate(parameter_name);
+                    context.occurrences.invalidate(identity_name);
+
                     // Replace all applied usages of identity with the arg
                     body.replace_identity_usage(parameter_name.clone());
                     // Have to check if the body still has any occurrences of the parameter
-                    // After attempting replacement
+                    // After attempting replacement. Only `found` is inspected, so the
+                    // scan can stop at the first occurrence.
                     if !body
-                        .var_occurrences(parameter_name.clone(), vec![], vec![])
+                        .var_occurrences(parameter_name.clone(), vec![], vec![], 1)
                         .found
                     {
                         changed = true;
-                        context.inlined_apply_ids.push(arg_id);
+                        context.inlined_apply_ids.push(*arg_id);
                         *self = std::mem::replace(body, Term::Error.force());
                     }
                 }
@@ -1956,7 +2316,7 @@ impl Term<Name> {
     fn inline_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -1967,18 +2327,15 @@ impl Term<Name> {
                 parameter_name,
                 body,
             } => {
-                // pops stack here no matter what
-                let Some(Args::Apply(arg_id, arg_term)) = arg_stack.pop() else {
+                // reads the top of the stack here no matter what
+                let Some(Args::Apply(arg_id, applied_arg)) = arg_stack.last() else {
                     return false;
                 };
 
-                let arg_term = arg_term.pierce_no_inlines_ref();
+                let arg_id = *arg_id;
+                let arg_term = applied_arg.pierce_no_inlines_ref();
 
                 let body = Rc::make_mut(body);
-
-                let var_lookup = body.var_occurrences(parameter_name.clone(), vec![], vec![]);
-
-                let must_execute_condition = var_lookup.delays == 0 && !var_lookup.no_inline;
 
                 let cant_throw_condition = matches!(
                     arg_term,
@@ -1994,6 +2351,70 @@ impl Term<Name> {
                     .keys()
                     .any(|b| b.wrapped_name() == parameter_name.text);
 
+                // Fast path: when the tracker vouches for the parameter's
+                // occurrence count, the count alone settles three of the four
+                // decision shapes below without scanning the body:
+                //  - >= 2 occurrences: neither inlining (needs exactly 1) nor
+                //    stripping (needs 0) can fire;
+                //  - 0 occurrences: stripping fires iff the argument can't
+                //    throw (or is a force-wrapped builtin);
+                //  - exactly 1 occurrence with a can't-throw argument: inline
+                //    (delays/no_inline only matter for must-execute, which is
+                //    or-ed with can't-throw).
+                // Only "exactly 1 occurrence of a possibly-throwing argument"
+                // still needs the delays-aware scan.
+                let mut known_single = false;
+
+                if let Some(count) = context.occurrences.trusted_count(parameter_name) {
+                    match count {
+                        0 => {
+                            if cant_throw_condition || force_wrapped_builtin {
+                                changed = true;
+                                // The unused argument is dropped: its contents
+                                // disappear from the program, so their counts
+                                // can no longer be trusted.
+                                context.occurrences.invalidate_term(applied_arg);
+                                context.inlined_apply_ids.push(arg_id);
+                                *self = std::mem::replace(body, Term::Error.force());
+                            }
+                            return changed;
+                        }
+                        1 if !force_wrapped_builtin && cant_throw_condition => {
+                            changed = true;
+                            // Exactly one occurrence: the argument is moved,
+                            // not duplicated or dropped, so every count stays
+                            // exact.
+                            body.substitute_single_var(parameter_name.clone(), arg_term);
+
+                            context.inlined_apply_ids.push(arg_id);
+                            *self = std::mem::replace(body, Term::Error.force());
+                            return changed;
+                        }
+                        // Exactly one occurrence of a possibly-throwing
+                        // argument: the delays-aware scan below is still
+                        // needed, but it can stop at the (only) occurrence —
+                        // the unwind out of the recursion accounts for the
+                        // delays and no_inline markers on that occurrence's
+                        // path, and the tracker guarantees there is no other
+                        // occurrence to accumulate.
+                        1 => known_single = true,
+                        _ => return false,
+                    }
+                }
+
+                // The decisions below only distinguish "unused", "used exactly
+                // once" and "used more than once", so the scan can stop as soon
+                // as a second occurrence is seen (or the first, when the
+                // occurrence count is already known to be exactly one).
+                let var_lookup = body.var_occurrences(
+                    parameter_name.clone(),
+                    vec![],
+                    vec![],
+                    if known_single { 1 } else { 2 },
+                );
+
+                let must_execute_condition = var_lookup.delays == 0 && !var_lookup.no_inline;
+
                 // This will inline terms that only occur once
                 // if they are guaranteed to execute or can't throw an error by themselves
                 if !force_wrapped_builtin
@@ -2001,7 +2422,9 @@ impl Term<Name> {
                     && (must_execute_condition || cant_throw_condition)
                 {
                     changed = true;
-                    body.substitute_var(parameter_name.clone(), arg_term);
+                    // The lookup above guarantees exactly one occurrence, so
+                    // the substitution can stop at the first match.
+                    body.substitute_single_var(parameter_name.clone(), arg_term);
 
                     context.inlined_apply_ids.push(arg_id);
                     *self = std::mem::replace(body, Term::Error.force());
@@ -2009,6 +2432,7 @@ impl Term<Name> {
                 // This will strip out unused terms that can't throw an error by themselves
                 } else if !var_lookup.found && (cant_throw_condition || force_wrapped_builtin) {
                     changed = true;
+                    context.occurrences.invalidate_term(applied_arg);
                     context.inlined_apply_ids.push(arg_id);
                     *self = std::mem::replace(body, Term::Error.force());
                 }
@@ -2024,15 +2448,15 @@ impl Term<Name> {
     fn force_delay_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
         let mut changed = false;
         if let Term::Delay(d) = self {
-            if let Some(Args::Force(id)) = arg_stack.pop() {
+            if let Some(Args::Force(id)) = arg_stack.last() {
                 changed = true;
-                context.inlined_apply_ids.push(id);
+                context.inlined_apply_ids.push(*id);
                 *self = std::mem::replace(Rc::make_mut(d), Term::Error.force())
             } else if let Term::Force(var) = d.as_ref()
                 && let Term::Var(_) = var.as_ref()
@@ -2098,7 +2522,7 @@ impl Term<Name> {
     fn cast_data_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -2106,11 +2530,13 @@ impl Term<Name> {
 
         match self {
             Term::Builtin(first_function) => {
-                let Some(Args::Apply(arg_id, mut arg_term)) = arg_stack.pop() else {
+                let Some(Args::Apply(arg_id, arg_term)) = arg_stack.last() else {
                     return false;
                 };
 
-                match &mut arg_term {
+                let arg_id = *arg_id;
+
+                match arg_term {
                     Term::Apply { function, argument } => {
                         if let Term::Builtin(second_function) = function.as_ref() {
                             match (first_function, second_function) {
@@ -2124,10 +2550,7 @@ impl Term<Name> {
                                 | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
                                     changed = true;
                                     context.inlined_apply_ids.push(arg_id);
-                                    *self = std::mem::replace(
-                                        Rc::make_mut(argument),
-                                        Term::Error.force(),
-                                    );
+                                    *self = argument.as_ref().clone();
                                 }
                                 _ => {}
                             }
@@ -2251,7 +2674,7 @@ impl Term<Name> {
     fn builtin_eval_reducer(
         &mut self,
         _id: Option<usize>,
-        mut arg_stack: Vec<Args>,
+        arg_stack: &[Args],
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
@@ -2259,33 +2682,26 @@ impl Term<Name> {
 
         match self {
             Term::Builtin(func) => {
-                arg_stack = arg_stack
-                    .into_iter()
-                    .filter(|args| matches!(args, Args::Apply(_, _)))
-                    .collect_vec();
-
-                let args = arg_stack
+                let applies = arg_stack
                     .iter()
-                    .map(|args| {
-                        let Args::Apply(_, term) = args else {
-                            unreachable!()
-                        };
-
-                        term.pierce_no_inlines_ref()
+                    .filter_map(|args| match args {
+                        Args::Apply(arg_id, term) => Some((*arg_id, term)),
+                        _ => None,
                     })
                     .collect_vec();
-                if arg_stack.len() == func.arity() && func.is_error_safe(&args) {
+
+                let args = applies
+                    .iter()
+                    .map(|(_, term)| term.pierce_no_inlines_ref())
+                    .collect_vec();
+                if applies.len() == func.arity() && func.is_error_safe(&args) {
                     changed = true;
                     let applied_term =
-                        arg_stack
+                        applies
                             .into_iter()
-                            .fold(Term::Builtin(*func), |acc, item| {
-                                let Args::Apply(arg_id, arg) = item else {
-                                    unreachable!()
-                                };
-
+                            .fold(Term::Builtin(*func), |acc, (arg_id, arg)| {
                                 context.inlined_apply_ids.push(arg_id);
-                                acc.apply(arg.pierce_no_inlines().clone())
+                                acc.apply(arg.pierce_no_inlines_ref().clone())
                             });
 
                     // The check above is to make sure the program is error safe
@@ -2378,24 +2794,6 @@ impl Term<Name> {
         term
     }
 
-    fn pierce_no_inlines(mut self) -> Self {
-        let term = &mut self;
-
-        while let Term::Lambda {
-            parameter_name,
-            body,
-        } = term
-        {
-            if parameter_name.as_ref().text == NO_INLINE {
-                *term = std::mem::replace(Rc::make_mut(body), Term::Error.force());
-            } else {
-                break;
-            }
-        }
-
-        std::mem::replace(term, Term::Error.force())
-    }
-
     fn is_a_builtin_wrapper(&self) -> bool {
         let (names, term) = self.pop_lambdas_and_get_names();
 
@@ -2449,6 +2847,22 @@ impl Program<Name> {
     fn traverse_uplc_with(
         self,
         inline_lambda: bool,
+        track_scopes: bool,
+        with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
+    ) -> (Self, Context) {
+        self.traverse_uplc_with_tracker(
+            OccurrenceTracker::disabled(),
+            inline_lambda,
+            track_scopes,
+            with,
+        )
+    }
+
+    fn traverse_uplc_with_tracker(
+        self,
+        occurrences: OccurrenceTracker,
+        inline_lambda: bool,
+        track_scopes: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> (Self, Context) {
         let mut term = self.term;
@@ -2457,6 +2871,7 @@ impl Program<Name> {
         let mut id_gen = IdGen::new();
 
         let mut context = Context {
+            occurrences,
             inlined_apply_ids: vec![],
             constants_to_flip: vec![],
             integer_list_args: vec![],
@@ -2478,6 +2893,7 @@ impl Program<Name> {
             with,
             &mut context,
             inline_lambda,
+            track_scopes,
         );
         (
             Program {
@@ -2492,11 +2908,11 @@ impl Program<Name> {
         // First pass is necessary to ensure fst_pair and snd_pair are inlined before
         // builtin_force_reducer is run
         let (program, context) = self
-            .traverse_uplc_with(false, &mut |id, term, _arg_stack, scope, context| {
+            .traverse_uplc_with(false, false, &mut |id, term, _arg_stack, scope, context| {
                 term.inline_constr_ops(id, vec![], scope, context);
             })
             .0
-            .traverse_uplc_with(false, &mut |id, term, arg_stack, scope, context| {
+            .traverse_uplc_with(false, false, &mut |id, term, arg_stack, scope, context| {
                 term.bls381_compressor(id, vec![], scope, context);
                 term.builtin_force_reducer(id, arg_stack, scope, context);
                 term.remove_inlined_ids(id, vec![], scope, context);
@@ -2547,41 +2963,50 @@ impl Program<Name> {
     }
 
     pub fn multi_pass(self) -> (Self, Context) {
-        self.traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
-            let false = term.lambda_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+        // One O(n) walk gives inline_reducer exact occurrence counts for every
+        // uniquely-bound name, replacing most per-binder body scans.
+        let occurrences = OccurrenceTracker::new(&self.term);
 
-            let false = term.identity_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+        self.traverse_uplc_with_tracker(
+            occurrences,
+            true,
+            false,
+            &mut |id, term, arg_stack, scope, context| {
+                let false = term.lambda_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.inline_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.identity_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.force_delay_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.inline_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.cast_data_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.force_delay_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            let false = term.builtin_eval_reducer(id, arg_stack.clone(), scope, context) else {
-                term.remove_inlined_ids(id, vec![], scope, context);
-                return;
-            };
+                let false = term.cast_data_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
 
-            term.convert_arithmetic_ops(id, arg_stack, scope, context);
-            term.flip_constants(id, vec![], scope, context);
-            term.remove_inlined_ids(id, vec![], scope, context);
-        })
+                let false = term.builtin_eval_reducer(id, &arg_stack, scope, context) else {
+                    term.remove_inlined_ids(id, vec![], scope, context);
+                    return;
+                };
+
+                term.convert_arithmetic_ops(id, arg_stack, scope, context);
+                term.flip_constants(id, vec![], scope, context);
+                term.remove_inlined_ids(id, vec![], scope, context);
+            },
+        )
     }
 
     pub fn run_one_opt(
@@ -2589,12 +3014,15 @@ impl Program<Name> {
         inline_lambda: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> Self {
-        let (mut program, context) =
-            self.traverse_uplc_with(inline_lambda, &mut |id, term, arg_stack, scope, context| {
+        let (mut program, context) = self.traverse_uplc_with(
+            inline_lambda,
+            false,
+            &mut |id, term, arg_stack, scope, context| {
                 with(id, term, arg_stack, scope, context);
                 term.flip_constants(id, vec![], scope, context);
                 term.remove_inlined_ids(id, vec![], scope, context);
-            });
+            },
+        );
 
         if context.integer_list_convert {
             program.term = program.term.data_list_to_integer_list();
@@ -2612,7 +3040,7 @@ impl Program<Name> {
     }
 
     pub fn clean_up_no_inlines(self) -> Self {
-        self.traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
+        self.traverse_uplc_with(true, false, &mut |id, term, _arg_stack, scope, context| {
             term.remove_no_inlines(id, vec![], scope, context);
         })
         .0
@@ -2620,13 +3048,13 @@ impl Program<Name> {
 
     pub fn afterwards(self) -> Self {
         let (mut program, context) =
-            self.traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
+            self.traverse_uplc_with(true, false, &mut |id, term, arg_stack, scope, context| {
                 term.typed_list_convert_arg(id, arg_stack, scope, context);
             });
 
         program = program
             .split_body_lambda_reducer()
-            .traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
+            .traverse_uplc_with(true, false, &mut |id, term, _arg_stack, scope, context| {
                 term.case_constr_apply_reducer(id, vec![], scope, context);
             })
             .0;
@@ -2665,95 +3093,98 @@ impl Program<Name> {
 
         let mut final_ids: IndexMap<Vec<usize>, ()> = IndexMap::new();
 
-        let (step_a, _) = self.traverse_uplc_with(
-            false,
-            &mut |_id, term, arg_stack, scope, _context| match term {
-                Term::Builtin(func) => {
-                    if let Some(arg_stack) = func.try_curry_builtin(arg_stack) {
-                        // In the case of order agnostic builtins we want to sort the args by constant first
-                        // This gives us the opportunity to curry constants that often pop up in the code
+        let (step_a, _) =
+            self.traverse_uplc_with(false, true, &mut |_id, term, arg_stack, scope, _context| {
+                match term {
+                    Term::Builtin(func) => {
+                        if let Some(arg_stack) = func.try_curry_builtin(arg_stack) {
+                            // In the case of order agnostic builtins we want to sort the args by constant first
+                            // This gives us the opportunity to curry constants that often pop up in the code
 
-                        let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
+                            let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
 
-                        // First we see if we have already curried this builtin before
-                        let mut id_vec = if let Some((index, _)) =
-                            curried_terms.iter_mut().find_position(
-                                |curried_term: &&mut CurriedBuiltin| curried_term.func == *func,
-                            ) {
-                            // We found it the builtin was curried before
-                            // So now we merge the new args into the existing curried builtin
-                            let curried_builtin = curried_terms.swap_remove(index);
+                            // First we see if we have already curried this builtin before
+                            let mut id_vec = if let Some((index, _)) =
+                                curried_terms.iter_mut().find_position(
+                                    |curried_term: &&mut CurriedBuiltin| curried_term.func == *func,
+                                ) {
+                                // We found it the builtin was curried before
+                                // So now we merge the new args into the existing curried builtin
+                                let curried_builtin = curried_terms.swap_remove(index);
 
-                            let curried_builtin =
-                                curried_builtin.merge_node_by_path(builtin_args.clone());
+                                let curried_builtin =
+                                    curried_builtin.merge_node_by_path(builtin_args.clone());
 
-                            flipped_terms
-                                .insert(scope.clone(), curried_builtin.is_flipped(&builtin_args));
-
-                            let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
-                                unreachable!();
-                            };
-
-                            curried_terms.push(curried_builtin);
-
-                            id_vec
-                        } else {
-                            // Brand new builtin so we add it to the list
-                            let curried_builtin = builtin_args.clone().args_to_curried_args(*func);
-
-                            let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
-                                unreachable!();
-                            };
-
-                            curried_terms.push(curried_builtin);
-
-                            id_vec
-                        };
-
-                        while let Some(node) = id_vec.pop() {
-                            if !matches!(node.term, Term::Constant { .. }) {
-                                continue;
-                            }
-
-                            let mut id_only_vec =
-                                id_vec.iter().map(|item| item.curried_id).collect_vec();
-
-                            id_only_vec.push(node.curried_id);
-
-                            let curry_name = CurriedName {
-                                func_name: func.aiken_name(),
-                                id_vec: id_only_vec,
-                            };
-
-                            if let Some((map_scope, _, occurrences)) =
-                                id_mapped_curry_terms.get_mut(&curry_name)
-                            {
-                                *map_scope = map_scope.common_ancestor(scope);
-                                *occurrences += 1;
-                            } else if id_vec.is_empty() {
-                                id_mapped_curry_terms.insert(
-                                    curry_name,
-                                    (scope.clone(), Term::Builtin(*func).apply(node.term), 1),
+                                flipped_terms.insert(
+                                    scope.clone(),
+                                    curried_builtin.is_flipped(&builtin_args),
                                 );
+
+                                let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
+                                    unreachable!();
+                                };
+
+                                curried_terms.push(curried_builtin);
+
+                                id_vec
                             } else {
-                                let var_name = id_vec_function_to_var(
-                                    &func.aiken_name(),
-                                    &id_vec.iter().map(|item| item.curried_id).collect_vec(),
-                                );
+                                // Brand new builtin so we add it to the list
+                                let curried_builtin =
+                                    builtin_args.clone().args_to_curried_args(*func);
 
-                                id_mapped_curry_terms.insert(
-                                    curry_name,
-                                    (scope.clone(), Term::var(var_name).apply(node.term), 1),
-                                );
+                                let Some(id_vec) = curried_builtin.get_id_args(builtin_args) else {
+                                    unreachable!();
+                                };
+
+                                curried_terms.push(curried_builtin);
+
+                                id_vec
+                            };
+
+                            while let Some(node) = id_vec.pop() {
+                                if !matches!(node.term, Term::Constant { .. }) {
+                                    continue;
+                                }
+
+                                let mut id_only_vec =
+                                    id_vec.iter().map(|item| item.curried_id).collect_vec();
+
+                                id_only_vec.push(node.curried_id);
+
+                                let curry_name = CurriedName {
+                                    func_name: func.aiken_name(),
+                                    id_vec: id_only_vec,
+                                };
+
+                                if let Some((map_scope, _, occurrences)) =
+                                    id_mapped_curry_terms.get_mut(&curry_name)
+                                {
+                                    *map_scope = map_scope.common_ancestor(scope);
+                                    *occurrences += 1;
+                                } else if id_vec.is_empty() {
+                                    id_mapped_curry_terms.insert(
+                                        curry_name,
+                                        (scope.clone(), Term::Builtin(*func).apply(node.term), 1),
+                                    );
+                                } else {
+                                    let var_name = id_vec_function_to_var(
+                                        &func.aiken_name(),
+                                        &id_vec.iter().map(|item| item.curried_id).collect_vec(),
+                                    );
+
+                                    id_mapped_curry_terms.insert(
+                                        curry_name,
+                                        (scope.clone(), Term::var(var_name).apply(node.term), 1),
+                                    );
+                                }
                             }
                         }
                     }
+                    Term::Constr { .. } => todo!(),
+                    Term::Case { .. } => todo!(),
+                    _ => {}
                 }
-                Term::Constr { .. } => todo!(),
-                Term::Case { .. } => todo!(),
-                _ => {}
-            },
-        );
+            });
 
         id_mapped_curry_terms
             .into_iter()
@@ -2777,90 +3208,91 @@ impl Program<Name> {
                 }
             });
 
-        let (mut step_b, _) = step_a.traverse_uplc_with(
-            false,
-            &mut |id, term, arg_stack, scope, _context| match term {
-                Term::Builtin(func) => {
-                    if let Some(mut arg_stack) = func.try_curry_builtin(arg_stack) {
-                        let Some(curried_builtin) =
-                            curried_terms.iter().find(|curry| curry.func == *func)
-                        else {
-                            return;
-                        };
+        let (mut step_b, _) =
+            step_a.traverse_uplc_with(false, true, &mut |id, term, arg_stack, scope, _context| {
+                match term {
+                    Term::Builtin(func) => {
+                        if let Some(mut arg_stack) = func.try_curry_builtin(arg_stack) {
+                            let Some(curried_builtin) =
+                                curried_terms.iter().find(|curry| curry.func == *func)
+                            else {
+                                return;
+                            };
 
-                        if let Some(true) = flipped_terms.get(scope) {
-                            arg_stack.reverse();
-                        }
-
-                        let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
-
-                        let Some(mut id_vec) = curried_builtin.get_id_args(builtin_args) else {
-                            return;
-                        };
-
-                        while !id_vec.is_empty() {
-                            let id_lookup = id_vec.iter().map(|item| item.curried_id).collect_vec();
-
-                            if final_ids.contains_key(&id_lookup) {
-                                break;
+                            if let Some(true) = flipped_terms.get(scope) {
+                                arg_stack.reverse();
                             }
-                            id_vec.pop();
-                        }
 
-                        if id_vec.is_empty() {
-                            return;
-                        }
+                            let builtin_args = BuiltinArgs::args_from_arg_stack(arg_stack, *func);
 
-                        let name = id_vec_function_to_var(
-                            &func.aiken_name(),
-                            &id_vec.iter().map(|item| item.curried_id).collect_vec(),
-                        );
+                            let Some(mut id_vec) = curried_builtin.get_id_args(builtin_args) else {
+                                return;
+                            };
 
-                        id_vec.iter().for_each(|item| {
-                            curry_applied_ids.push(item.applied_id);
-                        });
+                            while !id_vec.is_empty() {
+                                let id_lookup =
+                                    id_vec.iter().map(|item| item.curried_id).collect_vec();
 
-                        *term = Term::var(name);
-                    }
-                }
-                Term::Apply { function, .. } => {
-                    let id = id.unwrap();
-
-                    if curry_applied_ids.contains(&id) {
-                        *term = function.as_ref().clone();
-                    }
-
-                    if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
-                        for (key, val) in insert_list.into_iter().rev() {
-                            let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
-
-                            if term
-                                .var_occurrences(Name::text(&name).into(), vec![], vec![])
-                                .found
-                            {
-                                *term = term.clone().lambda(name).apply(val);
+                                if final_ids.contains_key(&id_lookup) {
+                                    break;
+                                }
+                                id_vec.pop();
                             }
+
+                            if id_vec.is_empty() {
+                                return;
+                            }
+
+                            let name = id_vec_function_to_var(
+                                &func.aiken_name(),
+                                &id_vec.iter().map(|item| item.curried_id).collect_vec(),
+                            );
+
+                            id_vec.iter().for_each(|item| {
+                                curry_applied_ids.push(item.applied_id);
+                            });
+
+                            *term = Term::var(name);
                         }
                     }
-                }
-                Term::Constr { .. } => todo!(),
-                Term::Case { .. } => todo!(),
-                _ => {
-                    if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
-                        for (key, val) in insert_list.into_iter().rev() {
-                            let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+                    Term::Apply { function, .. } => {
+                        let id = id.unwrap();
 
-                            if term
-                                .var_occurrences(Name::text(&name).into(), vec![], vec![])
-                                .found
-                            {
-                                *term = term.clone().lambda(name).apply(val);
+                        if curry_applied_ids.contains(&id) {
+                            *term = function.as_ref().clone();
+                        }
+
+                        if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
+                            for (key, val) in insert_list.into_iter().rev() {
+                                let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+
+                                if term
+                                    .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
+                                    .found
+                                {
+                                    *term = term.clone().lambda(name).apply(val);
+                                }
                             }
                         }
                     }
+                    Term::Constr { .. } => todo!(),
+                    Term::Case { .. } => todo!(),
+                    _ => {
+                        if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
+                            for (key, val) in insert_list.into_iter().rev() {
+                                let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+
+                                if term
+                                    .var_occurrences(Name::text(&name).into(), vec![], vec![], 1)
+                                    .found
+                                {
+                                    *term = term.clone().lambda(name).apply(val);
+                                }
+                            }
+                        }
+                    }
                 }
-            },
-        );
+            });
 
         let mut interner = CodeGenInterner::new();
 
@@ -2922,6 +3354,27 @@ mod tests {
     }
 
     #[test]
+    fn single_substitution_traverses_case_and_constr() {
+        let program = Program {
+            version: (1, 1, 0),
+            term: Term::constr(0, vec![Term::var("pair")])
+                .case(vec![Term::var("branch")])
+                .lambda("pair")
+                .apply(Term::integer(20.into()))
+                .lambda("branch")
+                .apply(Term::integer(30.into())),
+        };
+
+        let expected = Program {
+            version: (1, 1, 0),
+            term: Term::constr(0, vec![Term::integer(20.into())])
+                .case(vec![Term::integer(30.into())]),
+        };
+
+        compare_optimization(expected, program, |program| program.multi_pass().0);
+    }
+
+    #[test]
     fn lambda_reduce_var() {
         let program = Program {
             version: (1, 0, 0),
@@ -2947,7 +3400,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -2968,7 +3421,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -2987,7 +3440,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3028,7 +3481,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.lambda_reducer(id, arg_stack, scope, context);
+                term.lambda_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3174,7 +3627,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3201,7 +3654,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3252,7 +3705,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3279,7 +3732,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3308,7 +3761,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.identity_reducer(id, arg_stack, scope, context);
+                term.identity_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3330,7 +3783,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3367,7 +3820,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3404,7 +3857,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3425,7 +3878,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.inline_reducer(id, arg_stack, scope, context);
+                term.inline_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3454,7 +3907,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.cast_data_reducer(id, arg_stack, scope, context);
+                term.cast_data_reducer(id, &arg_stack, scope, context);
             })
         });
     }
@@ -3481,7 +3934,7 @@ mod tests {
 
         compare_optimization(expected, program, |p| {
             p.run_one_opt(true, &mut |id, term, arg_stack, scope, context| {
-                term.cast_data_reducer(id, arg_stack, scope, context);
+                term.cast_data_reducer(id, &arg_stack, scope, context);
             })
         });
     }

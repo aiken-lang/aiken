@@ -47,6 +47,17 @@ impl AirInterner {
         }
     }
 
+    /// The current value of the uniqueness counter.
+    pub fn counter(&self) -> usize {
+        self.current
+    }
+
+    /// Bump the uniqueness counter by `n`, as if `n` names had been interned
+    /// (and popped) in between.
+    pub fn advance(&mut self, n: usize) {
+        self.current += n;
+    }
+
     pub fn lookup_interned(&self, text: &String) -> String {
         if let Some(u) = self.identifiers.get(text) {
             format!("{}_id_{}", text, *u.last())

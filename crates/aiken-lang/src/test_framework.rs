@@ -73,31 +73,11 @@ impl Test {
     ) -> Test {
         let program = generator.generate_raw(&test.body, &[], &module_name);
 
-        let assertion = match test.body.try_into() {
-            Err(..) => None,
-            Ok(Assertion { bin_op, head, tail }) => {
-                let as_constant = |generator: &mut CodeGenerator<'_>, side| {
-                    Program::<NamedDeBruijn>::try_from(generator.generate_raw(
-                        &side,
-                        &[],
-                        &module_name,
-                    ))
-                    .expect("failed to convert assertion operand to NamedDeBruijn")
-                    .eval(ExBudget::max())
-                    .unwrap_constant()
-                    .map(|cst| (cst, side.tipo()))
-                };
-
-                // Assertion at this point is evaluated so it's not just a normal assertion
-                Some(Assertion {
-                    bin_op,
-                    head: as_constant(generator, head.expect("cannot be Err at this point")),
-                    tail: tail
-                        .expect("cannot be Err at this point")
-                        .try_mapped(|e| as_constant(generator, e)),
-                })
-            }
-        };
+        // Only the structural breakdown of the assertion is kept here; its
+        // operands are only ever shown for failed tests, so generating and
+        // evaluating them is deferred until a failure is actually reported
+        // (see Assertion::<TypedExpr>::evaluate).
+        let assertion: Option<Box<Assertion<TypedExpr>>> = test.body.try_into().ok().map(Box::new);
 
         Test::UnitTest(UnitTest {
             input_path,
@@ -222,7 +202,11 @@ pub struct UnitTest {
     pub name: String,
     pub on_test_failure: OnTestFailure,
     pub program: Program<Name>,
-    pub assertion: Option<Assertion<(Constant, Rc<Type>)>>,
+    /// The structural breakdown of a binary-operator test body. Operands are
+    /// kept unevaluated: they are only generated and run when a failure needs
+    /// to be displayed (see `Assertion::<TypedExpr>::evaluate`). Boxed to keep
+    /// the Test enum's variants comparably sized.
+    pub assertion: Option<Box<Assertion<TypedExpr>>>,
 }
 
 unsafe impl Send for UnitTest {}
@@ -259,7 +243,10 @@ impl UnitTest {
             test: self.to_owned(),
             spent_budget: eval_result.cost(),
             logs,
-            assertion: self.assertion,
+            // Filled in later, and only for failures: evaluating assertion
+            // operands requires a code generator, and successful tests never
+            // display them.
+            assertion: None,
         }
     }
 }
@@ -1276,6 +1263,42 @@ pub struct Assertion<T> {
     pub bin_op: BinOp,
     pub head: Result<T, ()>,
     pub tail: Result<Vec1<T>, ()>,
+}
+
+impl Assertion<TypedExpr> {
+    /// Generate and evaluate the assertion's operands, so a failure can be
+    /// displayed with the value each side evaluated to. This is deliberately
+    /// only called for failed unit tests: each operand costs a full program
+    /// generation plus an evaluation, which used to be paid eagerly for every
+    /// unit test in the project at collection time.
+    pub fn evaluate(
+        &self,
+        generator: &mut CodeGenerator<'_>,
+        module_name: &str,
+    ) -> Assertion<(Constant, Rc<Type>)> {
+        let as_constant = |generator: &mut CodeGenerator<'_>, side: &TypedExpr| {
+            Program::<NamedDeBruijn>::try_from(generator.generate_raw(side, &[], module_name))
+                .expect("failed to convert assertion operand to NamedDeBruijn")
+                .eval(ExBudget::max())
+                .unwrap_constant()
+                .map(|cst| (cst, side.tipo()))
+        };
+
+        // Assertion at this point is evaluated so it's not just a normal assertion
+        Assertion {
+            bin_op: self.bin_op,
+            head: as_constant(
+                generator,
+                self.head.as_ref().expect("cannot be Err at this point"),
+            ),
+            tail: self
+                .tail
+                .as_ref()
+                .expect("cannot be Err at this point")
+                .clone()
+                .try_mapped(|e| as_constant(generator, &e)),
+        }
+    }
 }
 
 impl TryFrom<TypedExpr> for Assertion<TypedExpr> {

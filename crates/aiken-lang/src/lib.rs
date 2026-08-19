@@ -32,6 +32,16 @@ impl IdGenerator {
     pub fn next(&self) -> u64 {
         self.id.fetch_add(1, Ordering::Relaxed)
     }
+
+    /// The id the next call to `next` would return.
+    pub fn current(&self) -> u64 {
+        self.id.load(Ordering::Relaxed)
+    }
+
+    /// Consume `n` ids at once, as if `next` had been called `n` times.
+    pub fn advance(&self, n: u64) {
+        self.id.fetch_add(n, Ordering::Relaxed);
+    }
 }
 
 #[macro_export]
