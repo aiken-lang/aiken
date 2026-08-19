@@ -207,7 +207,7 @@ impl Validator<()> {
             .replace_pairs_with_data_lists();
 
         Ok(Validator {
-            title: format!("{}.{}.{}", &module.name, &def.name, &func.name,),
+            title: format!("{}.{}.{}", module.name, def.name, func.name,),
             description: func.doc.clone(),
             parameters,
             datum,
