@@ -31,7 +31,7 @@ pretty = "0.11.3"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.148"
 strum = { version = "0.26.3", features = ["derive"] }
-thiserror = "1.0.39"
+thiserror = "2.0.12"
 blst = "0.3.11"
 once_cell = "1.18.0"
 hamming = "0.1.3"
