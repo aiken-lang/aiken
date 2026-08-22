@@ -2,31 +2,51 @@ name: Nix Build
 
 on:
   push:
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   nix-build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            system: x86_64-linux
+          - os: ubuntu-24.04-arm
+            system: aarch64-linux
+          - os: macos-15
+            system: aarch64-darwin
+          # Intel macOS: best-effort only. GitHub Actions retired the free
+          # Intel runner (macos-13) in Dec 2025 and Intel support ends
+          # entirely in Aug 2027 (see actions/runner-images#13046). Kept
+          # for visibility, not as a merge gate. 
+          - os: macos-15-intel
+            system: x86_64-darwin
+            best-effort: true
+
+    runs-on: ${{ matrix.os }}
+    name: nix build (${{ matrix.system }})
+    continue-on-error: ${{ matrix.best-effort == true }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-        with:
-          ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Run the Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v14
+      # Magic Nix Cache removed: FlakeHub Cache is unconfigured (no token /
+      # `id-token: write` permission
+
+      - name: Flake check
+        timeout-minutes: 20
+        run: nix flake check --system ${{ matrix.system }}
 
       - name: Build Aiken
-        shell: bash
-        run: |
-          set +e
-          nix build
-          exitcode="$?"
-          if [[ "$exitcode" != "0" ]] ; then
-            echo "::warning::Nix build failed with exit code $exitcode"
-            exit 0
-          else
-            exit "$exitcode"
-          fi
+        timeout-minutes: 30
+        run: nix build --system ${{ matrix.system }} .#aiken
+
+      - name: Smoke test dev shell
+        timeout-minutes: 5
+        run: nix develop --system ${{ matrix.system }} -c cargo --version

@@ -17,18 +17,9 @@
         overlays = [rust-overlay.overlays.default];
       };
 
-      osxDependencies = with pkgs;
-        lib.optionals stdenv.isDarwin
-        [
-          darwin.apple_sdk.frameworks.Security
-          darwin.apple_sdk.frameworks.CoreServices
-          darwin.apple_sdk.frameworks.SystemConfiguration
-        ];
-
-      cargoTomlContents = builtins.readFile ./Cargo.toml;
-
-      version = (builtins.fromTOML cargoTomlContents).workspace.package.version;
-      rustVersion = (builtins.fromTOML cargoTomlContents).workspace.package."rust-version";
+      cargoToml = fromTOML (builtins.readFile ./Cargo.toml);
+      version = cargoToml.workspace.package.version;
+      rustVersion = cargoToml.workspace.package."rust-version";
 
       rustToolchain = pkgs.rust-bin.stable.${rustVersion}.default;
 
@@ -37,13 +28,18 @@
         rustc = rustToolchain;
       };
 
+      gitRev =
+        if builtins.hasAttr "rev" self
+        then self.rev
+        else "dirty";
+
       aiken = rustPlatform.buildRustPackage {
         inherit version;
 
-        name = "aiken";
+        pname = "aiken";
 
-        buildInputs = with pkgs; [openssl] ++ osxDependencies;
-        nativeBuildInputs = with pkgs; [pkg-config openssl.dev];
+        buildInputs = [pkgs.openssl];
+        nativeBuildInputs = [pkgs.pkg-config pkgs.openssl.dev];
 
         src = pkgs.lib.cleanSourceWith {src = self;};
         doCheck = false; # don’t run cargo test
@@ -76,36 +72,33 @@
           mainProgram = "aiken";
         };
       };
-
+    in {
       packages = {
-        aiken = aiken;
-        default = packages.aiken;
+        inherit aiken;
+        default = aiken;
       };
 
-      overlays.default = final: prev: {aiken = packages.aiken;};
+      checks.default = aiken;
 
-      gitRev =
-        if (builtins.hasAttr "rev" self)
-        then self.rev
-        else "dirty";
-    in {
-      inherit packages overlays;
-
-      devShell = pkgs.mkShell {
-        buildInputs = with pkgs;
-          [
-            pkg-config
-            openssl
-            cargo-insta
-            (rustToolchain.override {
-              extensions = ["rust-src" "clippy" "rustfmt" "rust-analyzer"];
-            })
-          ]
-          ++ osxDependencies;
+      devShells.default = pkgs.mkShell {
+        buildInputs = [
+          pkgs.pkg-config
+          pkgs.openssl
+          pkgs.cargo-insta
+          (rustToolchain.override {
+            extensions = ["rust-src" "clippy" "rustfmt" "rust-analyzer"];
+          })
+        ];
 
         shellHook = ''
           export GIT_REVISION=${gitRev}
         '';
       };
-    });
+    })
+    // {
+      # `overlays` is a top-level flake output, NOT a per-system one
+      overlays.default = final: prev: {
+        aiken = self.packages.${final.system}.aiken;
+      };
+    };
 }
