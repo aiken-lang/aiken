@@ -17,18 +17,10 @@
         overlays = [rust-overlay.overlays.default];
       };
 
-      osxDependencies = with pkgs;
-        lib.optionals stdenv.isDarwin
-        [
-          darwin.apple_sdk.frameworks.Security
-          darwin.apple_sdk.frameworks.CoreServices
-          darwin.apple_sdk.frameworks.SystemConfiguration
-        ];
-
       cargoTomlContents = builtins.readFile ./Cargo.toml;
 
-      version = (builtins.fromTOML cargoTomlContents).workspace.package.version;
-      rustVersion = (builtins.fromTOML cargoTomlContents).workspace.package."rust-version";
+      version = (fromTOML cargoTomlContents).workspace.package.version;
+      rustVersion = (fromTOML cargoTomlContents).workspace.package."rust-version";
 
       rustToolchain = pkgs.rust-bin.stable.${rustVersion}.default;
 
@@ -42,7 +34,7 @@
 
         name = "aiken";
 
-        buildInputs = with pkgs; [openssl] ++ osxDependencies;
+        buildInputs = with pkgs; [openssl];
         nativeBuildInputs = with pkgs; [pkg-config openssl.dev];
 
         src = pkgs.lib.cleanSourceWith {src = self;};
@@ -100,8 +92,7 @@
             (rustToolchain.override {
               extensions = ["rust-src" "clippy" "rustfmt" "rust-analyzer"];
             })
-          ]
-          ++ osxDependencies;
+          ];
 
         shellHook = ''
           export GIT_REVISION=${gitRev}
