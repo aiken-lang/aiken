@@ -1,16 +1,31 @@
-name: Nix Build
+name: Nix Builds
 
 on:
   push:
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   nix-build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            system: x86_64-linux
+          - os: ubuntu-24.04-arm
+            system: aarch64-linux
+          - os: macos-13
+            system: x86_64-darwin
+          - os: macos-14
+            system: aarch64-darwin
+
+    runs-on: ${{ matrix.os }}
+    name: nix build (${{ matrix.system }})
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-        with:
-          ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
@@ -18,15 +33,14 @@ jobs:
       - name: Run the Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v14
 
+      # Fails the whole flake eval up front, on every platform, so
+      # evaluation errors (e.g. platform-conditional code that only
+      # breaks on Darwin) can't hide behind a Linux-only build step.
+      - name: Flake check
+        run: nix flake check --system ${{ matrix.system }}
+
       - name: Build Aiken
-        shell: bash
-        run: |
-          set +e
-          nix build
-          exitcode="$?"
-          if [[ "$exitcode" != "0" ]] ; then
-            echo "::warning::Nix build failed with exit code $exitcode"
-            exit 0
-          else
-            exit "$exitcode"
-          fi
+        run: nix build --system ${{ matrix.system }} .#aiken
+
+      - name: Smoke test dev shell
+        run: nix develop --system ${{ matrix.system }} -c cargo --version
