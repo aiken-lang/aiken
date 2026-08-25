@@ -3,10 +3,16 @@ use crate::module::CheckedModules;
 use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
 use pallas_primitives::conway::Language;
 use pretty_assertions::assert_eq;
-use std::rc::Rc;
+use std::{
+    process::Command,
+    rc::Rc,
+    thread,
+    time::{Duration, Instant},
+};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
+    builtins::DefaultFunction,
     machine::{cost_model::ExBudget, runtime::Compressable},
     optimize::{self},
 };
@@ -6490,4 +6496,272 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
 
     assert_uplc(src, program_verbose, true, true);
     assert_uplc(src, program_silent, true, false);
+}
+
+fn generate_first_test(source_code: &str) -> Program<Name> {
+    let mut project = TestProject::new();
+    let module = project.check(project.parse(source_code));
+    let test = module
+        .ast
+        .definitions()
+        .find_map(|definition| match definition {
+            Definition::Test(test) => Some(test),
+            _ => None,
+        })
+        .expect("source should contain a test");
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    generator.generate_raw(&test.body, &[], &module.name)
+}
+
+fn generate_function(source_code: &str, name: &str) -> Program<Name> {
+    let mut project = TestProject::new();
+    let module = project.check(project.parse(source_code));
+    let function = module
+        .ast
+        .definitions()
+        .find_map(|definition| match definition {
+            Definition::Fn(function) if function.name == name => Some(function),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("source should contain function {name}"));
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    generator.generate_raw(&function.body, &function.arguments, &module.name)
+}
+
+fn count_builtin<T>(term: &Term<T>, builtin: DefaultFunction) -> usize {
+    let current = usize::from(matches!(term, Term::Builtin(actual) if *actual == builtin));
+    let nested = match term {
+        Term::Delay(term) | Term::Force(term) => count_builtin(term, builtin),
+        Term::Lambda { body, .. } => count_builtin(body, builtin),
+        Term::Apply { function, argument } => {
+            count_builtin(function, builtin) + count_builtin(argument, builtin)
+        }
+        Term::Constr { fields, .. } => fields
+            .iter()
+            .map(|field| count_builtin(field, builtin))
+            .sum(),
+        Term::Case { constr, branches } => {
+            count_builtin(constr, builtin)
+                + branches
+                    .iter()
+                    .map(|branch| count_builtin(branch, builtin))
+                    .sum::<usize>()
+        }
+        Term::Var(_) | Term::Constant(_) | Term::Error | Term::Builtin(_) => 0,
+    };
+
+    current + nested
+}
+
+fn issue_1389_source(function_count: usize, test_count: usize) -> String {
+    assert!(function_count > 0);
+    let functions = (0..function_count)
+        .map(|index| {
+            if index == 0 {
+                "fn helper_0(value: Int) -> Int { value + 1 }".to_string()
+            } else {
+                format!(
+                    "fn helper_{index}(value: Int) -> Int {{ helper_{}(value) + 1 }}",
+                    index - 1
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let tests = (0..test_count)
+        .map(|index| {
+            format!(
+                "test shared_graph_{index}() {{ shared_value == {function_count} }}"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        r#"
+        {functions}
+
+        const shared_value: Int = helper_{}(0)
+
+        {tests}
+        "#,
+        function_count - 1
+    )
+}
+
+fn issue_1389_serialize(program: Program<Name>) -> Vec<u8> {
+    Program::<DeBruijn>::try_from(program)
+        .expect("generated test should remain well scoped")
+        .to_cbor()
+        .expect("generated test should serialize")
+}
+
+#[test]
+fn issue_1389_repeated_test_codegen_is_byte_identical() {
+    let source = issue_1389_source(8, 3);
+    let mut project = TestProject::new();
+    let module = project.check(project.parse(&source));
+    let tests = module
+        .ast
+        .definitions()
+        .filter_map(|definition| match definition {
+            Definition::Test(test) => Some(test.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    assert_eq!(tests.len(), 3);
+    let first = issue_1389_serialize(generator.generate_raw(&tests[0].body, &[], &module.name));
+    let repeated = issue_1389_serialize(generator.generate_raw(&tests[0].body, &[], &module.name));
+    let alongside_other =
+        issue_1389_serialize(generator.generate_raw(&tests[1].body, &[], &module.name));
+    let after_other =
+        issue_1389_serialize(generator.generate_raw(&tests[0].body, &[], &module.name));
+
+    assert_eq!(repeated, first, "repeated codegen changed serialized output");
+    assert_eq!(
+        alongside_other, first,
+        "equivalent tests generated different serialized output"
+    );
+    assert_eq!(
+        after_other, first,
+        "generating another test polluted the generator state"
+    );
+}
+
+#[test]
+fn issue_1389_shared_constant_codegen_meets_deadline() {
+    const CHILD_ENV: &str = "AIKEN_ISSUE_1389_CHILD";
+    const DEADLINE: Duration = Duration::from_secs(10);
+
+    if std::env::var_os(CHILD_ENV).is_some() {
+        let source = issue_1389_source(128, 1024);
+        let mut project = TestProject::new();
+        let module = project.check(project.parse(&source));
+        let tests = module
+            .ast
+            .definitions()
+            .filter_map(|definition| match definition {
+                Definition::Test(test) => Some(test.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+        assert_eq!(tests.len(), 1024);
+        for test in tests {
+            issue_1389_serialize(generator.generate_raw(&test.body, &[], &module.name));
+        }
+        return;
+    }
+    // Calibration on an Apple M3 Max with debug test binaries: HEAD 5bcde6d
+    // completes this 128-function/1024-test workload in 2.87s; pre-fix
+    // 46429ab exceeds 10s. The subprocess deadline keeps regressions bounded.
+
+    let mut child = Command::new(std::env::current_exe().expect("test binary should exist"))
+        .args([
+            "--exact",
+            "tests::gen_uplc::issue_1389_shared_constant_codegen_meets_deadline",
+            "--nocapture",
+        ])
+        .env(CHILD_ENV, "1")
+        .spawn()
+        .expect("codegen subprocess should start");
+    let deadline = Instant::now() + DEADLINE;
+
+    loop {
+        if let Some(status) = child.try_wait().expect("codegen subprocess should be waitable") {
+            assert!(
+                status.success(),
+                "issue #1389 codegen subprocess exited unsuccessfully: {status}"
+            );
+            return;
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "issue #1389: shared-constant codegen exceeded the {}s wall-clock deadline",
+                DEADLINE.as_secs()
+            );
+        }
+
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[test]
+#[ignore = "issue #1314: failing module constants currently panic during code generation"]
+fn issue_1314_failing_module_constant_does_not_panic() {
+    let program = generate_first_test(
+        r#"
+            fn helper_fail_bool() -> Bool {
+              fail @"constant helper bool"
+            }
+
+            const broken_fail: Bool = helper_fail_bool()
+
+            test use_fail_constant() fail {
+              broken_fail
+            }
+        "#,
+    );
+
+    Program::<DeBruijn>::try_from(program)
+        .expect("a fail-marked constant should compile without panicking");
+}
+
+#[test]
+#[ignore = "issue #1380: list boundaries currently add redundant BLS conversions"]
+fn issue_1380_list_boundary_does_not_add_bls_conversions() {
+    // A maintainer described Data-backed lists as a known limitation and
+    // discussed warnings or specialized collections instead. Until the
+    // intended contract is settled, this remains an ignored reproducer.
+    let source = r#"
+        use aiken/builtin
+
+        pub fn g1(point: ByteArray) -> ByteArray {
+          let decoded = builtin.bls12_381_g1_uncompress(point)
+          let points = [decoded]
+          expect [head] = points
+          builtin.bls12_381_g1_compress(
+            builtin.bls12_381_g1_add(head, head),
+          )
+        }
+
+        pub fn g2(point: ByteArray) -> ByteArray {
+          let decoded = builtin.bls12_381_g2_uncompress(point)
+          let points = [decoded]
+          expect [head] = points
+          builtin.bls12_381_g2_compress(
+            builtin.bls12_381_g2_add(head, head),
+          )
+        }
+    "#;
+    let g1 = generate_function(source, "g1");
+    let g2 = generate_function(source, "g2");
+
+    assert_eq!(
+        (
+            count_builtin(&g2.term, DefaultFunction::Bls12_381_G2_Uncompress),
+            count_builtin(&g2.term, DefaultFunction::Bls12_381_G2_Add),
+            count_builtin(&g2.term, DefaultFunction::Bls12_381_G2_Compress),
+        ),
+        (1, 1, 1),
+        "the G2 list boundary should not add an uncompress/compress round-trip"
+    );
+    assert_eq!(
+        count_builtin(&g1.term, DefaultFunction::Bls12_381_G1_Compress),
+        1,
+        "the list boundary should not add a G1 compression"
+    );
+    assert_eq!(
+        count_builtin(&g1.term, DefaultFunction::Bls12_381_G1_Uncompress),
+        1,
+        "the list boundary should not add a G1 decompression"
+    );
 }

@@ -847,6 +847,71 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "issue #1269: aliases currently create duplicate CIP-57 definitions"]
+    fn issue_1269_credential_alias_has_one_blueprint_definition() {
+        let mut project = TestProject::new();
+        let modules = CheckedModules::singleton(project.check(project.parse(indoc::indoc! { r#"
+            pub type Credential {
+              VerificationKey(ByteArray)
+              Script(ByteArray)
+            }
+
+            pub type PaymentCredential = Credential
+
+            pub type SpendDatum {
+              owner: PaymentCredential,
+            }
+
+            pub type SpendRedeemer {
+              owner: Credential,
+            }
+
+            validator credential_alias {
+              spend(
+                _datum: Option<SpendDatum>,
+                _redeemer: SpendRedeemer,
+                _utxo: Data,
+                _self: Data,
+              ) {
+                True
+              }
+            }
+        "# })));
+        let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+        let (validator, definition) = modules
+            .validators()
+            .next()
+            .expect("source code should yield a validator");
+        let validators = Validator::from_checked_module(
+            &modules,
+            &mut generator,
+            validator,
+            definition,
+            &PlutusVersion::default(),
+        )
+        .expect("blueprint generation should succeed");
+        let definitions = serde_json::to_value(&validators[0].definitions)
+            .expect("definitions should serialize");
+        let credential_definitions = definitions
+            .as_object()
+            .expect("definitions should serialize as an object")
+            .keys()
+            .filter(|key| {
+                matches!(
+                    key.rsplit('/').next(),
+                    Some("Credential" | "PaymentCredential")
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            credential_definitions.len(),
+            1,
+            "Credential and its PaymentCredential alias should share one definition; found {credential_definitions:?}"
+        );
+    }
+
+    #[test]
     fn rogue_generic() {
         assert_validator!(
             r#"

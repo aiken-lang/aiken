@@ -567,10 +567,15 @@ impl From<&Constant> for Type {
 #[cfg(test)]
 mod tests {
     use num_bigint::BigInt;
+    use std::{
+        process::Command,
+        thread,
+        time::{Duration, Instant},
+    };
 
     use super::{cost_model::ExBudget, runtime::Compressable};
     use crate::{
-        ast::{Constant, NamedDeBruijn, Program, Term},
+        ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
     };
 
@@ -819,5 +824,170 @@ mod tests {
         let final_term = eval_result.result().unwrap();
 
         assert_eq!(final_term, Term::bool(true))
+    }
+
+    #[test]
+    fn issue_1410_cek_list_construction_and_destruction_preserves_values() {
+        const ITEM_COUNT: usize = 128;
+
+        let mut list = Term::empty_list();
+        for value in (0..ITEM_COUNT).rev() {
+            list = Term::mk_cons()
+                .apply(Term::data(Data::integer(value.into())))
+                .apply(list);
+        }
+
+        let mut last = list;
+        for _ in 1..ITEM_COUNT {
+            last = Term::tail_list().apply(last);
+        }
+
+        let program = Program {
+            version: (1, 0, 0),
+            term: Term::head_list().apply(last),
+        };
+
+        assert_eq!(
+            program.eval(ExBudget::max()).result().unwrap(),
+            Term::data(Data::integer((ITEM_COUNT - 1).into()))
+        );
+    }
+
+    #[test]
+    fn issue_1410_cek_list_builtin_budget_is_stable() {
+        let list = Term::<Name>::mk_cons()
+            .apply(Term::data(Data::integer(1.into())))
+            .apply(
+                Term::mk_cons()
+                    .apply(Term::data(Data::integer(2.into())))
+                    .apply(Term::empty_list()),
+            );
+        let selected = list.clone().delayed_choose_list(
+            Term::data(Data::integer(0.into())),
+            Term::head_list().apply(list.clone()),
+        );
+        let dropped = Term::Builtin(DefaultFunction::DropList)
+            .force()
+            .apply(Term::integer(1.into()))
+            .apply(list);
+        let body = Term::null_list().force().apply(
+            Term::mk_cons()
+                .apply(selected)
+                .apply(Term::tail_list().apply(dropped)),
+        );
+        let program = Program::<NamedDeBruijn>::try_from(Program {
+            version: (1, 1, 0),
+            term: body,
+        })
+        .expect("list builtin budget program should remain well scoped");
+        let evaluation = program.eval(ExBudget::max());
+
+        assert!(
+            evaluation.result().is_ok(),
+            "budget program failed: {:?}",
+            evaluation.result
+        );
+        assert_eq!(
+            evaluation.cost(),
+            ExBudget {
+                cpu: 1_957_542,
+                mem: 6_456,
+            }
+        );
+    }
+
+    #[test]
+    #[ignore = "issue #1410: CEK list construction and consumption exceed the host deadline"]
+    fn issue_1410_quadratic_list_host_cost_deadline_reproducer() {
+        const CHILD_ENV: &str = "AIKEN_ISSUE_1410_CHILD";
+        const DEPTH: usize = 2048;
+        const DEADLINE: Duration = Duration::from_secs(2);
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            thread::Builder::new()
+                .name("issue-1410-cek".to_string())
+                .stack_size(64 * 1024 * 1024)
+                .spawn(|| {
+                    let mut list = Term::<Name>::empty_list();
+                    for value in (0..DEPTH).rev() {
+                        list = Term::mk_cons()
+                            .apply(Term::data(Data::integer(value.into())))
+                            .apply(list);
+                    }
+
+                    let mut tail = list;
+                    for _ in 0..DEPTH {
+                        tail = Term::tail_list().apply(tail);
+                    }
+
+                    let program = Program::<NamedDeBruijn>::try_from(Program {
+                        version: (1, 1, 0),
+                        term: Term::null_list().force().apply(tail),
+                    })
+                    .expect("host-cost program should remain well scoped");
+                    assert_eq!(
+                        program.eval(ExBudget::max()).result().unwrap(),
+                        Term::bool(true)
+                    );
+                })
+                .expect("host-cost worker thread should start")
+                .join()
+                .expect("host-cost worker thread should not panic");
+            return;
+        }
+
+        // Calibration on an Apple M3 Max at HEAD 5bcde6d: depth 2048 takes
+        // 2.98s. PR #1410 reports 1.80GB/5.5s before the fix versus
+        // 132MB/1.2s after it; a two-second subprocess deadline separates
+        // both measurements without relying on the surrounding test job.
+        let mut child = Command::new(std::env::current_exe().expect("test binary should exist"))
+            .args([
+                "--ignored",
+                "--exact",
+                "machine::tests::issue_1410_quadratic_list_host_cost_deadline_reproducer",
+                "--nocapture",
+            ])
+            .env(CHILD_ENV, "1")
+            .spawn()
+            .expect("CEK host-cost subprocess should start");
+        let deadline = Instant::now() + DEADLINE;
+
+        loop {
+            if let Some(status) = child.try_wait().expect("CEK subprocess should be waitable") {
+                assert!(
+                    status.success(),
+                    "issue #1410 CEK subprocess exited unsuccessfully: {status}"
+                );
+                return;
+            }
+
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!(
+                    "issue #1410: depth {DEPTH} exceeded the {}s host wall-clock deadline",
+                    DEADLINE.as_secs()
+                );
+            }
+
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    #[test]
+    #[ignore = "issue #1359: malformed ConstrData currently panics in the CEK runtime"]
+    fn issue_1359_out_of_range_constr_tag_returns_an_error() {
+        let tag = "18446744073709551616".parse::<BigInt>().unwrap();
+        let program = Program {
+            version: (1, 0, 0),
+            term: Term::constr_data()
+                .apply(Term::integer(tag))
+                .apply(Term::empty_list()),
+        };
+
+        assert!(
+            program.eval(ExBudget::max()).result().is_err(),
+            "an out-of-range constructor tag should return a CEK error"
+        );
     }
 }

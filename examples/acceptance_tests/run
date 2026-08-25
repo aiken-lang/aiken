@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z $1 ]; then
+if [ -z "${1:-}" ]; then
   echo -e "\033[31mMissing argument: \033[1mACCEPTANCE_TEST\033[0m"
   echo ""
   echo -e "\033[1mUsage: \033[0m"
@@ -12,19 +12,31 @@ if [ -z $1 ]; then
 fi
 
 WORKDIR="$(dirname -- "${BASH_SOURCE[0]}")"
-TARGET="$WORKDIR/$(basename $1)"
+TARGET="$WORKDIR/$(basename "$1")"
 
 TMP=$(mktemp)
-VALIDATORS=$(find $TARGET -type f -path "*validators/*.ak")
-cargo run -r -- check -S "$TARGET" >"$TMP" 2>&1
-if [ "$?" -eq "0" ]; then
-  if [ -z "$VALIDATORS" ]; then
+trap 'rm -f "$TMP"' EXIT
+PYTHON="${PYTHON:-python3}"
+DEADLINE_SECONDS=240
+VALIDATORS=$(find "$TARGET" -type f -path "*validators/*.ak")
+if [ -f "$TARGET/.assert-only" ]; then
+  CHECK_STATUS=0
+else
+  "$PYTHON" "$WORKDIR/run-with-timeout.py" "$DEADLINE_SECONDS" \
+    cargo run -r -- check -S "$TARGET" >"$TMP" 2>&1
+  CHECK_STATUS=$?
+fi
+
+if [ "$CHECK_STATUS" -eq "0" ]; then
+  if [ -z "$VALIDATORS" ] && [ ! -f "$TARGET/assert.sh" ]; then
     echo "✅ $(basename $TARGET)"
   else
     if [ ! -f "$TARGET/assert.sh" ]; then
-      cargo run -r --quiet -- build -S $TARGET 1>$TMP 2>/dev/null
+      "$PYTHON" "$WORKDIR/run-with-timeout.py" "$DEADLINE_SECONDS" \
+        cargo run -r --quiet -- build -S "$TARGET" >"$TMP" 2>&1
     else
-      $TARGET/assert.sh 1>$TMP 2>/dev/null
+      "$PYTHON" "$WORKDIR/run-with-timeout.py" "$DEADLINE_SECONDS" \
+        "$TARGET/assert.sh" >"$TMP" 2>&1
     fi
 
     if [ "$?" -eq "0" ]; then

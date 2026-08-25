@@ -9,7 +9,12 @@ use crate::{
     parser,
     tipo::error::{Error, UnifyErrorSituation, Warning},
 };
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    process::Command,
+    thread,
+    time::{Duration, Instant},
+};
 
 const DEFAULT_MODULE_NAME: &str = "my_module";
 const DEFAULT_PACKAGE: &str = "test/project";
@@ -1065,6 +1070,25 @@ fn record_update_duplicate_labels() {
         check(parse(source_code)),
         Err((_, Error::DuplicateRecordUpdateArgument { label, .. })) if label == "age"
     ))
+}
+
+#[test]
+fn record_update_single_label() {
+    let source_code = r#"
+        pub type User {
+          User {
+            name: ByteArray,
+            age: Int,
+          }
+        }
+
+        pub fn foo() {
+          let user = User { name: "ada", age: 10 }
+          User { ..user, age: 20 }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
 }
 
 #[test]
@@ -5173,4 +5197,70 @@ fn incomplete_pair() {
         dbg!(check_validator(parse(source_code))),
         Err((_, Error::IncorrectFunctionCallArity { expected, .. })) if expected == 2
     ))
+}
+
+fn issue_1390_source(depth: usize) -> String {
+    let value = (0..depth).fold("Z".to_string(), |value, _| format!("S({value})"));
+
+    format!("pub type Nat {{\n  Z\n  S(Nat)\n}}\n\npub fn probe() -> Nat {{\n  {value}\n}}\n")
+}
+
+#[test]
+fn issue_1390_nested_constructor_type_checks_at_safe_depth() {
+    let source = issue_1390_source(64);
+
+    assert!(check(parse(&source)).is_ok());
+}
+
+#[test]
+#[ignore = "issue #1390: depth 2048 exhausts the native stack in an isolated subprocess"]
+fn issue_1390_nested_constructor_subprocess_reproducer() {
+    const CHILD_ENV: &str = "AIKEN_ISSUE_1390_CHILD";
+    const DEPTH: usize = 2048;
+    const DEADLINE: Duration = Duration::from_secs(10);
+
+    if std::env::var_os(CHILD_ENV).is_some() {
+        let source = issue_1390_source(DEPTH);
+        assert!(
+            check(parse(&source)).is_ok(),
+            "deep constructor input should type-check or return a structured diagnostic"
+        );
+        return;
+    }
+
+    let mut child = Command::new(std::env::current_exe().expect("test binary should exist"))
+        .args([
+            "--ignored",
+            "--exact",
+            "tests::check::issue_1390_nested_constructor_subprocess_reproducer",
+            "--nocapture",
+        ])
+        .env(CHILD_ENV, "1")
+        .spawn()
+        .expect("type-checker subprocess should start");
+    let deadline = Instant::now() + DEADLINE;
+
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .expect("type-checker subprocess should be waitable")
+        {
+            assert!(
+                status.success(),
+                "issue #1390 stack-overflow subprocess exited unsuccessfully: {status}"
+            );
+            return;
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "issue #1390: depth {DEPTH} exceeded the {}s wall-clock deadline",
+                DEADLINE.as_secs()
+            );
+        }
+
+        thread::sleep(Duration::from_millis(25));
+    }
 }

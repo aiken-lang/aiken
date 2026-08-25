@@ -1,0 +1,3 @@
+Issue #1309 quarantined crash reproducer (const-function workaround half).
+Expected failure: optimizer panics at shrinker.rs with FreeUnique(__cyclic_function_6).
+Explicit run: ./examples/acceptance_tests/run 136

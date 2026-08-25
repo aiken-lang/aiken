@@ -4511,4 +4511,17 @@ mod tests {
             })
         });
     }
+
+    #[test]
+    #[ignore = "issue #1407: the release optimizer currently reports FreeUnique"]
+    fn issue_1407_cyclic_function_optimization_remains_well_scoped() {
+        let program =
+            crate::parser::program(include_str!("../../test_data/regressions/issue_1407.uplc"))
+                .expect("regression fixture should parse");
+
+        let program = crate::optimize::aiken_optimize_and_intern(program);
+
+        Program::<NamedDeBruijn>::try_from(program)
+            .expect("optimized cyclic functions should remain well scoped");
+    }
 }

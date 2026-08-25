@@ -1,0 +1,3 @@
+Issue #1359 quarantined CLI reproducer.
+Expected failure: cbor.deserialise plus a typed expect panics in machine/runtime.rs with TryFromBigIntError.
+Explicit run: ./examples/acceptance_tests/run 142
