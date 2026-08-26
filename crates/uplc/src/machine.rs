@@ -820,4 +820,21 @@ mod tests {
 
         assert_eq!(final_term, Term::bool(true))
     }
+
+    #[test]
+    #[ignore = "issue #1359: malformed ConstrData currently panics in the CEK runtime"]
+    fn issue_1359_out_of_range_constr_tag_returns_an_error() {
+        let tag = "18446744073709551616".parse::<BigInt>().unwrap();
+        let program = Program {
+            version: (1, 0, 0),
+            term: Term::constr_data()
+                .apply(Term::integer(tag))
+                .apply(Term::empty_list()),
+        };
+
+        assert!(
+            program.eval(ExBudget::max()).result().is_err(),
+            "an out-of-range constructor tag should return a CEK error"
+        );
+    }
 }

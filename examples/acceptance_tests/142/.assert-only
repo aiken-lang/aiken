@@ -1,0 +1,1 @@
+assert.sh owns the CLI subprocess so the runtime panic is isolated and bounded.

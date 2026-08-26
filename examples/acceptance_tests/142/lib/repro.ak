@@ -1,0 +1,17 @@
+use aiken/cbor
+
+pub type OrderDatum {
+  OrderDatum(Data)
+}
+
+fn amaru() -> OrderDatum {
+  let bytes = #"d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34ffd8799fd8799fd87a9f581c5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34ffffffffd87980ffd87a9f9f40401b0000000b9567bc06ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b00000001bf08eb00ffffd87980ff"
+  expect Some(datum) = cbor.deserialise(bytes)
+  expect datum: OrderDatum = datum
+  datum
+}
+
+test issue_1359_reported_datum_does_not_crash() {
+  trace amaru()
+  True
+}
