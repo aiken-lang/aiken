@@ -6491,3 +6491,40 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
     assert_uplc(src, program_verbose, true, true);
     assert_uplc(src, program_silent, true, false);
 }
+
+fn generate_first_test(source_code: &str) -> Program<Name> {
+    let mut project = TestProject::new();
+    let module = project.check(project.parse(source_code));
+    let test = module
+        .ast
+        .definitions()
+        .find_map(|definition| match definition {
+            Definition::Test(test) => Some(test),
+            _ => None,
+        })
+        .expect("source should contain a test");
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    generator.generate_raw(&test.body, &[], &module.name)
+}
+
+#[test]
+#[ignore = "issue #1314: failing module constants currently panic during code generation"]
+fn issue_1314_failing_module_constant_does_not_panic() {
+    let program = generate_first_test(
+        r#"
+            fn helper_fail_bool() -> Bool {
+              fail @"constant helper bool"
+            }
+
+            const broken_fail: Bool = helper_fail_bool()
+
+            test use_fail_constant() fail {
+              broken_fail
+            }
+        "#,
+    );
+
+    Program::<DeBruijn>::try_from(program)
+        .expect("a fail-marked constant should compile without panicking");
+}

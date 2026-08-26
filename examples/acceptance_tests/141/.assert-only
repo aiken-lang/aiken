@@ -1,0 +1,1 @@
+assert.sh owns the CLI invocation so it can accept either a coherent fail verdict or a structured diagnostic after issue #1314 is fixed.

@@ -1,0 +1,3 @@
+Issue #1314 quarantined CLI reproducer.
+Expected failure: aiken check panics with Failed to evaluate constant: EvaluationFailure instead of reporting the fail-marked test coherently.
+Explicit run: ./examples/acceptance_tests/run 141
