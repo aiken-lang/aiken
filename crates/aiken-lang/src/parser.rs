@@ -87,7 +87,12 @@ pub fn module(
 
 #[cfg(test)]
 mod tests {
-    use crate::assert_module;
+    use crate::{assert_module, ast::ModuleKind};
+    use std::{
+        process::Command,
+        thread,
+        time::{Duration, Instant},
+    };
 
     #[test]
     fn merge_imports() {
@@ -163,5 +168,70 @@ mod tests {
             }
             "#
         );
+    }
+
+    fn issue_1377_source(depth: usize) -> String {
+        let expression = (0..depth).fold("3".to_string(), |expression, index| {
+            let operator = if index % 3 == 1 { "*" } else { "+" };
+            format!("({expression} {operator} {})", index + 4)
+        });
+
+        format!("pub fn probe(y: Int) -> Int {{\n  let value = {expression}\n  value * y\n}}\n")
+    }
+
+    #[test]
+    fn issue_1377_parenthesized_operator_chain_parses_at_safe_depth() {
+        super::module(&issue_1377_source(12), ModuleKind::Lib)
+            .expect("parenthesized operator chain should parse");
+    }
+
+    #[test]
+    #[ignore = "issue #1377: depth 18 exceeds the bounded parser deadline"]
+    fn issue_1377_parenthesized_operator_chain_deadline_reproducer() {
+        const CHILD_ENV: &str = "AIKEN_ISSUE_1377_CHILD";
+        const DEPTH: usize = 18;
+        const DEADLINE: Duration = Duration::from_secs(10);
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            super::module(&issue_1377_source(DEPTH), ModuleKind::Lib)
+                .expect("parenthesized operator chain should parse");
+            return;
+        }
+
+        // Calibration: on an Apple M3 Max at 5bcde6d, depth 18 took 99.72s.
+        // Ten seconds separates that nonlinear behavior while keeping the forced
+        // reproducer bounded well below five minutes on macOS and Linux.
+        let mut child = Command::new(std::env::current_exe().expect("test binary should exist"))
+            .args([
+                "--ignored",
+                "--exact",
+                "parser::tests::issue_1377_parenthesized_operator_chain_deadline_reproducer",
+                "--nocapture",
+            ])
+            .env(CHILD_ENV, "1")
+            .spawn()
+            .expect("parser subprocess should start");
+        let deadline = Instant::now() + DEADLINE;
+
+        loop {
+            if let Some(status) = child.try_wait().expect("parser subprocess should be waitable") {
+                assert!(
+                    status.success(),
+                    "issue #1377 parser subprocess exited unsuccessfully: {status}"
+                );
+                return;
+            }
+
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!(
+                    "issue #1377: depth {DEPTH} parse exceeded the {}s wall-clock deadline",
+                    DEADLINE.as_secs()
+                );
+            }
+
+            thread::sleep(Duration::from_millis(25));
+        }
     }
 }
