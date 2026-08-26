@@ -1,0 +1,13 @@
+name = "aiken-lang/acceptance_test_136"
+version = "0.0.0"
+plutus = "v3"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "main"
+source = "github"
