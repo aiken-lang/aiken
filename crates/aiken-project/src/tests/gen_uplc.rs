@@ -7,6 +7,7 @@ use std::rc::Rc;
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
+    builtins::DefaultFunction,
     machine::{cost_model::ExBudget, runtime::Compressable},
     optimize::{self},
 };
@@ -6508,6 +6509,47 @@ fn generate_first_test(source_code: &str) -> Program<Name> {
     generator.generate_raw(&test.body, &[], &module.name)
 }
 
+fn generate_function(source_code: &str, name: &str) -> Program<Name> {
+    let mut project = TestProject::new();
+    let module = project.check(project.parse(source_code));
+    let function = module
+        .ast
+        .definitions()
+        .find_map(|definition| match definition {
+            Definition::Fn(function) if function.name == name => Some(function),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("source should contain function {name}"));
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    generator.generate_raw(&function.body, &function.arguments, &module.name)
+}
+
+fn count_builtin<T>(term: &Term<T>, builtin: DefaultFunction) -> usize {
+    let current = usize::from(matches!(term, Term::Builtin(actual) if *actual == builtin));
+    let nested = match term {
+        Term::Delay(term) | Term::Force(term) => count_builtin(term, builtin),
+        Term::Lambda { body, .. } => count_builtin(body, builtin),
+        Term::Apply { function, argument } => {
+            count_builtin(function, builtin) + count_builtin(argument, builtin)
+        }
+        Term::Constr { fields, .. } => fields
+            .iter()
+            .map(|field| count_builtin(field, builtin))
+            .sum(),
+        Term::Case { constr, branches } => {
+            count_builtin(constr, builtin)
+                + branches
+                    .iter()
+                    .map(|branch| count_builtin(branch, builtin))
+                    .sum::<usize>()
+        }
+        Term::Var(_) | Term::Constant(_) | Term::Error | Term::Builtin(_) => 0,
+    };
+
+    current + nested
+}
+
 #[test]
 #[ignore = "issue #1314: failing module constants currently panic during code generation"]
 fn issue_1314_failing_module_constant_does_not_panic() {
@@ -6527,4 +6569,55 @@ fn issue_1314_failing_module_constant_does_not_panic() {
 
     Program::<DeBruijn>::try_from(program)
         .expect("a fail-marked constant should compile without panicking");
+}
+
+#[test]
+#[ignore = "issue #1380: list boundaries currently add redundant BLS conversions"]
+fn issue_1380_list_boundary_does_not_add_bls_conversions() {
+    // A maintainer described Data-backed lists as a known limitation and
+    // discussed warnings or specialized collections instead. Until the
+    // intended contract is settled, this remains an ignored reproducer.
+    let source = r#"
+        use aiken/builtin
+
+        pub fn g1(point: ByteArray) -> ByteArray {
+          let decoded = builtin.bls12_381_g1_uncompress(point)
+          let points = [decoded]
+          expect [head] = points
+          builtin.bls12_381_g1_compress(
+            builtin.bls12_381_g1_add(head, head),
+          )
+        }
+
+        pub fn g2(point: ByteArray) -> ByteArray {
+          let decoded = builtin.bls12_381_g2_uncompress(point)
+          let points = [decoded]
+          expect [head] = points
+          builtin.bls12_381_g2_compress(
+            builtin.bls12_381_g2_add(head, head),
+          )
+        }
+    "#;
+    let g1 = generate_function(source, "g1");
+    let g2 = generate_function(source, "g2");
+
+    assert_eq!(
+        (
+            count_builtin(&g2.term, DefaultFunction::Bls12_381_G2_Uncompress),
+            count_builtin(&g2.term, DefaultFunction::Bls12_381_G2_Add),
+            count_builtin(&g2.term, DefaultFunction::Bls12_381_G2_Compress),
+        ),
+        (1, 1, 1),
+        "the G2 list boundary should not add an uncompress/compress round-trip"
+    );
+    assert_eq!(
+        count_builtin(&g1.term, DefaultFunction::Bls12_381_G1_Compress),
+        1,
+        "the list boundary should not add a G1 compression"
+    );
+    assert_eq!(
+        count_builtin(&g1.term, DefaultFunction::Bls12_381_G1_Uncompress),
+        1,
+        "the list boundary should not add a G1 decompression"
+    );
 }
