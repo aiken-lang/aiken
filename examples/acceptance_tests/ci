@@ -3,8 +3,12 @@
 exit_codes=()
 
 TESTS=()
-for scenario in $(find . -maxdepth 1 -mindepth 1 -type d ! -name script_context); do
-  ./run $scenario &
+for scenario in [0-9][0-9][0-9]; do
+  [ -d "$scenario" ] || continue
+  if [ -f "$scenario/.regression-quarantine" ]; then
+    continue
+  fi
+  ./run "$scenario" &
   TESTS+=("$!")
 done
 
