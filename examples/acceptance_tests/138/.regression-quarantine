@@ -1,0 +1,4 @@
+Issue #1326 quarantined contract reproducer.
+Expected failure: compiler-generated trace filtering removes execution, so 1 of 2 fail-marked tests receives an unexpected verdict.
+Contract ambiguity: a maintainer says removing execution may be intentional; this fixture records the divergence pending a warning or contract decision.
+Explicit run: ./examples/acceptance_tests/run 138
