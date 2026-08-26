@@ -1,0 +1,3 @@
+Issue #1251 quarantined reproducer.
+Expected failure: expect traces are classified as compiler-generated and compact output retains the <expected> prefix, diverging from the issue's six-case matrix.
+Explicit run: ./examples/acceptance_tests/run 135
