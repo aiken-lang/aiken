@@ -3,7 +3,12 @@ use crate::module::CheckedModules;
 use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
 use pallas_primitives::conway::Language;
 use pretty_assertions::assert_eq;
-use std::rc::Rc;
+use std::{
+    process::Command,
+    rc::Rc,
+    thread,
+    time::{Duration, Instant},
+};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
@@ -6548,6 +6553,145 @@ fn count_builtin<T>(term: &Term<T>, builtin: DefaultFunction) -> usize {
     };
 
     current + nested
+}
+
+fn issue_1389_source(function_count: usize, test_count: usize) -> String {
+    assert!(function_count > 0);
+    let functions = (0..function_count)
+        .map(|index| {
+            if index == 0 {
+                "fn helper_0(value: Int) -> Int { value + 1 }".to_string()
+            } else {
+                format!(
+                    "fn helper_{index}(value: Int) -> Int {{ helper_{}(value) + 1 }}",
+                    index - 1
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let tests = (0..test_count)
+        .map(|index| {
+            format!(
+                "test shared_graph_{index}() {{ shared_value == {function_count} }}"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        r#"
+        {functions}
+
+        const shared_value: Int = helper_{}(0)
+
+        {tests}
+        "#,
+        function_count - 1
+    )
+}
+
+fn issue_1389_serialize(program: Program<Name>) -> Vec<u8> {
+    Program::<DeBruijn>::try_from(program)
+        .expect("generated test should remain well scoped")
+        .to_cbor()
+        .expect("generated test should serialize")
+}
+
+#[test]
+fn issue_1389_repeated_test_codegen_is_byte_identical() {
+    let source = issue_1389_source(8, 3);
+    let mut project = TestProject::new();
+    let module = project.check(project.parse(&source));
+    let tests = module
+        .ast
+        .definitions()
+        .filter_map(|definition| match definition {
+            Definition::Test(test) => Some(test.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    assert_eq!(tests.len(), 3);
+    let first = issue_1389_serialize(generator.generate_raw(&tests[0].body, &[], &module.name));
+    let repeated = issue_1389_serialize(generator.generate_raw(&tests[0].body, &[], &module.name));
+    let alongside_other =
+        issue_1389_serialize(generator.generate_raw(&tests[1].body, &[], &module.name));
+    let after_other =
+        issue_1389_serialize(generator.generate_raw(&tests[0].body, &[], &module.name));
+
+    assert_eq!(repeated, first, "repeated codegen changed serialized output");
+    assert_eq!(
+        alongside_other, first,
+        "equivalent tests generated different serialized output"
+    );
+    assert_eq!(
+        after_other, first,
+        "generating another test polluted the generator state"
+    );
+}
+
+#[test]
+fn issue_1389_shared_constant_codegen_meets_deadline() {
+    const CHILD_ENV: &str = "AIKEN_ISSUE_1389_CHILD";
+    const DEADLINE: Duration = Duration::from_secs(10);
+
+    if std::env::var_os(CHILD_ENV).is_some() {
+        let source = issue_1389_source(128, 1024);
+        let mut project = TestProject::new();
+        let module = project.check(project.parse(&source));
+        let tests = module
+            .ast
+            .definitions()
+            .filter_map(|definition| match definition {
+                Definition::Test(test) => Some(test.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+        assert_eq!(tests.len(), 1024);
+        for test in tests {
+            issue_1389_serialize(generator.generate_raw(&test.body, &[], &module.name));
+        }
+        return;
+    }
+    // Calibration on an Apple M3 Max with debug test binaries: HEAD 5bcde6d
+    // completes this 128-function/1024-test workload in 2.87s; pre-fix
+    // 46429ab exceeds 10s. The subprocess deadline keeps regressions bounded.
+
+    let mut child = Command::new(std::env::current_exe().expect("test binary should exist"))
+        .args([
+            "--exact",
+            "tests::gen_uplc::issue_1389_shared_constant_codegen_meets_deadline",
+            "--nocapture",
+        ])
+        .env(CHILD_ENV, "1")
+        .spawn()
+        .expect("codegen subprocess should start");
+    let deadline = Instant::now() + DEADLINE;
+
+    loop {
+        if let Some(status) = child.try_wait().expect("codegen subprocess should be waitable") {
+            assert!(
+                status.success(),
+                "issue #1389 codegen subprocess exited unsuccessfully: {status}"
+            );
+            return;
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "issue #1389: shared-constant codegen exceeded the {}s wall-clock deadline",
+                DEADLINE.as_secs()
+            );
+        }
+
+        thread::sleep(Duration::from_millis(25));
+    }
 }
 
 #[test]
