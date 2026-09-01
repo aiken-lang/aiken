@@ -40,7 +40,7 @@ pallas-codec.workspace = true
 pallas-primitives.workspace = true
 pallas-addresses.workspace = true
 pallas-traverse.workspace = true
-rand = "0.8.5"
+rand = "0.9.2"
 regex = "1.12.2"
 serde_json = "1.0.148"
 strum = { version = "0.26.3", features = ["derive"] }
