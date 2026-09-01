@@ -64,7 +64,7 @@ dependencies = [
  "indoc",
  "inquire",
  "miette 7.6.0",
- "num-bigint",
+ "num-bigint 0.5.1",
  "openssl",
  "openssl-probe 0.2.1",
  "ordinal",
@@ -96,7 +96,7 @@ dependencies = [
  "insta",
  "itertools 0.10.5",
  "miette 7.6.0",
- "num-bigint",
+ "num-bigint 0.5.1",
  "ordinal",
  "owo-colors 3.5.0",
  "pallas-primitives",
@@ -156,7 +156,7 @@ dependencies = [
  "katex",
  "miette 7.6.0",
  "notify",
- "num-bigint",
+ "num-bigint 0.5.1",
  "numfmt",
  "ordinal",
  "owo-colors 3.5.0",
@@ -2166,9 +2166,19 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
-version = "0.4.6"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
+checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
 dependencies = [
  "num-integer",
  "num-traits",
@@ -2343,7 +2353,7 @@ checksum = "7bb2a83ec9e56b222250ba1cb3115c54e621852f114bb46b44a8d8e189ea9a8e"
 dependencies = [
  "hex",
  "minicbor",
- "num-bigint",
+ "num-bigint 0.4.8",
  "serde",
  "thiserror 1.0.69",
 ]
@@ -3763,7 +3773,7 @@ dependencies = [
  "itertools 0.10.5",
  "k256",
  "miette 5.10.0",
- "num-bigint",
+ "num-bigint 0.5.1",
  "num-integer",
  "num-traits",
  "once_cell",
