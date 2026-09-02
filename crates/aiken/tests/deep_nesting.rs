@@ -101,6 +101,29 @@ fn deep_failing_module(depth: usize) -> String {
     source
 }
 
+fn deep_tuple_module(depth: usize) -> String {
+    // Companion to the unary `deep_module` above: nested tuple literals
+    // `(0, (0, ... 0 ...))` at the same depth. Fuzz testing vs the
+    // unary reproducer in aiken-lang/aiken#1390 found that nested
+    // tuples exercise a distinct crash path that constructor-focused
+    // fixtures miss.
+    let mut source = String::with_capacity(200 + depth * 6);
+    source.push_str("test deeply_nested_tuple() {\n  let value = ");
+
+    for _ in 0..depth {
+        source.push_str("(0, ");
+    }
+
+    source.push('0');
+
+    for _ in 0..depth {
+        source.push(')');
+    }
+
+    source.push_str("\n  value == value\n}\n");
+    source
+}
+
 fn assert_check_succeeds(depth: usize, skip_tests: bool) {
     let project = TestProject::new(depth);
     let output = project.check(skip_tests, false);
@@ -182,4 +205,26 @@ fn excessive_nesting_exits_normally() {
 #[test]
 fn failing_deep_test_renders_and_exits_normally() {
     assert_failing_test_exits_normally(4_096);
+}
+
+#[test]
+fn check_accepts_deep_tuple_chains() {
+    for depth in [2_048, 4_096, 6_144] {
+        let project = TestProject::from_source(deep_tuple_module(depth));
+        let output = project.check(false, false);
+
+        assert!(
+            output.status.success(),
+            "aiken check failed at tuple depth {depth} with status {}\nstdout:\n{}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+}
+
+#[test]
+fn excessive_tuple_nesting_exits_normally() {
+    assert_depth_limit_exits_normally(MAX_EXPRESSION_NESTING + 1, false);
+    assert_depth_limit_exits_normally(MAX_EXPRESSION_NESTING * 10, true);
 }

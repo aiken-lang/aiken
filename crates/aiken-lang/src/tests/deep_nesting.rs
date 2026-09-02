@@ -75,6 +75,28 @@ fn deep_discarded_void_expression_module(depth: usize) -> String {
     source
 }
 
+fn deep_tuple_module(depth: usize) -> String {
+    // Build `(0, (0, (0, ... 0 ...)))` of `depth` nested tuples. Each level
+    // adds three characters (`(0, ` or `)`), so the source grows linearly
+    // with depth, but the AST node count also grows linearly, and the type
+    // inference pass is forced to recurse through `infer_tuple` once per
+    // nesting level. Fuzz vs the issue's reproducer found that nested
+    // tuples segfault at a different (higher) depth than nested
+    // constructors, so they exercise a separate crash path that the
+    // constructor-focused regression suite in this file does not hit.
+    let mut source = String::with_capacity(220 + depth * 6);
+    source.push_str("test deeply_nested_tuple() {\n  let value = ");
+    for _ in 0..depth {
+        source.push_str("(0, ");
+    }
+    source.push('0');
+    for _ in 0..depth {
+        source.push(')');
+    }
+    source.push_str("\n  value == value\n}\n");
+    source
+}
+
 fn parse_generated(source: String, expectation: &str) -> UntypedModule {
     let (mut module, _) = parser::module(&source, ModuleKind::Lib).expect(expectation);
     module.name = MODULE_NAME.to_string();
@@ -234,4 +256,41 @@ fn infers_deep_discarded_void_expression_on_a_small_native_stack() {
         ),
         "deep-discarded-void-expression-small-stack",
     );
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[test]
+fn infers_deep_tuple_on_a_small_native_stack() {
+    infer_on_small_native_stack(
+        parse_generated(deep_tuple_module(4_096), "deep tuple module should parse"),
+        "deep-tuple-small-stack",
+    );
+}
+
+#[test]
+fn rejects_excessive_tuple_nesting_with_a_normal_error() {
+    for tuple_depth in [
+        MAX_EXPRESSION_NESTING + 1,
+        MAX_EXPRESSION_NESTING.saturating_mul(10),
+    ] {
+        let error = infer_result(parse_generated(
+            deep_tuple_module(tuple_depth),
+            "excessively nested tuple module should be rejected",
+        ))
+        .expect_err("excessively nested tuple module should be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "Expression nesting exceeds the supported limit."
+        );
+
+        assert!(matches!(
+            error,
+            Error::ExpressionNestingLimitExceeded {
+                depth,
+                limit: MAX_EXPRESSION_NESTING,
+                ..
+            } if depth > MAX_EXPRESSION_NESTING
+        ));
+    }
 }

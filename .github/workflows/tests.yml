@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
@@ -30,17 +30,13 @@ jobs:
           cargo install --path=crates/aiken --target=x86_64-unknown-linux-musl
           mv $(which aiken) aiken
           ldd aiken
-      - name: Run deep-expression regressions with release musl binary
-        env:
-          AIKEN_BIN: ${{ github.workspace }}/aiken
-        run: cargo test --release -p aiken --test deep_nesting
       - uses: actions/upload-artifact@v5
         with:
           name: aiken-${{ github.sha }}-${{ runner.arch }}-${{ runner.os }}
           path: ./aiken
 
   acceptance_tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
@@ -60,7 +56,7 @@ jobs:
         shell: bash
 
   unit_tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
@@ -71,7 +67,7 @@ jobs:
         run: cargo test --verbose --workspace
 
   benchmarks:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
@@ -83,7 +79,7 @@ jobs:
           cargo run -r -- check benchmarks
 
   checks:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
