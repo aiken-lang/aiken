@@ -27,6 +27,7 @@ use std::{
 };
 
 mod gen_uplc;
+mod fail_constants_fuzz;
 
 // TODO: Possible refactor this out of the module and have it used by `Project`. The idea would
 // be to make this struct below the actual project, and wrap it in another metadata struct
