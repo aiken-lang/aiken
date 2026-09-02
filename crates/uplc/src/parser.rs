@@ -188,7 +188,7 @@ peg::parser! {
 
         rule constant_list() -> Constant
           = "(" _* "list" _* t:type_info() _* ")" _+ ls:list(Some(&t)) {
-            Constant::ProtoList(t, ls)
+            Constant::ProtoList(t, ls.into_iter().map(Rc::new).collect())
           }
 
         rule constant_pair() -> Constant
@@ -331,7 +331,10 @@ peg::parser! {
             }
             / ls:list(list_sub_type(type_info)) {?
                 match type_info {
-                    Some(Type::List(t)) => Ok(Constant::ProtoList(t.as_ref().clone(), ls)),
+                    Some(Type::List(t)) => Ok(Constant::ProtoList(
+                        t.as_ref().clone(),
+                        ls.into_iter().map(Rc::new).collect(),
+                    )),
                     _ => Err("found 'List' instead of expected type")
                 }
             }
@@ -864,7 +867,9 @@ mod tests {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(Type::Unit, vec![Constant::Unit]).into())
+                term: Term::Constant(
+                    Constant::ProtoList(Type::Unit, vec![Constant::Unit.into()]).into()
+                )
             }
         )
     }
@@ -880,9 +885,9 @@ mod tests {
                     Constant::ProtoList(
                         Type::Bool,
                         vec![
-                            Constant::Bool(true),
-                            Constant::Bool(false),
-                            Constant::Bool(true)
+                            Constant::Bool(true).into(),
+                            Constant::Bool(false).into(),
+                            Constant::Bool(true).into()
                         ]
                     )
                     .into()
@@ -902,8 +907,8 @@ mod tests {
                     Constant::ProtoList(
                         Type::ByteString,
                         vec![
-                            Constant::ByteString(vec![0x00]),
-                            Constant::ByteString(vec![0x01]),
+                            Constant::ByteString(vec![0x00]).into(),
+                            Constant::ByteString(vec![0x01]).into(),
                         ]
                     )
                     .into()
@@ -925,12 +930,17 @@ mod tests {
                         vec![
                             Constant::ProtoList(
                                 Type::Integer,
-                                vec![Constant::Integer(14.into()), Constant::Integer(42.into())]
-                            ),
+                                vec![
+                                    Constant::Integer(14.into()).into(),
+                                    Constant::Integer(42.into()).into()
+                                ]
+                            )
+                            .into(),
                             Constant::ProtoList(
                                 Type::Integer,
-                                vec![Constant::Integer(1337.into())]
+                                vec![Constant::Integer(1337.into()).into()]
                             )
+                            .into()
                         ]
                     )
                     .into()
@@ -956,7 +966,10 @@ mod tests {
                 term: Term::Constant(
                     Constant::ProtoList(
                         Type::Integer,
-                        vec![Constant::Integer(14.into()), Constant::Integer(42.into())],
+                        vec![
+                            Constant::Integer(14.into()).into(),
+                            Constant::Integer(42.into()).into()
+                        ],
                     )
                     .into()
                 )
@@ -1024,7 +1037,10 @@ mod tests {
                         Constant::String(String::from("foo")).into(),
                         Constant::ProtoList(
                             Type::Integer,
-                            vec![Constant::Integer(14.into()), Constant::Integer(42.into())],
+                            vec![
+                                Constant::Integer(14.into()).into(),
+                                Constant::Integer(42.into()).into()
+                            ],
                         )
                         .into()
                     )

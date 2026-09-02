@@ -1145,7 +1145,7 @@ where
 
     fn run_runnables(
         &self,
-        tests: Vec<Test>,
+        mut tests: Vec<Test>,
         seed: u32,
         max_success: usize,
         tracing: Tracing,
@@ -1156,10 +1156,40 @@ where
 
         let plutus_version = &self.config.plutus;
 
-        tests
+        // The structural assertions hold typed expressions whose Rc-based
+        // nodes are shared with the module ASTs; those reference counts are
+        // not atomic, so keep the assertions on this thread rather than
+        // letting them cross into the parallel test runs below (indexed
+        // parallel iterators preserve order, so results line up with the
+        // assertions taken here).
+        let mut assertions = tests
+            .iter_mut()
+            .map(|test| match test {
+                Test::UnitTest(unit_test) => unit_test.assertion.take(),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        let mut results = tests
             .into_par_iter()
             .map(|test| test.run(seed, max_success, plutus_version, tracing))
-            .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
+            .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>();
+
+        // Assertion operands are only displayed for failed unit tests, so
+        // generating and evaluating them is deferred until here rather than
+        // being paid for every unit test at collection time.
+        let mut generator = self.new_generator(tracing);
+
+        for (result, assertion) in results.iter_mut().zip(assertions.iter_mut()) {
+            if let TestResult::UnitTestResult(unit) = result
+                && !unit.success
+                && let Some(assertion) = assertion.take()
+            {
+                unit.assertion = Some(assertion.evaluate(&mut generator, &unit.test.module));
+            }
+        }
+
+        results
             .into_iter()
             .map(|test| test.reify(&data_types))
             .collect()

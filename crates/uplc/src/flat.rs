@@ -525,7 +525,7 @@ impl Encode for Constant {
 
                 encode_constant(&type_encode, e)?;
 
-                e.encode_list_with(list, encode_constant_value)?;
+                e.encode_list_with(list, |item, e| encode_constant_value(item, e))?;
             }
             Constant::ProtoPair(type1, type2, a, b) => {
                 let mut type_encode = vec![7, 7, 6];
@@ -582,7 +582,7 @@ fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error>
         Constant::Unit => Ok(()),
         Constant::Bool(b) => b.encode(e),
         Constant::ProtoList(_, list) => {
-            e.encode_list_with(list, encode_constant_value)?;
+            e.encode_list_with(list, |item, e| encode_constant_value(item, e))?;
             Ok(())
         }
         Constant::ProtoPair(_, _, a, b) => {
@@ -645,8 +645,9 @@ impl Decode<'_> for Constant {
 
                 let typ = decode_type(&mut rest)?;
 
-                let list: Vec<Constant> =
-                    d.decode_list_with(|d| decode_constant_value(typ.clone().into(), d))?;
+                let list: Vec<Rc<Constant>> = d.decode_list_with(|d| {
+                    decode_constant_value(typ.clone().into(), d).map(Rc::new)
+                })?;
 
                 Ok(Constant::ProtoList(typ, list))
             }
@@ -708,8 +709,8 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
         Type::Unit => Ok(Constant::Unit),
         Type::Bool => Ok(Constant::Bool(bool::decode(d)?)),
         Type::List(sub_type) => {
-            let list: Vec<Constant> =
-                d.decode_list_with(|d| decode_constant_value(sub_type.clone(), d))?;
+            let list: Vec<Rc<Constant>> =
+                d.decode_list_with(|d| decode_constant_value(sub_type.clone(), d).map(Rc::new))?;
 
             Ok(Constant::ProtoList(sub_type.as_ref().clone(), list))
         }
@@ -1030,8 +1031,16 @@ mod tests {
                 Constant::ProtoList(
                     Type::List(Type::Integer.into()),
                     vec![
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7.into())]),
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5.into())]),
+                        Constant::ProtoList(
+                            Type::Integer,
+                            vec![Constant::Integer(7.into()).into()],
+                        )
+                        .into(),
+                        Constant::ProtoList(
+                            Type::Integer,
+                            vec![Constant::Integer(5.into()).into()],
+                        )
+                        .into(),
                     ],
                 )
                 .into(),
@@ -1092,8 +1101,16 @@ mod tests {
                 Constant::ProtoList(
                     Type::List(Type::Integer.into()),
                     vec![
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7.into())]),
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5.into())]),
+                        Constant::ProtoList(
+                            Type::Integer,
+                            vec![Constant::Integer(7.into()).into()],
+                        )
+                        .into(),
+                        Constant::ProtoList(
+                            Type::Integer,
+                            vec![Constant::Integer(5.into()).into()],
+                        )
+                        .into(),
                     ],
                 )
                 .into(),

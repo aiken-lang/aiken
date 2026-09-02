@@ -421,7 +421,7 @@ fn expect_pair(term: &Constant) -> Result<(Constant, Constant), Error> {
 
 fn expect_list(term: &Constant) -> Result<Vec<Constant>, Error> {
     if let Constant::ProtoList(_, elems) = term {
-        return Ok(elems.to_owned());
+        return Ok(elems.iter().map(|elem| elem.as_ref().clone()).collect());
     }
 
     Err(mismatch(

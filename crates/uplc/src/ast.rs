@@ -331,6 +331,43 @@ pub enum Term<T> {
     },
 }
 
+impl<T: Clone> Term<T> {
+    /// Rebuild the term with every `Rc` allocation freshly boxed, sharing
+    /// nothing with `self`. Unlike `clone`, this only ever borrows existing
+    /// allocations (it never bumps a reference count), so it is safe to call
+    /// from several threads on terms that share `Rc` nodes — which `Rc`'s
+    /// non-atomic counts would otherwise forbid.
+    pub fn deep_clone(&self) -> Term<T> {
+        match self {
+            Term::Var(name) => Term::Var(Rc::new(name.as_ref().clone())),
+            Term::Delay(term) => Term::Delay(Rc::new(term.deep_clone())),
+            Term::Lambda {
+                parameter_name,
+                body,
+            } => Term::Lambda {
+                parameter_name: Rc::new(parameter_name.as_ref().clone()),
+                body: Rc::new(body.deep_clone()),
+            },
+            Term::Apply { function, argument } => Term::Apply {
+                function: Rc::new(function.deep_clone()),
+                argument: Rc::new(argument.deep_clone()),
+            },
+            Term::Constant(constant) => Term::Constant(Rc::new(constant.deep_clone())),
+            Term::Force(term) => Term::Force(Rc::new(term.deep_clone())),
+            Term::Error => Term::Error,
+            Term::Builtin(fun) => Term::Builtin(*fun),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields.iter().map(|field| field.deep_clone()).collect(),
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(constr.deep_clone()),
+                branches: branches.iter().map(|branch| branch.deep_clone()).collect(),
+            },
+        }
+    }
+}
+
 impl<T> Term<T> {
     pub fn is_constant(&self) -> bool {
         matches!(self, Term::Constant(..))
@@ -405,7 +442,10 @@ pub enum Constant {
     // tag: 4
     Bool(bool),
     // tag: 5
-    ProtoList(Type, Vec<Constant>),
+    // Elements are `Rc`-shared so list builtins (mkCons, tailList) can build
+    // derived lists without deep-cloning every element; see `deep_clone` for
+    // the thread-isolation caveat.
+    ProtoList(Type, Vec<Rc<Constant>>),
     // tag: 6
     ProtoPair(Type, Type, Rc<Constant>, Rc<Constant>),
     // tag: 7
@@ -492,6 +532,47 @@ pub enum Type {
     Bls12_381G1Element,
     Bls12_381G2Element,
     Bls12_381MlResult,
+}
+
+impl Constant {
+    /// An equal constant sharing no allocation with `self`.
+    ///
+    /// `Rc` reference counts are not atomic, so a constant that may end up
+    /// embedded in programs handled by different threads (e.g. tests run in
+    /// parallel) must not share `Rc`s with anything else.
+    pub fn deep_clone(&self) -> Constant {
+        match self {
+            Constant::ProtoList(tipo, items) => Constant::ProtoList(
+                tipo.deep_clone(),
+                items
+                    .iter()
+                    .map(|item| Rc::new(item.deep_clone()))
+                    .collect(),
+            ),
+            Constant::ProtoPair(fst_tipo, snd_tipo, fst, snd) => Constant::ProtoPair(
+                fst_tipo.deep_clone(),
+                snd_tipo.deep_clone(),
+                Rc::new(fst.deep_clone()),
+                Rc::new(snd.deep_clone()),
+            ),
+            // The remaining variants own their contents outright.
+            other => other.clone(),
+        }
+    }
+}
+
+impl Type {
+    /// An equal type sharing no allocation with `self` (see
+    /// `Constant::deep_clone`).
+    pub fn deep_clone(&self) -> Type {
+        match self {
+            Type::List(inner) => Type::List(Rc::new(inner.deep_clone())),
+            Type::Pair(fst, snd) => {
+                Type::Pair(Rc::new(fst.deep_clone()), Rc::new(snd.deep_clone()))
+            }
+            other => other.clone(),
+        }
+    }
 }
 
 impl Display for Type {

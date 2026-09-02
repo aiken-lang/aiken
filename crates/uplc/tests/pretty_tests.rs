@@ -21,9 +21,9 @@ fn constant_list_integer() {
             Constant::ProtoList(
                 Type::Integer,
                 vec![
-                    Constant::Integer(0.to_bigint().unwrap()),
-                    Constant::Integer(1.to_bigint().unwrap()),
-                    Constant::Integer(2.to_bigint().unwrap()),
+                    Constant::Integer(0.to_bigint().unwrap()).into(),
+                    Constant::Integer(1.to_bigint().unwrap()).into(),
+                    Constant::Integer(2.to_bigint().unwrap()).into(),
                 ],
             )
             .into(),
@@ -79,24 +79,28 @@ fn constant_deeply_nested_list() {
                         vec![
                             Constant::ProtoList(
                                 t0.clone(),
-                                vec![Constant::Integer((-1).to_bigint().unwrap())],
-                            ),
-                            Constant::ProtoList(t0.clone(), vec![]),
+                                vec![Constant::Integer((-1).to_bigint().unwrap()).into()],
+                            )
+                            .into(),
+                            Constant::ProtoList(t0.clone(), vec![]).into(),
                         ],
-                    ),
+                    )
+                    .into(),
                     Constant::ProtoList(
                         t1,
                         vec![
-                            Constant::ProtoList(t0.clone(), vec![]),
+                            Constant::ProtoList(t0.clone(), vec![]).into(),
                             Constant::ProtoList(
                                 t0,
                                 vec![
-                                    Constant::Integer(2.to_bigint().unwrap()),
-                                    Constant::Integer(3.to_bigint().unwrap()),
+                                    Constant::Integer(2.to_bigint().unwrap()).into(),
+                                    Constant::Integer(3.to_bigint().unwrap()).into(),
                                 ],
-                            ),
+                            )
+                            .into(),
                         ],
-                    ),
+                    )
+                    .into(),
                 ],
             )
             .into(),

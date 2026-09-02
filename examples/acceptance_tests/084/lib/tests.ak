@@ -27,3 +27,7 @@ test t() {
   trace cbor.diagnostic(list.map([Pair(#"", 20)], snd_pair))
   True
 }
+
+test snd_pair_as_function() {
+  list.map([Pair(#"", 20)], snd_pair) == [20]
+}

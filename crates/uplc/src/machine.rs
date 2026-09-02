@@ -372,7 +372,7 @@ impl Machine {
                             let head = items[0].clone();
                             let tail = Constant::ProtoList(item_type.clone(), items[1..].to_vec());
 
-                            (0, vec![Value::Con(head.into()), Value::Con(tail.into())], 2)
+                            (0, vec![Value::Con(head), Value::Con(tail.into())], 2)
                         }
                         Constant::ProtoPair(_, _, first, second) => (
                             0,

@@ -57,7 +57,7 @@ impl Value {
         Value::Con(constant.into())
     }
 
-    pub fn list(typ: Type, n: Vec<Constant>) -> Self {
+    pub fn list(typ: Type, n: Vec<Rc<Constant>>) -> Self {
         let constant = Constant::ProtoList(typ, n);
 
         Value::Con(constant.into())
@@ -122,7 +122,7 @@ impl Value {
         Ok((t1, t2, first, second))
     }
 
-    pub(super) fn unwrap_list(&self) -> Result<(&Type, &Vec<Constant>), Error> {
+    pub(super) fn unwrap_list(&self) -> Result<(&Type, &Vec<Rc<Constant>>), Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(t, list) = inner else {
@@ -152,6 +152,16 @@ impl Value {
         Ok(())
     }
 
+    /// Like `unwrap_constant`, but hands out the shared allocation itself so
+    /// the caller can store it (e.g. as a list element) without a deep clone.
+    pub(super) fn unwrap_constant_rc(&self) -> Result<Rc<Constant>, Error> {
+        let Value::Con(item) = self else {
+            return Err(Error::NotAConstant(self.clone()));
+        };
+
+        Ok(Rc::clone(item))
+    }
+
     pub(super) fn unwrap_constant(&self) -> Result<&Constant, Error> {
         let Value::Con(item) = self else {
             return Err(Error::NotAConstant(self.clone()));
@@ -160,7 +170,7 @@ impl Value {
         Ok(item.as_ref())
     }
 
-    pub(super) fn unwrap_data_list(&self) -> Result<&Vec<Constant>, Error> {
+    pub(super) fn unwrap_data_list(&self) -> Result<&Vec<Rc<Constant>>, Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Data, list) = inner else {
@@ -173,7 +183,7 @@ impl Value {
         Ok(list)
     }
 
-    pub(super) fn unwrap_int_list(&self) -> Result<&Vec<Constant>, Error> {
+    pub(super) fn unwrap_int_list(&self) -> Result<&Vec<Rc<Constant>>, Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Integer, list) = inner else {
@@ -290,7 +300,9 @@ impl Value {
                     };
                 }
                 Constant::Unit | Constant::Bool(_) => total += 1,
-                Constant::ProtoList(_, items) => stack.extend(items.iter()),
+                Constant::ProtoList(_, items) => {
+                    stack.extend(items.iter().map(|item| item.as_ref()))
+                }
                 Constant::ProtoPair(_, _, l, r) => {
                     stack.push(l.as_ref());
                     stack.push(r.as_ref());
@@ -674,9 +686,9 @@ mod tests {
             Rc::new(Constant::ProtoList(
                 Type::String,
                 vec![
-                    Constant::String("abcd".to_string()),
-                    Constant::String("é".to_string()),
-                    Constant::ByteString(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                    Constant::String("abcd".to_string()).into(),
+                    Constant::String("é".to_string()).into(),
+                    Constant::ByteString(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).into(),
                 ],
             )),
         );
