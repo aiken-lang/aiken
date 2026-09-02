@@ -6,7 +6,8 @@
 
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
 - **uplc**: Convert `bls12_381_g1_multi_scalar_mul` / `bls12_381_g2_multi_scalar_mul` arguments from Aiken's data-encoded lists to the typed `List<Int>` and `List<G1Element>` / `List<G2Element>` constants expected by the builtins, like already done for `write_bits`. Fixes [#1378](https://github.com/aiken-lang/aiken/issues/1378). @perturbing
-
+- **uplc**: Avoid panicking on out-of-range ConstrData constructor tags (above `u64::MAX` or negative). Returns a typed `Error::ConstrTagOutOfRange` error instead. Fixes [#1359](https://github.com/aiken-lang/aiken/issues/1359).
+- **uplc**: Avoid panicking on oversized integer arguments to `IndexByteString` and `SliceByteString` (e.g., malformed CBOR). Returns a `Error::DeserialisationError` instead. Fixes [#1359](https://github.com/aiken-lang/aiken/issues/1359).
 
 ## v1.1.23 - 2026-06-26
 
@@ -17,6 +18,7 @@
 ### Fixed
 
 - **uplc**: Refresh default cost models parameters and fix discrepancies between the various semantics and languages. @KtorZ
+- **uplc**: Avoid panic (and return a clean error) when evaluating a `ConstrData` builtin receives a constructor tag outside the valid u64 range. Fixes [#1359](https://github.com/aiken-lang/aiken/issues/1359). @knoal
 - **aiken-lang**: Preserve typed `expect` assignments during unused-binding cleanup so `Data` validation still runs even when the bound name is unused. Fixes [#1325](https://github.com/aiken-lang/aiken/issues/1325). @knoal
 - **aiken-lang**: Emit a parse error instead panicking when a `@tag(...)` decorator value exceeds `usize::MAX`. Fixes [#1319](https://github.com/aiken-lang/aiken/issues/1319). @SAY-5, @KtorZ
 - **aiken-lang**: Use canonical type identity for cached `expect` decoder names to avoid collisions across modules and generic type shapes. Fixes [#1331](https://github.com/aiken-lang/aiken/issues/1331). @Riley-Kilgore

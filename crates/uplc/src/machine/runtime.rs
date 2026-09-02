@@ -612,12 +612,22 @@ impl DefaultFunction {
                 let skip: usize = if arg1.lt(&0.into()) {
                     0
                 } else {
-                    arg1.try_into().unwrap()
+                    arg1.try_into().map_err(|_| {
+                        Error::DeserialisationError(
+                            format!("slice offset {} does not fit in usize", arg1),
+                            args[0].clone(),
+                        )
+                    })?
                 };
                 let take: usize = if arg2.lt(&0.into()) {
                     0
                 } else {
-                    arg2.try_into().unwrap()
+                    arg2.try_into().map_err(|_| {
+                        Error::DeserialisationError(
+                            format!("slice length {} does not fit in usize", arg2),
+                            args[1].clone(),
+                        )
+                    })?
                 };
 
                 let ret: Vec<u8> = arg3.iter().skip(skip).take(take).cloned().collect();
@@ -637,7 +647,12 @@ impl DefaultFunction {
                 let arg1 = args[0].unwrap_byte_string()?;
                 let arg2 = args[1].unwrap_integer()?;
 
-                let index: i128 = arg2.try_into().unwrap();
+                let index: i128 = arg2.try_into().map_err(|_| {
+                    Error::DeserialisationError(
+                        format!("byte string index {} does not fit in i128", arg2),
+                        args[1].clone(),
+                    )
+                })?;
 
                 if 0 <= index && index < arg1.len() as i128 {
                     let ret = arg1[index as usize];
@@ -949,7 +964,10 @@ impl DefaultFunction {
                     })
                     .collect();
 
-                let i: u64 = i.try_into().unwrap();
+                // Two-step conversion so the compiler infers the closure parameter
+                // type (avoids E0282 / E0271 under Rust 1.95 + edition 2024).
+                let i_result: Result<u64, _> = i.try_into();
+                let i: u64 = i_result.map_err(|e| Error::ConstrTagOutOfRange(e.to_string()))?;
 
                 let constr_data = Data::constr(i, data_list);
 
@@ -2302,7 +2320,7 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 #[cfg(test)]
 mod tests {
     use super::{BuiltinSemantics, Error, convert_constr_to_tag, convert_tag_to_constr};
-    use crate::{builtins::DefaultFunction, machine::value::Value};
+    use crate::{ast::Type, builtins::DefaultFunction, machine::value::Value};
     use num_bigint::BigInt;
     use pallas_primitives::conway::Language;
 
@@ -2333,6 +2351,24 @@ mod tests {
                 .unwrap(),
             Value::integer(4.into())
         );
+    }
+
+    #[test]
+    fn constr_data_rejects_constructor_tag_above_u64_max() {
+        // Regression for aiken-lang/aiken#1359 — evaluating
+        // `ConstrData` with a constructor tag larger than `u64::MAX`
+        // used to panic via `try_into().unwrap()`. After the fix it
+        // surfaces a typed `Error::ConstrTagOutOfRange` error instead.
+
+        let too_large = BigInt::from(u64::MAX) + BigInt::from(1u8);
+        let empty_data_list = Value::list(Type::Data, vec![]);
+
+        let args = [Value::integer(too_large), empty_data_list];
+
+        match DefaultFunction::ConstrData.call(BuiltinSemantics::C, &args, &mut vec![]) {
+            Err(Error::ConstrTagOutOfRange(_)) => {}
+            other => panic!("expected Error::ConstrTagOutOfRange, got: {:?}", other),
+        }
     }
 
     #[test]
