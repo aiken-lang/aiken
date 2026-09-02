@@ -890,16 +890,23 @@ impl DefaultFunction {
                 }
             }
             DefaultFunction::MkCons => {
-                let item = args[0].unwrap_constant()?;
+                let item = args[0].unwrap_constant_rc()?;
                 let (r#type, list) = args[1].unwrap_list()?;
 
-                if *r#type != Type::from(item) {
-                    return Err(Error::TypeMismatch(Type::from(item), r#type.clone()));
+                if *r#type != Type::from(item.as_ref()) {
+                    return Err(Error::TypeMismatch(
+                        Type::from(item.as_ref()),
+                        r#type.clone(),
+                    ));
                 }
 
-                let mut ret = vec![item.clone()];
-
-                ret.extend(list.clone());
+                // Share the spine's elements instead of deep-cloning them:
+                // consing onto a list must stay O(len) in pointer copies, not
+                // O(total element size), or deep recursion over accumulated
+                // lists goes quadratic in host memory.
+                let mut ret = Vec::with_capacity(list.len() + 1);
+                ret.push(item);
+                ret.extend(list.iter().map(Rc::clone));
 
                 let value = Value::list(r#type.clone(), ret);
 
@@ -911,7 +918,7 @@ impl DefaultFunction {
                 if list.is_empty() {
                     Err(Error::EmptyList(args[0].clone()))
                 } else {
-                    let value = Value::Con(list[0].clone().into());
+                    let value = Value::Con(list[0].clone());
 
                     Ok(value)
                 }
@@ -951,7 +958,7 @@ impl DefaultFunction {
 
                 let data_list: Vec<PlutusData> = l
                     .iter()
-                    .map(|item| match item {
+                    .map(|item| match item.as_ref() {
                         Constant::Data(d) => d.clone(),
                         _ => unreachable!(),
                     })
@@ -984,7 +991,8 @@ impl DefaultFunction {
                 let mut map = Vec::new();
 
                 for item in list {
-                    let Constant::ProtoPair(Type::Data, Type::Data, left, right) = item else {
+                    let Constant::ProtoPair(Type::Data, Type::Data, left, right) = item.as_ref()
+                    else {
                         unreachable!()
                     };
 
@@ -1006,7 +1014,7 @@ impl DefaultFunction {
 
                 let data_list: Vec<PlutusData> = list
                     .iter()
-                    .map(|item| match item {
+                    .map(|item| match item.as_ref() {
                         Constant::Data(d) => d.clone(),
                         _ => unreachable!(),
                     })
@@ -1053,7 +1061,7 @@ impl DefaultFunction {
                             c.fields
                                 .deref()
                                 .iter()
-                                .map(|d| Constant::Data(d.clone()))
+                                .map(|d| Rc::new(Constant::Data(d.clone())))
                                 .collect(),
                         )
                         .into(),
@@ -1078,13 +1086,13 @@ impl DefaultFunction {
                         Type::Pair(Type::Data.into(), Type::Data.into()),
                         m.deref()
                             .iter()
-                            .map(|p| -> Constant {
-                                Constant::ProtoPair(
+                            .map(|p| -> Rc<Constant> {
+                                Rc::new(Constant::ProtoPair(
                                     Type::Data,
                                     Type::Data,
                                     Constant::Data(p.0.clone()).into(),
                                     Constant::Data(p.1.clone()).into(),
-                                )
+                                ))
                             })
                             .collect(),
                     );
@@ -1108,7 +1116,7 @@ impl DefaultFunction {
                         Type::Data,
                         l.deref()
                             .iter()
-                            .map(|d| Constant::Data(d.clone()))
+                            .map(|d| Rc::new(Constant::Data(d.clone())))
                             .collect(),
                     );
 
@@ -1412,8 +1420,11 @@ impl DefaultFunction {
                 // Every scalar (in the full first list, regardless of the
                 // point list length) must fit within the 512-byte bound.
                 for scalar in scalars {
-                    let Constant::Integer(scalar) = scalar else {
-                        return Err(Error::TypeMismatch(Type::Integer, Type::from(scalar)));
+                    let Constant::Integer(scalar) = scalar.as_ref() else {
+                        return Err(Error::TypeMismatch(
+                            Type::Integer,
+                            Type::from(scalar.as_ref()),
+                        ));
                     };
 
                     if scalar < &MSM_SCALAR_LB || scalar > &MSM_SCALAR_UB {
@@ -1430,14 +1441,17 @@ impl DefaultFunction {
                 let mut blst_points: Vec<blst::blst_p2> = Vec::with_capacity(points.len());
 
                 for (scalar, point) in scalars.iter().zip(points.iter()) {
-                    let Constant::Integer(scalar) = scalar else {
-                        return Err(Error::TypeMismatch(Type::Integer, Type::from(scalar)));
+                    let Constant::Integer(scalar) = scalar.as_ref() else {
+                        return Err(Error::TypeMismatch(
+                            Type::Integer,
+                            Type::from(scalar.as_ref()),
+                        ));
                     };
 
-                    let Constant::Bls12_381G2Element(point) = point else {
+                    let Constant::Bls12_381G2Element(point) = point.as_ref() else {
                         return Err(Error::TypeMismatch(
                             Type::Bls12_381G2Element,
-                            Type::from(point),
+                            Type::from(point.as_ref()),
                         ));
                     };
 
@@ -1788,7 +1802,7 @@ impl DefaultFunction {
                 let set_bit = args[2].unwrap_bool()?;
 
                 for index in indices {
-                    let Constant::Integer(bit_index) = index else {
+                    let Constant::Integer(bit_index) = index.as_ref() else {
                         unreachable!()
                     };
 
@@ -1956,8 +1970,8 @@ impl DefaultFunction {
                 let mut scalar_values = Vec::with_capacity(scalars.len());
 
                 for constant in scalars {
-                    let Constant::Integer(scalar) = constant else {
-                        return Err(Error::TypeMismatch(Type::Integer, constant.into()));
+                    let Constant::Integer(scalar) = constant.as_ref() else {
+                        return Err(Error::TypeMismatch(Type::Integer, constant.as_ref().into()));
                     };
 
                     if scalar < &MSM_SCALAR_LB || scalar > &MSM_SCALAR_UB {
@@ -1970,10 +1984,10 @@ impl DefaultFunction {
                 let mut point_values = Vec::with_capacity(points.len());
 
                 for constant in points {
-                    let Constant::Bls12_381G1Element(point) = constant else {
+                    let Constant::Bls12_381G1Element(point) = constant.as_ref() else {
                         return Err(Error::TypeMismatch(
                             Type::Bls12_381G1Element,
-                            constant.into(),
+                            constant.as_ref().into(),
                         ));
                     };
 

@@ -2128,40 +2128,76 @@ impl BuiltinCosts {
                 mem: self.snd_pair.mem.cost(args[0].to_ex_mem()),
                 cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::ChooseList => ExBudget {
-                mem: self.choose_list.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-                cpu: self.choose_list.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::MkCons => ExBudget {
-                mem: self
-                    .mk_cons
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .mk_cons
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::HeadList => ExBudget {
-                mem: self.head_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.head_list.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::TailList => ExBudget {
-                mem: self.tail_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::NullList => ExBudget {
-                mem: self.null_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
-            },
+            // The list builtins below are constant-cost on every published cost
+            // model, yet `to_ex_mem()` on a list walks every element (including
+            // nested `Data`). Computing that size on each call turns list
+            // traversal/accumulation quadratic in wall time, so skip the walk
+            // whenever the costing functions cannot observe the argument sizes.
+            DefaultFunction::ChooseList => {
+                let (x, y, z) =
+                    if self.choose_list.mem.is_constant() && self.choose_list.cpu.is_constant() {
+                        (0, 0, 0)
+                    } else {
+                        (
+                            args[0].to_ex_mem(),
+                            args[1].to_ex_mem(),
+                            args[2].to_ex_mem(),
+                        )
+                    };
+
+                ExBudget {
+                    mem: self.choose_list.mem.cost(x, y, z),
+                    cpu: self.choose_list.cpu.cost(x, y, z),
+                }
+            }
+            DefaultFunction::MkCons => {
+                let (x, y) = if self.mk_cons.mem.is_constant() && self.mk_cons.cpu.is_constant() {
+                    (0, 0)
+                } else {
+                    (args[0].to_ex_mem(), args[1].to_ex_mem())
+                };
+
+                ExBudget {
+                    mem: self.mk_cons.mem.cost(x, y),
+                    cpu: self.mk_cons.cpu.cost(x, y),
+                }
+            }
+            DefaultFunction::HeadList => {
+                let x = if self.head_list.mem.is_constant() && self.head_list.cpu.is_constant() {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.head_list.mem.cost(x),
+                    cpu: self.head_list.cpu.cost(x),
+                }
+            }
+            DefaultFunction::TailList => {
+                let x = if self.tail_list.mem.is_constant() && self.tail_list.cpu.is_constant() {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.tail_list.mem.cost(x),
+                    cpu: self.tail_list.cpu.cost(x),
+                }
+            }
+            DefaultFunction::NullList => {
+                let x = if self.null_list.mem.is_constant() && self.null_list.cpu.is_constant() {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.null_list.mem.cost(x),
+                    cpu: self.null_list.cpu.cost(x),
+                }
+            }
             DefaultFunction::ChooseData => ExBudget {
                 mem: self.choose_data.mem.cost(
                     args[0].to_ex_mem(),
@@ -2573,7 +2609,14 @@ impl BuiltinCosts {
                 // saturated to `i64::MAX`, rather than the integer's word size.
                 let literal = args[0].unwrap_integer()?;
                 let arg0 = literal_abs_as_i64_saturating(literal);
-                let arg1 = args[1].to_ex_mem();
+                // Both published costing functions for `dropList` depend only on
+                // the literal count, so avoid the O(list) size walk unless a
+                // cost model actually reads it.
+                let arg1 = if self.drop_list.mem.ignores_y() && self.drop_list.cpu.ignores_y() {
+                    0
+                } else {
+                    args[1].to_ex_mem()
+                };
 
                 ExBudget {
                     mem: self.drop_list.mem.cost(arg0, arg1),
@@ -3636,6 +3679,12 @@ impl Default for OneArgument {
 }
 
 impl OneArgument {
+    /// True when the function ignores its argument, so the caller can skip
+    /// computing a (potentially expensive) argument size.
+    pub fn is_constant(&self) -> bool {
+        matches!(self, OneArgument::ConstantCost(_))
+    }
+
     pub fn cost(&self, x: i64) -> i64 {
         match self {
             OneArgument::ConstantCost(c) => *c,
@@ -3674,6 +3723,20 @@ impl Default for TwoArguments {
 }
 
 impl TwoArguments {
+    /// True when the function ignores both arguments, so the caller can skip
+    /// computing (potentially expensive) argument sizes.
+    pub fn is_constant(&self) -> bool {
+        matches!(self, TwoArguments::ConstantCost(_))
+    }
+
+    /// True when the function's result never depends on `y`.
+    pub fn ignores_y(&self) -> bool {
+        matches!(
+            self,
+            TwoArguments::ConstantCost(_) | TwoArguments::LinearInX(_)
+        )
+    }
+
     pub fn cost(&self, x: i64, y: i64) -> i64 {
         match self {
             TwoArguments::ConstantCost(c) => *c,
@@ -3769,6 +3832,12 @@ impl Default for ThreeArguments {
 }
 
 impl ThreeArguments {
+    /// True when the function ignores all arguments, so the caller can skip
+    /// computing (potentially expensive) argument sizes.
+    pub fn is_constant(&self) -> bool {
+        matches!(self, ThreeArguments::ConstantCost(_))
+    }
+
     pub fn cost(&self, x: i64, y: i64, z: i64) -> i64 {
         match self {
             ThreeArguments::ConstantCost(c) => *c,
@@ -4213,7 +4282,10 @@ mod tests {
         let malformed = Value::bool(true);
         let proper_list = Value::list(
             Type::Integer,
-            vec![Constant::Integer(1.into()), Constant::Integer(2.into())],
+            vec![
+                Constant::Integer(1.into()).into(),
+                Constant::Integer(2.into()).into(),
+            ],
         );
 
         assert_eq!(1, list_len_or_value_ex_mem(&malformed));

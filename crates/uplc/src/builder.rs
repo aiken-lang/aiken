@@ -82,11 +82,15 @@ where
     }
 
     pub fn list_values(vals: Vec<Constant>) -> Self {
-        Term::Constant(Constant::ProtoList(Type::Data, vals).into())
+        Term::Constant(
+            Constant::ProtoList(Type::Data, vals.into_iter().map(Rc::new).collect()).into(),
+        )
     }
 
     pub fn int_values(vals: Vec<Constant>) -> Self {
-        Term::Constant(Constant::ProtoList(Type::Integer, vals).into())
+        Term::Constant(
+            Constant::ProtoList(Type::Integer, vals.into_iter().map(Rc::new).collect()).into(),
+        )
     }
 
     pub fn empty_map() -> Self {
@@ -97,7 +101,11 @@ where
 
     pub fn map_values(vals: Vec<Constant>) -> Self {
         Term::Constant(
-            Constant::ProtoList(Type::Pair(Type::Data.into(), Type::Data.into()), vals).into(),
+            Constant::ProtoList(
+                Type::Pair(Type::Data.into(), Type::Data.into()),
+                vals.into_iter().map(Rc::new).collect(),
+            )
+            .into(),
         )
     }
 

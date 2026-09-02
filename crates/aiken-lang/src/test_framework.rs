@@ -29,6 +29,7 @@ use std::{
 use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
+    optimize::aiken_optimize_and_intern,
 };
 use vec1::{Vec1, vec1};
 
@@ -71,33 +72,16 @@ impl Test {
         module_name: String,
         input_path: PathBuf,
     ) -> Test {
-        let program = generator.generate_raw(&test.body, &[], &module_name);
+        // The UPLC shrinker dominates test collection time, so it is deferred
+        // to the (parallel) run phase; `run` optimizes this program before
+        // evaluating it.
+        let program = generator.generate_raw_unoptimized(&test.body, &[], &module_name);
 
-        let assertion = match test.body.try_into() {
-            Err(..) => None,
-            Ok(Assertion { bin_op, head, tail }) => {
-                let as_constant = |generator: &mut CodeGenerator<'_>, side| {
-                    Program::<NamedDeBruijn>::try_from(generator.generate_raw(
-                        &side,
-                        &[],
-                        &module_name,
-                    ))
-                    .expect("failed to convert assertion operand to NamedDeBruijn")
-                    .eval(ExBudget::max())
-                    .unwrap_constant()
-                    .map(|cst| (cst, side.tipo()))
-                };
-
-                // Assertion at this point is evaluated so it's not just a normal assertion
-                Some(Assertion {
-                    bin_op,
-                    head: as_constant(generator, head.expect("cannot be Err at this point")),
-                    tail: tail
-                        .expect("cannot be Err at this point")
-                        .try_mapped(|e| as_constant(generator, e)),
-                })
-            }
-        };
+        // Only the structural breakdown of the assertion is kept here; its
+        // operands are only ever shown for failed tests, so generating and
+        // evaluating them is deferred until a failure is actually reported
+        // (see Assertion::<TypedExpr>::evaluate).
+        let assertion: Option<Box<Assertion<TypedExpr>>> = test.body.try_into().ok().map(Box::new);
 
         Test::UnitTest(UnitTest {
             input_path,
@@ -149,7 +133,9 @@ impl Test {
 
             let stripped_type_info = convert_opaque_type(&type_info, generator.data_types(), true);
 
-            let program = generator.clone().generate_raw(
+            // As in `unit_test`, optimization of both programs is deferred to
+            // the run phase so the shrinker cost is paid in parallel.
+            let program = generator.clone().generate_raw_unoptimized(
                 &test.body,
                 &[TypedArg {
                     tipo: stripped_type_info.clone(),
@@ -161,7 +147,10 @@ impl Test {
             // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
             // argument is a Data constructor which needs not any conversion. So we can just safely
             // apply onto it later.
-            let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
+            let generator_program =
+                generator
+                    .clone()
+                    .generate_raw_unoptimized(&via, &[], &module_name);
 
             match kind {
                 RunnableKind::Bench => Test::Benchmark(Benchmark {
@@ -222,17 +211,25 @@ pub struct UnitTest {
     pub name: String,
     pub on_test_failure: OnTestFailure,
     pub program: Program<Name>,
-    pub assertion: Option<Assertion<(Constant, Rc<Type>)>>,
+    /// The structural breakdown of a binary-operator test body. Operands are
+    /// kept unevaluated: they are only generated and run when a failure needs
+    /// to be displayed (see `Assertion::<TypedExpr>::evaluate`). Boxed to keep
+    /// the Test enum's variants comparably sized.
+    pub assertion: Option<Box<Assertion<TypedExpr>>>,
 }
 
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
     pub fn run(
-        self,
+        mut self,
         plutus_version: &PlutusVersion,
         tracing: Tracing,
     ) -> UnitTestResult<(Constant, Rc<Type>)> {
+        // Programs are collected unoptimized; the shrinker runs here so its
+        // cost is spread across the parallel test runs.
+        self.program = aiken_optimize_and_intern(self.program);
+
         let eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into());
@@ -259,7 +256,10 @@ impl UnitTest {
             test: self.to_owned(),
             spent_budget: eval_result.cost(),
             logs,
-            assertion: self.assertion,
+            // Filled in later, and only for failures: evaluating assertion
+            // operands requires a code generator, and successful tests never
+            // display them.
+            assertion: None,
         }
     }
 }
@@ -357,11 +357,16 @@ impl PropertyTest {
     /// Run a property test from a given seed. The property is run at most DEFAULT_MAX_SUCCESS times. It
     /// may stops earlier on failure; in which case a 'counterexample' is returned.
     pub fn run(
-        self,
+        mut self,
         seed: u32,
         n: usize,
         plutus_version: &PlutusVersion,
     ) -> PropertyTestResult<PlutusData> {
+        // Programs are collected unoptimized; the shrinker runs here so its
+        // cost is spread across the parallel test runs.
+        self.program = aiken_optimize_and_intern(self.program);
+        self.fuzzer.program = aiken_optimize_and_intern(self.fuzzer.program);
+
         let mut labels = BTreeMap::new();
         let mut remaining = n;
 
@@ -548,11 +553,16 @@ impl Benchmark {
     pub const DEFAULT_MAX_SIZE: usize = 30;
 
     pub fn run(
-        self,
+        mut self,
         seed: u32,
         max_size: usize,
         plutus_version: &PlutusVersion,
     ) -> BenchmarkResult {
+        // Programs are collected unoptimized; the shrinker runs here so its
+        // cost is spread across the parallel benchmark runs.
+        self.program = aiken_optimize_and_intern(self.program);
+        self.sampler.program = aiken_optimize_and_intern(self.sampler.program);
+
         let mut measures = Vec::with_capacity(max_size);
         let mut prng = Prng::from_seed(seed);
         let mut error = None;
@@ -1276,6 +1286,42 @@ pub struct Assertion<T> {
     pub bin_op: BinOp,
     pub head: Result<T, ()>,
     pub tail: Result<Vec1<T>, ()>,
+}
+
+impl Assertion<TypedExpr> {
+    /// Generate and evaluate the assertion's operands, so a failure can be
+    /// displayed with the value each side evaluated to. This is deliberately
+    /// only called for failed unit tests: each operand costs a full program
+    /// generation plus an evaluation, which used to be paid eagerly for every
+    /// unit test in the project at collection time.
+    pub fn evaluate(
+        &self,
+        generator: &mut CodeGenerator<'_>,
+        module_name: &str,
+    ) -> Assertion<(Constant, Rc<Type>)> {
+        let as_constant = |generator: &mut CodeGenerator<'_>, side: &TypedExpr| {
+            Program::<NamedDeBruijn>::try_from(generator.generate_raw(side, &[], module_name))
+                .expect("failed to convert assertion operand to NamedDeBruijn")
+                .eval(ExBudget::max())
+                .unwrap_constant()
+                .map(|cst| (cst, side.tipo()))
+        };
+
+        // Assertion at this point is evaluated so it's not just a normal assertion
+        Assertion {
+            bin_op: self.bin_op,
+            head: as_constant(
+                generator,
+                self.head.as_ref().expect("cannot be Err at this point"),
+            ),
+            tail: self
+                .tail
+                .as_ref()
+                .expect("cannot be Err at this point")
+                .clone()
+                .try_mapped(|e| as_constant(generator, &e)),
+        }
+    }
 }
 
 impl TryFrom<TypedExpr> for Assertion<TypedExpr> {

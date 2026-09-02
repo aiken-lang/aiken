@@ -900,7 +900,11 @@ impl UntypedExpr {
                             elements: args
                                 .into_iter()
                                 .map(|arg| {
-                                    UntypedExpr::do_reify_constant(data_types, arg, inner.clone())
+                                    UntypedExpr::do_reify_constant(
+                                        data_types,
+                                        Rc::unwrap_or_clone(arg),
+                                        inner.clone(),
+                                    )
                                 })
                                 .collect::<Result<Vec<_>, _>>()?,
                             tail: None,
@@ -918,7 +922,11 @@ impl UntypedExpr {
                         .into_iter()
                         .zip(elems)
                         .map(|(arg, arg_type)| {
-                            UntypedExpr::do_reify_constant(data_types, arg, arg_type.clone())
+                            UntypedExpr::do_reify_constant(
+                                data_types,
+                                Rc::unwrap_or_clone(arg),
+                                arg_type.clone(),
+                            )
                         })
                         .collect::<Result<Vec<_>, _>>()?,
                 }),

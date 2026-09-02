@@ -754,8 +754,8 @@ fn acceptance_test_6_equals_tuple() {
                 Constant::ProtoList(
                     Type::Data,
                     vec![
-                        Constant::Data(Data::integer(1.into())),
-                        Constant::Data(Data::list(vec![])),
+                        Constant::Data(Data::integer(1.into())).into(),
+                        Constant::Data(Data::list(vec![])).into(),
                     ],
                 )
                 .into(),
@@ -766,8 +766,8 @@ fn acceptance_test_6_equals_tuple() {
                 Constant::ProtoList(
                     Type::Data,
                     vec![
-                        Constant::Data(Data::integer(1.into())),
-                        Constant::Data(Data::list(vec![])),
+                        Constant::Data(Data::integer(1.into())).into(),
+                        Constant::Data(Data::list(vec![])).into(),
                     ],
                 )
                 .into(),
@@ -6007,7 +6007,7 @@ fn mk_cons_direct_invoke_2() {
             .apply(
                 Term::list_data().apply(Term::mk_cons().apply(Term::data(some)).apply(
                     Term::Constant(
-                        Constant::ProtoList(Type::Data, vec![Constant::Data(none)]).into(),
+                        Constant::ProtoList(Type::Data, vec![Constant::Data(none).into()]).into(),
                     ),
                 )),
             ),
