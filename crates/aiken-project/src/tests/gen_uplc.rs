@@ -119,6 +119,199 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
 }
 
 #[test]
+fn fail_annotated_module_constant_does_not_panic_during_codegen() {
+    let src = r#"
+        fn helper_fail_bool() -> Bool {
+          fail @"constant helper bool"
+        }
+
+        const broken_fail: Bool =
+          helper_fail_bool()
+
+        test use_fail_constant() fail {
+          broken_fail
+        }
+    "#;
+
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(src)));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+
+    let checked_module = modules.values().next().expect("expected checked module");
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("expected test definition");
+
+    let program = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        generator.generate_raw(&test.body, &[], &checked_module.name)
+    }))
+    .expect("code generation for fail-constant test should not panic");
+
+    let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+    let eval = debruijn_program.eval(ExBudget::default());
+
+    assert!(
+        eval.failed(true, &Language::PlutusV3),
+        "expected fail-constant test to fail at runtime instead of panicking during codegen; logs: {:#?}",
+        eval.logs()
+    );
+}
+
+// Regression coverage surfaced by the fuzz suite in
+// crates/aiken-project/src/tests/fail_constants_fuzz.rs. PR #1387 originally
+// tested only `fail` + direct test reference; the fuzz also caught:
+//
+//   - todo keyword (vs fail)
+//   - reference from a function body (vs direct test body)
+//
+// These three additional regression tests pin those cases down.
+
+#[test]
+fn todo_annotated_module_constant_does_not_panic_during_codegen() {
+    let src = r#"
+        fn helper_todo_bool() -> Bool {
+          todo @"constant helper bool"
+        }
+
+        const broken_todo: Bool =
+          helper_todo_bool()
+
+        test use_todo_constant() fail {
+          broken_todo
+        }
+    "#;
+
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(src)));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+
+    let checked_module = modules.values().next().expect("expected checked module");
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("expected test definition");
+
+    let program = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        generator.generate_raw(&test.body, &[], &checked_module.name)
+    }))
+    .expect("code generation for todo-constant test should not panic");
+
+    let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+    let eval = debruijn_program.eval(ExBudget::default());
+
+    assert!(
+        eval.failed(true, &Language::PlutusV3),
+        "expected todo-constant test to fail at runtime instead of panicking during codegen; logs: {:#?}",
+        eval.logs()
+    );
+}
+
+#[test]
+fn fail_annotated_constant_referenced_from_fn_body_does_not_panic() {
+    // Regression for #1314: the constant `broken` is referenced from inside a
+    // *function body* (not directly in a test). The PR #1387 fix needs to cover
+    // this reference path too, since codegen evaluates the constant whenever it
+    // is referenced anywhere in the module.
+
+    let src = r#"
+        fn helper_fail_bool() -> Bool {
+          fail @"constant helper bool"
+        }
+
+        const broken: Bool =
+          helper_fail_bool()
+
+        fn use_it() -> Bool {
+          broken
+        }
+
+        test call_use_it() {
+          use_it() == True
+        }
+    "#;
+
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(src)));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+
+    let checked_module = modules.values().next().expect("expected checked module");
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("expected test definition");
+
+    let _program = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        generator.generate_raw(&test.body, &[], &checked_module.name)
+    }))
+    .expect("code generation for fail-constant referenced via fn should not panic");
+}
+
+#[test]
+fn todo_annotated_constant_referenced_from_fn_body_does_not_panic() {
+    // Combines both regressions: todo keyword + fn-body reference.
+    let src = r#"
+        fn helper_todo_bool() -> Bool {
+          todo @"constant helper bool"
+        }
+
+        const broken: Bool =
+          helper_todo_bool()
+
+        fn use_it() -> Bool {
+          broken
+        }
+
+        test call_use_it() {
+          use_it() == True
+        }
+    "#;
+
+    let mut project = TestProject::new();
+
+    let modules = CheckedModules::singleton(project.check(project.parse(src)));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+
+    let checked_module = modules.values().next().expect("expected checked module");
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|def| match def {
+            Definition::Test(func) => Some(func.clone()),
+            _ => None,
+        })
+        .expect("expected test definition");
+
+    let _program = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        generator.generate_raw(&test.body, &[], &checked_module.name)
+    }))
+    .expect("code generation for todo-constant referenced via fn should not panic");
+}
+
+#[test]
 fn acceptance_test_1_length() {
     let src = r#"
         pub fn length(xs: List<a>) -> Int {
@@ -6491,3 +6684,7 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
     assert_uplc(src, program_verbose, true, true);
     assert_uplc(src, program_silent, true, false);
 }
+
+// (Regression test for https://github.com/aiken-lang/aiken/issues/1314 — the
+// canonical `fail_annotated_module_constant_does_not_panic_during_codegen`
+// test lives near the top of this file. This module ends here.)
