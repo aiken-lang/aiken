@@ -182,6 +182,7 @@ mod tests {
         ast::{TraceLevel, Tracing},
         plutus_version::PlutusVersion,
     };
+    use uplc::ast::{DeBruijn, Program, Term};
 
     macro_rules! assert_export {
         ($code:expr) => {
@@ -318,6 +319,271 @@ mod tests {
                     "Validator JSON should have compiledCode and definitions: {}",
                     json
                 );
+            }
+        }
+    }
+
+    /// Fuzz test for https://github.com/aiken-lang/aiken/issues/1333
+    ///
+    /// Parametrized over same-module helper shapes that could expose free-variable
+    /// bugs in the export pipeline. Each case exports a function that calls one or
+    /// more same-module helpers and verifies:
+    ///   1. The export succeeds and produces JSON containing `compiledCode` and
+    ///      `definitions`.
+    ///   2. The resulting UPLC `Program<DeBruijn>` contains no `Var(DeBruijn(N))`
+    ///      with `N > depth` at the use site (i.e., no orphan references that
+    ///      would error at runtime as `OpenTermEvaluated(Var(DeBruijn(N)))`).
+    ///
+    /// The PR #1372 fix adds an `insert_new_function` call in `hoist_function` so
+    /// that same-module helpers get registered in `key_to_func` and `DefineFunc`-
+    /// generated UPLC resolves correctly.
+    ///
+    /// Run with:
+    ///   cargo test -p aiken-project --lib export::tests::fuzz_export_same_module_dependencies
+    #[test]
+    fn fuzz_export_same_module_dependencies() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        let cases: &[(&str, &str, &str)] = &[
+            (
+                "orig_helper_pub",
+                r#"
+                pub fn helper(x: Int) -> Bool { x > 0 }
+                pub fn main(y: Int) -> Bool { helper(y) }
+                "#,
+                "main",
+            ),
+            (
+                "helper_private",
+                r#"
+                fn helper(x: Int) -> Bool { x > 0 }
+                pub fn main(y: Int) -> Bool { helper(y) }
+                "#,
+                "main",
+            ),
+            (
+                "chained_private",
+                r#"
+                fn inner(x: Int) -> Int { x + 1 }
+                fn middle(x: Int) -> Bool { inner(x) > 0 }
+                pub fn main(y: Int) -> Bool { middle(y) }
+                "#,
+                "main",
+            ),
+            (
+                "two_helpers_call_each_other",
+                r#"
+                fn helper_a(x: Int) -> Int { x + 1 }
+                fn helper_b(x: Int) -> Int { helper_a(x) + 2 }
+                pub fn main(y: Int) -> Int { helper_b(y) }
+                "#,
+                "main",
+            ),
+            (
+                "helper_multi_call",
+                r#"
+                fn sign(x: Int) -> Int {
+                  if x > 0 {
+                    1
+                  } else {
+                    if x < 0 {
+                      -1
+                    } else {
+                      0
+                    }
+                  }
+                }
+                pub fn main(y: Int) -> Int {
+                  let a = sign(y)
+                  let b = sign(y + 1)
+                  a + b
+                }
+                "#,
+                "main",
+            ),
+            (
+                "recursive_helper",
+                r#"
+                fn fact(n: Int) -> Int {
+                  if n <= 1 { 1 } else { n * fact(n - 1) }
+                }
+                pub fn main(y: Int) -> Int { fact(y) }
+                "#,
+                "main",
+            ),
+            (
+                "multiple_helpers_one_used",
+                r#"
+                fn used_helper(x: Int) -> Int { x * 2 }
+                fn unused_helper(x: Int) -> Int { x * 3 }
+                pub fn main(y: Int) -> Int { used_helper(y) }
+                "#,
+                "main",
+            ),
+            (
+                "helper_with_list",
+                r#"
+                fn sum_list(xs: List<Int>) -> Int {
+                  when xs is {
+                    [] -> 0
+                    [h, ..t] -> h + sum_list(t)
+                  }
+                }
+                pub fn main(xs: List<Int>) -> Int { sum_list(xs) }
+                "#,
+                "main",
+            ),
+            (
+                "helper_with_option",
+                r#"
+                fn unwrap_or_default(x: Option<Int>) -> Int {
+                  when x is {
+                    Some(v) -> v
+                    None -> 0
+                  }
+                }
+                pub fn main(x: Option<Int>) -> Int { unwrap_or_default(x) }
+                "#,
+                "main",
+            ),
+            (
+                "two_pub_fns_one_helper",
+                r#"
+                fn shared_helper(x: Int) -> Int { x + 100 }
+                pub fn first(y: Int) -> Int { shared_helper(y) }
+                pub fn second(y: Int) -> Int { y * 2 }
+                "#,
+                "first",
+            ),
+        ];
+
+        let mut failures: Vec<String> = Vec::new();
+        let mut successes: usize = 0;
+        let mut skips: usize = 0;
+
+        for (name, code, target_fn) in cases {
+            // Parse + check + export in one go so the same TestProject instance
+            // produces both modules and generator (otherwise the generator looks
+            // up names via a foreign id_gen and panics). Skips on any panic
+            // (parse / type errors).
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                let mut project = TestProject::new();
+                let parsed = project.parse(code);
+                let checked = project.check(parsed);
+                let modules = CheckedModules::singleton(checked);
+                let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+                let (module, func) = modules
+                    .functions()
+                    .find(|(_, f)| f.name == *target_fn)
+                    .unwrap_or_else(|| panic!("Could not find `{}` function", target_fn));
+                Export::from_function(
+                    func,
+                    module,
+                    &mut generator,
+                    &modules,
+                    &PlutusVersion::default(),
+                )
+            }));
+            let from_fn_result = match result {
+                Ok(r) => r,
+                Err(_) => {
+                    skips += 1;
+                    continue;
+                }
+            };
+
+            match from_fn_result {
+                Ok(validator) => {
+                    let json =
+                        serde_json::to_string(&validator).expect("Validator must serialize");
+                    if !json.contains("compiledCode") || !json.contains("definitions") {
+                        failures.push(format!(
+                            "{}: JSON missing compiledCode or definitions",
+                            name
+                        ));
+                        continue;
+                    }
+
+                    let program: &Program<DeBruijn> = validator.program.inner();
+                    let mut walker = FreeVarWalker::default();
+                    walker.visit(program);
+                    if !walker.free_vars.is_empty() {
+                        failures.push(format!(
+                            "{}: {} free Var(DeBruijn(N)) (max lambda depth: {}): {:?}",
+                            name,
+                            walker.free_vars.len(),
+                            walker.max_lambda_depth,
+                            walker.free_vars
+                        ));
+                    } else {
+                        successes += 1;
+                    }
+                }
+                Err(e) => {
+                    failures.push(format!("{}: Export errored: {:?}", name, e));
+                }
+            }
+        }
+
+        let total = cases.len();
+        eprintln!(
+            "fuzz_export_same_module_dependencies: {}/{} succeeded, {} skipped, {} failures",
+            successes, total, skips, failures.len()
+        );
+        if !failures.is_empty() {
+            panic!(
+                "fuzz_export_same_module_dependencies caught failures:\n  - {}",
+                failures.join("\n  - ")
+            );
+        }
+    }
+
+    /// Walk a UPLC `Program<DeBruijn>` and collect any `Var(DeBruijn(N))` whose
+    /// index exceeds the current scope's lambda depth — such a reference is
+    /// unbound and would error at runtime as `OpenTermEvaluated(Var(DeBruijn(N)))`.
+    #[derive(Default)]
+    struct FreeVarWalker {
+        free_vars: Vec<usize>,
+        max_lambda_depth: usize,
+    }
+
+    impl FreeVarWalker {
+        fn visit(&mut self, program: &Program<DeBruijn>) {
+            self.visit_term(&program.term, 0);
+        }
+
+        fn visit_term(&mut self, term: &Term<DeBruijn>, depth: usize) {
+            if depth > self.max_lambda_depth {
+                self.max_lambda_depth = depth;
+            }
+            match term {
+                Term::Var(name) => {
+                    // DeBruijn: Var(N) at depth D binds to the lambda at depth (D - N).
+                    // A valid reference requires N <= D. So N > D is a free var.
+                    let idx = name.inner();
+                    if idx > depth {
+                        self.free_vars.push(idx);
+                    }
+                }
+                Term::Delay(t) => self.visit_term(t, depth),
+                Term::Lambda { body, .. } => self.visit_term(body, depth + 1),
+                Term::Apply { function, argument } => {
+                    self.visit_term(function, depth);
+                    self.visit_term(argument, depth);
+                }
+                Term::Force(t) => self.visit_term(t, depth),
+                Term::Case { constr, branches } => {
+                    self.visit_term(constr, depth);
+                    for branch in branches {
+                        self.visit_term(branch, depth + 1);
+                    }
+                }
+                Term::Constr { fields, .. } => {
+                    for f in fields {
+                        self.visit_term(f, depth);
+                    }
+                }
+                Term::Builtin(_) | Term::Error | Term::Constant(_) => {}
             }
         }
     }
