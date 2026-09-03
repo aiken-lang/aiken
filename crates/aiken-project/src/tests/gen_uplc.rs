@@ -6048,8 +6048,247 @@ fn bls12_381_g1_multi_scalar_mul_happy_path_still_works() {
 
     assert_runs(src, false, false)
 }
+// ============================================================================
+//  Cross-validation harness for BLS12-381 G2 MSM (issue #1349)
+//
+//  Methodology (MCE A/B Playbook):
+//   - A-side: Aiken's `builtin.bls12_381_g2_multi_scalar_mul` runtime.
+//   - B-side: py_ecc reference (see `fuzz-g2-msm/vectors.json`).
+//   - Transform T: `(scalars, points) -> compressed G2 hex`.
+//   - For all test vectors, A(T) == B(T).
+//
+//  Test coverage:
+//   - basic (1*G + 2*(2G)) = 5G
+//   - zero-scalar-skipped (vanishing term)
+//   - all-zero-scalars-except-one (length > 1 with most zero)
+//   - large scalar 2^256+1 (forces modulo reduction mod r in normalize_bls_scalar)
+//   - negative scalar -1 (≡ r-1 mod r; requires BigInt reduction)
+//   - three distinct points (multi-term mix; different points matter)
+//   - scalar = r (must contribute 0; tests order-of-curve handling)
+//   - scalar = 2r+1 (must contribute 1; tests multi-r reduction)
+//   - mixed-negative-positive (-3, +5, +7)
+//   - scalar = 17r+5 (multiple-round r reduction)
+//
+//  Reference: see `fuzz-g2-msm/gen_vectors.py` for the oracle.
+
+/// Generate an Aiken source string for a G2 MSM fuzz case.
+fn build_g2_msm_fuzz_source(
+    scalars_aiken: Vec<&str>,
+    points_hex: Vec<&str>,
+    expected_hex: &str,
+) -> String {
+    let scalars_lit = scalars_aiken.join(", ");
+    let points_lit = points_hex
+        .iter()
+        .map(|h| format!(r#"#<Bls12_381, G2>"{h}""#))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let expected_lit = format!(r#"#<Bls12_381, G2>"{expected_hex}""#);
+    format!(
+        r#"
+      use aiken/builtin
+
+      test g2_msm_fuzz() {{
+        builtin.bls12_381_g2_equal(
+          builtin.bls12_381_g2_multi_scalar_mul([{scalars}], [{points}]),
+          {expected},
+        )
+      }}
+    "#,
+        scalars = scalars_lit,
+        points = points_lit,
+        expected = expected_lit,
+    )
+}
+
 
 #[test]
+fn aiken_bls12_381_g2_msm_fuzz_basic() {
+    // Scalars: [1, 2]
+    // Points:  2 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: 80fb837804dba8213329db46...3d1468df2688
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["1", "2"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#
+        ],
+        r#"80fb837804dba8213329db46608b6c121d973363c1234a86dd183baff112709cf97096c5e9a1a770ee9d7dc641a894d60411a5de6730ffece671a9f21d65028cc0f1102378de124562cb1ff49db6f004fcd14d683024b0548eff3d1468df2688"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_zero_scalar_skipped() {
+    // Scalars: [0, 1, 3]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: a190be857d602284393305bf...3ae1ee09bce3
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["0", "1", "3"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#,
+            r#"89380275bbc8e5dcea7dc4dd7e0550ff2ac480905396eda55062650f8d251c96eb480673937cc6d9d6a44aaa56ca66dc122915c824a0857e2ee414a3dccb23ae691ae54329781315a0c75df1c04d6d7a50a030fc866f09d516020ef82324afae"#
+        ],
+        r#"a190be857d602284393305bfe0a29e29a6982ed3f04ccaabafb7e59cdc7eda85c22bc3e8690355c7a0fb7590ae40f1b009303f04d568e289a35102b6df883d5ed620355c0eb5d02236718cdaf99fba6e19ef5cee2996268eb9a53ae1ee09bce3"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_all_zero_except_one() {
+    // Scalars: [0, 0, 1]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: 8bf78a97086750eb166986ed...268481a0be7c
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["0", "0", "1"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#,
+            r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#
+        ],
+        r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_large_scalar_2_256_plus_1() {
+    // Scalars: [115792089237316195423570985008687907853269984665640564039457584007913129639937, 0, 1]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: 80747509a3052ad151d84dc9...00628bfb4478
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["115792089237316195423570985008687907853269984665640564039457584007913129639937", "0", "1"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#,
+            r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#
+        ],
+        r#"80747509a3052ad151d84dc964c1b4c16043ac5ad4379aa9d4db593def8457abf80c2b840949316d906ec844f785c680156ac1a089cddf8b455172d46123d224b4a6384aca8b434010940443fbd3977c6e66eabea75c97ddbcd000628bfb4478"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_negative_scalar_minus1() {
+    // Scalars: [-1, 3]
+    // Points:  2 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: 80fb837804dba8213329db46...3d1468df2688
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["-1", "3"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#
+        ],
+        r#"80fb837804dba8213329db46608b6c121d973363c1234a86dd183baff112709cf97096c5e9a1a770ee9d7dc641a894d60411a5de6730ffece671a9f21d65028cc0f1102378de124562cb1ff49db6f004fcd14d683024b0548eff3d1468df2688"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_three_terms_distinct() {
+    // Scalars: [2, 3, 5]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: acc979110f99ff09251dfec0...6f2a6f60a118
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["2", "3", "5"],
+        vec![
+            r#"8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c"#,
+            r#"a190be857d602284393305bfe0a29e29a6982ed3f04ccaabafb7e59cdc7eda85c22bc3e8690355c7a0fb7590ae40f1b009303f04d568e289a35102b6df883d5ed620355c0eb5d02236718cdaf99fba6e19ef5cee2996268eb9a53ae1ee09bce3"#,
+            r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#
+        ],
+        r#"acc979110f99ff09251dfec09e395109b097a354214db521f764088c8e56e00afe14809cbb73d966930be22c297aeef8087abf82f116874d7f28e4fb8158f9a579c5324ca242cc64b77e465d42941ec889b7fa84869ea4eb07bd6f2a6f60a118"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_scalar_r_equals_inf() {
+    // Scalars: [52435875175126190479447740508185965837690552500527637822603658699938581184513, 0, 1]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: 8bf78a97086750eb166986ed...268481a0be7c
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["52435875175126190479447740508185965837690552500527637822603658699938581184513", "0", "1"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#,
+            r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#
+        ],
+        r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_scalar_2r_plus_1() {
+    // Scalars: [104871750350252380958895481016371931675381105001055275645207317399877162369027, 0, 1]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: 9292b2ce751f6f859ec7882e...ef6a973a3ed7
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["104871750350252380958895481016371931675381105001055275645207317399877162369027", "0", "1"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#,
+            r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#
+        ],
+        r#"9292b2ce751f6f859ec7882e14083eac9841b035f9d5ed938a81579dbce07dec2c0202b7f6b25226831cd9c578e893d00027513925b419f6c581788578379995290ab9478e08ecd1999d5e1a05c58144d2f9f06fb8c7fd1586f3ef6a973a3ed7"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_mixed_negative_positive() {
+    // Scalars: [-3, 5, 7]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: 87d56a36641872258022a12f...e064f152ad08
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["-3", "5", "7"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#,
+            r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#
+        ],
+        r#"87d56a36641872258022a12f8cbc3b2414b1a3f6afb76d64e90938877d4d028c3c10916f1b9c80639c3edbb235008577055bfe3f97b739f2aa586a04dc82a80a7005d7328e43ecde4ffa750db30350c65b38a4a116b68d7fb203e064f152ad08"#,
+    );
+    assert_runs(&src, false, true)
+}
+
+
+#[test]
+fn aiken_bls12_381_g2_msm_fuzz_scalar_17r_plus_5() {
+    // Scalars: [891409877977145238150611588639161419240739392508969842984262197898955880136726, 0, 1]
+    // Points:  3 G2 elements (compressed hex, py_ecc-verified)
+    // Expected: a5f8fb4cf5e5313f403f15c5...844e26154653
+    // Verify against py_ecc reference oracle in fuzz-g2-msm/vectors.json.
+    let src = build_g2_msm_fuzz_source(
+        vec!["891409877977145238150611588639161419240739392508969842984262197898955880136726", "0", "1"],
+        vec![
+            r#"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"#,
+            r#"aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"#,
+            r#"8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"#
+        ],
+        r#"a5f8fb4cf5e5313f403f15c59c79b9cebaec78291f2053c49d6427f40f2db2aa659d3a8fed7c7b07b7a5680c7b95ab5804b6570b4a6affe97649b0dd7a0ad0df160b37c332a8a7348dd3994cc6b1eb65623b4a9f0a3f320e7278844e26154653"#,
+    );
+    assert_runs(&src, false, true)
+}
+
 fn qualified_prelude_functions() {
     let src = r#"
         use aiken
