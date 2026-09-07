@@ -2678,8 +2678,6 @@ impl Term<Name> {
         _scope: &Scope,
         context: &mut Context,
     ) -> bool {
-        let mut changed = false;
-
         match self {
             Term::Builtin(func) => {
                 let applies = arg_stack
@@ -2694,37 +2692,49 @@ impl Term<Name> {
                     .iter()
                     .map(|(_, term)| term.pierce_no_inlines_ref())
                     .collect_vec();
-                if applies.len() == func.arity() && func.is_error_safe(&args) {
-                    changed = true;
-                    let applied_term =
-                        applies
-                            .into_iter()
-                            .fold(Term::Builtin(*func), |acc, (arg_id, arg)| {
-                                context.inlined_apply_ids.push(arg_id);
-                                acc.apply(arg.pierce_no_inlines_ref().clone())
-                            });
 
-                    // The check above is to make sure the program is error safe
-                    let eval_term: Term<Name> = Program {
-                        version: (1, 0, 0),
-                        term: applied_term,
-                    }
-                    .to_named_debruijn()
-                    .unwrap()
-                    .eval(ExBudget::default())
-                    .result()
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-
-                    *self = eval_term;
+                if applies.len() != func.arity() || !func.is_error_safe(&args) {
+                    return false;
                 }
+
+                let applied_term = args
+                    .iter()
+                    .fold(Term::Builtin(*func), |acc, arg| acc.apply((*arg).clone()));
+
+                // Static checks can miss evaluation errors or budget exhaustion.
+                // Only record applications for removal after a successful fold.
+                let Some(eval_term) = Self::eval_saturated_builtin(applied_term) else {
+                    return false;
+                };
+
+                for (arg_id, _) in applies {
+                    context.inlined_apply_ids.push(arg_id);
+                }
+
+                *self = eval_term;
+
+                true
             }
             Term::Constr { .. } => todo!(),
             Term::Case { .. } => todo!(),
-            _ => (),
+            _ => false,
         }
-        changed
+    }
+
+    fn eval_saturated_builtin(applied_term: Term<Name>) -> Option<Term<Name>> {
+        let program = Program {
+            version: (1, 0, 0),
+            term: applied_term,
+        }
+        .to_named_debruijn()
+        .ok()?;
+
+        program
+            .eval(ExBudget::default())
+            .result()
+            .ok()?
+            .try_into()
+            .ok()
     }
 
     fn remove_inlined_ids(
@@ -4510,5 +4520,71 @@ mod tests {
                 term.case_constr_apply_reducer(id, arg_stack, scope, context);
             })
         });
+    }
+
+    #[test]
+    fn builtin_eval_reducer_keeps_call_the_evaluator_rejects() {
+        // `is_error_safe` accepts 8193, but the evaluator's limit is 8192.
+        // Delaying the call makes the program valid.
+        let program = Program {
+            version: (1, 1, 0),
+            term: Term::Builtin(DefaultFunction::ReplicateByte)
+                .apply(Term::integer(8193.into()))
+                .apply(Term::integer(0.into()))
+                .delay(),
+        };
+
+        let expected = program.clone();
+
+        compare_optimization(expected, program, |program| program.multi_pass().0);
+    }
+
+    #[test]
+    fn builtin_eval_reducer_failed_fold_leaves_arguments_in_place() {
+        // Preserve the failed call's arguments while folding its sibling.
+        let unfoldable = Term::Builtin(DefaultFunction::ReplicateByte)
+            .apply(Term::integer(8193.into()))
+            .apply(Term::integer(0.into()));
+
+        let program = Program {
+            version: (1, 1, 0),
+            term: Term::append_bytearray()
+                .apply(unfoldable.clone())
+                .apply(
+                    Term::Builtin(DefaultFunction::ReplicateByte)
+                        .apply(Term::integer(3.into()))
+                        .apply(Term::integer(0.into())),
+                )
+                .delay(),
+        };
+
+        let expected = Program {
+            version: (1, 1, 0),
+            term: Term::append_bytearray()
+                .apply(unfoldable)
+                .apply(Term::byte_string(vec![0, 0, 0]))
+                .delay(),
+        };
+
+        compare_optimization(expected, program, |program| program.multi_pass().0);
+    }
+
+    #[test]
+    fn aiken_optimize_keeps_call_the_evaluator_rejects() {
+        let program = Program {
+            version: (1, 1, 0),
+            term: Term::Builtin(DefaultFunction::ReplicateByte)
+                .apply(Term::integer(8193.into()))
+                .apply(Term::integer(0.into()))
+                .delay(),
+        };
+
+        let expected = program.clone();
+
+        compare_optimization(
+            expected,
+            program,
+            crate::optimize::aiken_optimize_and_intern,
+        );
     }
 }

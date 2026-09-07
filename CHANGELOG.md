@@ -6,6 +6,7 @@
 
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
 - **uplc**: Convert `bls12_381_g1_multi_scalar_mul` / `bls12_381_g2_multi_scalar_mul` arguments from Aiken's data-encoded lists to the typed `List<Int>` and `List<G1Element>` / `List<G2Element>` constants expected by the builtins, like already done for `write_bits`. Fixes [#1378](https://github.com/aiken-lang/aiken/issues/1378). @perturbing
+- **uplc**: Keep a builtin call untouched when constant folding cannot evaluate it (e.g. `replicate_byte` with a size above the 8192-byte limit) instead of crashing the optimizer on an `unwrap`; the optimizer now only commits its bookkeeping once the evaluation succeeded. @jtranq
 
 
 ## v1.1.23 - 2026-06-26
