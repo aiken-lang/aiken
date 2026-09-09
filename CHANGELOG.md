@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- **aiken-lang**: Report unexpected end-of-file errors at the source byte offset instead of the token count. @jtranq
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
 - **aiken-lang**: Force disambiguation of unbounded empty lists during type unification when detected to prevent generating invalid UPLC that could cause runtime errors. @KtorZ
 - **aiken-project**: Reduce memory usage and processing time during test executions and compiler optimizations. @colll78

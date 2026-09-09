@@ -23,9 +23,11 @@ macro_rules! assert_expr {
     ($code:expr) => {
         use chumsky::Parser;
 
-        match $crate::parser::lexer::run(indoc::indoc! { $code }) {
+        let src = indoc::indoc! { $code };
+
+        match $crate::parser::lexer::run(src) {
             Ok($crate::parser::lexer::LexInfo { tokens, .. }) => {
-                let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
+                let stream = chumsky::Stream::from_iter($crate::ast::Span::create(src.len(), 1), tokens.into_iter());
 
                 let result = $crate::parser::expr::sequence().parse(stream);
 
@@ -68,9 +70,10 @@ macro_rules! assert_annotation {
     ($code:expr) => {
         use chumsky::Parser;
 
-        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
+        let src = indoc::indoc! { $code };
+        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(src).unwrap();
 
-        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
+        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(src.len(), 1), tokens.into_iter());
 
         let result = $crate::parser::annotation().parse(stream).unwrap();
 
@@ -89,9 +92,10 @@ macro_rules! assert_pattern {
     ($code:expr) => {
         use chumsky::Parser;
 
-        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
+        let src = indoc::indoc! { $code };
+        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(src).unwrap();
 
-        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
+        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(src.len(), 1), tokens.into_iter());
 
         let result = $crate::parser::pattern().parse(stream).unwrap();
 
@@ -126,9 +130,10 @@ macro_rules! assert_definition {
     ($code:expr) => {
         use chumsky::Parser;
 
-        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
+        let src = indoc::indoc! { $code };
+        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(src).unwrap();
 
-        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
+        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(src.len(), 1), tokens.into_iter());
 
         let result = $crate::parser::definition().parse(stream);
 
@@ -160,9 +165,10 @@ macro_rules! assert_import {
     ($code:expr) => {
         use chumsky::Parser;
 
-        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
+        let src = indoc::indoc! { $code };
+        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(src).unwrap();
 
-        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
+        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(src.len(), 1), tokens.into_iter());
 
         let result = $crate::parser::import().parse(stream).unwrap();
 
