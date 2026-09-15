@@ -26,7 +26,7 @@ pub fn module(
 ) -> Result<(ast::UntypedModule, ModuleExtra), Vec<ParseError>> {
     let lexer::LexInfo { tokens, extra } = lexer::run(src)?;
 
-    let stream = chumsky::Stream::from_iter(ast::Span::create(tokens.len(), 1), tokens.into_iter());
+    let stream = chumsky::Stream::from_iter(ast::Span::create(src.len(), 1), tokens.into_iter());
 
     let definitions = import()
         .repeated()
@@ -87,7 +87,29 @@ pub fn module(
 
 #[cfg(test)]
 mod tests {
+    use super::{error::ErrorKind, module};
     use crate::assert_module;
+    use crate::ast::ModuleKind;
+    use miette::Diagnostic;
+
+    #[test]
+    fn unexpected_eof_uses_source_byte_offset() {
+        for src in [
+            "fn foo() { 42",
+            "fn foo() {\n  42\n\n   ",
+            "fn foo() { \"héllo 🌍\"",
+            "fn foo() { 42\n// trailing comment 🌍\n",
+        ] {
+            let errors = module(src, ModuleKind::Lib).unwrap_err();
+            assert_eq!(errors.len(), 1, "source: {src:?}");
+            assert!(matches!(errors[0].kind.as_ref(), ErrorKind::UnexpectedEnd));
+
+            let labels = errors[0].labels().unwrap().collect::<Vec<_>>();
+            assert_eq!(labels.len(), 1);
+            assert_eq!(labels[0].offset(), src.len(), "source: {src:?}");
+            assert_eq!(labels[0].len(), 1);
+        }
+    }
 
     #[test]
     fn merge_imports() {
