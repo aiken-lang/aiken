@@ -117,10 +117,6 @@ fn check_validator_with_deps(
     check_module(ast, extra, ModuleKind::Validator, Tracing::verbose())
 }
 
-fn assert_illegal_comparison<T, W>(result: Result<T, (W, Error)>) {
-    assert!(matches!(result, Err((_, Error::IllegalComparison { .. }))));
-}
-
 #[test]
 fn bls12_381_elements_in_data_type() {
     let source_code = r#"
@@ -252,25 +248,53 @@ fn illegal_function_comparison() {
 }
 
 #[test]
-fn primitive_value_equality_is_illegal() {
+fn primitive_value_equality_is_allowed() {
     let source_code = r#"
         fn compare(left: Value, right: Value) -> Bool {
           left == right
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
-fn primitive_value_inequality_is_illegal() {
+fn primitive_value_inequality_is_allowed() {
     let source_code = r#"
-        fn compare(data: Data, value: Value) -> Bool {
-          data != value
+        fn compare(left: Value, right: Value) -> Bool {
+          left != right
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(dbg!(check(parse(source_code))).is_ok())
+}
+
+#[test]
+fn implicit_right_upcasting_to_value_is_not_allowed() {
+    let source_code = r#"
+        fn compare(left: Data, right: Value) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn implicit_left_upcasting_to_value_is_not_allowed_symmetric() {
+    let source_code = r#"
+        fn compare(left: Value, right: Data) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
 }
 
 #[test]
@@ -381,7 +405,7 @@ fn generic_equality_remains_legal_for_serialisable_types() {
 }
 
 #[test]
-fn generic_equality_rejects_value_specialisation() {
+fn generic_equality_accepts_value_specialisation() {
     let source_code = r#"
         fn same(left, right) -> Bool {
           left == right
@@ -392,11 +416,11 @@ fn generic_equality_rejects_value_specialisation() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
-fn imported_generic_equality_rejects_value_specialisation() {
+fn imported_generic_equality_accepts_value_specialisation() {
     let dependency = r#"
         pub fn same(left, right) -> Bool {
           left == right
@@ -411,14 +435,11 @@ fn imported_generic_equality_rejects_value_specialisation() {
         }
     "#;
 
-    assert_illegal_comparison(check_with_deps(
-        parse(source_code),
-        vec![parse_as(dependency, "equality")],
-    ));
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "equality")],).is_ok());
 }
 
 #[test]
-fn prelude_generic_equality_rejects_value_specialisation() {
+fn prelude_generic_equality_accepts_value_specialisation() {
     let source_code = r#"
         fn same(left: Option<a>, right: Option<a>) -> Bool {
           left == right
@@ -429,11 +450,11 @@ fn prelude_generic_equality_rejects_value_specialisation() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
-fn piped_generic_equality_rejects_value_specialisation() {
+fn piped_generic_equality_accepts_value_specialisation() {
     let source_code = r#"
         fn same(value) -> Bool {
           value == value
@@ -444,7 +465,7 @@ fn piped_generic_equality_rejects_value_specialisation() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
@@ -463,7 +484,7 @@ fn pattern_unification_preserves_generic_equality_constraint() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
@@ -474,7 +495,7 @@ fn equality_rejects_value_nested_in_a_list() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
@@ -485,11 +506,11 @@ fn equality_rejects_value_nested_in_an_option() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
-fn equality_rejects_value_nested_through_generic_wrappers() {
+fn equality_accepts_value_nested_through_generic_wrappers() {
     let dependency = r#"
         pub opaque type Imported<a> {
           Imported(a)
@@ -510,32 +531,29 @@ fn equality_rejects_value_nested_through_generic_wrappers() {
         }
     "#;
 
-    assert_illegal_comparison(check_with_deps(
-        parse(source_code),
-        vec![parse_as(dependency, "wrapper")],
-    ));
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapper")]).is_ok());
 }
 
 #[test]
-fn equality_rejects_value_nested_in_a_tuple() {
+fn equality_accepts_value_nested_in_a_tuple() {
     let source_code = r#"
         fn compare(left: (Value, Int), right: (Value, Int)) -> Bool {
           left == right
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
-fn equality_rejects_value_nested_in_a_pair() {
+fn equality_accepts_value_nested_in_a_pair() {
     let source_code = r#"
         fn compare(left: Pair<Value, Int>, right: Pair<Value, Int>) -> Bool {
           left == right
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
@@ -573,7 +591,7 @@ fn equality_allows_value_in_a_recursive_phantom_type_argument() {
 }
 
 #[test]
-fn equality_rejects_value_in_a_generic_record_field() {
+fn equality_accepts_value_in_a_generic_record_field() {
     let source_code = r#"
         type Envelope<a> {
           Envelope(a)
@@ -584,11 +602,11 @@ fn equality_rejects_value_in_a_generic_record_field() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
-fn equality_rejects_value_erased_by_an_opaque_wrapper() {
+fn equality_accepts_value_erased_by_an_opaque_wrapper() {
     let source_code = r#"
         opaque type Wrapped {
           Wrapped(Value)
@@ -599,11 +617,11 @@ fn equality_rejects_value_erased_by_an_opaque_wrapper() {
         }
     "#;
 
-    assert_illegal_comparison(check(parse(source_code)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
-fn equality_rejects_value_erased_by_an_imported_opaque_wrapper() {
+fn equality_accepts_value_erased_by_an_imported_opaque_wrapper() {
     let dependency = r#"
         pub opaque type Wrapped {
           Wrapped(Value)
@@ -618,14 +636,11 @@ fn equality_rejects_value_erased_by_an_imported_opaque_wrapper() {
         }
     "#;
 
-    assert_illegal_comparison(check_with_deps(
-        parse(source_code),
-        vec![parse_as(dependency, "wrapped")],
-    ));
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]).is_ok());
 }
 
 #[test]
-fn equality_rejects_value_hidden_behind_an_imported_private_wrapper() {
+fn equality_accepts_value_hidden_behind_an_imported_private_wrapper() {
     let dependency = r#"
         type Hidden {
           Hidden(Value)
@@ -653,14 +668,11 @@ fn equality_rejects_value_hidden_behind_an_imported_private_wrapper() {
         }
     "#;
 
-    assert_illegal_comparison(check_with_deps(
-        parse(source_code),
-        vec![parse_as(dependency, "dep")],
-    ));
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok());
 }
 
 #[test]
-fn equality_rejects_value_hidden_behind_a_generic_imported_private_wrapper() {
+fn equality_accepts_value_hidden_behind_a_generic_imported_private_wrapper() {
     let dependency = r#"
         type Hidden<a> {
           Hidden(a, Value)
@@ -687,15 +699,9 @@ fn equality_rejects_value_hidden_behind_a_generic_imported_private_wrapper() {
         }
     "#;
 
-    assert_illegal_comparison(check_with_deps(
-        parse(source_code),
-        vec![parse_as(dependency, "dep")],
-    ));
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok());
 }
 
-// A private value-carrying type sitting in a *phantom* argument of a public
-// wrapper never makes it into the runtime representation, so equality stays
-// legal — same as the equivalent single-module program.
 #[test]
 fn equality_allows_private_value_type_in_a_phantom_argument_of_a_public_wrapper() {
     let dependency = r#"
@@ -731,10 +737,8 @@ fn equality_allows_private_value_type_in_a_phantom_argument_of_a_public_wrapper(
     assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok())
 }
 
-// Unlike a phantom wrapper, a wrapper that stores its type argument does put
-// the private value-carrying type into the runtime representation.
 #[test]
-fn equality_rejects_private_value_type_stored_in_a_foreign_generic_wrapper() {
+fn equality_accepts_private_value_type_stored_in_a_foreign_generic_wrapper() {
     let boxes = r#"
         pub opaque type Box<a> {
           Box(a)
@@ -774,16 +778,15 @@ fn equality_rejects_private_value_type_stored_in_a_foreign_generic_wrapper() {
         }
     "#;
 
-    assert_illegal_comparison(check_with_deps(
-        parse(source_code),
-        vec![parse_as(boxes, "boxes"), parse_as(dependency, "dep")],
-    ));
+    assert!(
+        check_with_deps(
+            parse(source_code),
+            vec![parse_as(boxes, "boxes"), parse_as(dependency, "dep")],
+        )
+        .is_ok()
+    );
 }
 
-// A private type is invisible to downstream modules, but its runtime fields
-// are substituted into the exported interface of the public types wrapping
-// it. `Hidden<a>` only stores an `Int`, so its `Value` phantom argument never
-// reaches the runtime representation and equality stays legal.
 #[test]
 fn equality_allows_value_phantom_behind_an_imported_private_wrapper() {
     let dependency = r#"
@@ -815,11 +818,8 @@ fn equality_allows_value_phantom_behind_an_imported_private_wrapper() {
     assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok())
 }
 
-// Unlike a phantom wrapper, a private wrapper that actually stores its type
-// argument exposes it in the runtime representation, so instantiating it with
-// `Value` downstream must still be rejected.
 #[test]
-fn equality_rejects_value_stored_behind_an_imported_private_generic_wrapper() {
+fn equality_accepts_value_stored_behind_an_imported_private_generic_wrapper() {
     let dependency = r#"
         type Hidden<a> {
           Hidden(a)
@@ -847,10 +847,7 @@ fn equality_rejects_value_stored_behind_an_imported_private_generic_wrapper() {
         }
     "#;
 
-    assert_illegal_comparison(check_with_deps(
-        parse(source_code),
-        vec![parse_as(dependency, "dep")],
-    ));
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")],).is_ok());
 }
 
 #[test]
@@ -4467,59 +4464,80 @@ fn fn_multi_variant_pattern() {
     ))
 }
 
-fn assert_soft_cast_from_data_is_illegal<T, W>(result: Result<T, (W, Error)>) {
+#[test]
+fn soft_casts_from_data_to_value_is_illegal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Bool {
+          if data is value: Value {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
     assert!(matches!(
-        result,
+        dbg!(check(parse(source_code))),
         Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
     ));
 }
 
 #[test]
-fn soft_casts_from_data_to_value_containers_are_illegal() {
-    for source_code in [
-        r#"
-            fn decode(data: Data) -> Bool {
-              if data is value: Value {
-                True
-              } else {
-                False
-              }
-            }
-        "#,
-        r#"
-            fn decode(data: Data) -> Bool {
-              if data is values: List<Value> {
-                True
-              } else {
-                False
-              }
-            }
-        "#,
-        r#"
-            fn decode(data: Data) -> Bool {
-              if data is value: Option<Value> {
-                True
-              } else {
-                False
-              }
-            }
-        "#,
-        r#"
-            type Wrapped {
-              value: Value
-            }
+fn soft_casts_from_data_to_list_value_is_illegal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Bool {
+          if data is values: List<Value> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
 
-            fn decode(data: Data) -> Bool {
-              if data is wrapped: Wrapped {
-                True
-              } else {
-                False
-              }
-            }
-        "#,
-    ] {
-        assert_soft_cast_from_data_is_illegal(check(parse(source_code)));
-    }
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_casts_from_data_to_option_value_is_illegal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Bool {
+          if data is value: Option<Value> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_casts_from_data_to_wrapped_value_is_illegal() {
+    let source_code = r#"
+        type Wrapped {
+          value: Value
+        }
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: Wrapped {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
 }
 
 #[test]
@@ -4542,14 +4560,14 @@ fn soft_cast_from_data_to_imported_opaque_value_wrapper_is_illegal() {
         }
     "#;
 
-    assert_soft_cast_from_data_is_illegal(check_with_deps(
-        parse(source_code),
-        vec![parse_as(dependency, "wrapped")],
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]),
+        Err((_, Error::ExpectOnOpaqueType { .. })),
     ));
 }
 
 #[test]
-fn strict_cast_from_data_to_value_remains_legal() {
+fn strict_cast_from_data_to_value_is_illegal() {
     let source_code = r#"
         fn decode(data: Data) -> Value {
           expect value: Value = data
@@ -4557,7 +4575,10 @@ fn strict_cast_from_data_to_value_remains_legal() {
         }
     "#;
 
-    assert!(check(parse(source_code)).is_ok())
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. })),
+    ))
 }
 
 #[test]

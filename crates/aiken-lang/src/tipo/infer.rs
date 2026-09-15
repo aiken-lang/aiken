@@ -142,12 +142,6 @@ impl UntypedModule {
             }
         }
 
-        // Private types are about to be pruned from the interface; fold their
-        // runtime representation into the public types wrapping them so that
-        // downstream modules can still detect native `Value` in runtime
-        // positions (e.g. to reject equality on such types).
-        environment.expand_private_runtime_fields(&module_name);
-
         environment
             .module_types
             .retain(|_, info| info.public && info.module == module_name);
@@ -422,19 +416,11 @@ fn infer_definition(
                 &top_level_scope,
             )?;
 
-            let is_bool = environment.unify(
-                typed_f.return_type.clone(),
-                Type::bool(),
-                typed_f.location,
-                false,
-            );
+            let is_bool =
+                environment.unify(typed_f.return_type.clone(), Type::bool(), typed_f.location);
 
-            let is_void = environment.unify(
-                typed_f.return_type.clone(),
-                Type::void(),
-                typed_f.location,
-                false,
-            );
+            let is_void =
+                environment.unify(typed_f.return_type.clone(), Type::void(), typed_f.location);
 
             environment.close_scope(top_level_scope);
 
@@ -802,7 +788,6 @@ where
                 inferred_inner_type.clone(),
                 provided_inner_type.clone(),
                 arg.via.location(),
-                false,
             )
             .map_err(|err| {
                 err.with_unify_error_situation(UnifyErrorSituation::FuzzerAnnotationMismatch)
@@ -964,7 +949,6 @@ fn infer_fuzzer(
                             tipo.clone(),
                             Type::fuzzer(wrapped.clone()),
                             *location,
-                            false,
                         )?;
 
                         Ok(wrapped.clone())

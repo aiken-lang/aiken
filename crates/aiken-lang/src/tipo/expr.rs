@@ -23,7 +23,8 @@ use crate::{
     format,
     parser::token::Base,
     tipo::{
-        DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar, fields::FieldMap,
+        DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar,
+        environment::UnifyMode, fields::FieldMap,
     },
 };
 use std::{
@@ -187,7 +188,7 @@ pub(crate) fn infer_function(
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
     // Assert that the inferred type matches the type of any recursive call
-    environment.unify(preregistered_type, tipo.clone(), *location, false)?;
+    environment.unify(preregistered_type, tipo.clone(), *location)?;
 
     // Generalise the function if safe to do so
     let tipo = if safe_to_generalise {
@@ -262,197 +263,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             tracing,
             ungeneralised_function_used: false,
         }
-    }
-
-    fn type_contains_runtime_value(&self, tipo: &Type) -> bool {
-        self.environment.type_contains_runtime_value(tipo)
-    }
-
-    fn runtime_field_types(&self, concrete_type: &Type) -> Option<Vec<Rc<Type>>> {
-        self.environment.runtime_field_types(concrete_type)
-    }
-
-    fn type_contains_equality_constraint(&self, tipo: &Type) -> bool {
-        if tipo.requires_equality() {
-            return true;
-        }
-
-        match tipo {
-            Type::App { args, .. } => args
-                .iter()
-                .any(|arg| self.type_contains_equality_constraint(arg)),
-            Type::Fn { args, ret, .. } => {
-                args.iter()
-                    .any(|arg| self.type_contains_equality_constraint(arg))
-                    || self.type_contains_equality_constraint(ret)
-            }
-            Type::Var { tipo, .. } => match &*tipo.borrow() {
-                TypeVar::Link { tipo } => self.type_contains_equality_constraint(tipo),
-                TypeVar::Unbound { .. } | TypeVar::Generic { .. } => false,
-            },
-            Type::Tuple { elems, .. } => elems
-                .iter()
-                .any(|elem| self.type_contains_equality_constraint(elem)),
-            Type::Pair { fst, snd, .. } => {
-                self.type_contains_equality_constraint(fst)
-                    || self.type_contains_equality_constraint(snd)
-            }
-        }
-    }
-
-    fn require_runtime_equality(&self, tipo: &Type) {
-        self.environment.require_runtime_equality(tipo);
-    }
-
-    #[allow(clippy::result_large_err)]
-    fn unify_equality_constraints(
-        &self,
-        left: &Rc<Type>,
-        right: &Rc<Type>,
-        location: Span,
-    ) -> Result<(), Error> {
-        self.unify_equality_constraints_inner(left, right, location, &mut BTreeSet::new())
-    }
-
-    #[allow(clippy::result_large_err)]
-    fn unify_equality_constraints_inner(
-        &self,
-        left: &Rc<Type>,
-        right: &Rc<Type>,
-        location: Span,
-        visiting: &mut BTreeSet<(String, String)>,
-    ) -> Result<(), Error> {
-        let left_link = match left.as_ref() {
-            Type::Var { tipo, .. } => match &*tipo.borrow() {
-                TypeVar::Link { tipo } => Some(tipo.clone()),
-                TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
-            },
-            _ => None,
-        };
-        if let Some(left_link) = left_link {
-            return self.unify_equality_constraints_inner(&left_link, right, location, visiting);
-        }
-
-        let right_link = match right.as_ref() {
-            Type::Var { tipo, .. } => match &*tipo.borrow() {
-                TypeVar::Link { tipo } => Some(tipo.clone()),
-                TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
-            },
-            _ => None,
-        };
-        if let Some(right_link) = right_link {
-            return self.unify_equality_constraints_inner(left, &right_link, location, visiting);
-        }
-
-        if left.requires_equality() {
-            if self.type_contains_runtime_value(right)
-                || ensure_serialisable(false, right.clone(), location).is_err()
-            {
-                return Err(Error::IllegalComparison { location });
-            }
-            self.require_runtime_equality(right);
-            return Ok(());
-        }
-
-        if right.requires_equality() {
-            if self.type_contains_runtime_value(left)
-                || ensure_serialisable(false, left.clone(), location).is_err()
-            {
-                return Err(Error::IllegalComparison { location });
-            }
-            self.require_runtime_equality(left);
-            return Ok(());
-        }
-
-        match (left.as_ref(), right.as_ref()) {
-            (
-                Type::App {
-                    module: left_module,
-                    name: left_name,
-                    args: left_args,
-                    ..
-                },
-                Type::App {
-                    module: right_module,
-                    name: right_name,
-                    args: right_args,
-                    ..
-                },
-            ) if left_module == right_module && left_name == right_name => {
-                if left.is_list() && right.is_list() {
-                    for (left, right) in left_args.iter().zip(right_args) {
-                        self.unify_equality_constraints_inner(left, right, location, visiting)?;
-                    }
-                } else if left.get_uplc_type().is_none() {
-                    let identity = (
-                        format!("{left_module}.{left_name}:{}", left.to_pretty(0)),
-                        format!("{right_module}.{right_name}:{}", right.to_pretty(0)),
-                    );
-                    if visiting.insert(identity.clone()) {
-                        match (
-                            self.runtime_field_types(left),
-                            self.runtime_field_types(right),
-                        ) {
-                            (Some(left_fields), Some(right_fields)) => {
-                                for (left, right) in left_fields.iter().zip(&right_fields) {
-                                    self.unify_equality_constraints_inner(
-                                        left, right, location, visiting,
-                                    )?;
-                                }
-                            }
-                            _ => {
-                                for (left, right) in left_args.iter().zip(right_args) {
-                                    self.unify_equality_constraints_inner(
-                                        left, right, location, visiting,
-                                    )?;
-                                }
-                            }
-                        }
-                        visiting.remove(&identity);
-                    }
-                }
-            }
-            (
-                Type::Fn {
-                    args: left_args,
-                    ret: left_ret,
-                    ..
-                },
-                Type::Fn {
-                    args: right_args,
-                    ret: right_ret,
-                    ..
-                },
-            ) => {
-                for (left, right) in left_args.iter().zip(right_args) {
-                    self.unify_equality_constraints_inner(left, right, location, visiting)?;
-                }
-                self.unify_equality_constraints_inner(left_ret, right_ret, location, visiting)?;
-            }
-            (Type::Tuple { elems: left, .. }, Type::Tuple { elems: right, .. }) => {
-                for (left, right) in left.iter().zip(right) {
-                    self.unify_equality_constraints_inner(left, right, location, visiting)?;
-                }
-            }
-            (
-                Type::Pair {
-                    fst: left_fst,
-                    snd: left_snd,
-                    ..
-                },
-                Type::Pair {
-                    fst: right_fst,
-                    snd: right_snd,
-                    ..
-                },
-            ) => {
-                self.unify_equality_constraints_inner(left_fst, right_fst, location, visiting)?;
-                self.unify_equality_constraints_inner(left_snd, right_snd, location, visiting)?;
-            }
-            _ => {}
-        }
-
-        Ok(())
     }
 
     #[allow(clippy::result_large_err)]
@@ -904,12 +714,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let typed_value = self.infer(value)?;
 
-        self.unify(
-            Type::bool(),
-            typed_value.tipo(),
-            typed_value.location(),
-            false,
-        )?;
+        self.unify(Type::bool(), typed_value.tipo(), typed_value.location())?;
 
         match text {
             None => Ok(typed_value),
@@ -943,35 +748,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let (input_type, output_type) = match &name {
             BinOp::Eq | BinOp::NotEq => {
                 let left = self.infer(left)?;
-
                 let right = self.infer(right)?;
 
-                let left_tipo = left.tipo();
-                let right_tipo = right.tipo();
+                self.unify(left.tipo(), right.tipo(), right.location())?;
 
-                if self.type_contains_runtime_value(&left_tipo)
-                    || self.type_contains_runtime_value(&right_tipo)
-                {
-                    return Err(Error::IllegalComparison { location });
-                }
-
-                self.unify(
-                    left_tipo.clone(),
-                    right_tipo.clone(),
-                    right.location(),
-                    false,
-                )?;
-
-                if self.type_contains_runtime_value(&left_tipo)
-                    || self.type_contains_runtime_value(&right_tipo)
-                {
-                    return Err(Error::IllegalComparison { location });
-                }
-
-                for tipo in [&left_tipo, &right_tipo] {
+                for tipo in &[left.tipo(), right.tipo()] {
                     ensure_serialisable(false, tipo.clone(), location)
                         .map_err(|_| Error::IllegalComparison { location })?;
-                    self.require_runtime_equality(tipo);
                 }
 
                 return Ok(TypedExpr::BinOp {
@@ -1001,19 +784,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             input_type.clone(),
             left.tipo(),
             left.type_defining_location(),
-            false,
         )
         .map_err(|e| e.operator_situation(name))?;
 
         let right = self.infer(right)?;
 
-        self.unify(
-            input_type,
-            right.tipo(),
-            right.type_defining_location(),
-            false,
-        )
-        .map_err(|e| e.operator_situation(name))?;
+        self.unify(input_type, right.tipo(), right.type_defining_location())
+            .map_err(|e| e.operator_situation(name))?;
 
         Ok(TypedExpr::BinOp {
             location,
@@ -1093,7 +870,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let return_type = self.instantiate(ret.clone(), &mut HashMap::new(), location)?;
 
         // Check that the spread variable unifies with the return type of the constructor
-        self.unify(return_type, spread.tipo(), spread.location(), false)?;
+        self.unify(return_type, spread.tipo(), spread.location())?;
 
         let mut arguments = Vec::new();
         let mut seen_labels = HashMap::with_capacity(args.len());
@@ -1120,11 +897,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             // field in the record contained within the spread variable. We
             // need to check the spread, and not the constructor, in order
             // to handle polymorphic types.
-            self.unify(
+            self.unify_with(
                 spread_field.tipo(),
                 value.tipo(),
                 value.location(),
-                spread_field.tipo().is_data(),
+                UnifyMode::AllowUpCast,
             )?;
 
             match field_map.fields.get(&label) {
@@ -1174,7 +951,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UnOp::Negate => Type::int(),
         };
 
-        self.unify(tipo.clone(), value.tipo(), value.location(), false)?;
+        self.unify(tipo.clone(), value.tipo(), value.location())?;
 
         Ok(TypedExpr::UnOp {
             location,
@@ -1599,12 +1376,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let tipo = self.instantiate(tipo, &mut type_vars, record.location())?;
 
-        self.unify(
-            accessor_record_type,
-            record.tipo(),
-            record.location(),
-            false,
-        )?;
+        self.unify(accessor_record_type, record.tipo(), record.location())?;
 
         if let Type::App { name, .. } = record.tipo().as_ref() {
             self.environment.increment_usage(name);
@@ -1647,7 +1419,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // function being type checked, resulting in better type errors and the
         // record field access syntax working.
         if let Some(expected) = expected {
-            self.unify(expected, tipo.clone(), location, false)?;
+            self.unify(expected, tipo.clone(), location)?;
         }
 
         let extra_assignment = by.into_extra_assignment(&arg_name, annotation.as_ref(), location);
@@ -1686,16 +1458,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .type_from_annotation(ann)
                 .and_then(|t| self.instantiate(t, &mut HashMap::new(), location))?;
 
-            let recoverable_value_cast =
-                kind.if_is() && value_typ.is_data() && self.type_contains_runtime_value(&ann_typ);
-
-            self.unify(
+            self.unify_with(
                 ann_typ.clone(),
                 value_typ.clone(),
                 typed_value.type_defining_location(),
-                (kind.is_let() && ann_typ.is_data())
-                    || kind.is_expect()
-                    || (kind.if_is() && !recoverable_value_cast),
+                kind.into(),
             )?;
 
             value_typ = ann_typ.clone();
@@ -1743,14 +1510,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     false,
                 ) {
                     Ok(pattern) if ann_typ.is_monomorphic() => {
-                        let recoverable_value_cast =
-                            kind.if_is() && self.type_contains_runtime_value(&ann_typ);
-
-                        self.unify(
+                        self.unify_with(
                             ann_typ.clone(),
                             value_typ.clone(),
                             typed_value.type_defining_location(),
-                            !recoverable_value_cast,
+                            kind.into(),
                         )?;
 
                         value_typ = ann_typ.clone();
@@ -1935,7 +1699,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             (_, value) => self.infer(value),
         }?;
 
-        self.unify(tipo.clone(), value.tipo(), value.location(), tipo.is_data())?;
+        self.unify_with(
+            tipo.clone(),
+            value.tipo(),
+            value.location(),
+            UnifyMode::AllowUpCast,
+        )?;
 
         Ok(value)
     }
@@ -2021,7 +1790,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 first_body_type.clone(),
                 typed_branch.body.tipo(),
                 typed_branch.body.type_defining_location(),
-                false,
             )?;
 
             typed_branches.push(typed_branch);
@@ -2039,7 +1807,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             first_body_type.clone(),
             typed_final_else.tipo(),
             typed_final_else.type_defining_location(),
-            false,
         )?;
 
         Ok(TypedExpr::If {
@@ -2101,7 +1868,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Type::bool(),
                     condition.tipo(),
                     condition.type_defining_location(),
-                    false,
                 )?;
 
                 let body = if let Some(filler) = recover_from_no_assignment(
@@ -2210,11 +1976,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // Check that any return type is accurate.
         let return_type = match return_type {
             Some(return_type) => {
-                self.unify(
+                self.unify_with(
                     return_type.clone(),
                     body.tipo(),
                     body.type_defining_location(),
-                    return_type.is_data(),
+                    UnifyMode::AllowUpCast,
                 )
                 .map_err(|e| {
                     e.return_annotation_mismatch()
@@ -2256,7 +2022,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let element = self.infer(elem)?;
 
             // Ensure they all have the same type
-            self.unify(tipo.clone(), element.tipo(), location, false)?;
+            self.unify(tipo.clone(), element.tipo(), location)?;
 
             elems.push(element)
         }
@@ -2272,7 +2038,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 let tail = self.infer(*tail)?;
 
                 // Ensure the tail has the same type as the preceding elements
-                self.unify(tipo.clone(), tail.tipo(), location, false)?;
+                self.unify(tipo.clone(), tail.tipo(), location)?;
 
                 Some(Box::new(tail))
             }
@@ -2304,7 +2070,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 Type::bool(),
                 typed_expression.tipo(),
                 typed_expression.location(),
-                false,
             )?;
 
             typed_expressions.push(typed_expression);
@@ -2783,12 +2548,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             }
         })?;
 
-        match self.unify(
-            Type::string(),
-            typed_arg.tipo(),
-            typed_arg.location(),
-            false,
-        ) {
+        match self.unify(Type::string(), typed_arg.tipo(), typed_arg.location()) {
             Err(_) => {
                 if matches!(self.tracing.trace_level(false), TraceLevel::Compact) {
                     self.environment
@@ -2796,7 +2556,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         .push(Warning::CompactTraceLabelIsNotstring { location });
                 }
 
-                self.unify(Type::data(), typed_arg.tipo(), typed_arg.location(), true)?;
+                self.unify_with(
+                    Type::data(),
+                    typed_arg.tipo(),
+                    typed_arg.location(),
+                    UnifyMode::AllowUpCast,
+                )
+                .map_err(|err| match err {
+                    Error::CouldNotUnify { location, .. } => {
+                        Error::IllegalTraceArgument { location }
+                    }
+                    err => err,
+                })?;
 
                 diagnose_expr(typed_arg)
             }
@@ -3032,7 +2803,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     return_type.clone(),
                     typed_clause.then.tipo(),
                     typed_clause.location(),
-                    false,
                 )
                 .map_err(|e| e.case_clause_mismatch())?;
 
@@ -3062,18 +2832,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         location: Span,
     ) -> Result<Rc<Type>, Error> {
         let result = self.environment.instantiate(t, ids, &self.hydrator);
-
-        for instantiated in ids.values() {
-            if instantiated.requires_equality() {
-                if self.type_contains_runtime_value(instantiated)
-                    || ensure_serialisable(false, instantiated.clone(), location).is_err()
-                {
-                    return Err(Error::IllegalComparison { location });
-                }
-                self.require_runtime_equality(instantiated);
-            }
-        }
-
         ensure_serialisable(true, result.clone(), location)?;
         Ok(result)
     }
@@ -3095,15 +2853,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         t1: Rc<Type>,
         t2: Rc<Type>,
         location: Span,
-        allow_cast: bool,
     ) -> Result<(), Error> {
-        if self.type_contains_equality_constraint(&t1)
-            || self.type_contains_equality_constraint(&t2)
-        {
-            self.unify_equality_constraints(&t1, &t2, location)?;
-        }
+        self.environment.unify(t1, t2, location)
+    }
 
-        self.environment.unify(t1, t2, location, allow_cast)
+    #[allow(clippy::result_large_err)]
+    pub(super) fn unify_with(
+        &mut self,
+        t1: Rc<Type>,
+        t2: Rc<Type>,
+        location: Span,
+        unify_mode: UnifyMode,
+    ) -> Result<(), Error> {
+        self.environment.unify_with(t1, t2, location, unify_mode)
     }
 }
 
@@ -3307,16 +3069,12 @@ fn diagnose_expr(expr: TypedExpr) -> Result<TypedExpr, Error> {
 
     let location = expr.location();
 
-    if expr.tipo().is_ml_result() {
-        return Err(Error::IllegalTraceArgument { location });
-    }
-
     Ok(TypedExpr::Call {
         tipo: Type::string(),
         fun: Box::new(decode_utf8.clone()),
         args: vec![CallArg {
             label: None,
-            location: expr.location(),
+            location,
             value: TypedExpr::Call {
                 tipo: Type::byte_array(),
                 fun: Box::new(diagnostic.clone()),

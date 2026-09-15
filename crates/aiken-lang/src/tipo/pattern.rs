@@ -78,8 +78,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     Some(initial) if self.initial_pattern_vars.contains(name) => {
                         assigned.push(name.to_string());
                         let initial_typ = initial.tipo.clone();
-                        self.environment
-                            .unify(initial_typ, typ, err_location, false)
+                        self.environment.unify(initial_typ, typ, err_location)
                     }
 
                     // This variable was not defined in the Initial multi-pattern
@@ -191,7 +190,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 value,
                 base,
             } => {
-                self.environment.unify(tipo, Type::int(), location, false)?;
+                self.environment.unify(tipo, Type::int(), location)?;
 
                 Ok(Pattern::Int {
                     location,
@@ -205,8 +204,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 value,
                 preferred_format,
             } => {
-                self.environment
-                    .unify(tipo, Type::byte_array(), location, false)?;
+                self.environment.unify(tipo, Type::byte_array(), location)?;
 
                 Ok(Pattern::ByteArray {
                     location,
@@ -277,7 +275,6 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                             Type::pair(t_fst.clone(), t_snd.clone()),
                             tipo,
                             location,
-                            false,
                         )?;
 
                         let fst = Box::new(self.unify(*fst, t_fst, None, false)?);
@@ -331,12 +328,8 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                             .map(|_| self.environment.new_unbound_var())
                             .collect();
 
-                        self.environment.unify(
-                            Type::tuple(elems_types.clone()),
-                            tipo,
-                            location,
-                            false,
-                        )?;
+                        self.environment
+                            .unify(Type::tuple(elems_types.clone()), tipo, location)?;
 
                         let mut patterns = vec![];
 
@@ -570,7 +563,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 })
                                 .try_collect()?;
 
-                            self.environment.unify(tipo, ret.clone(), location, false)?;
+                            self.environment.unify(tipo, ret.clone(), location)?;
 
                             Ok(Pattern::Constructor {
                                 location,
@@ -605,7 +598,6 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 tipo,
                                 instantiated_constructor_type.clone(),
                                 location,
-                                false,
                             )?;
 
                             Ok(Pattern::Constructor {

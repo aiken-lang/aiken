@@ -316,23 +316,9 @@ impl Type {
         }
     }
 
-    pub(crate) fn requires_equality(&self) -> bool {
-        match self {
-            Self::Var { tipo, .. } => tipo.borrow().requires_equality(),
-            Self::App { .. } | Self::Fn { .. } | Self::Tuple { .. } | Self::Pair { .. } => false,
-        }
-    }
-
-    pub(crate) fn require_equality(&self) {
-        if let Self::Var { tipo, .. } = self {
-            tipo.borrow_mut().require_equality();
-        }
-    }
-
     pub fn is_bls381_12_g1(&self) -> bool {
         match self {
             Self::App { module, name, .. } => well_known::G1_ELEMENT == name && module.is_empty(),
-
             Self::Var { tipo, .. } => tipo.borrow().is_bls381_12_g1(),
             _ => false,
         }
@@ -341,7 +327,6 @@ impl Type {
     pub fn is_bls381_12_g2(&self) -> bool {
         match self {
             Self::App { module, name, .. } => well_known::G2_ELEMENT == name && module.is_empty(),
-
             Self::Var { tipo, .. } => tipo.borrow().is_bls381_12_g2(),
             _ => false,
         }
@@ -352,7 +337,6 @@ impl Type {
             Self::App { module, name, .. } => {
                 well_known::MILLER_LOOP_RESULT == name && module.is_empty()
             }
-
             Self::Var { tipo, .. } => tipo.borrow().is_ml_result(),
             _ => false,
         }
@@ -918,11 +902,7 @@ pub enum TypeVar {
     /// identify if two unbound variable Rust values are the same Aiken type variable
     /// instance or not.
     ///
-    Unbound {
-        id: u64,
-        #[serde(default)]
-        equality: bool,
-    },
+    Unbound { id: u64 },
     /// Link is type variable where it was an unbound variable but we worked out
     /// that it is some other type and now we point to that one.
     ///
@@ -939,11 +919,7 @@ pub enum TypeVar {
     /// // a is TypeVar::Generic
     /// ```
     ///
-    Generic {
-        id: u64,
-        #[serde(default)]
-        equality: bool,
-    },
+    Generic { id: u64 },
 }
 
 impl TypeVar {
@@ -959,20 +935,6 @@ impl TypeVar {
 
     pub fn is_unbound(&self) -> bool {
         matches!(self, Self::Unbound { .. })
-    }
-
-    fn requires_equality(&self) -> bool {
-        match self {
-            Self::Link { tipo } => tipo.requires_equality(),
-            Self::Unbound { equality, .. } | Self::Generic { equality, .. } => *equality,
-        }
-    }
-
-    fn require_equality(&mut self) {
-        match self {
-            Self::Link { tipo } => tipo.require_equality(),
-            Self::Unbound { equality, .. } | Self::Generic { equality, .. } => *equality = true,
-        }
     }
 
     pub fn is_void(&self) -> bool {
@@ -1366,9 +1328,6 @@ pub struct TypeConstructor {
     pub module: String,
     pub parameters: Vec<Rc<Type>>,
     pub tipo: Rc<Type>,
-    #[serde(default)]
-    /// Constructor field types retained for representation-sensitive checks.
-    pub runtime_fields: Vec<Rc<Type>>,
 }
 
 impl TypeConstructor {
@@ -1377,7 +1336,6 @@ impl TypeConstructor {
             location: Span::empty(),
             parameters: tipo.collect_generics(),
             tipo,
-            runtime_fields: Vec::new(),
             module: "".to_string(),
             public: true,
         }

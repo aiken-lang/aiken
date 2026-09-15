@@ -372,19 +372,13 @@ impl Type {
     }
 
     pub fn generic_var(id: u64) -> Rc<Type> {
-        let tipo = Rc::new(RefCell::new(TypeVar::Generic {
-            id,
-            equality: false,
-        }));
+        let tipo = Rc::new(RefCell::new(TypeVar::Generic { id }));
 
         Rc::new(Type::Var { tipo, alias: None })
     }
 
     pub fn unbound_var(id: u64) -> Rc<Type> {
-        let tipo = Rc::new(RefCell::new(TypeVar::Unbound {
-            id,
-            equality: false,
-        }));
+        let tipo = Rc::new(RefCell::new(TypeVar::Unbound { id }));
 
         Rc::new(Type::Var { tipo, alias: None })
     }

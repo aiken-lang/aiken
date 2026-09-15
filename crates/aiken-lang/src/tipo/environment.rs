@@ -3,7 +3,6 @@ use super::{
     ValueConstructorVariant,
     error::{Error, Warning},
     exhaustive::{Matrix, PatternStack, simplify},
-    find_and_replace_generics, get_generic_id_and_type,
     hydrator::Hydrator,
 };
 use crate::{
@@ -14,7 +13,8 @@ use crate::{
         TypedDefinition, TypedFunction, TypedPattern, TypedValidator, UnqualifiedImport,
         UntypedArg, UntypedDefinition, UntypedFunction, Use, Validator,
     },
-    tipo::{TypeAliasAnnotation, fields::FieldMap},
+    expr::AssignmentKind,
+    tipo::{TypeAliasAnnotation, fields::FieldMap, well_known},
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -441,26 +441,6 @@ impl<'a> Environment<'a> {
             .ok_or_else(unknown_type_constructor)
     }
 
-    #[allow(clippy::result_large_err)]
-    pub fn get_type_constructor_mut(
-        &mut self,
-        name: &str,
-        location: Span,
-    ) -> Result<&mut TypeConstructor, Error> {
-        let types = self.known_type_names();
-
-        let constructor = self
-            .module_types
-            .get_mut(name)
-            .ok_or_else(|| Error::UnknownType {
-                location,
-                name: name.to_string(),
-                types,
-            })?;
-
-        Ok(constructor)
-    }
-
     /// Lookup a type in the current scope.
     #[allow(clippy::result_large_err)]
     pub fn get_type_constructor(
@@ -776,6 +756,80 @@ impl<'a> Environment<'a> {
                 .any(|module| module.opaque_types.contains(qualifier))
     }
 
+    pub(crate) fn is_data_like(&mut self, tipo: &Type) -> bool {
+        self.is_data_like_inner(tipo, &mut HashMap::new())
+    }
+
+    fn is_data_like_inner(&mut self, tipo: &Type, ids: &mut HashMap<u64, Rc<Type>>) -> bool {
+        match tipo {
+            Type::App {
+                module, name, args, ..
+            } => {
+                let forbidden = [
+                    well_known::VALUE,
+                    well_known::G1_ELEMENT,
+                    well_known::G2_ELEMENT,
+                    well_known::MILLER_LOOP_RESULT,
+                ];
+
+                if module.is_empty() && forbidden.contains(&name.as_str()) {
+                    return false;
+                }
+
+                let type_constructor = if module.is_empty() {
+                    self.module_types.get(name)
+                } else {
+                    self.imported_modules
+                        .get(module)
+                        .and_then(|(_, module)| module.types.get(name))
+                };
+
+                if let Some(type_constructor) = type_constructor {
+                    for (arg, param) in args.iter().zip(type_constructor.parameters.iter()) {
+                        if let Some(id) = param.get_generic_id() {
+                            ids.insert(id, arg.clone());
+                        }
+                    }
+                }
+
+                for constructor in self
+                    .get_constructors_for_type(module, name, Span::empty())
+                    .unwrap_or_default()
+                {
+                    if let Type::Fn { args, .. } = constructor.tipo.as_ref()
+                        && args.iter().any(|arg| !self.is_data_like_inner(arg, ids))
+                    {
+                        return false;
+                    };
+                }
+
+                args.iter().all(|arg| self.is_data_like_inner(arg, ids))
+            }
+
+            Type::Var { tipo, .. } => match tipo.borrow().deref() {
+                TypeVar::Link { tipo } => self.is_data_like_inner(tipo, ids),
+                TypeVar::Generic { id } => {
+                    if let Some(tipo) = ids.get(id) {
+                        self.is_data_like_inner(&tipo.clone(), ids)
+                    } else {
+                        false
+                    }
+                }
+                TypeVar::Unbound { .. } => false,
+            },
+
+            Type::Tuple { elems, .. } => {
+                elems.iter().all(|elem| self.is_data_like_inner(elem, ids))
+            }
+
+            Type::Pair { fst, snd, .. } => {
+                self.is_data_like_inner(fst, ids) && self.is_data_like_inner(snd, ids)
+            }
+
+            Type::Fn { .. } => false,
+        }
+    }
+
     pub(crate) fn contains_opaque(&self, tipo: &Type) -> bool {
         match tipo {
             Type::App {
@@ -810,8 +864,8 @@ impl<'a> Environment<'a> {
 
             let mut opaque_types = HashSet::new();
 
-            self.collect_opaque_types_from_values(&self.module_values, &mut opaque_types);
-            self.collect_opaque_types_from_values(&self.scope, &mut opaque_types);
+            self.collect_opaque_types_from_constructors(&self.module_values, &mut opaque_types);
+            self.collect_opaque_types_from_constructors(&self.scope, &mut opaque_types);
 
             for (module, name) in opaque_types {
                 self.register_opaque_type(&module, &name);
@@ -823,7 +877,7 @@ impl<'a> Environment<'a> {
         }
     }
 
-    fn collect_opaque_types_from_values(
+    fn collect_opaque_types_from_constructors(
         &self,
         values: &HashMap<String, ValueConstructor>,
         opaque_types: &mut HashSet<(String, String)>,
@@ -905,15 +959,12 @@ impl<'a> Environment<'a> {
                         });
                     }
 
-                    TypeVar::Generic { id, equality } => match ids.get(id) {
+                    TypeVar::Generic { id } => match ids.get(id) {
                         Some(t) => return Type::with_alias(t.clone(), alias.clone()),
                         None => {
                             if !hydrator.is_rigid(id) {
                                 // Check this in the hydrator, i.e. is it a created type
                                 let v = Type::with_alias(self.new_unbound_var(), alias.clone());
-                                if *equality {
-                                    v.require_equality();
-                                }
                                 ids.insert(*id, v.clone());
                                 return v;
                             }
@@ -1373,7 +1424,6 @@ impl<'a> Environment<'a> {
                         public: *public,
                         parameters,
                         tipo: Rc::new(tipo),
-                        runtime_fields: Vec::new(),
                     },
                 )?;
 
@@ -1424,7 +1474,6 @@ impl<'a> Environment<'a> {
                             }
                             .into(),
                         )),
-                        runtime_fields: Vec::new(),
                     },
                 )?;
 
@@ -1716,7 +1765,6 @@ impl<'a> Environment<'a> {
                 }
 
                 // Check and register constructors
-                let mut runtime_fields = Vec::new();
                 for constructor in constructors {
                     assert_unique_value_name(names, &constructor.name, &constructor.location)?;
 
@@ -1743,8 +1791,6 @@ impl<'a> Environment<'a> {
                             field_map.insert(label.clone(), i, location)?;
                         }
                     }
-
-                    runtime_fields.extend(args_types.iter().cloned());
 
                     let field_map = field_map.into_option();
 
@@ -1784,11 +1830,6 @@ impl<'a> Environment<'a> {
 
                     self.insert_variable(constructor.name.clone(), constructor_info, typ);
                 }
-
-                self.module_types
-                    .get_mut(name)
-                    .expect("Type for custom type not found after registering values")
-                    .runtime_fields = runtime_fields;
             }
 
             Definition::ModuleConstant(ModuleConstant { name, location, .. }) => {
@@ -1800,397 +1841,10 @@ impl<'a> Environment<'a> {
         Ok(())
     }
 
-    pub(crate) fn type_contains_runtime_value(&self, tipo: &Type) -> bool {
-        self.type_contains_runtime_value_inner(tipo, &mut BTreeSet::new())
-    }
-
-    fn type_contains_runtime_value_inner(
-        &self,
-        tipo: &Type,
-        visiting: &mut BTreeSet<String>,
-    ) -> bool {
-        match tipo {
-            Type::Var { tipo, .. } => match &*tipo.borrow() {
-                TypeVar::Link { tipo } => self.type_contains_runtime_value_inner(tipo, visiting),
-                TypeVar::Unbound { .. } | TypeVar::Generic { .. } => false,
-            },
-            Type::Fn { .. } => false,
-            Type::Tuple { elems, .. } => elems
-                .iter()
-                .any(|elem| self.type_contains_runtime_value_inner(elem, visiting)),
-            Type::Pair { fst, snd, .. } => {
-                self.type_contains_runtime_value_inner(fst, visiting)
-                    || self.type_contains_runtime_value_inner(snd, visiting)
-            }
-            Type::App {
-                module, name, args, ..
-            } => {
-                if tipo.is_value() {
-                    return true;
-                }
-
-                let identity = format!("{module}.{name}:{}", tipo.to_pretty(0));
-                if !visiting.insert(identity.clone()) {
-                    return false;
-                }
-
-                let contains_value = match self.runtime_field_types(tipo) {
-                    Some(fields) => fields
-                        .iter()
-                        .any(|field| self.type_contains_runtime_value_inner(field, visiting)),
-                    None => args
-                        .iter()
-                        .any(|arg| self.type_contains_runtime_value_inner(arg, visiting)),
-                };
-
-                visiting.remove(&identity);
-                contains_value
-            }
-        }
-    }
-
-    pub(crate) fn require_runtime_equality(&self, tipo: &Type) {
-        self.require_runtime_equality_inner(tipo, &mut BTreeSet::new());
-    }
-
-    fn require_runtime_equality_inner(&self, tipo: &Type, visiting: &mut BTreeSet<String>) {
-        match tipo {
-            Type::Var { tipo: var, .. } => {
-                let linked = match &*var.borrow() {
-                    TypeVar::Link { tipo } => Some(tipo.clone()),
-                    TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
-                };
-
-                if let Some(linked) = linked {
-                    self.require_runtime_equality_inner(&linked, visiting);
-                } else {
-                    tipo.require_equality();
-                }
-            }
-            Type::Fn { .. } => {}
-            Type::Tuple { elems, .. } => {
-                for elem in elems {
-                    self.require_runtime_equality_inner(elem, visiting);
-                }
-            }
-            Type::Pair { fst, snd, .. } => {
-                self.require_runtime_equality_inner(fst, visiting);
-                self.require_runtime_equality_inner(snd, visiting);
-            }
-            Type::App {
-                module, name, args, ..
-            } => {
-                if tipo.is_list() {
-                    for arg in args {
-                        self.require_runtime_equality_inner(arg, visiting);
-                    }
-                    return;
-                }
-
-                if tipo.get_uplc_type().is_some() {
-                    return;
-                }
-
-                let identity = format!("{module}.{name}:{}", tipo.to_pretty(0));
-                if !visiting.insert(identity.clone()) {
-                    return;
-                }
-
-                match self.runtime_field_types(tipo) {
-                    Some(fields) => {
-                        for field in fields {
-                            self.require_runtime_equality_inner(&field, visiting);
-                        }
-                    }
-                    None => {
-                        for arg in args {
-                            self.require_runtime_equality_inner(arg, visiting);
-                        }
-                    }
-                }
-
-                visiting.remove(&identity);
-            }
-        }
-    }
-
-    /// Private types get pruned from the module's public interface, yet a
-    /// public (opaque) type may still wrap one in its runtime representation.
-    /// Downstream modules resolve `runtime_fields` through the interface, so
-    /// anything only reachable through a private type would escape runtime
-    /// checks like [`Self::type_contains_runtime_value`]. Before pruning,
-    /// substitute reachable private types with their (instantiated) runtime
-    /// fields so the interface exports the actual runtime representation, e.g.
-    /// `[Hidden<Value>] → [Int]` when `Hidden` merely stores an `Int`.
-    pub(crate) fn expand_private_runtime_fields(&mut self, module_name: &str) {
-        let private_types = self
-            .module_types
-            .iter()
-            .filter(|(_, info)| !info.public && info.module == module_name)
-            .map(|(name, _)| name.clone())
-            .collect::<BTreeSet<_>>();
-
-        if private_types.is_empty() {
-            return;
-        }
-
-        let public_types = self
-            .module_types
-            .iter()
-            .filter(|(_, info)| {
-                info.public && info.module == module_name && !info.runtime_fields.is_empty()
-            })
-            .map(|(name, info)| (name.clone(), info.runtime_fields.clone()))
-            .collect::<Vec<_>>();
-
-        for (name, fields) in public_types {
-            let mut expanded = Vec::new();
-            let mut visiting = BTreeSet::new();
-            let mut touched = false;
-
-            for field in &fields {
-                self.expand_private_runtime_field(
-                    field,
-                    module_name,
-                    &private_types,
-                    &mut visiting,
-                    &mut touched,
-                    &mut expanded,
-                );
-            }
-
-            if touched {
-                self.module_types
-                    .get_mut(&name)
-                    .expect("public type disappeared while expanding runtime fields")
-                    .runtime_fields = expanded;
-            }
-        }
-    }
-
-    /// Push the runtime representation of `tipo` onto `expanded`: a private
-    /// type dissolves into its (instantiated) runtime fields, anything else is
-    /// kept with private types substituted away inside it.
-    fn expand_private_runtime_field(
-        &self,
-        tipo: &Rc<Type>,
-        module_name: &str,
-        private_types: &BTreeSet<String>,
-        visiting: &mut BTreeSet<String>,
-        touched: &mut bool,
-        expanded: &mut Vec<Rc<Type>>,
-    ) {
-        match tipo.as_ref() {
-            Type::Var { tipo: var, .. } => {
-                let linked = match &*var.borrow() {
-                    TypeVar::Link { tipo } => Some(tipo.clone()),
-                    TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
-                };
-
-                match linked {
-                    Some(linked) => self.expand_private_runtime_field(
-                        &linked,
-                        module_name,
-                        private_types,
-                        visiting,
-                        touched,
-                        expanded,
-                    ),
-                    None => expanded.push(tipo.clone()),
-                }
-            }
-            Type::App { module, name, .. }
-                if module == module_name && private_types.contains(name) =>
-            {
-                let identity = format!("{module}.{name}:{}", tipo.to_pretty(0));
-                if !visiting.insert(identity.clone()) {
-                    return;
-                }
-
-                // Follow the fields actually stored by the constructor (so
-                // phantom type arguments do not leak into the expansion),
-                // dissolving nested private types along the way. Private
-                // types live in the current module, so they always resolve;
-                // keep the nominal field as a conservative fallback otherwise.
-                match self.runtime_field_types(tipo) {
-                    Some(fields) => {
-                        *touched = true;
-
-                        for field in fields {
-                            self.expand_private_runtime_field(
-                                &field,
-                                module_name,
-                                private_types,
-                                visiting,
-                                touched,
-                                expanded,
-                            );
-                        }
-                    }
-                    None => expanded.push(tipo.clone()),
-                }
-
-                visiting.remove(&identity);
-            }
-            Type::Fn { .. } | Type::Tuple { .. } | Type::Pair { .. } | Type::App { .. } => {
-                expanded.push(self.substitute_private_runtime_types(
-                    tipo,
-                    module_name,
-                    private_types,
-                    visiting,
-                    touched,
-                ));
-            }
-        }
-    }
-
-    /// Rewrite `tipo` so that any private type occurring inside it is replaced
-    /// by its runtime representation, keeping the surrounding structure (e.g.
-    /// `List<Hidden<a>>` becomes `List<Int>` when `Hidden` stores an `Int`).
-    /// A private type with several runtime fields becomes a tuple of them.
-    fn substitute_private_runtime_types(
-        &self,
-        tipo: &Rc<Type>,
-        module_name: &str,
-        private_types: &BTreeSet<String>,
-        visiting: &mut BTreeSet<String>,
-        touched: &mut bool,
-    ) -> Rc<Type> {
-        match tipo.as_ref() {
-            Type::Var { tipo: var, .. } => {
-                let linked = match &*var.borrow() {
-                    TypeVar::Link { tipo } => Some(tipo.clone()),
-                    TypeVar::Unbound { .. } | TypeVar::Generic { .. } => None,
-                };
-
-                match linked {
-                    Some(linked) => self.substitute_private_runtime_types(
-                        &linked,
-                        module_name,
-                        private_types,
-                        visiting,
-                        touched,
-                    ),
-                    None => tipo.clone(),
-                }
-            }
-            Type::Fn { .. } => tipo.clone(),
-            Type::Tuple { elems, alias } => Rc::new(Type::Tuple {
-                elems: elems
-                    .iter()
-                    .map(|elem| {
-                        self.substitute_private_runtime_types(
-                            elem,
-                            module_name,
-                            private_types,
-                            visiting,
-                            touched,
-                        )
-                    })
-                    .collect(),
-                alias: alias.clone(),
-            }),
-            Type::Pair { fst, snd, alias } => Rc::new(Type::Pair {
-                fst: self.substitute_private_runtime_types(
-                    fst,
-                    module_name,
-                    private_types,
-                    visiting,
-                    touched,
-                ),
-                snd: self.substitute_private_runtime_types(
-                    snd,
-                    module_name,
-                    private_types,
-                    visiting,
-                    touched,
-                ),
-                alias: alias.clone(),
-            }),
-            Type::App { module, name, .. }
-                if module == module_name && private_types.contains(name) =>
-            {
-                let mut fields = Vec::new();
-
-                self.expand_private_runtime_field(
-                    tipo,
-                    module_name,
-                    private_types,
-                    visiting,
-                    touched,
-                    &mut fields,
-                );
-
-                if fields.len() == 1 {
-                    fields.remove(0)
-                } else {
-                    Rc::new(Type::Tuple {
-                        elems: fields,
-                        alias: None,
-                    })
-                }
-            }
-            Type::App {
-                public,
-                module,
-                name,
-                args,
-                alias,
-            } => Rc::new(Type::App {
-                public: *public,
-                module: module.clone(),
-                name: name.clone(),
-                args: args
-                    .iter()
-                    .map(|arg| {
-                        self.substitute_private_runtime_types(
-                            arg,
-                            module_name,
-                            private_types,
-                            visiting,
-                            touched,
-                        )
-                    })
-                    .collect(),
-                alias: alias.clone(),
-            }),
-        }
-    }
-
-    pub(crate) fn runtime_field_types(&self, concrete_type: &Type) -> Option<Vec<Rc<Type>>> {
-        let Type::App { module, name, .. } = concrete_type else {
-            return Some(Vec::new());
-        };
-
-        let local = self
-            .module_types
-            .get(name)
-            .filter(|constructor| constructor.module.as_str() == module);
-
-        let type_constructor = local.or_else(|| {
-            self.importable_modules
-                .get(module)
-                .and_then(|module_info| module_info.types.get(name))
-        });
-
-        let type_constructor = type_constructor?;
-
-        if type_constructor.location == Span::empty() {
-            return None;
-        }
-
-        let mono_types: indexmap::IndexMap<_, _> =
-            get_generic_id_and_type(&type_constructor.tipo, concrete_type)
-                .into_iter()
-                .collect();
-
-        Some(
-            type_constructor
-                .runtime_fields
-                .iter()
-                .map(|field| find_and_replace_generics(field, &mono_types))
-                .collect(),
-        )
+    #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::result_large_err)]
+    pub fn unify(&mut self, lhs: Rc<Type>, rhs: Rc<Type>, location: Span) -> Result<(), Error> {
+        self.unify_with(lhs, rhs, location, UnifyMode::Strict)
     }
 
     /// Unify two types that should be the same.
@@ -2199,41 +1853,48 @@ impl<'a> Environment<'a> {
     /// It two types are found to not be the same an error is returned.
     #[allow(clippy::only_used_in_recursion)]
     #[allow(clippy::result_large_err)]
-    pub fn unify(
+    pub fn unify_with(
         &mut self,
         lhs: Rc<Type>,
         rhs: Rc<Type>,
         location: Span,
-        allow_cast: bool,
+        unify_mode: UnifyMode,
     ) -> Result<(), Error> {
         if lhs == rhs {
             return Ok(());
         }
 
-        if allow_cast {
-            if self.contains_opaque(&lhs) {
-                return Err(Error::ExpectOnOpaqueType { location });
+        match unify_mode {
+            UnifyMode::Strict => {}
+            UnifyMode::AllowUpCast => {
+                if lhs.is_data() && self.is_data_like(&rhs) {
+                    return Ok(());
+                }
             }
+            UnifyMode::AllowDownCast => {
+                if self.contains_opaque(&lhs) {
+                    return Err(Error::ExpectOnOpaqueType { location });
+                }
 
-            if (lhs.is_data() || rhs.is_data())
-                && !(lhs.is_unbound() || rhs.is_unbound())
-                && !(lhs.is_function() || rhs.is_function())
-                && !(lhs.is_generic() || rhs.is_generic())
-                && !(lhs.is_string() || rhs.is_string())
-            {
-                return Ok(());
+                if lhs.is_data() && self.is_data_like(&rhs) {
+                    return Ok(());
+                }
+
+                if self.is_data_like(&lhs) && rhs.is_data() {
+                    return Ok(());
+                }
             }
-        }
+        };
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.
         if let Type::Var { tipo, alias } = rhs.deref()
             && let TypeVar::Link { tipo } = tipo.borrow().deref()
         {
-            return self.unify(
+            return self.unify_with(
                 lhs,
                 Type::with_alias(tipo.clone(), alias.clone()),
                 location,
-                allow_cast,
+                unify_mode,
             );
         }
 
@@ -2249,7 +1910,7 @@ impl<'a> Environment<'a> {
             enum Action {
                 Unify(Rc<Type>),
                 CouldNotUnify,
-                Link { requires_equality: bool },
+                Link,
             }
 
             let action = match tipo.borrow().deref() {
@@ -2257,21 +1918,16 @@ impl<'a> Environment<'a> {
                     Action::Unify(Type::with_alias(tipo.clone(), alias.clone()))
                 }
 
-                TypeVar::Unbound { id, equality } => {
+                TypeVar::Unbound { id } => {
                     unify_unbound_type(rhs.clone(), *id, location)?;
-                    Action::Link {
-                        requires_equality: *equality,
-                    }
+                    Action::Link
                 }
 
-                TypeVar::Generic { id, equality } => {
+                TypeVar::Generic { id } => {
                     if let Type::Var { tipo, alias: _ } = rhs.deref()
                         && tipo.borrow().is_unbound()
                     {
-                        *tipo.borrow_mut() = TypeVar::Generic {
-                            id: *id,
-                            equality: *equality,
-                        };
+                        *tipo.borrow_mut() = TypeVar::Generic { id: *id };
                         return Ok(());
                     }
                     Action::CouldNotUnify
@@ -2279,25 +1935,17 @@ impl<'a> Environment<'a> {
             };
 
             return match action {
-                Action::Link { requires_equality } => {
-                    if requires_equality {
-                        if self.type_contains_runtime_value(&rhs) {
-                            return Err(Error::IllegalComparison { location });
-                        }
-                        self.require_runtime_equality(&rhs);
-                    }
+                Action::Link => {
                     *tipo.borrow_mut() = TypeVar::Link { tipo: rhs };
                     Ok(())
                 }
-                Action::Unify(t) => self.unify(t, rhs, location, allow_cast),
+                Action::Unify(t) => self.unify_with(t, rhs, location, unify_mode),
                 Action::CouldNotUnify => Err(could_not_unify()),
             };
         }
 
         if let Type::Var { .. } = rhs.deref() {
-            return self
-                .unify(rhs, lhs, location, false)
-                .map_err(|e| e.flip_unify());
+            return self.unify(rhs, lhs, location).map_err(|e| e.flip_unify());
         }
 
         match (lhs.deref(), rhs.deref()) {
@@ -2321,7 +1969,7 @@ impl<'a> Environment<'a> {
                     unify_enclosed_type(
                         lhs.clone(),
                         rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, false),
+                        self.unify(a.clone(), b.clone(), location),
                     )?;
                 }
                 Ok(())
@@ -2341,7 +1989,7 @@ impl<'a> Environment<'a> {
                     unify_enclosed_type(
                         lhs.clone(),
                         rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, false),
+                        self.unify(a.clone(), b.clone(), location),
                     )?;
                 }
                 Ok(())
@@ -2363,7 +2011,7 @@ impl<'a> Environment<'a> {
                     unify_enclosed_type(
                         lhs.clone(),
                         rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, false),
+                        self.unify(a.clone(), b.clone(), location),
                     )?;
                 }
                 Ok(())
@@ -2382,10 +2030,10 @@ impl<'a> Environment<'a> {
                 },
             ) if args1.len() == args2.len() => {
                 for (a, b) in args1.iter().zip(args2) {
-                    self.unify(a.clone(), b.clone(), location, allow_cast)
+                    self.unify_with(a.clone(), b.clone(), location, unify_mode)
                         .map_err(|_| could_not_unify())?;
                 }
-                self.unify(retrn1.clone(), retrn2.clone(), location, false)
+                self.unify(retrn1.clone(), retrn2.clone(), location)
                     .map_err(|_| could_not_unify())
             }
 
@@ -2449,7 +2097,7 @@ impl<'a> Environment<'a> {
     #[allow(clippy::result_large_err)]
     pub fn get_constructors_for_type(
         &mut self,
-        full_module_name: &String,
+        full_module_name: &str,
         name: &str,
         location: Span,
     ) -> Result<Vec<ValueConstructor>, Error> {
@@ -2518,6 +2166,27 @@ impl<'a> Environment<'a> {
     }
 }
 
+/// Captures unification policy rules, influenced by let/expect/if-is
+#[derive(Debug, Clone, Copy)]
+pub enum UnifyMode {
+    // A strict unification, no casting allowed whatsoever.
+    Strict,
+    // Direct assignations or function calls, allow implicit upcast to `Data`
+    AllowUpCast,
+    // Via `if/is` or `expect`, only allow non-opaque Data-like types on the left-hand side
+    AllowDownCast,
+}
+
+impl<T> From<AssignmentKind<T>> for UnifyMode {
+    fn from(kind: AssignmentKind<T>) -> Self {
+        match kind {
+            AssignmentKind::Let { .. } => Self::AllowUpCast,
+            AssignmentKind::Is => Self::AllowDownCast,
+            AssignmentKind::Expect { .. } => Self::AllowDownCast,
+        }
+    }
+}
+
 /// For Keeping track of entity usages and knowing which error to display.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntityKind {
@@ -2550,14 +2219,11 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
                 );
             }
 
-            TypeVar::Unbound { id, equality } => {
+            TypeVar::Unbound { id } => {
                 if id == &own_id {
                     return Err(Error::RecursiveType { location });
                 } else {
-                    Some(TypeVar::Unbound {
-                        id: *id,
-                        equality: *equality,
-                    })
+                    Some(TypeVar::Unbound { id: *id })
                 }
             }
 
@@ -2729,13 +2395,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
     match t.deref() {
         Type::Var { tipo, alias } => Type::with_alias(
             match tipo.borrow().deref() {
-                TypeVar::Unbound { id, equality } => {
-                    let generic = Type::generic_var(*id);
-                    if *equality {
-                        generic.require_equality();
-                    }
-                    generic
-                }
+                TypeVar::Unbound { id } => Type::generic_var(*id),
                 TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
                 TypeVar::Generic { .. } => Rc::new(Type::Var {
                     tipo: tipo.clone(),

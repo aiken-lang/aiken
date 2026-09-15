@@ -6559,8 +6559,9 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
 fn strict_value_expect_uses_un_value_data_in_verbose_mode() {
     let src = r#"
         test malformed_value_expect() {
-          let malformed: Data = 0
-          expect _: Value = malformed
+          let left: Value = {}
+          let right: Value = {}
+          expect left == right
         }
     "#;
 

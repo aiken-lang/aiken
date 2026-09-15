@@ -4482,13 +4482,13 @@ impl<'a> CodeGenerator<'a> {
                             Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal(),
                             Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal(),
                             Some(UplcType::Bool | UplcType::Unit) => Term::unit(),
-                            Some(UplcType::List(_) | UplcType::Pair(_, _) | UplcType::Data)
+                            Some(
+                                UplcType::List(_)
+                                | UplcType::Pair(_, _)
+                                | UplcType::Value
+                                | UplcType::Data,
+                            )
                             | None => Term::equals_data(),
-                            Some(UplcType::Value) => {
-                                unreachable!(
-                                    "Value equality is rejected during binary-op type inference"
-                                )
-                            }
                             Some(UplcType::Bls12_381MlResult) => {
                                 panic!("ML Result equality is not supported")
                             }
@@ -4537,11 +4537,17 @@ impl<'a> CodeGenerator<'a> {
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
                                     ))
                             }
-                            Some(UplcType::Value) => {
-                                unreachable!(
-                                    "Value equality is rejected during binary-op type inference"
-                                )
-                            }
+                            Some(UplcType::Value) => builtin
+                                .apply(builder::convert_type_to_data(
+                                    left,
+                                    &left_tipo,
+                                    &self.data_types,
+                                ))
+                                .apply(builder::convert_type_to_data(
+                                    right,
+                                    &right_tipo,
+                                    &self.data_types,
+                                )),
                             Some(
                                 UplcType::Data
                                 | UplcType::Bls12_381G1Element

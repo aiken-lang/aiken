@@ -6,8 +6,9 @@ use super::{
 use crate::{
     ast::{AssignmentKind, CallArg, PIPE_VARIABLE, Pattern, Span},
     expr::{TypedExpr, UntypedExpr},
+    tipo::environment::UnifyMode,
 };
-use std::{ops::Deref, rc::Rc};
+use std::rc::Rc;
 use vec1::Vec1;
 
 #[derive(Debug)]
@@ -260,19 +261,11 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
 
         // Ensure that the function accepts one argument of the correct type
         self.expr_typer
-            .unify(
+            .unify_with(
                 func.tipo(),
                 Type::function(vec![self.argument_type.clone()], return_type.clone()),
                 func.location(),
-                if let Type::Fn { args, .. } = func.tipo().deref() {
-                    if let Some(typ) = args.first() {
-                        typ.is_data()
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                },
+                UnifyMode::AllowUpCast,
             )
             .map_err(|e| {
                 let is_pipe_mismatch = self.check_if_pipe_type_mismatch(&e, func.location());
@@ -306,7 +299,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
                     (Some(a), Some(b)) => self
                         .expr_typer
                         .environment
-                        .unify(a.clone(), b.clone(), location, a.is_data())
+                        .unify_with(a.clone(), b.clone(), location, UnifyMode::AllowUpCast)
                         .is_err(),
                     _ => false,
                 }

@@ -10,7 +10,6 @@ Schema {
                 tipo: RefCell {
                     value: Generic {
                         id: 74,
-                        equality: false,
                     },
                 },
                 alias: None,

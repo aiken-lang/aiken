@@ -473,8 +473,8 @@ impl Constant {
             Constant::ProtoPair(fst, snd, left, right) => {
                 fst.contains_value()
                     || snd.contains_value()
-                    || Constant::contains_value(&left)
-                    || Constant::contains_value(&right)
+                    || Constant::contains_value(left)
+                    || Constant::contains_value(right)
             }
             _ => false,
         }

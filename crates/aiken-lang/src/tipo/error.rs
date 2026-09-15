@@ -370,10 +370,9 @@ Use an intermediate public representation instead, then re-construct the opaque 
     #[error("I noticed an unsupported use of equality.\n")]
     #[diagnostic(code("illegal::comparison"))]
     #[diagnostic(help(
-        r#"Equality is available for serialisable values whose runtime representation supports a total comparison. It is not defined for functions, {Fuzzer}, {MillerLoopResult}, or {Value}, including types that contain {Value}."#,
+        r#"Equality is available for serialisable values whose runtime representation supports a total comparison. It is not defined for functions, {Fuzzer} or {MillerLoopResult}, including types that contain those."#,
         Fuzzer = "Fuzzer".if_supports_color(Stdout, |s| s.cyan()),
         MillerLoopResult = "MillerLoopResult".if_supports_color(Stdout, |s| s.cyan()),
-        Value = "Value".if_supports_color(Stdout, |s| s.cyan()),
     ))]
     IllegalComparison {
         #[label("operands do not support equality")]
