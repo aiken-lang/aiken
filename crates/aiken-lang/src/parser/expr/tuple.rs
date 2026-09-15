@@ -65,4 +65,9 @@ mod tests {
     fn parse_tuple_with_trailing_comma() {
         assert_expr!("(x, y,)");
     }
+
+    #[test]
+    fn parse_bytearray() {
+        assert_expr!("(#\"abcd\")");
+    }
 }
