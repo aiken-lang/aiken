@@ -13,6 +13,7 @@ mod if_else;
 mod int;
 mod list;
 mod pair;
+mod parenthesized;
 mod record;
 mod record_update;
 mod sequence;
