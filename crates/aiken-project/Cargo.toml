@@ -13,60 +13,58 @@ rust-version.workspace = true
 build = "build.rs"
 
 [dependencies]
-aiken-lang = { path = "../aiken-lang", version = "1.1.23" }
-askama = { version = "0.12.0", features = ["urlencode"] }
-camino = "1.1.9"
-ciborium = "0.2.2"
-dirs = "6.0.0"
-fslock = "0.2.1"
-futures = "0.3.26"
-glob = "0.3.3"
-hex = "0.4.3"
-ignore = "0.4.20"
-indexmap = "1.9.2"
-indoc = "2.0.1"
-itertools = "0.10.5"
-miette = { version = "7.2.0", features = ["fancy"] }
-notify = "8.2.0"
-num-bigint = "0.4.4"
-ordinal = "0.4.0"
-owo-colors = { version = "3.5.0", features = ["supports-colors"] }
+aiken-lang.workspace = true
+askama = { workspace = true, features = ["urlencode"] }
+camino.workspace = true
+ciborium.workspace = true
+dirs.workspace = true
+fslock.workspace = true
+futures.workspace = true
+glob.workspace = true
+hex.workspace = true
+ignore.workspace = true
+indexmap.workspace = true
+indoc.workspace = true
+itertools.workspace = true
+miette = { workspace = true, features = ["fancy"] }
+notify.workspace = true
+num-bigint.workspace = true
+numfmt.workspace = true
+ordinal.workspace = true
+owo-colors = { workspace = true, features = ["supports-colors"] }
 pallas-addresses.workspace = true
 pallas-codec.workspace = true
 pallas-crypto.workspace = true
 pallas-primitives.workspace = true
 pallas-traverse.workspace = true
-petgraph = "0.6.3"
-pulldown-cmark = { version = "0.12.0", default-features = false, features = [
-    "html",
-] }
-rayon = "1.11.0"
-regex = "1.12.2"
-reqwest = { version = "0.11.14", features = ["blocking", "json"] }
-rgb = "0.8.50"
-semver = { version = "1.0.23", features = ["serde"] }
-serde = { version = "1.0.152", features = ["derive"] }
-serde_json = { version = "1.0.148", features = ["preserve_order"] }
-strip-ansi-escapes = "0.1.1"
-textplots = "0.8.7"
-thiserror = "1.0.39"
-tokio = { version = "1.43.1", features = ["full"] }
-toml = "1.1.0"
-uplc = { path = '../uplc', version = "1.1.23" }
-vec1 = "1.10.1"
+petgraph.workspace = true
+pulldown-cmark = { workspace = true, features = ["html"] }
+rayon.workspace = true
+regex.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json"] }
+rgb.workspace = true
+semver = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+strip-ansi-escapes.workspace = true
+textplots.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+toml.workspace = true
+uplc.workspace = true
+vec1.workspace = true
 walkdir.workspace = true
-zip = "0.6.4"
-numfmt = "1.1.1"
+zip.workspace = true
 
 [target.'cfg(not(windows))'.dependencies]
-katex = "0.4"
+katex.workspace = true
 
 [dev-dependencies]
-blst = "0.3.11"
-indoc = "2.0.1"
-insta.workspace = true
-proptest = "1.2.0"
-pretty_assertions = "1.3.0"
+blst.workspace = true
+indoc.workspace = true
+insta = { workspace = true, features = ["yaml", "json", "redactions"] }
+proptest.workspace = true
+pretty_assertions.workspace = true
 
 [build-dependencies]
-built = { version = "0.7.1", features = ["git2"] }
+built.workspace = true

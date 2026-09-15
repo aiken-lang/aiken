@@ -1849,9 +1849,9 @@ impl DefaultFunction {
                 let mut bv = BitVec::<u8, Msb0>::from_vec(bytes.clone());
 
                 if is_shl {
-                    bv.shift_left(usize::try_from(shift.abs()).unwrap());
+                    bv.shift_start(usize::try_from(shift.abs()).unwrap());
                 } else {
-                    bv.shift_right(usize::try_from(shift.abs()).unwrap());
+                    bv.shift_end(usize::try_from(shift.abs()).unwrap());
                 }
 
                 Ok(Value::byte_string(bv.into_vec()))

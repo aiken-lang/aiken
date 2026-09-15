@@ -11,19 +11,18 @@ documentation.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-crossbeam-channel = "0.5.15"
-indoc = "2.0.1"
-itertools = "0.10.5"
-lsp-server = "0.7.0"
-lsp-types = "0.94.0"
+aiken-lang.workspace = true
+aiken-project.workspace = true
+crossbeam-channel.workspace = true
+indoc.workspace = true
+itertools.workspace = true
+lsp-server.workspace = true
+lsp-types.workspace = true
 miette.workspace = true
-owo-colors = { version = "3.5.0", features = ["supports-colors"] }
-serde = "1.0.152"
-serde_json = "1.0.148"
-thiserror = "1.0.39"
-tracing = "0.1.44"
-url = "2.5.7"
-urlencoding = "2.1.2"
-
-aiken-lang = { path = '../aiken-lang', version = "1.1.23" }
-aiken-project = { path = '../aiken-project', version = "1.1.23" }
+owo-colors = { workspace = true, features = ["supports-colors"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url.workspace = true
+urlencoding.workspace = true

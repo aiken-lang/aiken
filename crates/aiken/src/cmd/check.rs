@@ -156,9 +156,9 @@ pub fn exec(
         std::process::exit(0);
     }
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
-    let seed = seed.unwrap_or_else(|| rng.r#gen());
+    let seed = seed.unwrap_or_else(|| rng.random());
 
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {

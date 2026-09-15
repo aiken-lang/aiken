@@ -86,9 +86,9 @@ pub fn exec(
         plain_numbers,
     }: Args,
 ) -> miette::Result<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
-    let seed = seed.unwrap_or_else(|| rng.r#gen());
+    let seed = seed.unwrap_or_else(|| rng.random());
 
     let result = with_project(directory.as_deref(), false, false, true, |p| {
         p.benchmark(
