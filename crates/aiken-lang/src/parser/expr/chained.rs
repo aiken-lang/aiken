@@ -4,13 +4,14 @@ use super::{
     bytearray::parser as bytearray, if_else::parser as if_else, int::parser as int,
     list::parser as list, pair::parser as pair, parenthesized::parser as parenthesized,
     record::parser as record, record_update::parser as record_update, string::parser as string,
-    value::parser as value, var::parser as var, when::parser as when,
+    var::parser as var, when::parser as when,
 };
 use crate::{
     expr::UntypedExpr,
     parser::{
         chain::{Chain, call::parser as call, field_access, tuple_index::parser as tuple_index},
         error::ParseError,
+        literal::value,
         token::Token,
     },
 };

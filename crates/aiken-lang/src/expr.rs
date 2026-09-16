@@ -664,17 +664,18 @@ impl ValueLiteralSpans {
             list: empty,
             entries: entries
                 .iter()
-                .map(|(_, tokens)| ValueEntrySpans {
-                    tuple: empty,
-                    currency: empty,
-                    token_list: empty,
-                    tokens: vec![
+                .map(|(_, assets)| ValueEntrySpans {
+                    entry: empty,
+                    policy: empty,
+                    assets: empty,
+                    asset_entries: vec![
                         ValueTokenSpans {
-                            tuple: empty,
-                            token: empty,
+                            entry: empty,
+                            asset_name: empty,
                             quantity: empty,
+                            preferred_format: ByteArrayFormatPreference::HexadecimalString,
                         };
-                        tokens.len()
+                        assets.len()
                     ],
                 })
                 .collect(),
@@ -684,17 +685,18 @@ impl ValueLiteralSpans {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValueEntrySpans {
-    pub tuple: Span,
-    pub currency: Span,
-    pub token_list: Span,
-    pub tokens: Vec<ValueTokenSpans>,
+    pub entry: Span,
+    pub policy: Span,
+    pub assets: Span,
+    pub asset_entries: Vec<ValueTokenSpans>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ValueTokenSpans {
-    pub tuple: Span,
-    pub token: Span,
+    pub entry: Span,
+    pub asset_name: Span,
     pub quantity: Span,
+    pub preferred_format: ByteArrayFormatPreference,
 }
 
 #[derive(Debug, Clone, PartialEq)]

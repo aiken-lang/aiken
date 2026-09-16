@@ -412,11 +412,11 @@ mod tests {
     fn value_validator_boundary_is_supported() {
         let mut project = TestProject::new();
         let modules = CheckedModules::singleton(project.check(project.parse(indoc::indoc! {r#"
-            use aiken/builtin.{lookup_coin}
+            use aiken/builtin.{lookup_value}
 
             validator thing {
               mint(redeemer: Value, policy_id: ByteArray, transaction: Data) {
-                lookup_coin(#"", #"", redeemer) >= 0
+                lookup_value(#"", #"", redeemer) >= 0
               }
             }
         "#})));

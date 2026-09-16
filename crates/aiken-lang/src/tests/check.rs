@@ -318,7 +318,7 @@ fn primitive_value_coexists_with_qualified_module_value() {
         }
 
         fn coexist() -> assets.Value {
-          expect _ = native_identity(#<Value>[])
+          expect _ = native_identity({})
           assets_identity(assets.zero)
         }
     "#;
@@ -346,7 +346,7 @@ fn unqualified_cardano_assets_value_shadows_primitive_value() {
         }
 
         fn mismatch() -> Value {
-          imported_identity(#<Value>[])
+          imported_identity({})
         }
     "#;
 
@@ -663,7 +663,7 @@ fn equality_accepts_value_hidden_behind_an_imported_private_wrapper() {
         }
 
         test trigger() {
-          let value = #<Value>[]
+          let value = { #"00000000000000000000000000000000000000000000000000000000": { "foo": 14 } }
           compare(make(value), make(value))
         }
     "#;
@@ -683,7 +683,7 @@ fn equality_accepts_value_hidden_behind_a_generic_imported_private_wrapper() {
         }
 
         pub fn make(value: a) -> Public<a> {
-          Public([Hidden(value, #<Value>[])])
+          Public([Hidden(value, {})])
         }
     "#;
 
@@ -773,7 +773,7 @@ fn equality_accepts_private_value_type_stored_in_a_foreign_generic_wrapper() {
         }
 
         test trigger() {
-          let value = #<Value>[]
+          let value = {}
           compare(make(value), make(value))
         }
     "#;
@@ -842,7 +842,7 @@ fn equality_accepts_value_stored_behind_an_imported_private_generic_wrapper() {
         }
 
         test trigger() {
-          let value = #<Value>[]
+          let value = {}
           compare(make(value), make(value))
         }
     "#;

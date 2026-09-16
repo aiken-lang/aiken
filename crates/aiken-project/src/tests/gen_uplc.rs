@@ -6059,22 +6059,29 @@ fn mk_cons_direct_invoke_3() {
 #[test]
 fn primitive_value_builtin_pipeline() {
     let src = r#"
-        use aiken/builtin.{insert_coin, lookup_coin}
-
+        use aiken/builtin.{insert_value, lookup_value}
         test value_builtin_pipeline() {
-            let empty: Value = #<Value>[]
-            lookup_coin(#"aa", #"bb", insert_coin(#"aa", #"bb", 42, empty)) == 42
+            lookup_value(
+                #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                #"bb",
+                insert_value(#"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", #"bb", 42, {}),
+            ) == 42
         }
     "#;
 
+    let policy = vec![
+        0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+        0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+    ];
+
     let empty_value = Term::Constant(Constant::Value(uplc::ast::Value::empty()).into());
     let inserted_value = Term::Builtin(DefaultFunction::InsertCoin)
-        .apply(Term::byte_string(vec![0xaa]))
+        .apply(Term::byte_string(policy.clone()))
         .apply(Term::byte_string(vec![0xbb]))
         .apply(Term::integer(42.into()))
         .apply(empty_value);
     let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
-        .apply(Term::byte_string(vec![0xaa]))
+        .apply(Term::byte_string(policy.clone()))
         .apply(Term::byte_string(vec![0xbb]))
         .apply(inserted_value);
 
@@ -6091,20 +6098,27 @@ fn primitive_value_builtin_pipeline() {
 #[test]
 fn primitive_value_module_constant() {
     let src = r#"
-        use aiken/builtin.{lookup_coin}
+        use aiken/builtin.{lookup_value}
 
-        pub const value: Value = #<Value>[(#"aa", [(#"bb", 42)])]
+        pub const value: Value = {#"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": { #"bb": 42 }}
 
         test value_module_constant() {
-            lookup_coin(#"aa", #"bb", value) == 42
+            lookup_value(#"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", #"bb", value) == 42
         }
     "#;
 
-    let value =
-        uplc::ast::Value::from_canonical_entries(vec![(vec![0xaa], vec![(vec![0xbb], 42.into())])])
-            .unwrap();
+    let policy = vec![
+        0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+        0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+    ];
+
+    let value = uplc::ast::Value::from_canonical_entries(vec![(
+        policy.clone(),
+        vec![(vec![0xbb], 42.into())],
+    )])
+    .unwrap();
     let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
-        .apply(Term::byte_string(vec![0xaa]))
+        .apply(Term::byte_string(policy.clone()))
         .apply(Term::byte_string(vec![0xbb]))
         .apply(Term::Constant(Constant::Value(value).into()));
 
@@ -6556,7 +6570,7 @@ fn expect_non_empty_list_with_as_binding_fails_in_silent_and_verbose() {
 }
 
 #[test]
-fn strict_value_expect_uses_un_value_data_in_verbose_mode() {
+fn strict_value_expect_compares_value_data_in_verbose_mode() {
     let src = r#"
         test malformed_value_expect() {
           let left: Value = {}
@@ -6565,13 +6579,14 @@ fn strict_value_expect_uses_un_value_data_in_verbose_mode() {
         }
     "#;
 
-    let program = Term::unit()
-        .lambda("__discard_expect___id_1")
-        .lambda("__debug_wrapped")
-        .apply(Term::Builtin(DefaultFunction::Trace).force())
-        .apply(
-            Term::Builtin(DefaultFunction::UnValueData).apply(Term::data(Data::integer(0.into()))),
+    let empty_value_data = || Term::value_data().apply(Term::value(Default::default()));
+    let program = Term::equals_data()
+        .apply(empty_value_data())
+        .apply(empty_value_data())
+        .delayed_if_then_else(
+            Term::unit(),
+            Term::Error.delayed_trace(Term::string("expect left == right")),
         );
 
-    assert_uplc(src, program, true, true);
+    assert_uplc(src, program, false, true);
 }

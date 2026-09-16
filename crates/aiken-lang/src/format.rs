@@ -70,6 +70,30 @@ pub struct Formatter<'a> {
     empty_lines: &'a [usize],
 }
 
+#[derive(Default)]
+struct ValueLiteralComments<'a> {
+    entries: Vec<ValueEntryComments<'a>>,
+    trailing: Option<Document<'a>>,
+}
+
+#[derive(Default)]
+struct ValueEntryComments<'a> {
+    entry: Option<Document<'a>>,
+    policy_id: Option<Document<'a>>,
+    assets: Option<Document<'a>>,
+    asset_entries: Vec<ValueAssetComments<'a>>,
+    assets_trailing: Option<Document<'a>>,
+    trailing: Option<Document<'a>>,
+}
+
+#[derive(Default)]
+struct ValueAssetComments<'a> {
+    entry: Option<Document<'a>>,
+    name: Option<Document<'a>>,
+    quantity: Option<Document<'a>>,
+    trailing: Option<Document<'a>>,
+}
+
 impl<'comments> Formatter<'comments> {
     pub fn new() -> Self {
         Default::default()
@@ -314,11 +338,15 @@ impl<'comments> Formatter<'comments> {
                     Some(t) => head.append(": ").append(self.annotation(t)),
                 };
 
-                head.append(" =")
-                    .append(break_("", " "))
-                    .append(self.expr(value, false))
-                    .nest(INDENT)
-                    .group()
+                if matches!(value, UntypedExpr::Value { .. }) {
+                    head.append(" = ").append(self.expr(value, false))
+                } else {
+                    head.append(" =")
+                        .append(break_("", " "))
+                        .append(self.expr(value, false))
+                        .nest(INDENT)
+                        .group()
+                }
             }
         }
     }
@@ -929,79 +957,165 @@ impl<'comments> Formatter<'comments> {
             "Value literal payload and source spans must remain aligned",
         );
 
+        let mut comments = spans.map(|spans| self.collect_value_comments(spans));
         let mut entries_docs = Vec::with_capacity(entries.len());
 
-        for (entry_index, (currency, tokens)) in entries.iter().enumerate() {
+        for (entry_index, (policy_id, assets)) in entries.iter().enumerate() {
             let entry_spans = spans.and_then(|spans| spans.entries.get(entry_index));
-            let entry_comments = entry_spans.map(|spans| self.pop_comments(spans.tuple.start));
-            let currency_comments =
-                entry_spans.map(|spans| self.pop_comments(spans.currency.start));
-            let currency_doc = match currency_comments {
-                Some(comments) => commented(value_key(currency), comments),
-                None => value_key(currency),
-            };
-            let token_list_comments =
-                entry_spans.map(|spans| self.pop_comments(spans.token_list.start));
+            let entry_comments = comments
+                .as_mut()
+                .and_then(|comments| comments.entries.get_mut(entry_index))
+                .and_then(|comments| comments.entry.take());
+            let policy_id_comments = comments
+                .as_mut()
+                .and_then(|comments| comments.entries.get_mut(entry_index))
+                .and_then(|comments| comments.policy_id.take());
+            let policy_id_doc = prepend_comments(value_key(policy_id), policy_id_comments);
+            let assets_comments = comments
+                .as_mut()
+                .and_then(|comments| comments.entries.get_mut(entry_index))
+                .and_then(|comments| comments.assets.take());
 
             debug_assert!(
-                entry_spans.is_none_or(|spans| tokens.len() == spans.tokens.len()),
-                "Value token payload and source spans must remain aligned",
+                entry_spans.is_none_or(|spans| assets.len() == spans.asset_entries.len()),
+                "Value asset payload and source spans must remain aligned",
             );
 
-            let mut token_docs = Vec::with_capacity(tokens.len());
+            let mut asset_docs = Vec::with_capacity(assets.len());
 
-            for (token_index, (token, quantity)) in tokens.iter().enumerate() {
-                let token_spans = entry_spans.and_then(|spans| spans.tokens.get(token_index));
-                let tuple_comments = token_spans.map(|spans| self.pop_comments(spans.tuple.start));
-                let token_comments = token_spans.map(|spans| self.pop_comments(spans.token.start));
-                let token_doc = match token_comments {
-                    Some(comments) => commented(value_key(token), comments),
-                    None => value_key(token),
-                };
-                let quantity_comments =
-                    token_spans.map(|spans| self.pop_comments(spans.quantity.start));
+            for (asset_index, (asset_name, quantity)) in assets.iter().enumerate() {
+                let asset_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
+                    .and_then(|comments| comments.entry.take());
+                let asset_name_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
+                    .and_then(|comments| comments.name.take());
+                let preferred_format = entry_spans
+                    .and_then(|spans| spans.asset_entries.get(asset_index))
+                    .map(|spans| spans.preferred_format)
+                    .unwrap_or(ByteArrayFormatPreference::HexadecimalString);
+                let asset_name = asset_name
+                    .iter()
+                    .map(|byte| (*byte, Span::empty()))
+                    .collect::<Vec<_>>();
+                let asset_name_doc = prepend_comments(
+                    self.bytearray(&asset_name, None, &preferred_format),
+                    asset_name_comments,
+                );
+                let quantity_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
+                    .and_then(|comments| comments.quantity.take());
                 let quantity_doc = Document::String(quantity.to_string());
                 let quantity_doc = match quantity_comments {
-                    Some(comments) => commented(quantity_doc, comments),
-                    None => quantity_doc,
+                    Some(comments) => line().append(comments).append(quantity_doc).nest(INDENT),
+                    None => " ".to_doc().append(quantity_doc),
                 };
-                let trailing_comments = token_spans
-                    .and_then(|spans| printed_comments(self.pop_comments(spans.tuple.end), false));
-                let tuple_doc = value_tuple([token_doc, quantity_doc], trailing_comments);
-                let tuple_doc = match tuple_comments {
-                    Some(comments) => commented(tuple_doc, comments),
-                    None => tuple_doc,
-                };
+                let trailing_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
+                    .and_then(|comments| comments.trailing.take());
+                let asset_doc = value_map_entry(
+                    asset_name_doc.append(":").append(quantity_doc),
+                    trailing_comments,
+                );
+                let asset_doc = prepend_comments(asset_doc, asset_comments);
 
-                token_docs.push(tuple_doc);
+                asset_docs.push(asset_doc);
             }
 
-            let tokens_doc = join(token_docs, break_(",", ", "));
-            let trailing_comments = entry_spans
-                .and_then(|spans| printed_comments(self.pop_comments(spans.token_list.end), false));
-            let tokens_doc = value_list(tokens_doc, tokens.len(), trailing_comments);
-            let tokens_doc = match token_list_comments {
-                Some(comments) => commented(tokens_doc, comments),
-                None => tokens_doc,
+            let trailing_comments = comments
+                .as_mut()
+                .and_then(|comments| comments.entries.get_mut(entry_index))
+                .and_then(|comments| comments.assets_trailing.take());
+            let assets_doc = value_map(asset_docs, trailing_comments);
+            let assets_doc = match assets_comments {
+                Some(comments) => line().append(comments).append(assets_doc).nest(INDENT),
+                None => " ".to_doc().append(assets_doc),
             };
-            let trailing_comments = entry_spans
-                .and_then(|spans| printed_comments(self.pop_comments(spans.tuple.end), false));
-            let entry_doc = value_tuple([currency_doc, tokens_doc], trailing_comments);
-            let entry_doc = match entry_comments {
-                Some(comments) => commented(entry_doc, comments),
-                None => entry_doc,
-            };
+            let trailing_comments = comments
+                .as_mut()
+                .and_then(|comments| comments.entries.get_mut(entry_index))
+                .and_then(|comments| comments.trailing.take());
+            let entry_doc = value_map_entry(
+                policy_id_doc.append(":").append(assets_doc),
+                trailing_comments,
+            );
+            let entry_doc = prepend_comments(entry_doc, entry_comments);
 
             entries_docs.push(entry_doc);
         }
 
-        let entries_doc = join(entries_docs, break_(",", ", "));
-        let trailing_comments =
-            spans.and_then(|spans| printed_comments(self.pop_comments(spans.list.end), false));
+        let trailing_comments = comments.and_then(|mut comments| comments.trailing.take());
 
-        "#<Value>"
-            .to_doc()
-            .append(value_list(entries_doc, entries.len(), trailing_comments))
+        value_map(entries_docs, trailing_comments)
+    }
+
+    fn collect_value_comments<'a>(
+        &mut self,
+        spans: &ValueLiteralSpans,
+    ) -> ValueLiteralComments<'a> {
+        let mut comments = ValueLiteralComments {
+            entries: spans
+                .entries
+                .iter()
+                .map(|entry| ValueEntryComments {
+                    asset_entries: entry
+                        .asset_entries
+                        .iter()
+                        .map(|_| ValueAssetComments::default())
+                        .collect(),
+                    ..ValueEntryComments::default()
+                })
+                .collect(),
+            trailing: None,
+        };
+        let mut entry_indices = (0..spans.entries.len()).collect::<Vec<_>>();
+        entry_indices.sort_by_key(|index| spans.entries[*index].entry.start);
+
+        for entry_index in entry_indices {
+            let entry_spans = &spans.entries[entry_index];
+            let entry_comments = &mut comments.entries[entry_index];
+
+            entry_comments.entry =
+                printed_comments(self.pop_comments(entry_spans.entry.start), true);
+            entry_comments.policy_id =
+                printed_comments(self.pop_comments(entry_spans.policy.start), true);
+            entry_comments.assets =
+                printed_comments(self.pop_comments(entry_spans.assets.start), true);
+
+            let mut asset_indices = (0..entry_spans.asset_entries.len()).collect::<Vec<_>>();
+            asset_indices.sort_by_key(|index| entry_spans.asset_entries[*index].entry.start);
+
+            for asset_index in asset_indices {
+                let asset_spans = &entry_spans.asset_entries[asset_index];
+                let asset_comments = &mut entry_comments.asset_entries[asset_index];
+
+                asset_comments.entry =
+                    printed_comments(self.pop_comments(asset_spans.entry.start), true);
+                asset_comments.name =
+                    printed_comments(self.pop_comments(asset_spans.asset_name.start), true);
+                asset_comments.quantity =
+                    printed_comments(self.pop_comments(asset_spans.quantity.start), true);
+                asset_comments.trailing =
+                    printed_comments(self.pop_comments(asset_spans.entry.end), false);
+            }
+
+            entry_comments.assets_trailing =
+                printed_comments(self.pop_comments(entry_spans.assets.end), false);
+            entry_comments.trailing =
+                printed_comments(self.pop_comments(entry_spans.entry.end), false);
+        }
+
+        let closing_brace = spans.list.end.saturating_sub(1);
+        comments.trailing = printed_comments(self.pop_comments(closing_brace), false);
+        comments
     }
 
     pub fn bytearray<'a>(
@@ -2385,52 +2499,46 @@ fn value_key<'a>(bytes: &[u8]) -> Document<'a> {
     Document::String(format!("#\"{}\"", hex::encode(bytes)))
 }
 
-fn value_tuple<'a>(
-    args: [Document<'a>; 2],
-    trailing_comments: Option<Document<'a>>,
-) -> Document<'a> {
-    let contents = break_("(", "(").append(join(args, break_(",", ", ")));
-
-    match trailing_comments {
-        Some(comments) => contents
-            .append(line())
-            .append(comments)
-            .nest(INDENT)
-            .append(line())
-            .append(")")
-            .force_break(),
-        None => contents
-            .nest(INDENT)
-            .append(break_("", ""))
-            .append(")")
-            .group(),
+fn prepend_comments<'a>(doc: Document<'a>, comments: Option<Document<'a>>) -> Document<'a> {
+    match comments {
+        Some(comments) => comments.append(doc.group()),
+        None => doc,
     }
 }
 
-fn value_list<'a>(
-    elements: Document<'a>,
-    length: usize,
+fn value_map_entry<'a>(
+    entry: Document<'a>,
     trailing_comments: Option<Document<'a>>,
 ) -> Document<'a> {
-    let Some(comments) = trailing_comments else {
-        return list(elements, length, None);
+    let entry = entry.append(",");
+
+    match trailing_comments {
+        Some(comments) => entry.append(line()).append(comments),
+        None => entry,
+    }
+}
+
+fn value_map<'a>(
+    entries: Vec<Document<'a>>,
+    trailing_comments: Option<Document<'a>>,
+) -> Document<'a> {
+    if entries.is_empty() && trailing_comments.is_none() {
+        return "{}".to_doc();
+    }
+
+    let mut body = join(entries, line());
+
+    if let Some(comments) = trailing_comments {
+        if !body.is_empty() {
+            body = body.append(line());
+        }
+        body = body.append(comments);
     };
 
-    let contents = if length == 0 {
-        break_("[", "[").append(comments)
-    } else {
-        break_("[", "[")
-            .append(elements)
-            .append(",")
-            .append(line())
-            .append(comments)
-    };
-
-    contents
-        .nest(INDENT)
+    "{".to_doc()
+        .append(line().append(body).nest(INDENT))
         .append(line())
-        .append("]")
-        .force_break()
+        .append("}")
 }
 
 pub fn wrap_args<'a, I>(args: I) -> Document<'a>

@@ -109,48 +109,246 @@ fn format_g2_element_constant() {
 
 #[test]
 fn format_value_literal_to_canonical_nested_syntax() {
-    let source = r#"const value =
-  #<Value>[
-    (#"aa", [
-      (#"bb", 42),
-    ]),
-  ]
+    let source = r#"const value = {
+        #"00000000000000000000000000000000000000000000000000000000": { #"bb": 42 }
+    }
 "#;
     let formatted = format_source(source);
 
     pretty_assertions::assert_eq!(
         formatted,
-        "const value = #<Value>[(#\"aa\", [(#\"bb\", 42)])]\n",
+        r#"const value = {
+  #"00000000000000000000000000000000000000000000000000000000": {
+    #"bb": 42,
+  },
+}
+"#,
     );
     pretty_assertions::assert_eq!(format_source(&formatted), formatted);
 }
 
 #[test]
-fn format_value_literal_preserves_nested_comments() {
-    let source = r#"const value =
-  #<Value>[
-    // outer entry
-    (#"aa", [
-      // inner entry
-      (#"bb", 42),
-    ]),
-  ]
+fn format_value_literal_preserves_asset_name_encoding() {
+    let source = r#"const value = {
+      #"00000000000000000000000000000000000000000000000000000000": {
+        "bb": 2,
+        #"aa": 1,
+        "café": 3,
+      },
+    }
 "#;
     let formatted = format_source(source);
 
     pretty_assertions::assert_eq!(
         formatted,
-        r#"const value =
-  #<Value>[
-    // outer entry
-    (
-      #"aa",
-      [
+        r#"const value = {
+  #"00000000000000000000000000000000000000000000000000000000": {
+    "bb": 2,
+    "café": 3,
+    #"aa": 1,
+  },
+}
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_empty_value_literal_on_one_line() {
+    let source = "const value = {}\n";
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(formatted, source);
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_empty_value_literal_preserves_comments() {
+    let source = r#"const value = {
+      // still here
+    }
+"#;
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"const value = {
+  // still here
+}
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_let_bound_value_literal() {
+    let source = r#"fn example() {
+      let value = {
+        #"00000000000000000000000000000000000000000000000000000000": {
+          #"aa": 1,
+        },
+      }
+      let empty = {}
+      (value, empty)
+    }
+"#;
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"fn example() {
+  let value = {
+    #"00000000000000000000000000000000000000000000000000000000": {
+      #"aa": 1,
+    },
+  }
+  let empty = {}
+  (value, empty)
+}
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_preserves_empty_line_after_value_literal() {
+    let source = r#"fn example() {
+  let value = {
+    #"00000000000000000000000000000000000000000000000000000000": {
+      "foo": 1,
+    },
+  }
+
+  and {
+    builtin.lookup_value(policy_00, "foo", value) == 1,
+    builtin.lookup_value(policy_00, "bar", value) == 0,
+    builtin.lookup_value(policy_ff, "foo", value) == 0,
+  }
+}
+"#;
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(formatted, source);
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_value_literal_preserves_nested_comments() {
+    let source = r#"const value = {
+      // outer entry
+      #"00000000000000000000000000000000000000000000000000000000": {
         // inner entry
-        (#"bb", 42),
-      ]
-    ),
-  ]
+        #"bb": 42,
+      }
+    }"#;
+
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"const value = {
+  // outer entry
+  #"00000000000000000000000000000000000000000000000000000000": {
+    // inner entry
+    #"bb": 42,
+  },
+}
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_value_literal_preserves_comments_before_closing_braces() {
+    let source = r#"const value = {
+      #"00000000000000000000000000000000000000000000000000000000": {
+        #"aa": 1,
+        // before inner close
+      },
+      // before outer close
+    }"#;
+
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"const value = {
+  #"00000000000000000000000000000000000000000000000000000000": {
+    #"aa": 1,
+    // before inner close
+  },
+  // before outer close
+}
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_value_literal_preserves_comments_between_keys_and_values() {
+    let source = r#"const value = {
+      #"00000000000000000000000000000000000000000000000000000000":
+        // before assets
+        {
+          #"aa":
+            // before quantity
+            1,
+        },
+    }"#;
+
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"const value = {
+  #"00000000000000000000000000000000000000000000000000000000":
+    // before assets
+    {
+      #"aa":
+        // before quantity
+        1,
+    },
+}
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn format_value_literal_keeps_comments_with_canonicalized_entries() {
+    let source = r#"const value = {
+      // policy 22
+      #"22222222222222222222222222222222222222222222222222222222": {
+        // asset bb
+        #"bb": 2,
+        // asset aa
+        #"aa": 1,
+      },
+      // policy 11
+      #"11111111111111111111111111111111111111111111111111111111": {
+        // asset cc
+        #"cc": 3,
+      },
+    }
+"#;
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"const value = {
+  // policy 11
+  #"11111111111111111111111111111111111111111111111111111111": {
+    // asset cc
+    #"cc": 3,
+  },
+  // policy 22
+  #"22222222222222222222222222222222222222222222222222222222": {
+    // asset aa
+    #"aa": 1,
+    // asset bb
+    #"bb": 2,
+  },
+}
 "#,
     );
     pretty_assertions::assert_eq!(format_source(&formatted), formatted);
