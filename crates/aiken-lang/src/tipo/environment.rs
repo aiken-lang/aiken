@@ -815,7 +815,7 @@ impl<'a> Environment<'a> {
                         false
                     }
                 }
-                TypeVar::Unbound { .. } => false,
+                TypeVar::Unbound { .. } => true,
             },
 
             Type::Tuple { elems, .. } => {
@@ -1868,7 +1868,7 @@ impl<'a> Environment<'a> {
             UnifyMode::Strict => {}
             UnifyMode::AllowUpCast => {
                 if lhs.is_data() && self.is_data_like(&rhs) {
-                    return Ok(());
+                    return assert_no_unbounded_empty_list(&rhs, location);
                 }
             }
             UnifyMode::AllowDownCast => {
@@ -1876,12 +1876,10 @@ impl<'a> Environment<'a> {
                     return Err(Error::ExpectOnOpaqueType { location });
                 }
 
-                if lhs.is_data() && self.is_data_like(&rhs) {
-                    return Ok(());
-                }
-
-                if self.is_data_like(&lhs) && rhs.is_data() {
-                    return Ok(());
+                if (lhs.is_data() && self.is_data_like(&rhs))
+                    || (self.is_data_like(&lhs) && rhs.is_data())
+                {
+                    return assert_no_unbounded_empty_list(&rhs, location);
                 }
             }
         };
@@ -2279,6 +2277,15 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
 
         Type::Var { .. } => unreachable!(),
     }
+}
+
+#[allow(clippy::result_large_err)]
+fn assert_no_unbounded_empty_list(rhs: &Type, location: Span) -> Result<(), Error> {
+    if rhs.is_unbounded_list() {
+        return Err(Error::AmbiguousEmptyList { location });
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::result_large_err)]

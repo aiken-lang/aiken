@@ -1198,6 +1198,16 @@ The best thing to do from here is to remove it."#))]
         #[label("cannot be inspected")]
         location: Span,
     },
+
+    #[error("I couldn't quite figure out the type of that empty list.\n")]
+    #[diagnostic(code("ambiguous::empty_list"))]
+    #[diagnostic(help(
+        "In this context, the empty can designate either a empty array or an empty map. This matters because of Aiken's structural representation of types. I cannot possibly choose in this scenario and I need help to resolve the ambiguity. Either:\n\n- use a builtin such as `map_data` or `list_data` to be explicit about its Data representation; or\n- create a local declaration with a type annotation that indicates wether it's a plain `List` or a map (a.k.a `Pairs`)."
+    ))]
+    AmbiguousEmptyList {
+        #[label("ambiguous empty list")]
+        location: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -1266,7 +1276,8 @@ impl ExtraData for Error {
             | Error::ConflictingDecorators { .. }
             | Error::DecoratorTagOverlap { .. }
             | Error::InvalidFieldAccess { .. }
-            | Error::IllegalTraceArgument { .. } => None,
+            | Error::IllegalTraceArgument { .. }
+            | Error::AmbiguousEmptyList { .. } => None,
 
             Error::PrivateTypeLeak {
                 leaked,

@@ -4446,8 +4446,8 @@ impl<'a> CodeGenerator<'a> {
             Air::BinOp {
                 name: mut op,
                 // changed this to argument tipo
-                left_tipo,
-                right_tipo,
+                mut left_tipo,
+                mut right_tipo,
                 ..
             } => {
                 let mut left = arg_stack.pop().unwrap();
@@ -4461,6 +4461,7 @@ impl<'a> CodeGenerator<'a> {
                     // If the operator is symmetric, it's safe to swap left and right
                     if op.is_symmetric() {
                         std::mem::swap(&mut left, &mut right);
+                        std::mem::swap(&mut left_tipo, &mut right_tipo);
                     // Special case for SubInt, which is easy to transform into a sum
                     } else if matches!(op, BinOp::SubInt)
                         && let Some(minus_right) = right.try_negate()
@@ -4481,20 +4482,37 @@ impl<'a> CodeGenerator<'a> {
                             Some(UplcType::ByteString) => Term::equals_bytestring(),
                             Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal(),
                             Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal(),
-                            Some(UplcType::Bool | UplcType::Unit) => Term::unit(),
-                            Some(
-                                UplcType::List(_)
-                                | UplcType::Pair(_, _)
-                                | UplcType::Value
-                                | UplcType::Data,
-                            )
-                            | None => Term::equals_data(),
+                            Some(UplcType::Unit) => Term::unit(),
+                            Some(UplcType::Bool) => Term::unit(),
+                            Some(UplcType::Pair(_, _)) => {
+                                left = Term::map_data()
+                                    .apply(Term::mk_cons().apply(left).apply(Term::empty_map()));
+                                right = Term::map_data()
+                                    .apply(Term::mk_cons().apply(right).apply(Term::empty_map()));
+                                Term::equals_data()
+                            }
+                            Some(UplcType::List(_) | UplcType::Value | UplcType::Data) | None => {
+                                left = builder::convert_type_to_data(
+                                    left,
+                                    &left_tipo,
+                                    &self.data_types,
+                                );
+                                right = builder::convert_type_to_data(
+                                    right,
+                                    &right_tipo,
+                                    &self.data_types,
+                                );
+                                Term::equals_data()
+                            }
                             Some(UplcType::Bls12_381MlResult) => {
                                 panic!("ML Result equality is not supported")
                             }
                         };
 
                         let binop_eq = match uplc_type {
+                            Some(UplcType::Unit) => {
+                                left.choose_unit(right.choose_unit(Term::bool(true)))
+                            }
                             Some(UplcType::Bool) => {
                                 if matches!(op, BinOp::Eq) {
                                     if left.is_true() {
@@ -4522,42 +4540,7 @@ impl<'a> CodeGenerator<'a> {
                                     }
                                 }
                             }
-                            Some(UplcType::List(_)) if left_tipo.is_map() => builtin
-                                .apply(Term::map_data().apply(left))
-                                .apply(Term::map_data().apply(right)),
-                            Some(UplcType::List(_)) => builtin
-                                .apply(Term::list_data().apply(left))
-                                .apply(Term::list_data().apply(right)),
-                            Some(UplcType::Pair(_, _)) => {
-                                builtin
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(left).apply(Term::empty_map()),
-                                    ))
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(right).apply(Term::empty_map()),
-                                    ))
-                            }
-                            Some(UplcType::Value) => builtin
-                                .apply(builder::convert_type_to_data(
-                                    left,
-                                    &left_tipo,
-                                    &self.data_types,
-                                ))
-                                .apply(builder::convert_type_to_data(
-                                    right,
-                                    &right_tipo,
-                                    &self.data_types,
-                                )),
-                            Some(
-                                UplcType::Data
-                                | UplcType::Bls12_381G1Element
-                                | UplcType::Bls12_381G2Element
-                                | UplcType::Bls12_381MlResult
-                                | UplcType::Integer
-                                | UplcType::String
-                                | UplcType::ByteString,
-                            ) => builtin.apply(left).apply(right),
-
+                            Some(_) => builtin.apply(left).apply(right),
                             None => {
                                 let mut left = left;
                                 let mut right = right;
@@ -4591,9 +4574,6 @@ impl<'a> CodeGenerator<'a> {
                                 }
 
                                 builtin.apply(left).apply(right)
-                            }
-                            Some(UplcType::Unit) => {
-                                left.choose_unit(right.choose_unit(Term::bool(true)))
                             }
                         };
 

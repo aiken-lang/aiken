@@ -750,7 +750,26 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 let left = self.infer(left)?;
                 let right = self.infer(right)?;
 
-                self.unify(left.tipo(), right.tipo(), right.location())?;
+                self.unify_with(
+                    left.tipo(),
+                    right.tipo(),
+                    right.location(),
+                    UnifyMode::AllowUpCast,
+                )
+                .or_else(|err| {
+                    if name.is_symmetric() {
+                        return self
+                            .unify_with(
+                                right.tipo(),
+                                left.tipo(),
+                                left.location(),
+                                UnifyMode::AllowUpCast,
+                            )
+                            .or(Err(err));
+                    }
+
+                    Err(err)
+                })?;
 
                 for tipo in &[left.tipo(), right.tipo()] {
                     ensure_serialisable(false, tipo.clone(), location)

@@ -358,6 +358,16 @@ impl Type {
         }
     }
 
+    pub fn is_unbounded_list(&self) -> bool {
+        match self {
+            Self::App {
+                module, name, args, ..
+            } if "List" == name && module.is_empty() => args.iter().any(|arg| arg.is_unbound()),
+            Self::Var { tipo, .. } => tipo.borrow().is_unbounded_list(),
+            _ => false,
+        }
+    }
+
     pub fn is_option(&self) -> bool {
         match self {
             Self::App { module, name, .. } if "Option" == name && module.is_empty() => true,
@@ -1002,6 +1012,13 @@ impl TypeVar {
     pub fn is_list(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_list(),
+            _ => false,
+        }
+    }
+
+    pub fn is_unbounded_list(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_unbounded_list(),
             _ => false,
         }
     }

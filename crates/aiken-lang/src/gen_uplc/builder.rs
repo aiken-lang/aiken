@@ -755,15 +755,12 @@ pub fn convert_type_to_data(
     field_type: &Rc<Type>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
-    let uplc_type = field_type.get_uplc_type();
-
-    match uplc_type {
+    match field_type.get_uplc_type() {
         Some(UplcType::Integer) => Term::i_data().apply(term),
         Some(UplcType::String) => Term::b_data().apply(Term::encode_utf8().apply(term)),
         Some(UplcType::ByteString) => Term::b_data().apply(term),
         Some(UplcType::List(_)) if field_type.is_map() => Term::map_data().apply(term),
         Some(UplcType::List(_)) => Term::list_data().apply(term),
-
         Some(UplcType::Bls12_381G1Element) => {
             Term::b_data().apply(Term::bls12_381_g1_compress().apply(term))
         }
@@ -791,7 +788,6 @@ pub fn convert_type_to_data(
             Term::Constant(UplcConstant::Data(Data::constr(1, vec![])).into()),
             Term::Constant(UplcConstant::Data(Data::constr(0, vec![])).into()),
         ),
-
         Some(UplcType::Data) | None => {
             let list_decorator = lookup_data_type_by_tipo(data_types, field_type)
                 .map(|dt| {
