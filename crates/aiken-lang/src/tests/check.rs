@@ -4541,6 +4541,55 @@ fn soft_casts_from_data_to_wrapped_value_is_illegal() {
 }
 
 #[test]
+fn soft_casts_from_data_to_imported_generic_wrapper_is_legal() {
+    let dependency = r#"
+        pub type Wrapped<a> {
+          Wrapped(a)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped as dependency
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: dependency.Wrapped<Int> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]).is_ok());
+}
+
+#[test]
+fn soft_casts_from_data_to_imported_generic_value_wrapper_is_illegal() {
+    let dependency = r#"
+        pub type Wrapped<a> {
+          Wrapped(a)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped as dependency
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: dependency.Wrapped<Value> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
 fn soft_cast_from_data_to_imported_opaque_value_wrapper_is_illegal() {
     let dependency = r#"
         pub opaque type Wrapped {
