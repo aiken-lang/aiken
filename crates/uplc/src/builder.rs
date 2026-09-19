@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, Name, Term, Type},
+    ast::{Constant, Name, Term, Type, Value},
     builtins::DefaultFunction,
 };
 use pallas_primitives::alonzo::PlutusData;
@@ -421,6 +421,14 @@ where
 
     pub fn write_bits() -> Self {
         Term::Builtin(DefaultFunction::WriteBits)
+    }
+
+    pub fn value_data() -> Self {
+        Term::Builtin(DefaultFunction::ValueData)
+    }
+
+    pub fn value(value: Value) -> Self {
+        Term::Constant(Constant::Value(value).into())
     }
 }
 

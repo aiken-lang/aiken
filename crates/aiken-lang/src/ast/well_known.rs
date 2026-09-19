@@ -28,6 +28,7 @@ pub const PRNG_CONSTRUCTORS: &[&str] = &["Seeded", "Replayed"];
 pub const REDEEMER_WRAPPER: &str = "RedeemerWrapper";
 pub const STRING: &str = "String";
 pub const VOID: &str = "Void";
+pub const VALUE: &str = "Value";
 pub const VOID_CONSTRUCTORS: &[&str] = &["Void"];
 
 pub const SCRIPT_CONTEXT: &str = "__ScriptContext";
@@ -62,6 +63,16 @@ impl Type {
         Rc::new(Type::App {
             public: true,
             name: DATA.to_string(),
+            module: "".to_string(),
+            args: vec![],
+            alias: None,
+        })
+    }
+
+    pub fn value() -> Rc<Type> {
+        Rc::new(Type::App {
+            public: true,
+            name: VALUE.to_string(),
             module: "".to_string(),
             args: vec![],
             alias: None,

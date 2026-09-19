@@ -261,7 +261,8 @@ impl Type {
                 | UplcType::Bls12_381G1Element
                 | UplcType::Bls12_381G2Element
                 | UplcType::Bls12_381MlResult
-                | UplcType::Data,
+                | UplcType::Data
+                | UplcType::Value,
             ) => true,
 
             None => false,
@@ -305,10 +306,19 @@ impl Type {
         }
     }
 
+    pub fn is_value(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if well_known::VALUE == name && module.is_empty() => {
+                true
+            }
+            Self::Var { tipo, .. } => tipo.borrow().is_value(),
+            _ => false,
+        }
+    }
+
     pub fn is_bls381_12_g1(&self) -> bool {
         match self {
             Self::App { module, name, .. } => well_known::G1_ELEMENT == name && module.is_empty(),
-
             Self::Var { tipo, .. } => tipo.borrow().is_bls381_12_g1(),
             _ => false,
         }
@@ -317,7 +327,6 @@ impl Type {
     pub fn is_bls381_12_g2(&self) -> bool {
         match self {
             Self::App { module, name, .. } => well_known::G2_ELEMENT == name && module.is_empty(),
-
             Self::Var { tipo, .. } => tipo.borrow().is_bls381_12_g2(),
             _ => false,
         }
@@ -328,7 +337,6 @@ impl Type {
             Self::App { module, name, .. } => {
                 well_known::MILLER_LOOP_RESULT == name && module.is_empty()
             }
-
             Self::Var { tipo, .. } => tipo.borrow().is_ml_result(),
             _ => false,
         }
@@ -346,6 +354,16 @@ impl Type {
         match self {
             Self::App { module, name, .. } if "List" == name && module.is_empty() => true,
             Self::Var { tipo, .. } => tipo.borrow().is_list(),
+            _ => false,
+        }
+    }
+
+    pub fn is_unbounded_list(&self) -> bool {
+        match self {
+            Self::App {
+                module, name, args, ..
+            } if "List" == name && module.is_empty() => args.iter().any(|arg| arg.is_unbound()),
+            Self::Var { tipo, .. } => tipo.borrow().is_unbounded_list(),
             _ => false,
         }
     }
@@ -501,6 +519,8 @@ impl Type {
             Some(UplcType::Integer)
         } else if self.is_bytearray() {
             Some(UplcType::ByteString)
+        } else if self.is_value() {
+            Some(UplcType::Value)
         } else if self.is_string() {
             Some(UplcType::String)
         } else if self.is_bool() {
@@ -955,6 +975,13 @@ impl TypeVar {
         }
     }
 
+    pub fn is_value(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_value(),
+            _ => false,
+        }
+    }
+
     pub fn is_bls381_12_g1(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_bls381_12_g1(),
@@ -985,6 +1012,13 @@ impl TypeVar {
     pub fn is_list(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_list(),
+            _ => false,
+        }
+    }
+
+    pub fn is_unbounded_list(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_unbounded_list(),
             _ => false,
         }
     }
@@ -1034,7 +1068,7 @@ impl TypeVar {
 
     pub fn get_generic(&self) -> Option<u64> {
         match self {
-            TypeVar::Generic { id } => Some(*id),
+            TypeVar::Generic { id, .. } => Some(*id),
             TypeVar::Link { tipo } => tipo.get_generic_id(),
             _ => None,
         }

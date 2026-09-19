@@ -23,7 +23,8 @@ use crate::{
     format,
     parser::token::Base,
     tipo::{
-        DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar, fields::FieldMap,
+        DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar,
+        environment::UnifyMode, fields::FieldMap,
     },
 };
 use std::{
@@ -187,7 +188,7 @@ pub(crate) fn infer_function(
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
     // Assert that the inferred type matches the type of any recursive call
-    environment.unify(preregistered_type, tipo.clone(), *location, false)?;
+    environment.unify(preregistered_type, tipo.clone(), *location)?;
 
     // Generalise the function if safe to do so
     let tipo = if safe_to_generalise {
@@ -473,6 +474,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             UntypedExpr::String { location, value } => Ok(self.infer_string(value, location)),
 
+            UntypedExpr::Value {
+                location, value, ..
+            } => Ok(TypedExpr::Value {
+                location,
+                tipo: Type::value(),
+                value,
+            }),
+
             UntypedExpr::LogicalOpChain {
                 kind,
                 expressions,
@@ -705,12 +714,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let typed_value = self.infer(value)?;
 
-        self.unify(
-            Type::bool(),
-            typed_value.tipo(),
-            typed_value.location(),
-            false,
-        )?;
+        self.unify(Type::bool(), typed_value.tipo(), typed_value.location())?;
 
         match text {
             None => Ok(typed_value),
@@ -744,10 +748,28 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let (input_type, output_type) = match &name {
             BinOp::Eq | BinOp::NotEq => {
                 let left = self.infer(left)?;
-
                 let right = self.infer(right)?;
 
-                self.unify(left.tipo(), right.tipo(), right.location(), false)?;
+                self.unify_with(
+                    left.tipo(),
+                    right.tipo(),
+                    right.location(),
+                    UnifyMode::AllowUpCast,
+                )
+                .or_else(|err| {
+                    if name.is_symmetric() {
+                        return self
+                            .unify_with(
+                                right.tipo(),
+                                left.tipo(),
+                                left.location(),
+                                UnifyMode::AllowUpCast,
+                            )
+                            .or(Err(err));
+                    }
+
+                    Err(err)
+                })?;
 
                 for tipo in &[left.tipo(), right.tipo()] {
                     ensure_serialisable(false, tipo.clone(), location)
@@ -781,19 +803,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             input_type.clone(),
             left.tipo(),
             left.type_defining_location(),
-            false,
         )
         .map_err(|e| e.operator_situation(name))?;
 
         let right = self.infer(right)?;
 
-        self.unify(
-            input_type,
-            right.tipo(),
-            right.type_defining_location(),
-            false,
-        )
-        .map_err(|e| e.operator_situation(name))?;
+        self.unify(input_type, right.tipo(), right.type_defining_location())
+            .map_err(|e| e.operator_situation(name))?;
 
         Ok(TypedExpr::BinOp {
             location,
@@ -873,7 +889,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let return_type = self.instantiate(ret.clone(), &mut HashMap::new(), location)?;
 
         // Check that the spread variable unifies with the return type of the constructor
-        self.unify(return_type, spread.tipo(), spread.location(), false)?;
+        self.unify(return_type, spread.tipo(), spread.location())?;
 
         let mut arguments = Vec::new();
         let mut seen_labels = HashMap::with_capacity(args.len());
@@ -900,11 +916,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             // field in the record contained within the spread variable. We
             // need to check the spread, and not the constructor, in order
             // to handle polymorphic types.
-            self.unify(
+            self.unify_with(
                 spread_field.tipo(),
                 value.tipo(),
                 value.location(),
-                spread_field.tipo().is_data(),
+                UnifyMode::AllowUpCast,
             )?;
 
             match field_map.fields.get(&label) {
@@ -954,7 +970,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UnOp::Negate => Type::int(),
         };
 
-        self.unify(tipo.clone(), value.tipo(), value.location(), false)?;
+        self.unify(tipo.clone(), value.tipo(), value.location())?;
 
         Ok(TypedExpr::UnOp {
             location,
@@ -1379,12 +1395,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let tipo = self.instantiate(tipo, &mut type_vars, record.location())?;
 
-        self.unify(
-            accessor_record_type,
-            record.tipo(),
-            record.location(),
-            false,
-        )?;
+        self.unify(accessor_record_type, record.tipo(), record.location())?;
 
         if let Type::App { name, .. } = record.tipo().as_ref() {
             self.environment.increment_usage(name);
@@ -1427,7 +1438,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // function being type checked, resulting in better type errors and the
         // record field access syntax working.
         if let Some(expected) = expected {
-            self.unify(expected, tipo.clone(), location, false)?;
+            self.unify(expected, tipo.clone(), location)?;
         }
 
         let extra_assignment = by.into_extra_assignment(&arg_name, annotation.as_ref(), location);
@@ -1466,11 +1477,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .type_from_annotation(ann)
                 .and_then(|t| self.instantiate(t, &mut HashMap::new(), location))?;
 
-            self.unify(
+            self.unify_with(
                 ann_typ.clone(),
                 value_typ.clone(),
                 typed_value.type_defining_location(),
-                (kind.is_let() && ann_typ.is_data()) || kind.is_expect() || kind.if_is(),
+                kind.into(),
             )?;
 
             value_typ = ann_typ.clone();
@@ -1518,11 +1529,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     false,
                 ) {
                     Ok(pattern) if ann_typ.is_monomorphic() => {
-                        self.unify(
+                        self.unify_with(
                             ann_typ.clone(),
                             value_typ.clone(),
                             typed_value.type_defining_location(),
-                            true,
+                            kind.into(),
                         )?;
 
                         value_typ = ann_typ.clone();
@@ -1707,7 +1718,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             (_, value) => self.infer(value),
         }?;
 
-        self.unify(tipo.clone(), value.tipo(), value.location(), tipo.is_data())?;
+        self.unify_with(
+            tipo.clone(),
+            value.tipo(),
+            value.location(),
+            UnifyMode::AllowUpCast,
+        )?;
 
         Ok(value)
     }
@@ -1793,7 +1809,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 first_body_type.clone(),
                 typed_branch.body.tipo(),
                 typed_branch.body.type_defining_location(),
-                false,
             )?;
 
             typed_branches.push(typed_branch);
@@ -1811,7 +1826,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             first_body_type.clone(),
             typed_final_else.tipo(),
             typed_final_else.type_defining_location(),
-            false,
         )?;
 
         Ok(TypedExpr::If {
@@ -1873,7 +1887,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Type::bool(),
                     condition.tipo(),
                     condition.type_defining_location(),
-                    false,
                 )?;
 
                 let body = if let Some(filler) = recover_from_no_assignment(
@@ -1982,11 +1995,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // Check that any return type is accurate.
         let return_type = match return_type {
             Some(return_type) => {
-                self.unify(
+                self.unify_with(
                     return_type.clone(),
                     body.tipo(),
                     body.type_defining_location(),
-                    return_type.is_data(),
+                    UnifyMode::AllowUpCast,
                 )
                 .map_err(|e| {
                     e.return_annotation_mismatch()
@@ -2028,7 +2041,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let element = self.infer(elem)?;
 
             // Ensure they all have the same type
-            self.unify(tipo.clone(), element.tipo(), location, false)?;
+            self.unify(tipo.clone(), element.tipo(), location)?;
 
             elems.push(element)
         }
@@ -2044,7 +2057,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 let tail = self.infer(*tail)?;
 
                 // Ensure the tail has the same type as the preceding elements
-                self.unify(tipo.clone(), tail.tipo(), location, false)?;
+                self.unify(tipo.clone(), tail.tipo(), location)?;
 
                 Some(Box::new(tail))
             }
@@ -2076,7 +2089,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 Type::bool(),
                 typed_expression.tipo(),
                 typed_expression.location(),
-                false,
             )?;
 
             typed_expressions.push(typed_expression);
@@ -2555,12 +2567,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             }
         })?;
 
-        match self.unify(
-            Type::string(),
-            typed_arg.tipo(),
-            typed_arg.location(),
-            false,
-        ) {
+        match self.unify(Type::string(), typed_arg.tipo(), typed_arg.location()) {
             Err(_) => {
                 if matches!(self.tracing.trace_level(false), TraceLevel::Compact) {
                     self.environment
@@ -2568,7 +2575,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         .push(Warning::CompactTraceLabelIsNotstring { location });
                 }
 
-                self.unify(Type::data(), typed_arg.tipo(), typed_arg.location(), true)?;
+                self.unify_with(
+                    Type::data(),
+                    typed_arg.tipo(),
+                    typed_arg.location(),
+                    UnifyMode::AllowUpCast,
+                )
+                .map_err(|err| match err {
+                    Error::CouldNotUnify { location, .. } => {
+                        Error::IllegalTraceArgument { location }
+                    }
+                    err => err,
+                })?;
 
                 diagnose_expr(typed_arg)
             }
@@ -2804,7 +2822,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     return_type.clone(),
                     typed_clause.then.tipo(),
                     typed_clause.location(),
-                    false,
                 )
                 .map_err(|e| e.case_clause_mismatch())?;
 
@@ -2850,14 +2867,24 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 
     #[allow(clippy::result_large_err)]
-    fn unify(
+    pub(super) fn unify(
         &mut self,
         t1: Rc<Type>,
         t2: Rc<Type>,
         location: Span,
-        allow_cast: bool,
     ) -> Result<(), Error> {
-        self.environment.unify(t1, t2, location, allow_cast)
+        self.environment.unify(t1, t2, location)
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub(super) fn unify_with(
+        &mut self,
+        t1: Rc<Type>,
+        t2: Rc<Type>,
+        location: Span,
+        unify_mode: UnifyMode,
+    ) -> Result<(), Error> {
+        self.environment.unify_with(t1, t2, location, unify_mode)
     }
 }
 
@@ -2897,6 +2924,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         UntypedExpr::Fn { .. }
         | UntypedExpr::BinOp { .. }
         | UntypedExpr::ByteArray { .. }
+        | UntypedExpr::Value { .. }
         | UntypedExpr::Call { .. }
         | UntypedExpr::ErrorTerm { .. }
         | UntypedExpr::FieldAccess { .. }
@@ -3060,16 +3088,12 @@ fn diagnose_expr(expr: TypedExpr) -> Result<TypedExpr, Error> {
 
     let location = expr.location();
 
-    if expr.tipo().is_ml_result() {
-        return Err(Error::IllegalTraceArgument { location });
-    }
-
     Ok(TypedExpr::Call {
         tipo: Type::string(),
         fun: Box::new(decode_utf8.clone()),
         args: vec![CallArg {
             label: None,
-            location: expr.location(),
+            location,
             value: TypedExpr::Call {
                 tipo: Type::byte_array(),
                 fun: Box::new(diagnostic.clone()),

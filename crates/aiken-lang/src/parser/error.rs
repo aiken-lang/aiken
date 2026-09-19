@@ -56,6 +56,15 @@ impl ParseError {
         self
     }
 
+    pub fn missing_pound_sign(span: Span) -> Self {
+        Self {
+            kind: Box::new(ErrorKind::MissingPoundSign),
+            expected: HashSet::new(),
+            span,
+            label: Some("missing front '#'"),
+        }
+    }
+
     pub fn illegal_multiline_expect_comment(span: Span) -> Self {
         Self {
             kind: Box::new(ErrorKind::IllegalMultilineExpectComment),
@@ -162,6 +171,20 @@ impl ParseError {
         }
     }
 
+    pub fn invalid_value_literal(span: Span, label: Option<String>, reason: String) -> Self {
+        Self {
+            kind: Box::new(ErrorKind::InvalidValueLiteral { reason }),
+            span,
+            expected: HashSet::new(),
+            label: label
+                .map(|s| {
+                    let s: &'static str = Box::leak(s.into_boxed_str());
+                    s
+                })
+                .or(Some("invalid Value literal")),
+        }
+    }
+
     pub fn match_on_curve(span: Span) -> Self {
         Self {
             kind: Box::new(ErrorKind::PatternMatchOnCurvePoint),
@@ -209,7 +232,7 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
                 .into_iter()
                 .map(|x| x.map(Into::into).unwrap_or(Pattern::End))
                 .collect(),
-            label: Some("not quite a pattern"),
+            label: Some("not what I expected"),
         }
     }
 
@@ -281,6 +304,10 @@ pub enum ErrorKind {
     }))]
     MalformedBase16StringLiteral,
 
+    #[error("I tripped over an invalid Value literal.")]
+    #[diagnostic(help("{reason}"))]
+    InvalidValueLiteral { reason: String },
+
     #[error("I came across a bytearray declared using two different notations.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#bytearray"))]
     #[diagnostic(help("Either use decimal or hexadecimal notation, but don't mix them."))]
@@ -318,6 +345,10 @@ pub enum ErrorKind {
         usize::MAX
     ))]
     InvalidDecoratorTag,
+
+    #[error("I spotted an hex-encoded literal without pound sign")]
+    #[diagnostic()]
+    MissingPoundSign,
 }
 
 fn fmt_curve_type(curve: &CurveType) -> String {
