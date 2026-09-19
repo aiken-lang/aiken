@@ -4540,41 +4540,7 @@ impl<'a> CodeGenerator<'a> {
                                     }
                                 }
                             }
-                            Some(_) => builtin.apply(left).apply(right),
-                            None => {
-                                let mut left = left;
-                                let mut right = right;
-
-                                let left_data_type =
-                                    lookup_data_type_by_tipo(&self.data_types, &left_tipo);
-
-                                let right_data_type =
-                                    lookup_data_type_by_tipo(&self.data_types, &right_tipo);
-
-                                if left_data_type
-                                    .map(|d| {
-                                        d.decorators
-                                            .iter()
-                                            .any(|dec| matches!(dec.kind, DecoratorKind::List))
-                                    })
-                                    .unwrap_or(false)
-                                {
-                                    left = Term::list_data().apply(left)
-                                }
-
-                                if right_data_type
-                                    .map(|d| {
-                                        d.decorators
-                                            .iter()
-                                            .any(|dec| matches!(dec.kind, DecoratorKind::List))
-                                    })
-                                    .unwrap_or(false)
-                                {
-                                    right = Term::list_data().apply(right)
-                                }
-
-                                builtin.apply(left).apply(right)
-                            }
+                            Some(_) | None => builtin.apply(left).apply(right),
                         };
 
                         if !left_tipo.is_bool() && matches!(op, BinOp::NotEq) {

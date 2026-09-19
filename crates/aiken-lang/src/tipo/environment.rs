@@ -776,7 +776,7 @@ impl<'a> Environment<'a> {
                     return false;
                 }
 
-                let type_constructor = if module.is_empty() {
+                let type_constructor = if module.is_empty() || module == self.current_module {
                     self.module_types.get(name)
                 } else {
                     self.imported_modules
@@ -796,11 +796,31 @@ impl<'a> Environment<'a> {
                     .get_constructors_for_type(module, name, Span::empty())
                     .unwrap_or_default()
                 {
-                    if let Type::Fn { args, .. } = constructor.tipo.as_ref()
-                        && args.iter().any(|arg| !self.is_data_like_inner(arg, ids))
+                    if let Type::Fn {
+                        args: constructor_args,
+                        ret,
+                        ..
+                    } = constructor.tipo.as_ref()
                     {
-                        return false;
-                    };
+                        if let Type::App {
+                            args: constructor_type_args,
+                            ..
+                        } = ret.as_ref()
+                        {
+                            for (arg, param) in args.iter().zip(constructor_type_args) {
+                                if let Some(id) = param.get_generic_id() {
+                                    ids.insert(id, arg.clone());
+                                }
+                            }
+                        }
+
+                        if constructor_args
+                            .iter()
+                            .any(|arg| !self.is_data_like_inner(arg, ids))
+                        {
+                            return false;
+                        }
+                    }
                 }
 
                 args.iter().all(|arg| self.is_data_like_inner(arg, ids))
