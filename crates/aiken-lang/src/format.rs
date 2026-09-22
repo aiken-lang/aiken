@@ -2860,6 +2860,7 @@ fn value_map<'a>(
         .append(line().append(body).nest(INDENT))
         .append(line())
         .append("}")
+        .force_break()
 }
 
 pub fn wrap_args<'a, I>(args: I) -> Document<'a>

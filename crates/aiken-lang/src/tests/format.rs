@@ -272,6 +272,28 @@ fn format_insert_value_builtin_as_a_value_literal() {
 }
 
 #[test]
+fn format_value_literal_nested_in_call_does_not_affect_the_next_argument() {
+    let source = r#"fn example() {
+  consume({ policy: { asset: quantity } }, next(first, second))
+}
+"#;
+    let expected = r#"fn example() {
+  consume(
+    {
+      policy: {
+        asset: quantity,
+      },
+    },
+    next(first, second),
+  )
+}
+"#;
+
+    pretty_assertions::assert_eq!(format_source(source), expected);
+    pretty_assertions::assert_eq!(format_source(expected), expected);
+}
+
+#[test]
 fn format_value_literal_preserves_asset_name_encoding() {
     let source = r#"const value = {
       #"00000000000000000000000000000000000000000000000000000000": {
