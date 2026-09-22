@@ -32,8 +32,8 @@ impl EventListener for Terminal {
                 root,
             } => {
                 eprintln!(
-                    "{} {} {} ({})",
-                    "    Compiling"
+                    "{:>13} {} {} ({})",
+                    "Compiling"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     name.if_supports_color(Stderr, |s| s.bold()),
@@ -48,8 +48,8 @@ impl EventListener for Terminal {
                 root,
             } => {
                 eprintln!(
-                    "{} {} for {} {} ({})",
-                    "   Generating"
+                    "{:>13} {} for {} {} ({})",
+                    "Generating"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "documentation".if_supports_color(Stderr, |s| s.bold()),
@@ -62,16 +62,16 @@ impl EventListener for Terminal {
             }
             Event::WaitingForBuildDirLock => {
                 eprintln!(
-                    "{}",
-                    "Waiting for build directory lock ..."
+                    "{:>13} for build directory lock...",
+                    "Waiting"
                         .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.purple())
+                        .if_supports_color(Stderr, |s| s.purple()),
                 );
             }
             Event::DumpingUPLC { path } => {
                 eprintln!(
-                    "{} {} ({})",
-                    "    Exporting"
+                    "{:>13} {} ({})",
+                    "Exporting"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "UPLC".if_supports_color(Stderr, |s| s.bold()),
@@ -81,8 +81,8 @@ impl EventListener for Terminal {
             }
             Event::GeneratingBlueprint { path } => {
                 eprintln!(
-                    "{} {} ({})",
-                    "   Generating"
+                    "{:>13} {} ({})",
+                    "Generating"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "project's blueprint".if_supports_color(Stderr, |s| s.bold()),
@@ -92,8 +92,8 @@ impl EventListener for Terminal {
             }
             Event::GeneratingDocFiles { output_path } => {
                 eprintln!(
-                    "{} {} to {}",
-                    "      Writing"
+                    "{:>13} {} to {}",
+                    "Writing"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "documentation files".if_supports_color(Stderr, |s| s.bold()),
@@ -105,8 +105,8 @@ impl EventListener for Terminal {
             }
             Event::GeneratingUPLCFor { name, path } => {
                 eprintln!(
-                    "{} {} {}.{{{}}}",
-                    "   Generating"
+                    "{:>13} {} {}.{{{}}}",
+                    "Generating"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "UPLC for"
@@ -167,8 +167,8 @@ impl EventListener for Terminal {
             }
             Event::RunningTests => {
                 eprintln!(
-                    "{} {}",
-                    "      Testing"
+                    "{:>13} {}",
+                    "Testing"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "...".if_supports_color(Stderr, |s| s.bold())
@@ -242,8 +242,8 @@ impl EventListener for Terminal {
             }
             Event::ResolvingPackages { name } => {
                 eprintln!(
-                    "{} {}",
-                    "    Resolving"
+                    "{:>13} {}",
+                    "Resolving"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     name.if_supports_color(Stderr, |s| s.bold())
@@ -251,8 +251,8 @@ impl EventListener for Terminal {
             }
             Event::PackageResolveFallback { name } => {
                 eprintln!(
-                    "{} {}\n        ↳ You're seeing this message because the package version is unpinned and the network is not accessible.",
-                    "        Using"
+                    "{:>13} {}\n        ↳ You're seeing this message because the package version is unpinned and the network is not accessible.",
+                    "Using"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.yellow()),
                     format!("uncertain local version for {name}")
@@ -272,10 +272,10 @@ impl EventListener for Terminal {
                 };
 
                 eprintln!(
-                    "{} {} from {source}",
+                    "{:>13} {} from {source}",
                     match source {
-                        DownloadSource::Network => "   Downloaded",
-                        DownloadSource::Cache => "      Fetched",
+                        DownloadSource::Network => "Downloaded",
+                        DownloadSource::Cache => "Fetched",
                     }
                     .if_supports_color(Stderr, |s| s.bold())
                     .if_supports_color(Stderr, |s| s.purple()),
@@ -284,8 +284,8 @@ impl EventListener for Terminal {
             }
             Event::ResolvingVersions => {
                 eprintln!(
-                    "{} {}",
-                    "    Resolving"
+                    "{:>13} {}",
+                    "Resolving"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "dependencies".if_supports_color(Stderr, |s| s.bold())
@@ -293,8 +293,8 @@ impl EventListener for Terminal {
             }
             Event::RunningBenchmarks => {
                 eprintln!(
-                    "{} {}",
-                    " Benchmarking"
+                    "{:>13} {}",
+                    "Benchmarking"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "...".if_supports_color(Stderr, |s| s.bold())
