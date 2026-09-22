@@ -4006,9 +4006,16 @@ impl<'a> CodeGenerator<'a> {
                         erase_opaque_type_operations(air_tree, &self.data_types);
                     });
 
+                    // Constant compilation is re-entrant: it happens while the enclosing
+                    // program is still being lowered. Keep its cycle links isolated so a
+                    // constant's dependency graph cannot overwrite the enclosing graph.
+                    let outer_cyclic_functions = std::mem::take(&mut self.cyclic_functions);
+
                     value = self.hoist_functions_to_validator(value);
 
                     let term = self.uplc_code_gen(value.to_vec());
+
+                    self.cyclic_functions = outer_cyclic_functions;
 
                     let mut program =
                         self.new_program(self.special_functions.apply_used_functions(term));

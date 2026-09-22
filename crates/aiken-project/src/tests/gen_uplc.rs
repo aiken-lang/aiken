@@ -119,6 +119,31 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
     }
 }
 
+fn assert_uplc_evaluates_successfully(source_code: &str) {
+    let mut project = TestProject::new();
+    let checked_module = project.check(project.parse(source_code));
+
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|definition| match definition {
+            Definition::Test(test) => Some(test),
+            _ => None,
+        })
+        .expect("expected one test definition");
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+    let program = generator.generate_raw(&test.body, &[], &checked_module.name);
+    let program: Program<DeBruijn> = program.try_into().unwrap();
+    let eval = program.eval(ExBudget::default());
+
+    assert!(
+        !eval.failed(true, &Language::PlutusV3),
+        "logs - {:#?}",
+        eval.logs()
+    );
+}
+
 #[test]
 fn acceptance_test_1_length() {
     let src = r#"
@@ -6589,4 +6614,34 @@ fn strict_value_expect_compares_value_data_in_verbose_mode() {
         );
 
     assert_uplc(src, program, false, true);
+}
+
+#[test]
+fn module_constant_evaluation_preserves_outer_cyclic_functions() {
+    let src = r#"
+        fn f(n: Int) -> Int {
+          if n <= 0 {
+            0
+          } else {
+            g(n - 1)
+          }
+        }
+
+        fn g(n: Int) -> Int {
+          if n <= 0 {
+            0
+          } else {
+            f(n - 1)
+          }
+        }
+
+        const x = f(0)
+
+        test foo() {
+          let b = (as_data(f(0)), x)
+          b == b
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
 }
