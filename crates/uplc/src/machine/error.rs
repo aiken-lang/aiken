@@ -1,5 +1,8 @@
 use super::{ExBudget, Value};
-use crate::ast::{NamedDeBruijn, Term, Type};
+use crate::{
+    ast::{NamedDeBruijn, Term, Type, ValueError},
+    builtins::DefaultFunction,
+};
 use num_bigint::BigInt;
 use std::string::FromUtf8Error;
 
@@ -130,6 +133,12 @@ pub enum Error {
     DeserialisationError(String, Value),
     #[error("integer overflow")]
     OverflowError,
+    #[error("value builtin failed: {0}")]
+    ValueBuiltin(#[source] ValueError),
+    #[error("builtin {0} is not available in this plutus / protocol version")]
+    BuiltinNotAvailable(DefaultFunction),
+    #[error("Value constants are not available in this plutus / protocol version")]
+    ValueConstantNotAvailable,
     #[error("{0} is not within the bounds of a Natural")]
     OutsideNaturalBounds(BigInt),
     #[error("{0} is not within the bounds of a Byte")]

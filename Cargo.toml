@@ -34,7 +34,6 @@ tap = "aiken-lang/homebrew-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
     "aarch64-apple-darwin",
-    "x86_64-apple-darwin",
     "x86_64-unknown-linux-musl",
     "aarch64-unknown-linux-musl",
     "x86_64-pc-windows-msvc",
@@ -70,7 +69,6 @@ github-build-setup = "../musl-build-setup.yml"
 aarch64-unknown-linux-musl = "ubuntu-24.04-arm"
 x86_64-unknown-linux-musl = "ubuntu-24.04"
 x86_64-pc-windows-msvc = "windows-2022"
-x86_64-apple-darwin = "macos-15-intel"
 aarch64-apple-darwin = "macos-15"
 
 [workspace.dependencies]
@@ -135,6 +133,7 @@ secp256k1 = "0.26.0"
 semver = "1.0.23"
 serde = "1.0.197"
 serde_json = "1.0.148"
+stacker = "0.1.25"
 strip-ansi-escapes = "0.1.1"
 strum = "0.26.3"
 test-case = "3.3.1"

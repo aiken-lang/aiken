@@ -13,7 +13,8 @@ use crate::{
         TypedDefinition, TypedFunction, TypedPattern, TypedValidator, UnqualifiedImport,
         UntypedArg, UntypedDefinition, UntypedFunction, Use, Validator,
     },
-    tipo::{TypeAliasAnnotation, fields::FieldMap},
+    expr::AssignmentKind,
+    tipo::{TypeAliasAnnotation, fields::FieldMap, well_known},
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -440,26 +441,6 @@ impl<'a> Environment<'a> {
             .ok_or_else(unknown_type_constructor)
     }
 
-    #[allow(clippy::result_large_err)]
-    pub fn get_type_constructor_mut(
-        &mut self,
-        name: &str,
-        location: Span,
-    ) -> Result<&mut TypeConstructor, Error> {
-        let types = self.known_type_names();
-
-        let constructor = self
-            .module_types
-            .get_mut(name)
-            .ok_or_else(|| Error::UnknownType {
-                location,
-                name: name.to_string(),
-                types,
-            })?;
-
-        Ok(constructor)
-    }
-
     /// Lookup a type in the current scope.
     #[allow(clippy::result_large_err)]
     pub fn get_type_constructor(
@@ -775,6 +756,240 @@ impl<'a> Environment<'a> {
                 .any(|module| module.opaque_types.contains(qualifier))
     }
 
+    pub(crate) fn is_data_like(&mut self, tipo: &Type) -> bool {
+        self.assert_known_data_type(
+            tipo,
+            &mut HashMap::new(),
+            &mut HashSet::new(),
+            false,
+            &[
+                well_known::VALUE,
+                well_known::G1_ELEMENT,
+                well_known::G2_ELEMENT,
+                well_known::MILLER_LOOP_RESULT,
+            ],
+        )
+    }
+
+    pub fn ensure_serialisable(&mut self, tipo: Rc<Type>, location: Span) -> Result<(), Error> {
+        if !self.assert_known_data_type(
+            tipo.as_ref(),
+            &mut HashMap::new(),
+            &mut HashSet::new(),
+            true,
+            &[well_known::MILLER_LOOP_RESULT],
+        ) {
+            return Err(Error::IllegalTypeInData {
+                tipo: tipo.clone(),
+                location,
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn ensure_serialisable_at_top_level(
+        &mut self,
+        tipo: Rc<Type>,
+        location: Span,
+    ) -> Result<(), Error> {
+        if !self.assert_serialisable_type(
+            tipo.as_ref(),
+            true,
+            &mut HashMap::new(),
+            &mut HashSet::new(),
+        ) {
+            return Err(Error::IllegalTypeInData { tipo, location });
+        }
+
+        Ok(())
+    }
+
+    fn assert_serialisable_type(
+        &mut self,
+        tipo: &Type,
+        is_top_level: bool,
+        ids: &mut HashMap<u64, Rc<Type>>,
+        active_types: &mut HashSet<(String, String)>,
+    ) -> bool {
+        match tipo {
+            Type::Fn { args, ret, .. } if is_top_level => {
+                args.iter()
+                    .all(|arg| self.assert_serialisable_type(arg, true, ids, active_types))
+                    && self.assert_serialisable_type(ret, true, ids, active_types)
+            }
+
+            Type::App { .. } if is_top_level && tipo.is_ml_result() => true,
+
+            Type::Var { tipo, .. } => match tipo.borrow().deref() {
+                TypeVar::Link { tipo } => {
+                    self.assert_serialisable_type(tipo, is_top_level, ids, active_types)
+                }
+                TypeVar::Generic { .. } | TypeVar::Unbound { .. } => true,
+            },
+
+            _ => self.assert_known_data_type(
+                tipo,
+                ids,
+                active_types,
+                true,
+                &[well_known::MILLER_LOOP_RESULT],
+            ),
+        }
+    }
+
+    fn assert_known_data_type(
+        &mut self,
+        tipo: &Type,
+        ids: &mut HashMap<u64, Rc<Type>>,
+        active_types: &mut HashSet<(String, String)>,
+        allow_unmapped_generics: bool,
+        forbidden_known_types: &[&str],
+    ) -> bool {
+        match tipo {
+            Type::App {
+                module, name, args, ..
+            } => {
+                if module.is_empty() && forbidden_known_types.contains(&name.as_str()) {
+                    return false;
+                }
+
+                let qualifier = (module.clone(), name.clone());
+
+                if !active_types.insert(qualifier.clone()) {
+                    return args.iter().all(|arg| {
+                        self.assert_known_data_type(
+                            arg,
+                            ids,
+                            active_types,
+                            allow_unmapped_generics,
+                            forbidden_known_types,
+                        )
+                    });
+                }
+
+                let type_constructor = if module.is_empty() || module == self.current_module {
+                    self.module_types.get(name)
+                } else {
+                    self.imported_modules
+                        .get(module)
+                        .and_then(|(_, module)| module.types.get(name))
+                };
+
+                if let Some(type_constructor) = type_constructor {
+                    for (arg, param) in args.iter().zip(type_constructor.parameters.iter()) {
+                        if let Some(id) = param.get_generic_id() {
+                            ids.insert(id, arg.clone());
+                        }
+                    }
+                }
+
+                for constructor in self
+                    .get_constructors_for_type(module, name, Span::empty())
+                    .unwrap_or_default()
+                {
+                    if let Type::Fn {
+                        args: constructor_args,
+                        ret,
+                        ..
+                    } = constructor.tipo.as_ref()
+                    {
+                        if let Type::App {
+                            args: constructor_type_args,
+                            ..
+                        } = ret.as_ref()
+                        {
+                            for (arg, param) in args.iter().zip(constructor_type_args) {
+                                if let Some(id) = param.get_generic_id() {
+                                    ids.insert(id, arg.clone());
+                                }
+                            }
+                        }
+
+                        if constructor_args.iter().any(|arg| {
+                            !self.assert_known_data_type(
+                                arg,
+                                ids,
+                                active_types,
+                                allow_unmapped_generics,
+                                forbidden_known_types,
+                            )
+                        }) {
+                            active_types.remove(&qualifier);
+                            return false;
+                        }
+                    }
+                }
+
+                let result = args.iter().all(|arg| {
+                    self.assert_known_data_type(
+                        arg,
+                        ids,
+                        active_types,
+                        allow_unmapped_generics,
+                        forbidden_known_types,
+                    )
+                });
+
+                active_types.remove(&qualifier);
+
+                result
+            }
+
+            Type::Var { tipo, .. } => match tipo.borrow().deref() {
+                TypeVar::Link { tipo } => self.assert_known_data_type(
+                    tipo,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                ),
+                TypeVar::Generic { id } => {
+                    if let Some(tipo) = ids.get(id) {
+                        self.assert_known_data_type(
+                            &tipo.clone(),
+                            ids,
+                            active_types,
+                            allow_unmapped_generics,
+                            forbidden_known_types,
+                        )
+                    } else {
+                        allow_unmapped_generics
+                    }
+                }
+                TypeVar::Unbound { .. } => true,
+            },
+
+            Type::Tuple { elems, .. } => elems.iter().all(|elem| {
+                self.assert_known_data_type(
+                    elem,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                )
+            }),
+
+            Type::Pair { fst, snd, .. } => {
+                self.assert_known_data_type(
+                    fst,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                ) && self.assert_known_data_type(
+                    snd,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                )
+            }
+
+            Type::Fn { .. } => false,
+        }
+    }
+
     pub(crate) fn contains_opaque(&self, tipo: &Type) -> bool {
         match tipo {
             Type::App {
@@ -809,8 +1024,8 @@ impl<'a> Environment<'a> {
 
             let mut opaque_types = HashSet::new();
 
-            self.collect_opaque_types_from_values(&self.module_values, &mut opaque_types);
-            self.collect_opaque_types_from_values(&self.scope, &mut opaque_types);
+            self.collect_opaque_types_from_constructors(&self.module_values, &mut opaque_types);
+            self.collect_opaque_types_from_constructors(&self.scope, &mut opaque_types);
 
             for (module, name) in opaque_types {
                 self.register_opaque_type(&module, &name);
@@ -822,7 +1037,7 @@ impl<'a> Environment<'a> {
         }
     }
 
-    fn collect_opaque_types_from_values(
+    fn collect_opaque_types_from_constructors(
         &self,
         values: &HashMap<String, ValueConstructor>,
         opaque_types: &mut HashSet<(String, String)>,
@@ -1786,193 +2001,203 @@ impl<'a> Environment<'a> {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::result_large_err)]
+    pub fn unify(&mut self, lhs: Rc<Type>, rhs: Rc<Type>, location: Span) -> Result<(), Error> {
+        self.unify_with(lhs, rhs, location, UnifyMode::Strict)
+    }
+
     /// Unify two types that should be the same.
     /// Any unbound type variables will be linked to the other type as they are the same.
     ///
     /// It two types are found to not be the same an error is returned.
     #[allow(clippy::only_used_in_recursion)]
     #[allow(clippy::result_large_err)]
-    pub fn unify(
+    pub fn unify_with(
         &mut self,
         lhs: Rc<Type>,
         rhs: Rc<Type>,
         location: Span,
-        allow_cast: bool,
+        unify_mode: UnifyMode,
     ) -> Result<(), Error> {
         if lhs == rhs {
             return Ok(());
         }
 
-        if allow_cast {
-            if self.contains_opaque(&lhs) {
-                return Err(Error::ExpectOnOpaqueType { location });
+        match unify_mode {
+            UnifyMode::Strict => {}
+            UnifyMode::AllowUpCast => {
+                if lhs.is_data() && self.is_data_like(&rhs) {
+                    return assert_no_unbounded_empty_list(&rhs, location);
+                }
             }
+            UnifyMode::AllowDownCast => {
+                if self.contains_opaque(&lhs) {
+                    return Err(Error::ExpectOnOpaqueType { location });
+                }
 
-            if (lhs.is_data() || rhs.is_data())
-                && !(lhs.is_unbound() || rhs.is_unbound())
-                && !(lhs.is_function() || rhs.is_function())
-                && !(lhs.is_generic() || rhs.is_generic())
-                && !(lhs.is_string() || rhs.is_string())
-            {
-                return Ok(());
+                if (lhs.is_data() && self.is_data_like(&rhs))
+                    || (self.is_data_like(&lhs) && rhs.is_data())
+                {
+                    return assert_no_unbounded_empty_list(&rhs, location);
+                }
             }
-        }
-
-        // Collapse right hand side type links. Left hand side will be collapsed in the next block.
-        if let Type::Var { tipo, alias } = rhs.deref()
-            && let TypeVar::Link { tipo } = tipo.borrow().deref()
-        {
-            return self.unify(
-                lhs,
-                Type::with_alias(tipo.clone(), alias.clone()),
-                location,
-                allow_cast,
-            );
-        }
-
-        let could_not_unify = || Error::CouldNotUnify {
-            location,
-            expected: lhs.clone(),
-            given: rhs.clone(),
-            situation: None,
-            rigid_type_names: HashMap::new(),
         };
-
-        if let Type::Var { tipo, alias } = lhs.deref() {
-            enum Action {
-                Unify(Rc<Type>),
-                CouldNotUnify,
-                Link,
+        stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
+            // Collapse right hand side type links. Left hand side will be collapsed in the next block.
+            if let Type::Var { tipo, alias } = rhs.deref()
+                && let TypeVar::Link { tipo } = tipo.borrow().deref()
+            {
+                return self.unify_with(
+                    lhs,
+                    Type::with_alias(tipo.clone(), alias.clone()),
+                    location,
+                    unify_mode,
+                );
             }
 
-            let action = match tipo.borrow().deref() {
-                TypeVar::Link { tipo } => {
-                    Action::Unify(Type::with_alias(tipo.clone(), alias.clone()))
-                }
-
-                TypeVar::Unbound { id } => {
-                    unify_unbound_type(rhs.clone(), *id, location)?;
-                    Action::Link
-                }
-
-                TypeVar::Generic { id } => {
-                    if let Type::Var { tipo, alias: _ } = rhs.deref()
-                        && tipo.borrow().is_unbound()
-                    {
-                        *tipo.borrow_mut() = TypeVar::Generic { id: *id };
-                        return Ok(());
-                    }
-                    Action::CouldNotUnify
-                }
+            let could_not_unify = || Error::CouldNotUnify {
+                location,
+                expected: lhs.clone(),
+                given: rhs.clone(),
+                situation: None,
+                rigid_type_names: HashMap::new(),
             };
 
-            return match action {
-                Action::Link => {
-                    *tipo.borrow_mut() = TypeVar::Link { tipo: rhs };
+            if let Type::Var { tipo, alias } = lhs.deref() {
+                enum Action {
+                    Unify(Rc<Type>),
+                    CouldNotUnify,
+                    Link,
+                }
+
+                let action = match tipo.borrow().deref() {
+                    TypeVar::Link { tipo } => {
+                        Action::Unify(Type::with_alias(tipo.clone(), alias.clone()))
+                    }
+
+                    TypeVar::Unbound { id } => {
+                        unify_unbound_type(rhs.clone(), *id, location)?;
+                        Action::Link
+                    }
+
+                    TypeVar::Generic { id } => {
+                        if let Type::Var { tipo, alias: _ } = rhs.deref()
+                            && tipo.borrow().is_unbound()
+                        {
+                            *tipo.borrow_mut() = TypeVar::Generic { id: *id };
+                            return Ok(());
+                        }
+                        Action::CouldNotUnify
+                    }
+                };
+
+                return match action {
+                    Action::Link => {
+                        *tipo.borrow_mut() = TypeVar::Link { tipo: rhs };
+                        Ok(())
+                    }
+                    Action::Unify(t) => self.unify_with(t, rhs, location, unify_mode),
+                    Action::CouldNotUnify => Err(could_not_unify()),
+                };
+            }
+
+            if let Type::Var { .. } = rhs.deref() {
+                return self.unify(rhs, lhs, location).map_err(|e| e.flip_unify());
+            }
+
+            match (lhs.deref(), rhs.deref()) {
+                (
+                    Type::App {
+                        module: m1,
+                        name: n1,
+                        args: args1,
+                        public: _,
+                        alias: _,
+                    },
+                    Type::App {
+                        module: m2,
+                        name: n2,
+                        args: args2,
+                        public: _,
+                        alias: _,
+                    },
+                ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
+                    for (a, b) in args1.iter().zip(args2) {
+                        unify_enclosed_type(
+                            lhs.clone(),
+                            rhs.clone(),
+                            self.unify(a.clone(), b.clone(), location),
+                        )?;
+                    }
                     Ok(())
                 }
-                Action::Unify(t) => self.unify(t, rhs, location, allow_cast),
-                Action::CouldNotUnify => Err(could_not_unify()),
-            };
-        }
 
-        if let Type::Var { .. } = rhs.deref() {
-            return self
-                .unify(rhs, lhs, location, false)
-                .map_err(|e| e.flip_unify());
-        }
-
-        match (lhs.deref(), rhs.deref()) {
-            (
-                Type::App {
-                    module: m1,
-                    name: n1,
-                    args: args1,
-                    public: _,
-                    alias: _,
-                },
-                Type::App {
-                    module: m2,
-                    name: n2,
-                    args: args2,
-                    public: _,
-                    alias: _,
-                },
-            ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
-                for (a, b) in args1.iter().zip(args2) {
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, false),
-                    )?;
+                (
+                    Type::Tuple {
+                        elems: elems1,
+                        alias: _,
+                    },
+                    Type::Tuple {
+                        elems: elems2,
+                        alias: _,
+                    },
+                ) if elems1.len() == elems2.len() => {
+                    for (a, b) in elems1.iter().zip(elems2) {
+                        unify_enclosed_type(
+                            lhs.clone(),
+                            rhs.clone(),
+                            self.unify(a.clone(), b.clone(), location),
+                        )?;
+                    }
+                    Ok(())
                 }
-                Ok(())
-            }
 
-            (
-                Type::Tuple {
-                    elems: elems1,
-                    alias: _,
-                },
-                Type::Tuple {
-                    elems: elems2,
-                    alias: _,
-                },
-            ) if elems1.len() == elems2.len() => {
-                for (a, b) in elems1.iter().zip(elems2) {
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, false),
-                    )?;
+                (
+                    Type::Pair {
+                        fst: lhs_fst,
+                        snd: lhs_snd,
+                        alias: _,
+                    },
+                    Type::Pair {
+                        fst: rhs_fst,
+                        snd: rhs_snd,
+                        alias: _,
+                    },
+                ) => {
+                    for (a, b) in [lhs_fst, lhs_snd].into_iter().zip([rhs_fst, rhs_snd]) {
+                        unify_enclosed_type(
+                            lhs.clone(),
+                            rhs.clone(),
+                            self.unify(a.clone(), b.clone(), location),
+                        )?;
+                    }
+                    Ok(())
                 }
-                Ok(())
-            }
 
-            (
-                Type::Pair {
-                    fst: lhs_fst,
-                    snd: lhs_snd,
-                    alias: _,
-                },
-                Type::Pair {
-                    fst: rhs_fst,
-                    snd: rhs_snd,
-                    alias: _,
-                },
-            ) => {
-                for (a, b) in [lhs_fst, lhs_snd].into_iter().zip([rhs_fst, rhs_snd]) {
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, false),
-                    )?;
+                (
+                    Type::Fn {
+                        args: args1,
+                        ret: retrn1,
+                        alias: _,
+                    },
+                    Type::Fn {
+                        args: args2,
+                        ret: retrn2,
+                        alias: _,
+                    },
+                ) if args1.len() == args2.len() => {
+                    for (a, b) in args1.iter().zip(args2) {
+                        self.unify_with(a.clone(), b.clone(), location, unify_mode)
+                            .map_err(|_| could_not_unify())?;
+                    }
+                    self.unify(retrn1.clone(), retrn2.clone(), location)
+                        .map_err(|_| could_not_unify())
                 }
-                Ok(())
-            }
 
-            (
-                Type::Fn {
-                    args: args1,
-                    ret: retrn1,
-                    alias: _,
-                },
-                Type::Fn {
-                    args: args2,
-                    ret: retrn2,
-                    alias: _,
-                },
-            ) if args1.len() == args2.len() => {
-                for (a, b) in args1.iter().zip(args2) {
-                    self.unify(a.clone(), b.clone(), location, allow_cast)
-                        .map_err(|_| could_not_unify())?;
-                }
-                self.unify(retrn1.clone(), retrn2.clone(), location, false)
-                    .map_err(|_| could_not_unify())
+                _ => Err(could_not_unify()),
             }
-
-            _ => Err(could_not_unify()),
-        }
+        })
     }
 
     /// Checks that the given patterns are exhaustive for given type.
@@ -2031,7 +2256,7 @@ impl<'a> Environment<'a> {
     #[allow(clippy::result_large_err)]
     pub fn get_constructors_for_type(
         &mut self,
-        full_module_name: &String,
+        full_module_name: &str,
         name: &str,
         location: Span,
     ) -> Result<Vec<ValueConstructor>, Error> {
@@ -2096,6 +2321,27 @@ impl<'a> Environment<'a> {
                     })
                 })
                 .collect()
+        }
+    }
+}
+
+/// Captures unification policy rules, influenced by let/expect/if-is
+#[derive(Debug, Clone, Copy)]
+pub enum UnifyMode {
+    // A strict unification, no casting allowed whatsoever.
+    Strict,
+    // Direct assignations or function calls, allow implicit upcast to `Data`
+    AllowUpCast,
+    // Via `if/is` or `expect`, only allow non-opaque Data-like types on the left-hand side
+    AllowDownCast,
+}
+
+impl<T> From<AssignmentKind<T>> for UnifyMode {
+    fn from(kind: AssignmentKind<T>) -> Self {
+        match kind {
+            AssignmentKind::Let { .. } => Self::AllowUpCast,
+            AssignmentKind::Is => Self::AllowDownCast,
+            AssignmentKind::Expect { .. } => Self::AllowDownCast,
         }
     }
 }
@@ -2192,6 +2438,15 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
 
         Type::Var { .. } => unreachable!(),
     }
+}
+
+#[allow(clippy::result_large_err)]
+fn assert_no_unbounded_empty_list(rhs: &Type, location: Span) -> Result<(), Error> {
+    if rhs.is_unbounded_list() {
+        return Err(Error::AmbiguousEmptyList { location });
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::result_large_err)]

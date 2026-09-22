@@ -48,5 +48,6 @@ hex.workspace = true
 indoc.workspace = true
 insta = { workspace = true, features = ["yaml", "json", "redactions"] }
 pretty_assertions.workspace = true
+proptest.workspace = true
 test-case.workspace = true
 walkdir.workspace = true

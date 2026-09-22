@@ -248,6 +248,652 @@ fn illegal_function_comparison() {
 }
 
 #[test]
+fn primitive_value_equality_is_allowed() {
+    let source_code = r#"
+        fn compare(left: Value, right: Value) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn primitive_value_inequality_is_allowed() {
+    let source_code = r#"
+        fn compare(left: Value, right: Value) -> Bool {
+          left != right
+        }
+    "#;
+
+    assert!(dbg!(check(parse(source_code))).is_ok())
+}
+
+#[test]
+fn implicit_right_upcasting_to_value_is_not_allowed() {
+    let source_code = r#"
+        fn compare(left: Data, right: Value) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn implicit_left_upcasting_to_value_is_not_allowed_symmetric() {
+    let source_code = r#"
+        fn compare(left: Value, right: Data) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn primitive_value_coexists_with_qualified_module_value() {
+    let dependency = r#"
+        pub opaque type Value {
+          inner: Int
+        }
+
+        pub const zero = Value { inner: 0 }
+    "#;
+    let source_code = r#"
+        use cardano/assets
+
+        fn native_identity(value: Value) -> Value {
+          value
+        }
+
+        fn assets_identity(value: assets.Value) -> assets.Value {
+          value
+        }
+
+        fn coexist() -> assets.Value {
+          expect _ = native_identity({})
+          assets_identity(assets.zero)
+        }
+    "#;
+
+    let result = check_with_deps(
+        parse(source_code),
+        vec![parse_as(dependency, "cardano/assets")],
+    );
+
+    assert!(result.is_ok(), "{result:#?}");
+}
+
+#[test]
+fn unqualified_cardano_assets_value_shadows_primitive_value() {
+    let dependency = r#"
+        pub opaque type Value {
+          inner: Int
+        }
+    "#;
+    let source_code = r#"
+        use cardano/assets.{Value}
+
+        fn imported_identity(value: Value) -> Value {
+          value
+        }
+
+        fn mismatch() -> Value {
+          imported_identity({})
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(
+            parse(source_code),
+            vec![parse_as(dependency, "cardano/assets")],
+        ),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn module_value_does_not_unify_with_primitive_value() {
+    let dependency = r#"
+        pub opaque type Value {
+          inner: Int
+        }
+
+        pub const zero = Value { inner: 0 }
+    "#;
+    let source_code = r#"
+        use cardano/assets.{zero}
+
+        fn native_identity(value: Value) -> Value {
+          value
+        }
+
+        fn mismatch() -> Value {
+          native_identity(zero)
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(
+            parse(source_code),
+            vec![parse_as(dependency, "cardano/assets")],
+        ),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn generic_equality_remains_legal_for_serialisable_types() {
+    let source_code = r#"
+        fn same(left, right) -> Bool {
+          left == right
+        }
+
+        fn compare() -> Bool {
+          same(1, 2)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn generic_equality_accepts_value_specialisation() {
+    let source_code = r#"
+        fn same(left, right) -> Bool {
+          left == right
+        }
+
+        fn compare(left: Value, right: Value) -> Bool {
+          same(left, right)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn imported_generic_equality_accepts_value_specialisation() {
+    let dependency = r#"
+        pub fn same(left, right) -> Bool {
+          left == right
+        }
+    "#;
+
+    let source_code = r#"
+        use equality.{same}
+
+        fn compare(left: Value, right: Value) -> Bool {
+          same(left, right)
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "equality")],).is_ok());
+}
+
+#[test]
+fn prelude_generic_equality_accepts_value_specialisation() {
+    let source_code = r#"
+        fn same(left: Option<a>, right: Option<a>) -> Bool {
+          left == right
+        }
+
+        fn compare(left: Value, right: Value) -> Bool {
+          same(Some(left), Some(right))
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn piped_generic_equality_accepts_value_specialisation() {
+    let source_code = r#"
+        fn same(value) -> Bool {
+          value == value
+        }
+
+        fn compare(value: Value) -> Bool {
+          value |> same
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn pattern_unification_preserves_generic_equality_constraint() {
+    let source_code = r#"
+        type Box<a> {
+          Box(a)
+        }
+
+        fn compare(value: Box<Value>) -> Bool {
+          fn(x) {
+            let result = x == x
+            expect Box(_) = x
+            result
+          }(value)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_rejects_value_nested_in_a_list() {
+    let source_code = r#"
+        fn compare(left: List<Value>, right: List<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_rejects_value_nested_in_an_option() {
+    let source_code = r#"
+        fn compare(left: Option<Value>, right: Option<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_accepts_value_nested_through_generic_wrappers() {
+    let dependency = r#"
+        pub opaque type Imported<a> {
+          Imported(a)
+        }
+    "#;
+    let source_code = r#"
+        use wrapper.{Imported}
+
+        type Local<a> {
+          Local(Option<a>)
+        }
+
+        fn compare(
+          left: Local<Imported<Value>>,
+          right: Local<Imported<Value>>,
+        ) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapper")]).is_ok());
+}
+
+#[test]
+fn equality_accepts_value_nested_in_a_tuple() {
+    let source_code = r#"
+        fn compare(left: (Value, Int), right: (Value, Int)) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_accepts_value_nested_in_a_pair() {
+    let source_code = r#"
+        fn compare(left: Pair<Value, Int>, right: Pair<Value, Int>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_allows_value_in_a_phantom_type_argument() {
+    let source_code = r#"
+        type Phantom<a> {
+          Phantom(Int)
+        }
+
+        fn compare(left: Phantom<Value>, right: Phantom<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_allows_value_in_a_recursive_phantom_type_argument() {
+    let source_code = r#"
+        type RecursivePhantom<a> {
+          End
+          Next(Int, RecursivePhantom<a>)
+        }
+
+        fn compare(
+          left: RecursivePhantom<Value>,
+          right: RecursivePhantom<Value>,
+        ) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn recursive_type_revisit_checks_type_arguments() {
+    let source_code = r#"
+        type Recursive<a> {
+          End
+          Next(Recursive<a>)
+        }
+
+        fn compare(
+          left: Recursive<MillerLoopResult>,
+          right: Recursive<MillerLoopResult>,
+        ) -> Bool {
+          left == right
+        }
+    "#;
+
+    let result = check(parse(source_code));
+
+    assert!(
+        matches!(result, Err((_, Error::IllegalTypeInData { .. }))),
+        "{result:#?}"
+    )
+}
+
+#[test]
+fn equality_accepts_value_in_a_generic_record_field() {
+    let source_code = r#"
+        type Envelope<a> {
+          Envelope(a)
+        }
+
+        fn compare(left: Envelope<Value>, right: Envelope<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_accepts_value_erased_by_an_opaque_wrapper() {
+    let source_code = r#"
+        opaque type Wrapped {
+          Wrapped(Value)
+        }
+
+        fn compare(left: Wrapped, right: Wrapped) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn equality_accepts_value_erased_by_an_imported_opaque_wrapper() {
+    let dependency = r#"
+        pub opaque type Wrapped {
+          Wrapped(Value)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped.{Wrapped}
+
+        fn compare(left: Wrapped, right: Wrapped) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]).is_ok());
+}
+
+#[test]
+fn equality_accepts_value_hidden_behind_an_imported_private_wrapper() {
+    let dependency = r#"
+        type Hidden {
+          Hidden(Value)
+        }
+
+        pub opaque type Public {
+          Public(Hidden)
+        }
+
+        pub fn make(value: Value) -> Public {
+          Public(Hidden(value))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public, right: Public) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          let value = { #"00000000000000000000000000000000000000000000000000000000": { "foo": 14 } }
+          compare(make(value), make(value))
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok());
+}
+
+#[test]
+fn equality_accepts_value_hidden_behind_a_generic_imported_private_wrapper() {
+    let dependency = r#"
+        type Hidden<a> {
+          Hidden(a, Value)
+        }
+
+        pub opaque type Public<a> {
+          Public(List<Hidden<a>>)
+        }
+
+        pub fn make(value: a) -> Public<a> {
+          Public([Hidden(value, {})])
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public<Int>, right: Public<Int>) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          compare(make(1), make(1))
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok());
+}
+
+#[test]
+fn equality_allows_private_value_type_in_a_phantom_argument_of_a_public_wrapper() {
+    let dependency = r#"
+        type Hidden {
+          Hidden(Value)
+        }
+
+        pub opaque type Phantom<a> {
+          Phantom(Int)
+        }
+
+        pub opaque type Public {
+          Public(Phantom<Hidden>)
+        }
+
+        pub fn make() -> Public {
+          Public(Phantom(0))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public, right: Public) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          compare(make(), make())
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok())
+}
+
+#[test]
+fn equality_accepts_private_value_type_stored_in_a_foreign_generic_wrapper() {
+    let boxes = r#"
+        pub opaque type Box<a> {
+          Box(a)
+        }
+
+        pub fn box(inner: a) -> Box<a> {
+          Box(inner)
+        }
+    "#;
+
+    let dependency = r#"
+        use boxes.{Box, box}
+
+        type Hidden {
+          Hidden(Value)
+        }
+
+        pub opaque type Public {
+          Public(Box<Hidden>)
+        }
+
+        pub fn make(value: Value) -> Public {
+          Public(box(Hidden(value)))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public, right: Public) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          let value = {}
+          compare(make(value), make(value))
+        }
+    "#;
+
+    assert!(
+        check_with_deps(
+            parse(source_code),
+            vec![parse_as(boxes, "boxes"), parse_as(dependency, "dep")],
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn equality_allows_value_phantom_behind_an_imported_private_wrapper() {
+    let dependency = r#"
+        type Hidden<a> {
+          Hidden(Int)
+        }
+
+        pub opaque type Public<a> {
+          Public(Hidden<a>)
+        }
+
+        pub fn make() -> Public<a> {
+          Public(Hidden(0))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public<Value>, right: Public<Value>) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          compare(make(), make())
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")]).is_ok())
+}
+
+#[test]
+fn equality_accepts_value_stored_behind_an_imported_private_generic_wrapper() {
+    let dependency = r#"
+        type Hidden<a> {
+          Hidden(a)
+        }
+
+        pub opaque type Public<a> {
+          Public(Hidden<a>)
+        }
+
+        pub fn make(value: a) -> Public<a> {
+          Public(Hidden(value))
+        }
+    "#;
+
+    let source_code = r#"
+        use dep.{Public, make}
+
+        fn compare(left: Public<Value>, right: Public<Value>) -> Bool {
+          left == right
+        }
+
+        test trigger() {
+          let value = {}
+          compare(make(value), make(value))
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "dep")],).is_ok());
+}
+
+#[test]
+fn equality_allows_value_in_an_imported_opaque_phantom_argument() {
+    let dependency = r#"
+        pub opaque type Phantom<a> {
+          Phantom(Int)
+        }
+    "#;
+
+    let source_code = r#"
+        use phantom.{Phantom}
+
+        fn compare(left: Phantom<Value>, right: Phantom<Value>) -> Bool {
+          left == right
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "phantom")]).is_ok())
+}
+
+#[test]
 fn illegal_inhabitants_returned() {
     let source_code = r#"
         type Fuzzer<a> = fn(PRNG) -> (a, PRNG)
@@ -3840,6 +4486,185 @@ fn fn_multi_variant_pattern() {
         check_validator(parse(source_code)),
         Err((_, Error::NotExhaustivePatternMatch { .. }))
     ))
+}
+
+#[test]
+fn soft_casts_from_data_to_value_is_illegal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Bool {
+          if data is value: Value {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_casts_from_data_to_list_value_is_illegal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Bool {
+          if data is values: List<Value> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_casts_from_data_to_option_value_is_illegal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Bool {
+          if data is value: Option<Value> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_casts_from_data_to_wrapped_value_is_illegal() {
+    let source_code = r#"
+        type Wrapped {
+          value: Value
+        }
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: Wrapped {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_casts_from_data_to_imported_generic_wrapper_is_legal() {
+    let dependency = r#"
+        pub type Wrapped<a> {
+          Wrapped(a)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped as dependency
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: dependency.Wrapped<Int> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]).is_ok());
+}
+
+#[test]
+fn soft_casts_from_data_to_imported_generic_value_wrapper_is_illegal() {
+    let dependency = r#"
+        pub type Wrapped<a> {
+          Wrapped(a)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped as dependency
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: dependency.Wrapped<Value> {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]),
+        Err((_, Error::CouldNotUnify { given, .. })) if given.is_data()
+    ));
+}
+
+#[test]
+fn soft_cast_from_data_to_imported_opaque_value_wrapper_is_illegal() {
+    let dependency = r#"
+        pub opaque type Wrapped {
+          Wrapped(Value)
+        }
+    "#;
+
+    let source_code = r#"
+        use wrapped.{Wrapped}
+
+        fn decode(data: Data) -> Bool {
+          if data is wrapped: Wrapped {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(parse(source_code), vec![parse_as(dependency, "wrapped")]),
+        Err((_, Error::ExpectOnOpaqueType { .. })),
+    ));
+}
+
+#[test]
+fn strict_cast_from_data_to_value_is_illegal() {
+    let source_code = r#"
+        fn decode(data: Data) -> Value {
+          expect value: Value = data
+          value
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. })),
+    ))
+}
+
+#[test]
+fn explicit_un_value_data_remains_legal() {
+    let source_code = r#"
+        use aiken/builtin
+
+        fn decode(data: Data) -> Value {
+          builtin.un_value_data(data)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]

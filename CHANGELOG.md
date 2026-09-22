@@ -2,12 +2,28 @@
 
 ## v1.1.24 - UNRELEASED
 
+### Added
+
+- **aiken-lang**: Add first-class UPLC `Value` support, exposed in Aiken as `Value`. This adds `insert_value`, `lookup_value`, `union_value`, `contains_value`, `value_data`, `un_value_data`, and `scale_value` to `aiken/builtin`, with canonical Plutus V3 conformance coverage. @Riley-Kilgore, @KtorZ
+- **aiken-lang**: Aiken now supports Value literals such as:
+
+  ```aiken
+  {
+    #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+        #"bb": 42,
+        "✨": 1,
+    }
+  }
+  ```
+  @KtorZ
+
 ### Fixed
 
 - **aiken-lang**: Correctly prevent upcasting `Data` from types containing opaque types or aliasing opaque types. @KtorZ
+- **aiken-lang**: Force disambiguation of unbounded empty lists during type unification when detected to prevent generating invalid UPLC that could cause runtime errors. @KtorZ
+- **aiken-project**: Reduce memory usage and processing time during test executions and compiler optimizations. @colll78
 - **uplc**: Convert `bls12_381_g1_multi_scalar_mul` / `bls12_381_g2_multi_scalar_mul` arguments from Aiken's data-encoded lists to the typed `List<Int>` and `List<G1Element>` / `List<G2Element>` constants expected by the builtins, like already done for `write_bits`. Fixes [#1378](https://github.com/aiken-lang/aiken/issues/1378). @perturbing
 - **uplc**: Keep a builtin call untouched when constant folding cannot evaluate it (e.g. `replicate_byte` with a size above the 8192-byte limit) instead of crashing the optimizer on an `unwrap`; the optimizer now only commits its bookkeeping once the evaluation succeeded. @jtranq
-
 
 ## v1.1.23 - 2026-06-26
 

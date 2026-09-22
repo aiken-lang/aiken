@@ -11,6 +11,7 @@ use crate::{
     parser::{
         chain::{Chain, call::parser as call, field_access, tuple_index::parser as tuple_index},
         error::ParseError,
+        literal::value,
         token::Token,
     },
 };
@@ -56,6 +57,7 @@ pub fn chain_start<'a>(
         and_or_chain(expression.clone()),
         var(),
         parenthesized(sequence.clone(), expression.clone()),
+        value(),
         bytearray(),
         list(expression.clone()),
         anonymous_function(sequence.clone()),

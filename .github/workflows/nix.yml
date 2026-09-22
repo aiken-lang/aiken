@@ -17,17 +17,9 @@ jobs:
             system: aarch64-linux
           - os: macos-15
             system: aarch64-darwin
-          # Intel macOS: best-effort only. GitHub Actions retired the free
-          # Intel runner (macos-13) in Dec 2025 and Intel support ends
-          # entirely in Aug 2027 (see actions/runner-images#13046). Kept
-          # for visibility, not as a merge gate. 
-          - os: macos-15-intel
-            system: x86_64-darwin
-            best-effort: true
 
     runs-on: ${{ matrix.os }}
     name: nix build (${{ matrix.system }})
-    continue-on-error: ${{ matrix.best-effort == true }}
 
     steps:
       - name: Checkout repository
