@@ -106,6 +106,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "serde",
+ "stacker",
  "strum",
  "thiserror 1.0.69",
  "uplc",

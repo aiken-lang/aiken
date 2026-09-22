@@ -28,6 +28,7 @@ patricia_tree.workspace = true
 petgraph.workspace = true
 pretty.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
+stacker.workspace = true
 strum = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 uplc.workspace = true

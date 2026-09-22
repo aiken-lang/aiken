@@ -2043,160 +2043,161 @@ impl<'a> Environment<'a> {
                 }
             }
         };
-
-        // Collapse right hand side type links. Left hand side will be collapsed in the next block.
-        if let Type::Var { tipo, alias } = rhs.deref()
-            && let TypeVar::Link { tipo } = tipo.borrow().deref()
-        {
-            return self.unify_with(
-                lhs,
-                Type::with_alias(tipo.clone(), alias.clone()),
-                location,
-                unify_mode,
-            );
-        }
-
-        let could_not_unify = || Error::CouldNotUnify {
-            location,
-            expected: lhs.clone(),
-            given: rhs.clone(),
-            situation: None,
-            rigid_type_names: HashMap::new(),
-        };
-
-        if let Type::Var { tipo, alias } = lhs.deref() {
-            enum Action {
-                Unify(Rc<Type>),
-                CouldNotUnify,
-                Link,
+        stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
+            // Collapse right hand side type links. Left hand side will be collapsed in the next block.
+            if let Type::Var { tipo, alias } = rhs.deref()
+                && let TypeVar::Link { tipo } = tipo.borrow().deref()
+            {
+                return self.unify_with(
+                    lhs,
+                    Type::with_alias(tipo.clone(), alias.clone()),
+                    location,
+                    unify_mode,
+                );
             }
 
-            let action = match tipo.borrow().deref() {
-                TypeVar::Link { tipo } => {
-                    Action::Unify(Type::with_alias(tipo.clone(), alias.clone()))
-                }
-
-                TypeVar::Unbound { id } => {
-                    unify_unbound_type(rhs.clone(), *id, location)?;
-                    Action::Link
-                }
-
-                TypeVar::Generic { id } => {
-                    if let Type::Var { tipo, alias: _ } = rhs.deref()
-                        && tipo.borrow().is_unbound()
-                    {
-                        *tipo.borrow_mut() = TypeVar::Generic { id: *id };
-                        return Ok(());
-                    }
-                    Action::CouldNotUnify
-                }
+            let could_not_unify = || Error::CouldNotUnify {
+                location,
+                expected: lhs.clone(),
+                given: rhs.clone(),
+                situation: None,
+                rigid_type_names: HashMap::new(),
             };
 
-            return match action {
-                Action::Link => {
-                    *tipo.borrow_mut() = TypeVar::Link { tipo: rhs };
+            if let Type::Var { tipo, alias } = lhs.deref() {
+                enum Action {
+                    Unify(Rc<Type>),
+                    CouldNotUnify,
+                    Link,
+                }
+
+                let action = match tipo.borrow().deref() {
+                    TypeVar::Link { tipo } => {
+                        Action::Unify(Type::with_alias(tipo.clone(), alias.clone()))
+                    }
+
+                    TypeVar::Unbound { id } => {
+                        unify_unbound_type(rhs.clone(), *id, location)?;
+                        Action::Link
+                    }
+
+                    TypeVar::Generic { id } => {
+                        if let Type::Var { tipo, alias: _ } = rhs.deref()
+                            && tipo.borrow().is_unbound()
+                        {
+                            *tipo.borrow_mut() = TypeVar::Generic { id: *id };
+                            return Ok(());
+                        }
+                        Action::CouldNotUnify
+                    }
+                };
+
+                return match action {
+                    Action::Link => {
+                        *tipo.borrow_mut() = TypeVar::Link { tipo: rhs };
+                        Ok(())
+                    }
+                    Action::Unify(t) => self.unify_with(t, rhs, location, unify_mode),
+                    Action::CouldNotUnify => Err(could_not_unify()),
+                };
+            }
+
+            if let Type::Var { .. } = rhs.deref() {
+                return self.unify(rhs, lhs, location).map_err(|e| e.flip_unify());
+            }
+
+            match (lhs.deref(), rhs.deref()) {
+                (
+                    Type::App {
+                        module: m1,
+                        name: n1,
+                        args: args1,
+                        public: _,
+                        alias: _,
+                    },
+                    Type::App {
+                        module: m2,
+                        name: n2,
+                        args: args2,
+                        public: _,
+                        alias: _,
+                    },
+                ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
+                    for (a, b) in args1.iter().zip(args2) {
+                        unify_enclosed_type(
+                            lhs.clone(),
+                            rhs.clone(),
+                            self.unify(a.clone(), b.clone(), location),
+                        )?;
+                    }
                     Ok(())
                 }
-                Action::Unify(t) => self.unify_with(t, rhs, location, unify_mode),
-                Action::CouldNotUnify => Err(could_not_unify()),
-            };
-        }
 
-        if let Type::Var { .. } = rhs.deref() {
-            return self.unify(rhs, lhs, location).map_err(|e| e.flip_unify());
-        }
-
-        match (lhs.deref(), rhs.deref()) {
-            (
-                Type::App {
-                    module: m1,
-                    name: n1,
-                    args: args1,
-                    public: _,
-                    alias: _,
-                },
-                Type::App {
-                    module: m2,
-                    name: n2,
-                    args: args2,
-                    public: _,
-                    alias: _,
-                },
-            ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
-                for (a, b) in args1.iter().zip(args2) {
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location),
-                    )?;
+                (
+                    Type::Tuple {
+                        elems: elems1,
+                        alias: _,
+                    },
+                    Type::Tuple {
+                        elems: elems2,
+                        alias: _,
+                    },
+                ) if elems1.len() == elems2.len() => {
+                    for (a, b) in elems1.iter().zip(elems2) {
+                        unify_enclosed_type(
+                            lhs.clone(),
+                            rhs.clone(),
+                            self.unify(a.clone(), b.clone(), location),
+                        )?;
+                    }
+                    Ok(())
                 }
-                Ok(())
-            }
 
-            (
-                Type::Tuple {
-                    elems: elems1,
-                    alias: _,
-                },
-                Type::Tuple {
-                    elems: elems2,
-                    alias: _,
-                },
-            ) if elems1.len() == elems2.len() => {
-                for (a, b) in elems1.iter().zip(elems2) {
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location),
-                    )?;
+                (
+                    Type::Pair {
+                        fst: lhs_fst,
+                        snd: lhs_snd,
+                        alias: _,
+                    },
+                    Type::Pair {
+                        fst: rhs_fst,
+                        snd: rhs_snd,
+                        alias: _,
+                    },
+                ) => {
+                    for (a, b) in [lhs_fst, lhs_snd].into_iter().zip([rhs_fst, rhs_snd]) {
+                        unify_enclosed_type(
+                            lhs.clone(),
+                            rhs.clone(),
+                            self.unify(a.clone(), b.clone(), location),
+                        )?;
+                    }
+                    Ok(())
                 }
-                Ok(())
-            }
 
-            (
-                Type::Pair {
-                    fst: lhs_fst,
-                    snd: lhs_snd,
-                    alias: _,
-                },
-                Type::Pair {
-                    fst: rhs_fst,
-                    snd: rhs_snd,
-                    alias: _,
-                },
-            ) => {
-                for (a, b) in [lhs_fst, lhs_snd].into_iter().zip([rhs_fst, rhs_snd]) {
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location),
-                    )?;
+                (
+                    Type::Fn {
+                        args: args1,
+                        ret: retrn1,
+                        alias: _,
+                    },
+                    Type::Fn {
+                        args: args2,
+                        ret: retrn2,
+                        alias: _,
+                    },
+                ) if args1.len() == args2.len() => {
+                    for (a, b) in args1.iter().zip(args2) {
+                        self.unify_with(a.clone(), b.clone(), location, unify_mode)
+                            .map_err(|_| could_not_unify())?;
+                    }
+                    self.unify(retrn1.clone(), retrn2.clone(), location)
+                        .map_err(|_| could_not_unify())
                 }
-                Ok(())
-            }
 
-            (
-                Type::Fn {
-                    args: args1,
-                    ret: retrn1,
-                    alias: _,
-                },
-                Type::Fn {
-                    args: args2,
-                    ret: retrn2,
-                    alias: _,
-                },
-            ) if args1.len() == args2.len() => {
-                for (a, b) in args1.iter().zip(args2) {
-                    self.unify_with(a.clone(), b.clone(), location, unify_mode)
-                        .map_err(|_| could_not_unify())?;
-                }
-                self.unify(retrn1.clone(), retrn2.clone(), location)
-                    .map_err(|_| could_not_unify())
+                _ => Err(could_not_unify()),
             }
-
-            _ => Err(could_not_unify()),
-        }
+        })
     }
 
     /// Checks that the given patterns are exhaustive for given type.
