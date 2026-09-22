@@ -249,6 +249,9 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
 #[derive(Debug, Clone, PartialEq, Eq, Diagnostic, thiserror::Error)]
 pub enum ErrorKind {
     #[error("I arrived at the end of the file unexpectedly.")]
+    #[diagnostic(help(
+        "You're likely missing a closing curly brace or square bracket somewhere..."
+    ))]
     UnexpectedEnd,
 
     #[error("{0}")]
