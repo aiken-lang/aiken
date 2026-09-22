@@ -591,6 +591,30 @@ fn equality_allows_value_in_a_recursive_phantom_type_argument() {
 }
 
 #[test]
+fn recursive_type_revisit_checks_type_arguments() {
+    let source_code = r#"
+        type Recursive<a> {
+          End
+          Next(Recursive<a>)
+        }
+
+        fn compare(
+          left: Recursive<MillerLoopResult>,
+          right: Recursive<MillerLoopResult>,
+        ) -> Bool {
+          left == right
+        }
+    "#;
+
+    let result = check(parse(source_code));
+
+    assert!(
+        matches!(result, Err((_, Error::IllegalTypeInData { .. }))),
+        "{result:#?}"
+    )
+}
+
+#[test]
 fn equality_accepts_value_in_a_generic_record_field() {
     let source_code = r#"
         type Envelope<a> {

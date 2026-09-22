@@ -757,23 +757,115 @@ impl<'a> Environment<'a> {
     }
 
     pub(crate) fn is_data_like(&mut self, tipo: &Type) -> bool {
-        self.is_data_like_inner(tipo, &mut HashMap::new())
+        self.assert_known_data_type(
+            tipo,
+            &mut HashMap::new(),
+            &mut HashSet::new(),
+            false,
+            &[
+                well_known::VALUE,
+                well_known::G1_ELEMENT,
+                well_known::G2_ELEMENT,
+                well_known::MILLER_LOOP_RESULT,
+            ],
+        )
     }
 
-    fn is_data_like_inner(&mut self, tipo: &Type, ids: &mut HashMap<u64, Rc<Type>>) -> bool {
+    pub fn ensure_serialisable(&mut self, tipo: Rc<Type>, location: Span) -> Result<(), Error> {
+        if !self.assert_known_data_type(
+            tipo.as_ref(),
+            &mut HashMap::new(),
+            &mut HashSet::new(),
+            true,
+            &[well_known::MILLER_LOOP_RESULT],
+        ) {
+            return Err(Error::IllegalTypeInData {
+                tipo: tipo.clone(),
+                location,
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn ensure_serialisable_at_top_level(
+        &mut self,
+        tipo: Rc<Type>,
+        location: Span,
+    ) -> Result<(), Error> {
+        if !self.assert_serialisable_type(
+            tipo.as_ref(),
+            true,
+            &mut HashMap::new(),
+            &mut HashSet::new(),
+        ) {
+            return Err(Error::IllegalTypeInData { tipo, location });
+        }
+
+        Ok(())
+    }
+
+    fn assert_serialisable_type(
+        &mut self,
+        tipo: &Type,
+        is_top_level: bool,
+        ids: &mut HashMap<u64, Rc<Type>>,
+        active_types: &mut HashSet<(String, String)>,
+    ) -> bool {
+        match tipo {
+            Type::Fn { args, ret, .. } if is_top_level => {
+                args.iter()
+                    .all(|arg| self.assert_serialisable_type(arg, true, ids, active_types))
+                    && self.assert_serialisable_type(ret, true, ids, active_types)
+            }
+
+            Type::App { .. } if is_top_level && tipo.is_ml_result() => true,
+
+            Type::Var { tipo, .. } => match tipo.borrow().deref() {
+                TypeVar::Link { tipo } => {
+                    self.assert_serialisable_type(tipo, is_top_level, ids, active_types)
+                }
+                TypeVar::Generic { .. } | TypeVar::Unbound { .. } => true,
+            },
+
+            _ => self.assert_known_data_type(
+                tipo,
+                ids,
+                active_types,
+                true,
+                &[well_known::MILLER_LOOP_RESULT],
+            ),
+        }
+    }
+
+    fn assert_known_data_type(
+        &mut self,
+        tipo: &Type,
+        ids: &mut HashMap<u64, Rc<Type>>,
+        active_types: &mut HashSet<(String, String)>,
+        allow_unmapped_generics: bool,
+        forbidden_known_types: &[&str],
+    ) -> bool {
         match tipo {
             Type::App {
                 module, name, args, ..
             } => {
-                let forbidden = [
-                    well_known::VALUE,
-                    well_known::G1_ELEMENT,
-                    well_known::G2_ELEMENT,
-                    well_known::MILLER_LOOP_RESULT,
-                ];
-
-                if module.is_empty() && forbidden.contains(&name.as_str()) {
+                if module.is_empty() && forbidden_known_types.contains(&name.as_str()) {
                     return false;
+                }
+
+                let qualifier = (module.clone(), name.clone());
+
+                if !active_types.insert(qualifier.clone()) {
+                    return args.iter().all(|arg| {
+                        self.assert_known_data_type(
+                            arg,
+                            ids,
+                            active_types,
+                            allow_unmapped_generics,
+                            forbidden_known_types,
+                        )
+                    });
                 }
 
                 let type_constructor = if module.is_empty() || module == self.current_module {
@@ -814,36 +906,84 @@ impl<'a> Environment<'a> {
                             }
                         }
 
-                        if constructor_args
-                            .iter()
-                            .any(|arg| !self.is_data_like_inner(arg, ids))
-                        {
+                        if constructor_args.iter().any(|arg| {
+                            !self.assert_known_data_type(
+                                arg,
+                                ids,
+                                active_types,
+                                allow_unmapped_generics,
+                                forbidden_known_types,
+                            )
+                        }) {
+                            active_types.remove(&qualifier);
                             return false;
                         }
                     }
                 }
 
-                args.iter().all(|arg| self.is_data_like_inner(arg, ids))
+                let result = args.iter().all(|arg| {
+                    self.assert_known_data_type(
+                        arg,
+                        ids,
+                        active_types,
+                        allow_unmapped_generics,
+                        forbidden_known_types,
+                    )
+                });
+
+                active_types.remove(&qualifier);
+
+                result
             }
 
             Type::Var { tipo, .. } => match tipo.borrow().deref() {
-                TypeVar::Link { tipo } => self.is_data_like_inner(tipo, ids),
+                TypeVar::Link { tipo } => self.assert_known_data_type(
+                    tipo,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                ),
                 TypeVar::Generic { id } => {
                     if let Some(tipo) = ids.get(id) {
-                        self.is_data_like_inner(&tipo.clone(), ids)
+                        self.assert_known_data_type(
+                            &tipo.clone(),
+                            ids,
+                            active_types,
+                            allow_unmapped_generics,
+                            forbidden_known_types,
+                        )
                     } else {
-                        false
+                        allow_unmapped_generics
                     }
                 }
                 TypeVar::Unbound { .. } => true,
             },
 
-            Type::Tuple { elems, .. } => {
-                elems.iter().all(|elem| self.is_data_like_inner(elem, ids))
-            }
+            Type::Tuple { elems, .. } => elems.iter().all(|elem| {
+                self.assert_known_data_type(
+                    elem,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                )
+            }),
 
             Type::Pair { fst, snd, .. } => {
-                self.is_data_like_inner(fst, ids) && self.is_data_like_inner(snd, ids)
+                self.assert_known_data_type(
+                    fst,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                ) && self.assert_known_data_type(
+                    snd,
+                    ids,
+                    active_types,
+                    allow_unmapped_generics,
+                    forbidden_known_types,
+                )
             }
 
             Type::Fn { .. } => false,

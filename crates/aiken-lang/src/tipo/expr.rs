@@ -23,14 +23,13 @@ use crate::{
     format,
     parser::token::Base,
     tipo::{
-        DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar,
-        environment::UnifyMode, fields::FieldMap,
+        DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, environment::UnifyMode,
+        fields::FieldMap,
     },
 };
 use std::{
     cmp::Ordering,
     collections::{BTreeSet, HashMap},
-    ops::Deref,
     rc::Rc,
 };
 use vec1::Vec1;
@@ -771,8 +770,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Err(err)
                 })?;
 
-                for tipo in &[left.tipo(), right.tipo()] {
-                    ensure_serialisable(false, tipo.clone(), location)
+                for tipo in [left.tipo(), right.tipo()] {
+                    self.environment
+                        .ensure_serialisable(tipo, location)
                         .map_err(|_| Error::IllegalComparison { location })?;
                 }
 
@@ -2011,8 +2011,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             None => body.tipo(),
         };
 
-        // Ensure elements are serialisable to Data.
-        ensure_serialisable(true, return_type.clone(), body.type_defining_location())?;
+        self.environment
+            .ensure_serialisable_at_top_level(return_type.clone(), body.type_defining_location())?;
 
         Ok((args, body, return_type))
     }
@@ -2047,7 +2047,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
 
         // Ensure elements are serialisable to Data.
-        ensure_serialisable(false, tipo.clone(), location)?;
+        self.environment
+            .ensure_serialisable(tipo.clone(), location)?;
 
         // Type check the ..tail, if there is one
         let tipo = Type::list(tipo);
@@ -2460,10 +2461,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         location: Span,
     ) -> Result<TypedExpr, Error> {
         let typed_fst = self.infer(fst)?;
-        ensure_serialisable(false, typed_fst.tipo(), location)?;
+        self.environment
+            .ensure_serialisable(typed_fst.tipo(), location)?;
 
         let typed_snd = self.infer(snd)?;
-        ensure_serialisable(false, typed_snd.tipo(), location)?;
+        self.environment
+            .ensure_serialisable(typed_snd.tipo(), location)?;
 
         Ok(TypedExpr::Pair {
             location,
@@ -2481,7 +2484,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let typed_elem = self.infer(elem)?;
 
             // Ensure elements are serialisable to Data.
-            ensure_serialisable(false, typed_elem.tipo(), location)?;
+            self.environment
+                .ensure_serialisable(typed_elem.tipo(), location)?;
 
             typed_elems.push(typed_elem);
         }
@@ -2851,7 +2855,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         location: Span,
     ) -> Result<Rc<Type>, Error> {
         let result = self.environment.instantiate(t, ids, &self.hydrator);
-        ensure_serialisable(true, result.clone(), location)?;
+        self.environment
+            .ensure_serialisable_at_top_level(result.clone(), location)?;
         Ok(result)
     }
 
@@ -2979,75 +2984,6 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
     }
 
     Ok(expr)
-}
-
-#[allow(clippy::result_large_err)]
-pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> Result<(), Error> {
-    match t.deref() {
-        Type::App {
-            args,
-            name: _,
-            module: _,
-            public: _,
-            alias: _,
-        } => {
-            if !is_top_level && t.is_ml_result() {
-                return Err(Error::IllegalTypeInData {
-                    tipo: t.clone(),
-                    location,
-                });
-            }
-
-            args.iter()
-                .map(|e| ensure_serialisable(false, e.clone(), location))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(())
-        }
-
-        Type::Tuple { elems, alias: _ } => {
-            elems
-                .iter()
-                .map(|e| ensure_serialisable(false, e.clone(), location))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(())
-        }
-
-        Type::Fn {
-            args,
-            ret,
-            alias: _,
-        } => {
-            if !is_top_level {
-                return Err(Error::IllegalTypeInData {
-                    tipo: t.clone(),
-                    location,
-                });
-            }
-
-            args.iter()
-                .map(|e| ensure_serialisable(true, e.clone(), location))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            ensure_serialisable(true, ret.clone(), location)
-        }
-
-        Type::Var { tipo, alias } => match tipo.borrow().deref() {
-            TypeVar::Unbound { .. } => Ok(()),
-            TypeVar::Generic { .. } => Ok(()),
-            TypeVar::Link { tipo } => ensure_serialisable(
-                is_top_level,
-                Type::with_alias(tipo.clone(), alias.clone()),
-                location,
-            ),
-        },
-
-        Type::Pair { fst, snd, .. } => {
-            ensure_serialisable(false, fst.clone(), location)?;
-            ensure_serialisable(false, snd.clone(), location)
-        }
-    }
 }
 
 #[allow(clippy::result_large_err)]
