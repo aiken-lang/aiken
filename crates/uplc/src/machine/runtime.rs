@@ -980,7 +980,7 @@ impl DefaultFunction {
                     })
                     .collect();
 
-                let i: u64 = i.try_into().unwrap();
+                let i: u64 = i.try_into().map_err(|_| Error::OverflowError)?;
 
                 let constr_data = Data::constr(i, data_list);
 
