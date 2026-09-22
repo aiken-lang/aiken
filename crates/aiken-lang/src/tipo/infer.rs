@@ -30,6 +30,23 @@ impl UntypedModule {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::result_large_err)]
     pub fn infer(
+        self,
+        id_gen: &IdGenerator,
+        kind: ModuleKind,
+        package: &str,
+        modules: &HashMap<String, TypeInfo>,
+        tracing: Tracing,
+        warnings: &mut Vec<Warning>,
+        env: Option<&str>,
+    ) -> Result<TypedModule, Error> {
+        stacker::maybe_grow(256 * 1024, 2 * 1024 * 1024, || {
+            self.infer_inner(id_gen, kind, package, modules, tracing, warnings, env)
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
+    fn infer_inner(
         mut self,
         id_gen: &IdGenerator,
         kind: ModuleKind,

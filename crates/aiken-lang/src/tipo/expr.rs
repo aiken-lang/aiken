@@ -451,6 +451,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     /// returning an error.
     #[allow(clippy::result_large_err)]
     pub fn infer(&mut self, expr: UntypedExpr) -> Result<TypedExpr, Error> {
+        stacker::maybe_grow(256 * 1024, 2 * 1024 * 1024, || self.infer_inner(expr))
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn infer_inner(&mut self, expr: UntypedExpr) -> Result<TypedExpr, Error> {
         match expr {
             UntypedExpr::ErrorTerm { location } => Ok(self.infer_error_term(location)),
 

@@ -479,6 +479,17 @@ impl<'a> CodeGenerator<'a> {
         module_build_name: &str,
         context: &[TypedExpr],
     ) -> AirTree {
+        stacker::maybe_grow(256 * 1024, 2 * 1024 * 1024, || {
+            self.build_inner(body, module_build_name, context)
+        })
+    }
+
+    fn build_inner(
+        &mut self,
+        body: &TypedExpr,
+        module_build_name: &str,
+        context: &[TypedExpr],
+    ) -> AirTree {
         if !context.is_empty() {
             let TypedExpr::Assignment {
                 location,
