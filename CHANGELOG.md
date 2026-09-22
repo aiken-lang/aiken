@@ -17,6 +17,10 @@
   ```
   @KtorZ
 
+### Changed
+
+- **aiken-lang**: Add support for data-reification and constant-reification for values; and as a consequence, reify any value-like data into a value expression literal (i.e. anything isomorphic to `Dict<ByteArray, Dict<ByteArray, Int>>` now reifies to a value, with nice formatting. @KtorZ
+
 ### Fixed
 
 - **aiken-lang**: Report unexpected end-of-file errors at the source byte offset instead of the token count. @jtranq

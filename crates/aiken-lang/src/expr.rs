@@ -1,3 +1,4 @@
+use crate::ast::well_known;
 pub(crate) use crate::{
     ast::{
         self, Annotation, ArgBy, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
@@ -17,7 +18,7 @@ use indexmap::IndexMap;
 use pallas_primitives::alonzo::{Constr, PlutusData};
 use std::{fmt::Debug, ops::Deref, rc::Rc, sync::Arc};
 use uplc::{
-    KeyValuePairs,
+    BigInt, KeyValuePairs,
     ast::{Data, ValueEntries},
     machine::{runtime::convert_tag_to_constr, value::from_pallas_bigint},
 };
@@ -1238,7 +1239,7 @@ impl UntypedExpr {
                         name,
                         args: type_args,
                         ..
-                    } if module.is_empty() && name.as_str() == "List" => {
+                    } if module.is_empty() && name.as_str() == well_known::LIST => {
                         if let [inner] = &type_args[..] {
                             Ok(UntypedExpr::List {
                                 location: Span::empty(),
@@ -1257,6 +1258,31 @@ impl UntypedExpr {
                                     .to_string(),
                             )
                         }
+                    }
+                    Type::App {
+                        module,
+                        name,
+                        args: type_args,
+                        ..
+                    } if module.is_empty() && name.as_str() == well_known::VALUE => {
+                        Ok(UntypedExpr::List {
+                            location: Span::empty(),
+                            elements: args
+                                .to_vec()
+                                .into_iter()
+                                .map(|arg| {
+                                    UntypedExpr::do_reify_data(
+                                        data_types,
+                                        arg,
+                                        Type::pair(
+                                            Type::byte_array(),
+                                            Type::list(Type::pair(Type::byte_array(), Type::int())),
+                                        ),
+                                    )
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
+                            tail: None,
+                        })
                     }
                     Type::Tuple { elems, .. } => Ok(UntypedExpr::Tuple {
                         location: Span::empty(),
@@ -1374,16 +1400,16 @@ impl UntypedExpr {
                     ))
                 }
 
-                PlutusData::Map(indef_or_def) => {
-                    let kvs = match indef_or_def {
-                        KeyValuePairs::Def(kvs) => kvs,
-                        KeyValuePairs::Indef(kvs) => kvs,
-                    };
+                PlutusData::Map(kvs) => {
+                    if let Some(value_like) = Self::reify_value_like(kvs.iter(), tipo.deref()) {
+                        return Ok(value_like);
+                    }
 
                     UntypedExpr::do_reify_data(
                         data_types,
                         Data::list(
-                            kvs.into_iter()
+                            kvs.to_vec()
+                                .into_iter()
                                 .map(|(k, v)| Data::list(vec![k, v]))
                                 .collect(),
                         ),
@@ -1392,6 +1418,51 @@ impl UntypedExpr {
                 }
             },
         )
+    }
+
+    fn reify_value_like<'iter>(
+        mut kvs: impl Iterator<Item = &'iter (PlutusData, PlutusData)>,
+        tipo: &Type,
+    ) -> Option<Self> {
+        if let Type::App { .. } = tipo {
+            let value_entries: ValueEntries =
+                kvs.try_fold(vec![], |mut outer_entries, (k, v)| {
+                    if let PlutusData::BoundedBytes(bytes) = k
+                        && let PlutusData::Map(assets) = v
+                    {
+                        outer_entries.push((
+                            bytes.to_vec(),
+                            assets
+                                .iter()
+                                .try_fold(vec![], |mut inner_entries, (k, v)| {
+                                    if let PlutusData::BoundedBytes(bytes) = k
+                                        && let PlutusData::BigInt(BigInt::Int(i)) = v
+                                    {
+                                        inner_entries.push((bytes.to_vec(), i128::from(*i)))
+                                    } else {
+                                        return None;
+                                    }
+
+                                    Some(inner_entries)
+                                })?,
+                        ))
+                    } else {
+                        return None;
+                    }
+
+                    Some(outer_entries)
+                })?;
+
+            let spans = ValueLiteralSpans::empty(&value_entries);
+
+            return Some(UntypedExpr::Value {
+                location: Span::empty(),
+                value: Arc::new(value_entries),
+                spans,
+            });
+        }
+
+        None
     }
 
     pub fn todo(reason: Option<Self>, location: Span) -> Self {
