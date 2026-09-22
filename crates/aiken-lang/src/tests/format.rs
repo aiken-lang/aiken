@@ -128,6 +128,66 @@ fn format_value_literal_to_canonical_nested_syntax() {
 }
 
 #[test]
+fn format_value_literal_puts_lovelace_first() {
+    let expected = r#"const value = {
+  lovelace: 42,
+  #"00000000000000000000000000000000000000000000000000000000": {
+    "foo": 1,
+  },
+}
+"#;
+
+    for source in [
+        r#"const value = {
+  lovelace: 42,
+  #"00000000000000000000000000000000000000000000000000000000": { "foo": 1 },
+}
+"#,
+        r#"const value = {
+  #"00000000000000000000000000000000000000000000000000000000": { "foo": 1 },
+  lovelace: 42,
+}
+"#,
+    ] {
+        pretty_assertions::assert_eq!(format_source(source), expected);
+    }
+
+    pretty_assertions::assert_eq!(format_source(expected), expected);
+}
+
+#[test]
+fn format_value_literal_keeps_comments_with_lovelace() {
+    let source = r#"const value = {
+      // custom policy
+      #"00000000000000000000000000000000000000000000000000000000": {
+        "foo": 1,
+      },
+      // ada
+      lovelace:
+        // quantity
+        42,
+    }
+"#;
+    let formatted = format_source(source);
+
+    pretty_assertions::assert_eq!(
+        formatted,
+        r#"const value = {
+  // ada
+  lovelace:
+    // quantity
+    42,
+  // custom policy
+  #"00000000000000000000000000000000000000000000000000000000": {
+    "foo": 1,
+  },
+}
+"#,
+    );
+    pretty_assertions::assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
 fn format_value_literal_preserves_asset_name_encoding() {
     let source = r#"const value = {
       #"00000000000000000000000000000000000000000000000000000000": {

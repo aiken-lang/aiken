@@ -11,6 +11,7 @@ use crate::{
 };
 
 const POLICY_ID_LENGTH: usize = 28;
+const LOVELACE: &str = "lovelace";
 
 struct ParsedAsset {
     name: Vec<u8>,
@@ -89,16 +90,18 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
         (bytes, location, preferred_format)
     });
 
-    let quantity = int()
-        .map(|(value, _)| {
-            BigInt::parse_bytes(value.as_bytes(), 10)
-                .expect("the lexer must produce valid integer strings")
-        })
-        .map_with_span(|quantity, location| (quantity, location));
+    let quantity = || {
+        int()
+            .map(|(value, _)| {
+                BigInt::parse_bytes(value.as_bytes(), 10)
+                    .expect("the lexer must produce valid integer strings")
+            })
+            .map_with_span(|quantity, location| (quantity, location))
+    };
 
     let asset = asset_name
         .then_ignore(just(Token::Colon))
-        .then(quantity)
+        .then(quantity())
         .map_with_span(
             |((name, name_location, preferred_format), (quantity, quantity_location)), location| {
                 ParsedAsset {
@@ -137,7 +140,28 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
         },
     );
 
-    policy
+    let lovelace = select! { Token::Name { name } if name == LOVELACE => () }
+        .map_with_span(|(), location| location)
+        .then_ignore(just(Token::Colon))
+        .then(quantity())
+        .map_with_span(
+            |(name_location, (quantity, quantity_location)), location| ParsedPolicy {
+                id: vec![],
+                assets: vec![ParsedAsset {
+                    name: vec![],
+                    preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                    quantity,
+                    location,
+                    name_location,
+                    quantity_location,
+                }],
+                location,
+                id_location: name_location,
+                assets_location: quantity_location,
+            },
+        );
+
+    choice((lovelace, policy))
         .separated_by(just(Token::Comma))
         .allow_trailing()
         .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
@@ -253,6 +277,50 @@ mod tests {
     #[test]
     fn parses_empty_value_literal() {
         assert!(entries("{}").is_empty());
+    }
+
+    #[test]
+    fn parses_lovelace_entry() {
+        assert_eq!(
+            entries("{ lovelace: 42 }").as_ref(),
+            &vec![(vec![], vec![(vec![], 42)])],
+        );
+    }
+
+    #[test]
+    fn parses_lovelace_mixed_with_custom_policies_in_any_order() {
+        let custom_policy = policy("11");
+
+        for source in [
+            format!(
+                r#"{{
+                  lovelace: 42,
+                  #"{custom_policy}": {{ "foo": 1 }},
+                }}"#,
+            ),
+            format!(
+                r#"{{
+                  #"{custom_policy}": {{ "foo": 1 }},
+                  lovelace: 42,
+                }}"#,
+            ),
+        ] {
+            assert_eq!(
+                entries(&source).as_ref(),
+                &vec![
+                    (vec![], vec![(vec![], 42)]),
+                    (vec![0x11; POLICY_ID_LENGTH], vec![(b"foo".to_vec(), 1)],),
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_duplicate_lovelace_entries() {
+        assert_eq!(
+            invalid_value_reason("{ lovelace: 1, lovelace: 2 }"),
+            ValueError::CurrencySymbolsNotStrictlyAscending.to_string(),
+        );
     }
 
     #[test]

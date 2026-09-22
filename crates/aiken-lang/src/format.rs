@@ -970,11 +970,74 @@ impl<'comments> Formatter<'comments> {
                 .as_mut()
                 .and_then(|comments| comments.entries.get_mut(entry_index))
                 .and_then(|comments| comments.policy_id.take());
-            let policy_id_doc = prepend_comments(value_key(policy_id), policy_id_comments);
             let assets_comments = comments
                 .as_mut()
                 .and_then(|comments| comments.entries.get_mut(entry_index))
                 .and_then(|comments| comments.assets.take());
+
+            if policy_id.is_empty()
+                && let [(asset_name, quantity)] = assets.as_slice()
+                && asset_name.is_empty()
+            {
+                let asset_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.first_mut())
+                    .and_then(|comments| comments.entry.take());
+                let asset_name_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.first_mut())
+                    .and_then(|comments| comments.name.take());
+                let quantity_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.first_mut())
+                    .and_then(|comments| comments.quantity.take());
+                let quantity_comments = [assets_comments, quantity_comments]
+                    .into_iter()
+                    .flatten()
+                    .reduce(Document::append);
+                let quantity_doc = Document::String(quantity.to_string());
+                let quantity_doc = match quantity_comments {
+                    Some(comments) => line().append(comments).append(quantity_doc).nest(INDENT),
+                    None => " ".to_doc().append(quantity_doc),
+                };
+                let lovelace_comments = [policy_id_comments, asset_comments, asset_name_comments]
+                    .into_iter()
+                    .flatten()
+                    .reduce(Document::append);
+                let lovelace_doc =
+                    prepend_comments("lovelace".to_doc(), lovelace_comments).append(":");
+                let asset_trailing_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.asset_entries.first_mut())
+                    .and_then(|comments| comments.trailing.take());
+                let assets_trailing_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.assets_trailing.take());
+                let entry_trailing_comments = comments
+                    .as_mut()
+                    .and_then(|comments| comments.entries.get_mut(entry_index))
+                    .and_then(|comments| comments.trailing.take());
+                let trailing_comments = [
+                    asset_trailing_comments,
+                    assets_trailing_comments,
+                    entry_trailing_comments,
+                ]
+                .into_iter()
+                .flatten()
+                .reduce(|left, right| left.append(line()).append(right));
+                let entry_doc =
+                    value_map_entry(lovelace_doc.append(quantity_doc), trailing_comments);
+
+                entries_docs.push(prepend_comments(entry_doc, entry_comments));
+                continue;
+            }
+
+            let policy_id_doc = prepend_comments(value_key(policy_id), policy_id_comments);
 
             debug_assert!(
                 entry_spans.is_none_or(|spans| assets.len() == spans.asset_entries.len()),
