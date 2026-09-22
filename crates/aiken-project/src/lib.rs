@@ -1082,7 +1082,7 @@ where
                 module_name,
                 input_path,
                 kind,
-            ));
+            )?);
         }
 
         // NOTE: The filtering syntax for tests isn't quite obvious. A common pitfall when willing

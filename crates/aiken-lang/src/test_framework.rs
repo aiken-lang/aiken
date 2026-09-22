@@ -5,7 +5,7 @@ use crate::{
     },
     expr::{CallArg, TypedExpr, UntypedExpr},
     format::Formatter,
-    gen_uplc::CodeGenerator,
+    gen_uplc::{CodeGenerator, Error as CodeGenError},
     plutus_version::PlutusVersion,
     tipo::{Type, convert_opaque_type},
 };
@@ -71,11 +71,11 @@ impl Test {
         test: TypedTest,
         module_name: String,
         input_path: PathBuf,
-    ) -> Test {
+    ) -> Result<Test, CodeGenError> {
         // The UPLC shrinker dominates test collection time, so it is deferred
         // to the (parallel) run phase; `run` optimizes this program before
         // evaluating it.
-        let program = generator.generate_raw_unoptimized(&test.body, &[], &module_name);
+        let program = generator.generate_raw_unoptimized(&test.body, &[], &module_name)?;
 
         // Only the structural breakdown of the assertion is kept here; its
         // operands are only ever shown for failed tests, so generating and
@@ -83,14 +83,14 @@ impl Test {
         // (see Assertion::<TypedExpr>::evaluate).
         let assertion: Option<Box<Assertion<TypedExpr>>> = test.body.try_into().ok().map(Box::new);
 
-        Test::UnitTest(UnitTest {
+        Ok(Test::UnitTest(UnitTest {
             input_path,
             module: module_name,
             name: test.name,
             program,
             assertion,
             on_test_failure: test.on_test_failure,
-        })
+        }))
     }
 
     pub fn property_test(
@@ -117,7 +117,7 @@ impl Test {
         module_name: String,
         input_path: PathBuf,
         kind: RunnableKind,
-    ) -> Test {
+    ) -> Result<Test, CodeGenError> {
         if test.arguments.is_empty() {
             if matches!(kind, RunnableKind::Bench) {
                 unreachable!("benchmark must have at least one argument");
@@ -142,7 +142,7 @@ impl Test {
                     ..parameter.clone().into()
                 }],
                 &module_name,
-            );
+            )?;
 
             // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
             // argument is a Data constructor which needs not any conversion. So we can just safely
@@ -150,9 +150,9 @@ impl Test {
             let generator_program =
                 generator
                     .clone()
-                    .generate_raw_unoptimized(&via, &[], &module_name);
+                    .generate_raw_unoptimized(&via, &[], &module_name)?;
 
-            match kind {
+            Ok(match kind {
                 RunnableKind::Bench => Test::Benchmark(Benchmark {
                     input_path,
                     module: module_name,
@@ -177,7 +177,7 @@ impl Test {
                         type_info,
                     },
                 ),
-            }
+            })
         }
     }
 
@@ -1300,11 +1300,15 @@ impl Assertion<TypedExpr> {
         module_name: &str,
     ) -> Assertion<(Constant, Rc<Type>)> {
         let as_constant = |generator: &mut CodeGenerator<'_>, side: &TypedExpr| {
-            Program::<NamedDeBruijn>::try_from(generator.generate_raw(side, &[], module_name))
-                .expect("failed to convert assertion operand to NamedDeBruijn")
-                .eval(ExBudget::max())
-                .unwrap_constant()
-                .map(|cst| (cst, side.tipo()))
+            Program::<NamedDeBruijn>::try_from(
+                generator
+                    .generate_raw(side, &[], module_name)
+                    .expect("assertion operand already compiled as part of the test"),
+            )
+            .expect("failed to convert assertion operand to NamedDeBruijn")
+            .eval(ExBudget::max())
+            .unwrap_constant()
+            .map(|cst| (cst, side.tipo()))
         };
 
         // Assertion at this point is evaluated so it's not just a normal assertion

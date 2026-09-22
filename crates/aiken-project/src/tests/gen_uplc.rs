@@ -1,6 +1,9 @@
 use super::TestProject;
 use crate::module::CheckedModules;
-use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
+use aiken_lang::{
+    ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator},
+    gen_uplc::Error as CodeGenError,
+};
 use pallas_primitives::conway::Language;
 use pretty_assertions::assert_eq;
 use std::rc::Rc;
@@ -56,7 +59,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
 
     match &script.2 {
         TestType::Func(Function { body: func, .. }) => {
-            let program = generator.generate_raw(func, &[], &script.1);
+            let program = generator.generate_raw(func, &[], &script.1).unwrap();
 
             let pretty_program = program.to_pretty();
 
@@ -94,7 +97,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
             });
         }
         TestType::Validator(func) => {
-            let program = generator.generate(func, &script.1);
+            let program = generator.generate(func, &script.1).unwrap();
 
             let pretty_program = program.to_pretty();
 
@@ -133,7 +136,9 @@ fn assert_uplc_evaluates_successfully(source_code: &str) {
         .expect("expected one test definition");
 
     let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
-    let program = generator.generate_raw(&test.body, &[], &checked_module.name);
+    let program = generator
+        .generate_raw(&test.body, &[], &checked_module.name)
+        .unwrap();
     let program: Program<DeBruijn> = program.try_into().unwrap();
     let eval = program.eval(ExBudget::default());
 
@@ -6644,4 +6649,36 @@ fn module_constant_evaluation_preserves_outer_cyclic_functions() {
     "#;
 
     assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn invalid_module_constant_returns_codegen_error() {
+    let src = r#"
+        const x = 1 / 0
+
+        test foo() {
+          x == 0
+        }
+    "#;
+
+    let mut project = TestProject::new();
+    let checked_module = project.check(project.parse(src));
+    let test = checked_module
+        .ast
+        .definitions()
+        .find_map(|definition| match definition {
+            Definition::Test(test) => Some(test),
+            _ => None,
+        })
+        .expect("expected one test definition");
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+    let error = generator
+        .generate_raw(&test.body, &[], &checked_module.name)
+        .unwrap_err();
+
+    let CodeGenError::CouldNotEvaluateConstant { name, error, .. } = error;
+
+    assert_eq!(name, "test_module.x");
+    assert!(matches!(*error, uplc::machine::Error::DivideByZero(..)));
 }

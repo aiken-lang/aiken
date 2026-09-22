@@ -106,7 +106,8 @@ mod test {
             module_name.to_string(),
             PathBuf::new(),
             RunnableKind::Test,
-        );
+        )
+        .expect("failed to generate test program");
 
         and_then(test, &mut generator, &data_types)
     }

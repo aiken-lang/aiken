@@ -2,6 +2,7 @@ use crate::{blueprint, deps::manifest::Package, package_name::PackageName};
 use aiken_lang::{
     ast::{self, Span},
     error::ExtraData,
+    gen_uplc,
     parser::error::ParseError,
     test_framework::{BenchmarkResult, PropertyTestResult, TestResult, UnitTestResult},
     tipo,
@@ -65,6 +66,9 @@ pub enum Error {
 
     #[error(transparent)]
     Blueprint(#[from] Box<blueprint::Error>),
+
+    #[error(transparent)]
+    CodeGen(Box<gen_uplc::Error>),
 
     #[error(transparent)]
     StandardIo(#[from] io::Error),
@@ -339,6 +343,12 @@ impl From<Error> for Vec<Error> {
     }
 }
 
+impl From<gen_uplc::Error> for Error {
+    fn from(error: gen_uplc::Error) -> Self {
+        Self::CodeGen(Box::new(error))
+    }
+}
+
 impl ExtraData for Error {
     fn extra_data(&self) -> Option<String> {
         match self {
@@ -347,6 +357,7 @@ impl ExtraData for Error {
             | Error::Format { .. }
             | Error::StandardIo { .. }
             | Error::Blueprint { .. }
+            | Error::CodeGen { .. }
             | Error::MissingManifest { .. }
             | Error::TomlLoading { .. }
             | Error::ImportCycle { .. }
@@ -382,6 +393,7 @@ impl GetSource for Error {
             | Error::Format { .. }
             | Error::StandardIo(_)
             | Error::Blueprint(_)
+            | Error::CodeGen(_)
             | Error::ImportCycle { .. }
             | Error::Http(_)
             | Error::ZipExtract(_)
@@ -412,6 +424,7 @@ impl GetSource for Error {
             | Error::Format { .. }
             | Error::StandardIo(_)
             | Error::Blueprint(_)
+            | Error::CodeGen(_)
             | Error::MissingManifest { .. }
             | Error::ImportCycle { .. }
             | Error::TestFailure { .. }
@@ -454,6 +467,7 @@ impl Diagnostic for Error {
         match self {
             Error::DuplicateModule { .. } => Some(boxed(Box::new("aiken::module::duplicate"))),
             Error::Blueprint(e) => e.code().map(boxed),
+            Error::CodeGen(e) => e.code().map(boxed),
             Error::ImportCycle { .. } => Some(boxed(Box::new("aiken::module::cyclical"))),
             Error::Parse { .. } => Some(boxed(Box::new("aiken::parser"))),
             Error::Type { error, .. } => Some(boxed(Box::new(format!(
@@ -495,6 +509,7 @@ impl Diagnostic for Error {
             ))),
             Error::FileIo { error, .. } => Some(Box::new(format!("{error}"))),
             Error::Blueprint(e) => e.help(),
+            Error::CodeGen(e) => e.help(),
             Error::ImportCycle { modules } => Some(Box::new(format!(
                 "Try moving the shared code to a separate module that the others can depend on\n- {}",
                 modules.join("\n- ")
@@ -554,6 +569,7 @@ impl Diagnostic for Error {
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         match self {
             Error::Blueprint(e) => e.labels(),
+            Error::CodeGen(e) => e.labels(),
             Error::Parse { error, .. } => error.labels(),
             Error::Type { error, .. } => error.labels(),
             Error::TomlLoading { location, .. } => {
@@ -592,6 +608,7 @@ impl Diagnostic for Error {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
             Error::Blueprint(e) => e.source_code(),
+            Error::CodeGen(e) => e.source_code(),
             Error::Parse { named, .. } => Some(named.as_ref()),
             Error::Type { named, .. } => Some(named.as_ref()),
             Error::TomlLoading { named, .. } => Some(named.as_ref()),
@@ -621,6 +638,7 @@ impl Diagnostic for Error {
     fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
             Error::Blueprint(e) => e.url(),
+            Error::CodeGen(e) => e.url(),
             Error::Type { error, .. } => error.url(),
             Error::DuplicateModule { .. }
             | Error::FileIo { .. }
@@ -651,6 +669,7 @@ impl Diagnostic for Error {
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
         match self {
             Error::Blueprint(e) => e.related(),
+            Error::CodeGen(e) => e.related(),
             Error::Type { error, .. } => error.related(),
             Error::DuplicateModule { .. }
             | Error::FileIo { .. }

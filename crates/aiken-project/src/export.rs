@@ -152,7 +152,7 @@ impl Export {
         })?;
 
         let program = generator
-            .generate_raw(&func.body, &func.arguments, &module.name)
+            .generate_raw(&func.body, &func.arguments, &module.name)?
             .to_debruijn()
             .unwrap();
 

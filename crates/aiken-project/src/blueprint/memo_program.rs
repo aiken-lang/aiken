@@ -1,4 +1,7 @@
-use aiken_lang::{ast::TypedValidator, gen_uplc::CodeGenerator};
+use aiken_lang::{
+    ast::TypedValidator,
+    gen_uplc::{CodeGenerator, Error},
+};
 use uplc::ast::{DeBruijn, Program};
 
 #[derive(Default)]
@@ -12,16 +15,16 @@ impl MemoProgram {
         generator: &mut CodeGenerator,
         def: &TypedValidator,
         module_name: &str,
-    ) -> Program<DeBruijn> {
+    ) -> Result<Program<DeBruijn>, Error> {
         match self.program.take() {
             None => {
-                let new_program = generator.generate(def, module_name).to_debruijn().unwrap();
+                let new_program = generator.generate(def, module_name)?.to_debruijn().unwrap();
 
                 self.program.replace(new_program.clone());
 
-                new_program
+                Ok(new_program)
             }
-            Some(program) => program,
+            Some(program) => Ok(program),
         }
     }
 }

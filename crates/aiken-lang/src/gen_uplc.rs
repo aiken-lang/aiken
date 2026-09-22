@@ -1,9 +1,11 @@
+use owo_colors::OwoColorize;
 pub mod air;
 pub mod builder;
 pub mod decision_tree;
 pub mod interner;
 pub mod stick_break_set;
 pub mod tree;
+use owo_colors::Stream::Stderr;
 
 use self::{
     air::Air,
@@ -46,6 +48,7 @@ use decision_tree::{Assigned, CaseTest, DecisionTree, TreeGen, get_tipo_by_path}
 use indexmap::IndexMap;
 use interner::AirInterner;
 use itertools::Itertools;
+use miette::{Diagnostic, NamedSource};
 use petgraph::{Graph, algo};
 use std::{
     collections::{HashMap, VecDeque},
@@ -62,6 +65,25 @@ use uplc::{
 };
 
 type Otherwise = Option<AirTree>;
+
+#[derive(Debug, thiserror::Error, Diagnostic)]
+pub enum Error {
+    #[error("I almost died evaluating the following constant: {}", name.if_supports_color(Stderr, |s| s.purple()))]
+    #[diagnostic(
+        code("aiken::codegen::constant_evaluation"),
+        help(
+            "module constants are evaluated at compile-time and must evaluate to non-error terms. This one fails with:\n{error}"
+        )
+    )]
+    CouldNotEvaluateConstant {
+        name: String,
+        #[label("does not evaluate successfully")]
+        location: Span,
+        error: Box<uplc::machine::Error>,
+        #[source_code]
+        source_code: NamedSource<String>,
+    },
+}
 
 const DELAY_ERROR: fn() -> AirTree =
     || AirTree::anon_func(vec![], AirTree::error(Type::void(), false), true);
@@ -283,7 +305,11 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn generate(&mut self, validator: &TypedValidator, module_name: &str) -> Program<Name> {
+    pub fn generate(
+        &mut self,
+        validator: &TypedValidator,
+        module_name: &str,
+    ) -> Result<Program<Name>, Error> {
         let context_name = "__context__".to_string();
         let context_name_interned = introduce_name(&mut self.interner, &context_name);
         validator.params.iter().for_each(|arg| {
@@ -307,7 +333,13 @@ impl<'a> CodeGenerator<'a> {
 
         let full_vec = full_tree.to_vec();
 
-        let term = self.uplc_code_gen(full_vec);
+        let term = match self.uplc_code_gen(full_vec) {
+            Ok(term) => term,
+            Err(error) => {
+                self.reset(true);
+                return Err(error);
+            }
+        };
 
         let term = cast_validator_args(term, &validator.params, &self.interner, &self.data_types);
 
@@ -318,7 +350,7 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
-        self.finalize(term)
+        Ok(self.finalize(term))
     }
 
     pub fn generate_raw(
@@ -326,7 +358,7 @@ impl<'a> CodeGenerator<'a> {
         body: &TypedExpr,
         args: &[TypedArg],
         module_name: &str,
-    ) -> Program<Name> {
+    ) -> Result<Program<Name>, Error> {
         self.generate_raw_inner(body, args, module_name, true)
     }
 
@@ -338,7 +370,7 @@ impl<'a> CodeGenerator<'a> {
         body: &TypedExpr,
         args: &[TypedArg],
         module_name: &str,
-    ) -> Program<Name> {
+    ) -> Result<Program<Name>, Error> {
         self.generate_raw_inner(body, args, module_name, false)
     }
 
@@ -348,7 +380,7 @@ impl<'a> CodeGenerator<'a> {
         args: &[TypedArg],
         module_name: &str,
         optimize: bool,
-    ) -> Program<Name> {
+    ) -> Result<Program<Name>, Error> {
         args.iter().for_each(|arg| {
             arg.get_variable_name()
                 .iter()
@@ -364,7 +396,13 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
 
-        let mut term = self.uplc_code_gen(full_vec);
+        let mut term = match self.uplc_code_gen(full_vec) {
+            Ok(term) => term,
+            Err(error) => {
+                self.reset(true);
+                return Err(error);
+            }
+        };
 
         term = if args.is_empty() {
             term
@@ -378,7 +416,7 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
-        self.finalize_with(term, optimize)
+        Ok(self.finalize_with(term, optimize))
     }
 
     fn new_program<T>(&self, term: Term<T>) -> Program<T> {
@@ -3929,21 +3967,25 @@ impl<'a> CodeGenerator<'a> {
         );
     }
 
-    fn uplc_code_gen(&mut self, mut ir_stack: Vec<Air>) -> Term<Name> {
+    fn uplc_code_gen(&mut self, mut ir_stack: Vec<Air>) -> Result<Term<Name>, Error> {
         let mut arg_stack: Vec<Term<Name>> = vec![];
 
         while let Some(air_element) = ir_stack.pop() {
-            let arg = self.gen_uplc(air_element, &mut arg_stack);
+            let arg = self.gen_uplc(air_element, &mut arg_stack)?;
             if let Some(arg) = arg {
                 arg_stack.push(arg);
             }
         }
         assert!(arg_stack.len() == 1, "Expected one term on the stack");
-        arg_stack.pop().unwrap()
+        Ok(arg_stack.pop().unwrap())
     }
 
-    fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) -> Option<Term<Name>> {
-        match ir {
+    fn gen_uplc(
+        &mut self,
+        ir: Air,
+        arg_stack: &mut Vec<Term<Name>>,
+    ) -> Result<Option<Term<Name>>, Error> {
+        Ok(match ir {
             Air::Int { value } => Some(Term::integer(value.parse().unwrap())),
             Air::String { value } => Some(Term::string(value)),
             Air::ByteArray { bytes } => Some(Term::byte_string(bytes)),
@@ -3974,7 +4016,11 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .into(),
                 )),
-                ValueConstructorVariant::ModuleConstant { module, name, .. } => {
+                ValueConstructorVariant::ModuleConstant {
+                    module,
+                    name,
+                    location,
+                } => {
                     let access_key = FunctionAccessKey {
                         module_name: module.clone(),
                         function_name: name.clone(),
@@ -3988,7 +4034,7 @@ impl<'a> CodeGenerator<'a> {
                         self.interner.advance(cached.interner_delta);
                         self.id_gen.advance(cached.id_gen_delta);
 
-                        return Some(cached.fresh_term());
+                        return Ok(Some(cached.fresh_term()));
                     }
 
                     let interner_before = self.interner.counter();
@@ -4017,6 +4063,8 @@ impl<'a> CodeGenerator<'a> {
 
                     self.cyclic_functions = outer_cyclic_functions;
 
+                    let term = term?;
+
                     let mut program =
                         self.new_program(self.special_functions.apply_used_functions(term));
 
@@ -4030,7 +4078,23 @@ impl<'a> CodeGenerator<'a> {
                     let term: Term<Name> = eval_program
                         .eval(ExBudget::max())
                         .result()
-                        .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                        .map_err(|error| {
+                            let (source_code, _) = self
+                                .module_src
+                                .get(module.as_str())
+                                .unwrap_or_else(|| panic!("Missing module {module}"));
+
+                            Error::CouldNotEvaluateConstant {
+                                name: if module.is_empty() {
+                                    name.clone()
+                                } else {
+                                    format!("{module}.{name}")
+                                },
+                                location: *location,
+                                error: Box::new(error),
+                                source_code: NamedSource::new(module.clone(), source_code.clone()),
+                            }
+                        })?
                         .try_into()
                         .unwrap();
 
@@ -4050,7 +4114,7 @@ impl<'a> CodeGenerator<'a> {
 
                         self.cached_constants.insert(access_key, cached);
 
-                        return Some(term);
+                        return Ok(Some(term));
                     }
 
                     Some(term)
@@ -5444,7 +5508,7 @@ impl<'a> CodeGenerator<'a> {
                     &self.data_types,
                 ))
             }
-        }
+        })
     }
 }
 
@@ -5520,7 +5584,7 @@ mod tests {
             Tracing::silent(),
         );
 
-        let program = generator.generate_raw(&expression, &[], "");
+        let program = generator.generate_raw(&expression, &[], "").unwrap();
 
         let Term::Constant(constant) = program.term else {
             panic!("Value literal did not lower to a direct UPLC constant")
@@ -5561,6 +5625,7 @@ mod tests {
                 },
                 &mut vec![],
             )
+            .expect("Value AIR should lower successfully")
             .expect("Value AIR should produce a term")
     }
 
@@ -5574,6 +5639,7 @@ mod tests {
                 },
                 &mut vec![value],
             )
+            .expect("CastToData AIR should lower successfully")
             .expect("CastToData AIR should produce a term")
     }
 
@@ -5589,6 +5655,7 @@ mod tests {
                 },
                 &mut vec![value],
             )
+            .expect("List AIR should lower successfully")
             .expect("List AIR should produce a term")
     }
 
@@ -5603,6 +5670,7 @@ mod tests {
                 },
                 &mut vec![value.clone(), value],
             )
+            .expect("Tuple AIR should lower successfully")
             .expect("Tuple AIR should produce a term")
     }
 
@@ -5616,6 +5684,7 @@ mod tests {
                 },
                 &mut vec![value.clone(), value],
             )
+            .expect("Pair AIR should lower successfully")
             .expect("Pair AIR should produce a term")
     }
 
@@ -5631,6 +5700,7 @@ mod tests {
                 },
                 &mut vec![value],
             )
+            .expect("Constr AIR should lower successfully")
             .expect("Constr AIR should produce a term")
     }
 

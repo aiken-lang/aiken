@@ -224,8 +224,8 @@ impl Validator<()> {
         generator: &mut CodeGenerator,
         def: &TypedValidator,
         module_name: &str,
-    ) -> Validator<SerializableProgram> {
-        Validator {
+    ) -> Result<Validator<SerializableProgram>, Error> {
+        Ok(Validator {
             title: self.title,
             description: self.description,
             parameters: self.parameters,
@@ -235,9 +235,9 @@ impl Validator<()> {
                 PlutusVersion::V1 => SerializableProgram::PlutusV1Program,
                 PlutusVersion::V2 => SerializableProgram::PlutusV2Program,
                 PlutusVersion::V3 => SerializableProgram::PlutusV3Program,
-            }(program.get(generator, def, module_name)),
+            }(program.get(generator, def, module_name)?),
             definitions: self.definitions,
-        }
+        })
     }
 }
 
@@ -277,12 +277,12 @@ impl Validator<SerializableProgram> {
         // And, having generics in the handler signature is not possible/supported by the UPLC
         // generation so we shouldn't attempt to generate any of the handler programs until we have
         // fully check their signature.
-        Ok(validators
+        validators
             .into_iter()
             .map(|validator| {
                 validator.attach_program(&mut program, plutus_version, generator, def, &module.name)
             })
-            .collect())
+            .collect()
     }
 
     pub fn apply(

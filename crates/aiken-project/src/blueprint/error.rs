@@ -6,7 +6,7 @@ use super::{
     definitions::Reference,
     schema::{self, Schema},
 };
-use aiken_lang::ast::Span;
+use aiken_lang::{ast::Span, gen_uplc};
 use miette::{Diagnostic, NamedSource};
 use owo_colors::{
     OwoColorize,
@@ -18,6 +18,10 @@ use uplc::ast::Constant;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    CodeGen(#[from] gen_uplc::Error),
+
     #[error("{}", error)]
     #[diagnostic(help("{}", error.help()))]
     #[diagnostic(code("aiken::blueprint::interface"))]
