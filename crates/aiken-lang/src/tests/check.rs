@@ -284,6 +284,48 @@ fn implicit_right_upcasting_to_value_is_not_allowed() {
 }
 
 #[test]
+fn value_literal_accepts_named_policies_assets_and_quantities() {
+    let source_code = r#"
+        fn make_value(
+          policy: ByteArray,
+          asset: ByteArray,
+          quantity: Int,
+        ) -> Value {
+          {
+            lovelace: quantity,
+            policy: {
+              asset: quantity,
+              "static": 1,
+            },
+            #"11111111111111111111111111111111111111111111111111111111": {
+              asset: 2,
+              "static": quantity,
+            },
+          }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn named_value_field_errors_use_the_identifier_span() {
+    let source_code = r#"fn make_value(asset: ByteArray) -> Value {
+  { missing_policy: { asset: 1 } }
+}
+    "#;
+    let expected_start = source_code.find("missing_policy").unwrap();
+    let result = check(parse(source_code));
+
+    assert!(matches!(
+        result,
+        Err((_, Error::UnknownVariable { name, location, .. }))
+            if name == "missing_policy"
+                && location == Span::create(expected_start, "missing_policy".len())
+    ));
+}
+
+#[test]
 fn implicit_left_upcasting_to_value_is_not_allowed_symmetric() {
     let source_code = r#"
         fn compare(left: Value, right: Data) -> Bool {

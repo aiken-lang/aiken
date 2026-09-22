@@ -8,9 +8,11 @@ use crate::{
         UntypedAssignmentKind, UntypedClause, UntypedDefinition, UntypedFunction, UntypedIfBranch,
         UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
     },
+    builtins::INSERT_VALUE,
     docvec,
     expr::{
-        DEFAULT_ERROR_STR, DEFAULT_TODO_STR, FnStyle, TypedExpr, UntypedExpr, ValueLiteralSpans,
+        DEFAULT_ERROR_STR, DEFAULT_TODO_STR, FnStyle, TypedExpr, UntypedExpr, ValueEntrySpans,
+        ValueLiteralSpans, ValueTokenSpans,
     },
     parser::{
         extra::{Comment, ModuleExtra},
@@ -92,6 +94,80 @@ struct ValueAssetComments<'a> {
     name: Option<Document<'a>>,
     quantity: Option<Document<'a>>,
     trailing: Option<Document<'a>>,
+}
+
+struct ValueInsertion<'a> {
+    policy: &'a CallArg<UntypedExpr>,
+    asset: &'a CallArg<UntypedExpr>,
+    quantity: &'a CallArg<UntypedExpr>,
+    tail: &'a CallArg<UntypedExpr>,
+    synthetic: bool,
+}
+
+enum ValueLiteralKey<'a> {
+    Bytes {
+        bytes: &'a [u8],
+        preferred_format: ByteArrayFormatPreference,
+    },
+    Expression(&'a UntypedExpr),
+}
+
+impl ValueLiteralKey<'_> {
+    fn is_empty(&self) -> bool {
+        match self {
+            Self::Bytes { bytes, .. } => bytes.is_empty(),
+            Self::Expression(UntypedExpr::ByteArray { bytes, .. }) => bytes.is_empty(),
+            Self::Expression(_) => false,
+        }
+    }
+
+    fn same_as(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Bytes { bytes: left, .. }, Self::Bytes { bytes: right, .. }) => left == right,
+            (
+                Self::Bytes { bytes: left, .. },
+                Self::Expression(UntypedExpr::ByteArray { bytes: right, .. }),
+            )
+            | (
+                Self::Expression(UntypedExpr::ByteArray { bytes: right, .. }),
+                Self::Bytes { bytes: left, .. },
+            ) => left.iter().copied().eq(right.iter().map(|(byte, _)| *byte)),
+            (
+                Self::Expression(UntypedExpr::ByteArray { bytes: left, .. }),
+                Self::Expression(UntypedExpr::ByteArray { bytes: right, .. }),
+            ) => left
+                .iter()
+                .map(|(byte, _)| *byte)
+                .eq(right.iter().map(|(byte, _)| *byte)),
+            (
+                Self::Expression(UntypedExpr::Var { name: left, .. }),
+                Self::Expression(UntypedExpr::Var { name: right, .. }),
+            ) => left == right,
+            _ => false,
+        }
+    }
+}
+
+enum ValueLiteralQuantity<'a> {
+    Integer(&'a i128),
+    Expression(&'a UntypedExpr),
+}
+
+struct ValueLiteralAsset<'a> {
+    name: ValueLiteralKey<'a>,
+    quantity: ValueLiteralQuantity<'a>,
+}
+
+struct ValueLiteralPolicy<'a> {
+    policy: ValueLiteralKey<'a>,
+    assets: Vec<ValueLiteralAsset<'a>>,
+    spans: Option<ValueEntrySpans>,
+}
+
+impl ValueLiteralPolicy<'_> {
+    fn is_lovelace(&self) -> bool {
+        self.policy.is_empty() && matches!(self.assets.as_slice(), [asset] if asset.name.is_empty())
+    }
 }
 
 impl<'comments> Formatter<'comments> {
@@ -338,7 +414,7 @@ impl<'comments> Formatter<'comments> {
                     Some(t) => head.append(": ").append(self.annotation(t)),
                 };
 
-                if matches!(value, UntypedExpr::Value { .. }) {
+                if is_value_literal(value) {
                     head.append(" = ").append(self.expr(value, false))
                 } else {
                     head.append(" =")
@@ -952,76 +1028,183 @@ impl<'comments> Formatter<'comments> {
         entries: &'a uplc::ast::ValueEntries,
         spans: Option<&ValueLiteralSpans>,
     ) -> Document<'a> {
+        self.value_literal(entries, spans, Vec::new())
+    }
+
+    fn value_with_insertions<'a>(&mut self, expr: &'a UntypedExpr) -> Option<Document<'a>> {
+        let mut insertions = Vec::new();
+        let (entries, spans) = collect_value_insertions(expr, &mut insertions)?;
+
+        Some(self.value_literal(entries, Some(spans), insertions))
+    }
+
+    fn value_literal<'a>(
+        &mut self,
+        entries: &'a uplc::ast::ValueEntries,
+        spans: Option<&ValueLiteralSpans>,
+        insertions: Vec<ValueInsertion<'a>>,
+    ) -> Document<'a> {
         debug_assert!(
             spans.is_none_or(|spans| entries.len() == spans.entries.len()),
             "Value literal payload and source spans must remain aligned",
         );
 
-        let mut comments = spans.map(|spans| self.collect_value_comments(spans));
-        let mut entries_docs = Vec::with_capacity(entries.len());
+        let mut policies = entries
+            .iter()
+            .enumerate()
+            .map(|(policy_index, (policy, assets))| {
+                let entry_spans = spans.and_then(|spans| spans.entries.get(policy_index));
+                let assets = assets
+                    .iter()
+                    .enumerate()
+                    .map(|(asset_index, (asset_name, quantity))| ValueLiteralAsset {
+                        name: ValueLiteralKey::Bytes {
+                            bytes: asset_name,
+                            preferred_format: entry_spans
+                                .and_then(|spans| spans.asset_entries.get(asset_index))
+                                .map(|spans| spans.preferred_format)
+                                .unwrap_or(ByteArrayFormatPreference::HexadecimalString),
+                        },
+                        quantity: ValueLiteralQuantity::Integer(quantity),
+                    })
+                    .collect();
 
-        for (entry_index, (policy_id, assets)) in entries.iter().enumerate() {
-            let entry_spans = spans.and_then(|spans| spans.entries.get(entry_index));
-            let entry_comments = comments
-                .as_mut()
-                .and_then(|comments| comments.entries.get_mut(entry_index))
-                .and_then(|comments| comments.entry.take());
-            let policy_id_comments = comments
-                .as_mut()
-                .and_then(|comments| comments.entries.get_mut(entry_index))
-                .and_then(|comments| comments.policy_id.take());
-            let assets_comments = comments
-                .as_mut()
-                .and_then(|comments| comments.entries.get_mut(entry_index))
-                .and_then(|comments| comments.assets.take());
+                ValueLiteralPolicy {
+                    policy: ValueLiteralKey::Bytes {
+                        bytes: policy,
+                        preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                    },
+                    assets,
+                    spans: entry_spans.cloned(),
+                }
+            })
+            .collect::<Vec<_>>();
 
-            if policy_id.is_empty()
-                && let [(asset_name, quantity)] = assets.as_slice()
-                && asset_name.is_empty()
-            {
-                let asset_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.first_mut())
-                    .and_then(|comments| comments.entry.take());
-                let asset_name_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.first_mut())
-                    .and_then(|comments| comments.name.take());
-                let quantity_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.first_mut())
-                    .and_then(|comments| comments.quantity.take());
+        for insertion in insertions {
+            let policy = ValueLiteralKey::Expression(&insertion.policy.value);
+            let asset = ValueLiteralAsset {
+                name: ValueLiteralKey::Expression(&insertion.asset.value),
+                quantity: ValueLiteralQuantity::Expression(&insertion.quantity.value),
+            };
+            let insertion_spans = insertion.synthetic.then(|| ValueEntrySpans {
+                entry: insertion.policy.location,
+                policy: insertion.policy.value.location(),
+                assets: insertion.tail.location,
+                asset_entries: vec![ValueTokenSpans {
+                    entry: insertion.asset.location,
+                    asset_name: insertion.asset.value.location(),
+                    quantity: insertion.quantity.value.location(),
+                    preferred_format: match &insertion.asset.value {
+                        UntypedExpr::ByteArray {
+                            preferred_format, ..
+                        } => *preferred_format,
+                        _ => ByteArrayFormatPreference::HexadecimalString,
+                    },
+                }],
+            });
+            let matching_policy =
+                policies
+                    .iter()
+                    .position(|candidate| match (&candidate.spans, &insertion_spans) {
+                        (Some(candidate), Some(insertion)) => candidate.entry == insertion.entry,
+                        _ => candidate.policy.same_as(&policy),
+                    });
+
+            if let Some(index) = matching_policy {
+                let candidate = &mut policies[index];
+                candidate.assets.push(asset);
+
+                match (&mut candidate.spans, insertion_spans) {
+                    (Some(candidate), Some(mut insertion)) => {
+                        candidate.asset_entries.append(&mut insertion.asset_entries);
+                    }
+                    (None, insertion) => candidate.spans = insertion,
+                    (Some(_), None) => {}
+                }
+            } else {
+                policies.push(ValueLiteralPolicy {
+                    policy,
+                    assets: vec![asset],
+                    spans: insertion_spans,
+                });
+            }
+        }
+
+        policies.sort_by_key(|policy| !policy.is_lovelace());
+
+        let mut comment_indices = Vec::with_capacity(policies.len());
+        let mut comment_spans = Vec::new();
+
+        for policy in &policies {
+            comment_indices.push(policy.spans.as_ref().map(|spans| {
+                let index = comment_spans.len();
+                comment_spans.push(spans.clone());
+                index
+            }));
+        }
+
+        let combined_spans = spans.map(|spans| ValueLiteralSpans {
+            list: spans.list,
+            entries: comment_spans,
+        });
+        let mut comments = combined_spans
+            .as_ref()
+            .map(|spans| self.collect_value_comments(spans));
+        let mut entries_docs = Vec::with_capacity(policies.len());
+
+        for (policy_index, policy) in policies.iter().enumerate() {
+            let comment_index = comment_indices[policy_index];
+            let entry_comments = value_entry_comments(&mut comments, comment_index, |comments| {
+                comments.entry.take()
+            });
+            let policy_comments = value_entry_comments(&mut comments, comment_index, |comments| {
+                comments.policy_id.take()
+            });
+            let assets_comments = value_entry_comments(&mut comments, comment_index, |comments| {
+                comments.assets.take()
+            });
+
+            if policy.is_lovelace() {
+                let asset = &policy.assets[0];
+                let asset_comments =
+                    value_asset_comments(&mut comments, comment_index, 0, |comments| {
+                        comments.entry.take()
+                    });
+                let asset_name_comments =
+                    value_asset_comments(&mut comments, comment_index, 0, |comments| {
+                        comments.name.take()
+                    });
+                let quantity_comments =
+                    value_asset_comments(&mut comments, comment_index, 0, |comments| {
+                        comments.quantity.take()
+                    });
                 let quantity_comments = [assets_comments, quantity_comments]
                     .into_iter()
                     .flatten()
                     .reduce(Document::append);
-                let quantity_doc = Document::String(quantity.to_string());
+                let quantity_doc = self.value_literal_quantity(&asset.quantity);
                 let quantity_doc = match quantity_comments {
                     Some(comments) => line().append(comments).append(quantity_doc).nest(INDENT),
                     None => " ".to_doc().append(quantity_doc),
                 };
-                let lovelace_comments = [policy_id_comments, asset_comments, asset_name_comments]
+                let lovelace_comments = [policy_comments, asset_comments, asset_name_comments]
                     .into_iter()
                     .flatten()
                     .reduce(Document::append);
                 let lovelace_doc =
                     prepend_comments("lovelace".to_doc(), lovelace_comments).append(":");
-                let asset_trailing_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.first_mut())
-                    .and_then(|comments| comments.trailing.take());
-                let assets_trailing_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.assets_trailing.take());
-                let entry_trailing_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.trailing.take());
+                let asset_trailing_comments =
+                    value_asset_comments(&mut comments, comment_index, 0, |comments| {
+                        comments.trailing.take()
+                    });
+                let assets_trailing_comments =
+                    value_entry_comments(&mut comments, comment_index, |comments| {
+                        comments.assets_trailing.take()
+                    });
+                let entry_trailing_comments =
+                    value_entry_comments(&mut comments, comment_index, |comments| {
+                        comments.trailing.take()
+                    });
                 let trailing_comments = [
                     asset_trailing_comments,
                     assets_trailing_comments,
@@ -1037,87 +1220,87 @@ impl<'comments> Formatter<'comments> {
                 continue;
             }
 
-            let policy_id_doc = prepend_comments(value_key(policy_id), policy_id_comments);
+            let policy_doc =
+                prepend_comments(self.value_literal_key(&policy.policy), policy_comments);
+            let mut asset_docs = Vec::with_capacity(policy.assets.len());
 
-            debug_assert!(
-                entry_spans.is_none_or(|spans| assets.len() == spans.asset_entries.len()),
-                "Value asset payload and source spans must remain aligned",
-            );
-
-            let mut asset_docs = Vec::with_capacity(assets.len());
-
-            for (asset_index, (asset_name, quantity)) in assets.iter().enumerate() {
-                let asset_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
-                    .and_then(|comments| comments.entry.take());
-                let asset_name_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
-                    .and_then(|comments| comments.name.take());
-                let preferred_format = entry_spans
-                    .and_then(|spans| spans.asset_entries.get(asset_index))
-                    .map(|spans| spans.preferred_format)
-                    .unwrap_or(ByteArrayFormatPreference::HexadecimalString);
-                let asset_name = asset_name
-                    .iter()
-                    .map(|byte| (*byte, Span::empty()))
-                    .collect::<Vec<_>>();
-                let asset_name_doc = prepend_comments(
-                    self.bytearray(&asset_name, None, &preferred_format),
-                    asset_name_comments,
-                );
-                let quantity_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
-                    .and_then(|comments| comments.quantity.take());
-                let quantity_doc = Document::String(quantity.to_string());
+            for (asset_index, asset) in policy.assets.iter().enumerate() {
+                let asset_comments =
+                    value_asset_comments(&mut comments, comment_index, asset_index, |comments| {
+                        comments.entry.take()
+                    });
+                let asset_name_comments =
+                    value_asset_comments(&mut comments, comment_index, asset_index, |comments| {
+                        comments.name.take()
+                    });
+                let asset_name_doc =
+                    prepend_comments(self.value_literal_key(&asset.name), asset_name_comments);
+                let quantity_comments =
+                    value_asset_comments(&mut comments, comment_index, asset_index, |comments| {
+                        comments.quantity.take()
+                    });
+                let quantity_doc = self.value_literal_quantity(&asset.quantity);
                 let quantity_doc = match quantity_comments {
                     Some(comments) => line().append(comments).append(quantity_doc).nest(INDENT),
                     None => " ".to_doc().append(quantity_doc),
                 };
-                let trailing_comments = comments
-                    .as_mut()
-                    .and_then(|comments| comments.entries.get_mut(entry_index))
-                    .and_then(|comments| comments.asset_entries.get_mut(asset_index))
-                    .and_then(|comments| comments.trailing.take());
+                let trailing_comments =
+                    value_asset_comments(&mut comments, comment_index, asset_index, |comments| {
+                        comments.trailing.take()
+                    });
                 let asset_doc = value_map_entry(
                     asset_name_doc.append(":").append(quantity_doc),
                     trailing_comments,
                 );
-                let asset_doc = prepend_comments(asset_doc, asset_comments);
 
-                asset_docs.push(asset_doc);
+                asset_docs.push(prepend_comments(asset_doc, asset_comments));
             }
 
-            let trailing_comments = comments
-                .as_mut()
-                .and_then(|comments| comments.entries.get_mut(entry_index))
-                .and_then(|comments| comments.assets_trailing.take());
+            let trailing_comments =
+                value_entry_comments(&mut comments, comment_index, |comments| {
+                    comments.assets_trailing.take()
+                });
             let assets_doc = value_map(asset_docs, trailing_comments);
             let assets_doc = match assets_comments {
                 Some(comments) => line().append(comments).append(assets_doc).nest(INDENT),
                 None => " ".to_doc().append(assets_doc),
             };
-            let trailing_comments = comments
-                .as_mut()
-                .and_then(|comments| comments.entries.get_mut(entry_index))
-                .and_then(|comments| comments.trailing.take());
-            let entry_doc = value_map_entry(
-                policy_id_doc.append(":").append(assets_doc),
-                trailing_comments,
-            );
-            let entry_doc = prepend_comments(entry_doc, entry_comments);
+            let trailing_comments =
+                value_entry_comments(&mut comments, comment_index, |comments| {
+                    comments.trailing.take()
+                });
+            let entry_doc =
+                value_map_entry(policy_doc.append(":").append(assets_doc), trailing_comments);
 
-            entries_docs.push(entry_doc);
+            entries_docs.push(prepend_comments(entry_doc, entry_comments));
         }
 
         let trailing_comments = comments.and_then(|mut comments| comments.trailing.take());
 
         value_map(entries_docs, trailing_comments)
+    }
+
+    fn value_literal_key<'a>(&mut self, key: &ValueLiteralKey<'a>) -> Document<'a> {
+        match key {
+            ValueLiteralKey::Bytes {
+                bytes,
+                preferred_format,
+            } => {
+                let bytes = bytes
+                    .iter()
+                    .map(|byte| (*byte, Span::empty()))
+                    .collect::<Vec<_>>();
+                self.bytearray(&bytes, None, preferred_format)
+            }
+            ValueLiteralKey::Expression(expression) => self.wrap_expr(expression),
+        }
+    }
+
+    fn value_literal_quantity<'a>(&mut self, quantity: &ValueLiteralQuantity<'a>) -> Document<'a> {
+        match quantity {
+            ValueLiteralQuantity::Integer(quantity) => Document::String(quantity.to_string()),
+            ValueLiteralQuantity::Expression(expression) => self.wrap_expr(expression),
+        }
     }
 
     fn collect_value_comments<'a>(
@@ -1390,7 +1573,10 @@ impl<'comments> Formatter<'comments> {
                 fun,
                 arguments: args,
                 ..
-            } => self.call(fun, args),
+            } => match self.value_with_insertions(expr) {
+                Some(value) => value,
+                None => self.call(fun, args),
+            },
 
             UntypedExpr::BinOp {
                 name, left, right, ..
@@ -2558,8 +2744,80 @@ impl<'a> Documentable<'a> for &'a BinOp {
     }
 }
 
-fn value_key<'a>(bytes: &[u8]) -> Document<'a> {
-    Document::String(format!("#\"{}\"", hex::encode(bytes)))
+fn collect_value_insertions<'a>(
+    expression: &'a UntypedExpr,
+    insertions: &mut Vec<ValueInsertion<'a>>,
+) -> Option<(&'a uplc::ast::ValueEntries, &'a ValueLiteralSpans)> {
+    let mut expression = expression;
+
+    loop {
+        match expression {
+            UntypedExpr::Value { value, spans, .. } => return Some((value, spans)),
+            UntypedExpr::Call { fun, arguments, .. } => {
+                let synthetic = match fun.as_ref() {
+                    UntypedExpr::Var { name, location } if name == INSERT_VALUE => {
+                        *location == Span::empty()
+                    }
+                    UntypedExpr::FieldAccess {
+                        label, container, ..
+                    } if label == INSERT_VALUE
+                        && matches!(container.as_ref(), UntypedExpr::Var { .. }) =>
+                    {
+                        false
+                    }
+                    _ => return None,
+                };
+                let [policy, asset, quantity, tail] = arguments.as_slice() else {
+                    return None;
+                };
+
+                if arguments.iter().any(|argument| argument.label.is_some()) {
+                    return None;
+                }
+
+                insertions.push(ValueInsertion {
+                    policy,
+                    asset,
+                    quantity,
+                    tail,
+                    synthetic,
+                });
+
+                expression = &tail.value;
+            }
+            _ => return None,
+        }
+    }
+}
+
+fn is_value_literal(expression: &UntypedExpr) -> bool {
+    collect_value_insertions(expression, &mut Vec::new()).is_some()
+}
+
+fn value_entry_comments<'a>(
+    comments: &mut Option<ValueLiteralComments<'a>>,
+    index: Option<usize>,
+    take: impl FnOnce(&mut ValueEntryComments<'a>) -> Option<Document<'a>>,
+) -> Option<Document<'a>> {
+    comments
+        .as_mut()
+        .zip(index)
+        .and_then(|(comments, index)| comments.entries.get_mut(index))
+        .and_then(take)
+}
+
+fn value_asset_comments<'a>(
+    comments: &mut Option<ValueLiteralComments<'a>>,
+    policy_index: Option<usize>,
+    asset_index: usize,
+    take: impl FnOnce(&mut ValueAssetComments<'a>) -> Option<Document<'a>>,
+) -> Option<Document<'a>> {
+    comments
+        .as_mut()
+        .zip(policy_index)
+        .and_then(|(comments, index)| comments.entries.get_mut(index))
+        .and_then(|comments| comments.asset_entries.get_mut(asset_index))
+        .and_then(take)
 }
 
 fn prepend_comments<'a>(doc: Document<'a>, comments: Option<Document<'a>>) -> Document<'a> {

@@ -27,6 +27,8 @@ use uplc::{
 
 pub const PRELUDE: &str = "aiken";
 pub const BUILTIN: &str = "aiken/builtin";
+// Shared by value-literal desugaring, formatting, and synthetic builtin resolution.
+pub(crate) const INSERT_VALUE: &str = "insert_value";
 
 pub static INTERNAL_FUNCTIONS: LazyLock<BTreeSet<&'static str>> = LazyLock::new(|| {
     let mut set = BTreeSet::new();

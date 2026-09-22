@@ -18,7 +18,7 @@ use crate::{
         TypedValidator, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction,
         UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
-    builtins::{BUILTIN, from_default_function},
+    builtins::{BUILTIN, INSERT_VALUE, from_default_function},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     parser::token::Base,
@@ -309,8 +309,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     where
         F: Copy + FnOnce(Error) -> Error,
     {
-        // Check to see if the function accepts labelled arguments
-        match self.get_field_map(&fun, location)? {
+        let is_synthetic_insert_value = matches!(
+            &fun,
+            TypedExpr::Var { name, location, .. }
+                if *location == Span::empty() && name == INSERT_VALUE
+        );
+
+        // Check to see if the function accepts labelled arguments. Synthetic value-literal calls
+        // already have positional arguments and are not registered in the lexical environment.
+        match if is_synthetic_insert_value {
+            None
+        } else {
+            self.get_field_map(&fun, location)?
+        } {
             // The fun has a field map so labelled arguments may be present and need to be reordered.
             Some(field_map) => field_map.reorder(&mut args, location)?,
 
@@ -2782,6 +2793,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     #[allow(clippy::result_large_err)]
     fn infer_var(&mut self, name: String, location: Span) -> Result<TypedExpr, Error> {
+        // Dynamic value literals introduce this synthetic callee before name resolution. Its empty
+        // span distinguishes it from a source-level variable named `insert_value`.
+        if location == Span::empty() && name == INSERT_VALUE {
+            return Ok(TypedExpr::Var {
+                constructor: from_default_function(
+                    DefaultFunction::InsertCoin,
+                    &self.environment.id_gen,
+                ),
+                location,
+                name,
+            });
+        }
+
         let constructor = self.infer_value_constructor(&None, &name, &location)?;
 
         Ok(TypedExpr::Var {

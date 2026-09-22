@@ -5,29 +5,139 @@ use std::sync::Arc;
 use uplc::ast::{VALUE_MAX_KEY_LEN, Value, ValueEntries, ValueError};
 
 use crate::{
-    ast::{ByteArrayFormatPreference, Span},
+    ast::{ByteArrayFormatPreference, CallArg, Span},
+    builtins::INSERT_VALUE,
     expr::{ValueEntrySpans, ValueLiteralSpans, ValueTokenSpans},
-    parser::{error::ParseError, literal::int, token::Token},
+    parser::{
+        error::ParseError,
+        literal::int,
+        token::{Base, Token},
+    },
 };
 
 const POLICY_ID_LENGTH: usize = 28;
 const LOVELACE: &str = "lovelace";
 
+#[derive(Clone)]
+enum ParsedKey {
+    Literal {
+        bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
+        location: Span,
+    },
+    Named {
+        name: String,
+        location: Span,
+    },
+}
+
+impl ParsedKey {
+    fn location(&self) -> Span {
+        match self {
+            Self::Literal { location, .. } | Self::Named { location, .. } => *location,
+        }
+    }
+
+    fn into_expression(self) -> UntypedExpr {
+        match self {
+            Self::Literal {
+                bytes,
+                preferred_format,
+                location,
+            } => UntypedExpr::ByteArray {
+                location,
+                bytes: bytes.into_iter().map(|byte| (byte, location)).collect(),
+                preferred_format,
+            },
+            Self::Named { name, location } => UntypedExpr::Var { name, location },
+        }
+    }
+}
+
+enum ParsedQuantity {
+    Literal { value: BigInt, location: Span },
+    Named { name: String, location: Span },
+}
+
+impl ParsedQuantity {
+    fn location(&self) -> Span {
+        match self {
+            Self::Literal { location, .. } | Self::Named { location, .. } => *location,
+        }
+    }
+
+    fn into_expression(self) -> UntypedExpr {
+        match self {
+            Self::Literal { value, location } => UntypedExpr::UInt {
+                location,
+                value: value.to_string(),
+                base: Base::Decimal {
+                    numeric_underscore: false,
+                },
+            },
+            Self::Named { name, location } => UntypedExpr::Var { name, location },
+        }
+    }
+}
+
 struct ParsedAsset {
-    name: Vec<u8>,
-    preferred_format: ByteArrayFormatPreference,
-    quantity: BigInt,
+    name: ParsedKey,
+    quantity: ParsedQuantity,
     location: Span,
-    name_location: Span,
-    quantity_location: Span,
 }
 
 struct ParsedPolicy {
-    id: Vec<u8>,
+    id: ParsedKey,
     assets: Vec<ParsedAsset>,
     location: Span,
-    id_location: Span,
     assets_location: Span,
+}
+
+struct ParsedInsertion {
+    policy: ParsedKey,
+    asset: ParsedKey,
+    quantity: ParsedQuantity,
+    policy_location: Span,
+    asset_location: Span,
+    assets_location: Span,
+}
+
+impl ParsedInsertion {
+    fn apply(self, tail: UntypedExpr, literal_location: Span) -> UntypedExpr {
+        let quantity_location = self.quantity.location();
+
+        UntypedExpr::Call {
+            location: literal_location,
+            // Source variables always have a non-empty span. The empty span marks this callee as
+            // compiler-generated so the typer can resolve the builtin without a user import.
+            fun: Box::new(UntypedExpr::Var {
+                location: Span::empty(),
+                name: INSERT_VALUE.to_string(),
+            }),
+            arguments: vec![
+                CallArg {
+                    label: None,
+                    location: self.policy_location,
+                    value: self.policy.into_expression(),
+                },
+                CallArg {
+                    label: None,
+                    location: self.asset_location,
+                    value: self.asset.into_expression(),
+                },
+                CallArg {
+                    label: None,
+                    location: quantity_location,
+                    value: self.quantity.into_expression(),
+                },
+                CallArg {
+                    label: None,
+                    location: self.assets_location,
+                    value: tail,
+                },
+            ],
+        }
+    }
 }
 
 pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
@@ -57,7 +167,11 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
                 ));
             }
 
-            (bytes, location)
+            ParsedKey::Literal {
+                bytes,
+                preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                location,
+            }
         });
 
     let asset_name = choice((
@@ -87,33 +201,44 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
             ));
         }
 
-        (bytes, location, preferred_format)
+        ParsedKey::Literal {
+            bytes,
+            preferred_format,
+            location,
+        }
     });
 
-    let quantity = || {
-        int()
-            .map(|(value, _)| {
-                BigInt::parse_bytes(value.as_bytes(), 10)
-                    .expect("the lexer must produce valid integer strings")
-            })
-            .map_with_span(|quantity, location| (quantity, location))
+    let named_policy_key = || {
+        select! { Token::Name { name } if name != LOVELACE => name }
+            .map_with_span(|name, location| ParsedKey::Named { name, location })
     };
 
-    let asset = asset_name
+    let named_key = || {
+        select! { Token::Name { name } => name }
+            .map_with_span(|name, location| ParsedKey::Named { name, location })
+    };
+
+    let quantity = || {
+        choice((
+            int()
+                .map(|(value, _)| {
+                    BigInt::parse_bytes(value.as_bytes(), 10)
+                        .expect("the lexer must produce valid integer strings")
+                })
+                .map_with_span(|value, location| ParsedQuantity::Literal { value, location }),
+            select! { Token::Name { name } => name }
+                .map_with_span(|name, location| ParsedQuantity::Named { name, location }),
+        ))
+    };
+
+    let asset = choice((asset_name, named_key()))
         .then_ignore(just(Token::Colon))
         .then(quantity())
-        .map_with_span(
-            |((name, name_location, preferred_format), (quantity, quantity_location)), location| {
-                ParsedAsset {
-                    name,
-                    preferred_format,
-                    quantity,
-                    location,
-                    name_location,
-                    quantity_location,
-                }
-            },
-        );
+        .map_with_span(|(name, quantity), location| ParsedAsset {
+            name,
+            quantity,
+            location,
+        });
 
     let assets = asset
         .separated_by(just(Token::Comma))
@@ -125,84 +250,135 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
         policy_id,
         select! { Token::ByteString { value } => value }.validate(|_value, span, emit| {
             emit(ParseError::missing_pound_sign(span));
-            (vec![], span)
+            ParsedKey::Literal {
+                bytes: vec![],
+                preferred_format: ByteArrayFormatPreference::Utf8String,
+                location: span,
+            }
         }),
+        named_policy_key(),
     ))
     .then_ignore(just(Token::Colon))
     .then(assets)
-    .map_with_span(
-        |((id, id_location), (assets, assets_location)), location| ParsedPolicy {
-            id,
-            assets,
-            location,
-            id_location,
-            assets_location,
-        },
-    );
+    .map_with_span(|(id, (assets, assets_location)), location| ParsedPolicy {
+        id,
+        assets,
+        location,
+        assets_location,
+    });
 
     let lovelace = select! { Token::Name { name } if name == LOVELACE => () }
         .map_with_span(|(), location| location)
         .then_ignore(just(Token::Colon))
         .then(quantity())
-        .map_with_span(
-            |(name_location, (quantity, quantity_location)), location| ParsedPolicy {
-                id: vec![],
-                assets: vec![ParsedAsset {
-                    name: vec![],
+        .map_with_span(|(name_location, quantity), location| {
+            let quantity_location = quantity.location();
+
+            ParsedPolicy {
+                id: ParsedKey::Literal {
+                    bytes: vec![],
                     preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                    location: name_location,
+                },
+                assets: vec![ParsedAsset {
+                    name: ParsedKey::Literal {
+                        bytes: vec![],
+                        preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                        location: name_location,
+                    },
                     quantity,
                     location,
-                    name_location,
-                    quantity_location,
                 }],
                 location,
-                id_location: name_location,
                 assets_location: quantity_location,
-            },
-        );
+            }
+        });
 
     choice((lovelace, policy))
         .separated_by(just(Token::Comma))
         .allow_trailing()
         .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
-        .validate(|mut policies, location, emit| {
-            for policy in &mut policies {
-                policy
-                    .assets
-                    .sort_by(|left, right| left.name.cmp(&right.name));
-            }
-            policies.sort_by(|left, right| left.id.cmp(&right.id));
+        .validate(|policies, location, emit| {
+            let mut static_policies = Vec::new();
+            let mut insertions = Vec::new();
 
-            let (entries, mut entry_spans): (Vec<_>, Vec<_>) = policies
-                .into_iter()
-                .map(|policy| {
-                    let (assets, asset_spans): (Vec<_>, Vec<_>) = policy
-                        .assets
-                        .into_iter()
-                        .map(|asset| {
-                            (
-                                (asset.name, asset.quantity),
-                                ValueTokenSpans {
-                                    entry: asset.location,
-                                    asset_name: asset.name_location,
-                                    quantity: asset.quantity_location,
-                                    preferred_format: asset.preferred_format,
-                                },
-                            )
-                        })
-                        .unzip();
+            for policy in policies {
+                let ParsedPolicy {
+                    id,
+                    assets,
+                    location: policy_location,
+                    assets_location,
+                } = policy;
 
-                    (
-                        (policy.id, assets),
+                if assets.is_empty() {
+                    emit(ParseError::invalid_value_literal(
+                        policy_location,
+                        None,
+                        ValueError::EmptyInnerMap.to_string(),
+                    ));
+                    continue;
+                }
+
+                let static_policy_id = match &id {
+                    ParsedKey::Literal { bytes, .. } => Some(bytes.clone()),
+                    ParsedKey::Named { .. } => None,
+                };
+                let mut static_assets = Vec::new();
+
+                for asset in assets {
+                    match (static_policy_id.as_ref(), asset.name, asset.quantity) {
+                        (
+                            Some(_),
+                            ParsedKey::Literal {
+                                bytes,
+                                preferred_format,
+                                location: name_location,
+                            },
+                            ParsedQuantity::Literal {
+                                value,
+                                location: quantity_location,
+                            },
+                        ) => static_assets.push((
+                            (bytes, value),
+                            ValueTokenSpans {
+                                entry: asset.location,
+                                asset_name: name_location,
+                                quantity: quantity_location,
+                                preferred_format,
+                            },
+                        )),
+                        (_, name, quantity) => insertions.push(ParsedInsertion {
+                            policy: id.clone(),
+                            asset: name,
+                            quantity,
+                            policy_location,
+                            asset_location: asset.location,
+                            assets_location,
+                        }),
+                    }
+                }
+
+                if !static_assets.is_empty() {
+                    static_assets.sort_by(|left, right| left.0.0.cmp(&right.0.0));
+                    let (assets, asset_spans) = static_assets.into_iter().unzip();
+
+                    static_policies.push((
+                        (
+                            static_policy_id.expect("static assets require a literal policy"),
+                            assets,
+                        ),
                         ValueEntrySpans {
-                            entry: policy.location,
-                            policy: policy.id_location,
-                            assets: policy.assets_location,
+                            entry: policy_location,
+                            policy: id.location(),
+                            assets: assets_location,
                             asset_entries: asset_spans,
                         },
-                    )
-                })
-                .unzip();
+                    ));
+                }
+            }
+
+            static_policies.sort_by(|left, right| left.0.0.cmp(&right.0.0));
+            let (entries, mut entry_spans): (Vec<_>, Vec<_>) = static_policies.into_iter().unzip();
 
             let value = match Value::from_canonical_entries(entries) {
                 Ok(value) => Arc::new(value.into_entries()),
@@ -217,18 +393,19 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
                 }
             };
 
-            (
+            let base = UntypedExpr::Value {
+                location,
                 value,
-                ValueLiteralSpans {
+                spans: ValueLiteralSpans {
                     list: location,
                     entries: entry_spans,
                 },
-            )
-        })
-        .map_with_span(|(value, spans), location| UntypedExpr::Value {
-            location,
-            value,
-            spans,
+            };
+
+            insertions
+                .into_iter()
+                .rev()
+                .fold(base, |tail, insertion| insertion.apply(tail, location))
         })
 }
 
@@ -313,6 +490,80 @@ mod tests {
                 ],
             );
         }
+    }
+
+    #[test]
+    fn named_value_fields_desugar_to_insert_value_with_exact_spans() {
+        let source = "{ policy_1: { asset_1: quantity } }";
+        let expression = parse(source).expect("Value literal should parse");
+        let UntypedExpr::Call { fun, arguments, .. } = expression else {
+            panic!("expected a dynamic Value literal to become a call");
+        };
+        let UntypedExpr::Var { name, location } = fun.as_ref() else {
+            panic!("expected insert_value to be a variable");
+        };
+        let [policy, asset, quantity, tail] = arguments.as_slice() else {
+            panic!("expected insert_value to have four arguments");
+        };
+
+        assert_eq!(name, INSERT_VALUE);
+        assert_eq!(*location, Span::empty());
+
+        for (argument, expected_name) in [
+            (policy, "policy_1"),
+            (asset, "asset_1"),
+            (quantity, "quantity"),
+        ] {
+            let UntypedExpr::Var { name, location } = &argument.value else {
+                panic!("expected {expected_name} to remain a variable");
+            };
+            let start = source.find(expected_name).unwrap();
+
+            assert_eq!(name, expected_name);
+            assert_eq!(*location, Span::create(start, expected_name.len()));
+        }
+
+        assert!(matches!(
+            &tail.value,
+            UntypedExpr::Value { value, .. } if value.is_empty()
+        ));
+    }
+
+    #[test]
+    fn named_value_fields_wrap_a_terminal_static_value() {
+        let static_policy = policy("11");
+        let source = format!(
+            r#"{{
+              lovelace: ada,
+              #"{static_policy}": {{
+                #"aa": 1,
+                asset: quantity,
+              }},
+              policy: {{ #"bb": 2 }},
+            }}"#,
+        );
+        let expression = parse(&source).expect("Value literal should parse");
+        let mut insertion_count = 0;
+        let mut current = &expression;
+
+        loop {
+            match current {
+                UntypedExpr::Call { arguments, .. } => {
+                    insertion_count += 1;
+                    current = &arguments[3].value;
+                }
+                UntypedExpr::Value { value, .. } => {
+                    assert_eq!(
+                        value.as_ref(),
+                        &vec![(vec![0x11; POLICY_ID_LENGTH], vec![(vec![0xaa], 1)])],
+                    );
+                    break;
+                }
+                expression => panic!("unexpected expression in insertion chain: {expression:#?}"),
+            }
+        }
+
+        assert_eq!(insertion_count, 3);
     }
 
     #[test]

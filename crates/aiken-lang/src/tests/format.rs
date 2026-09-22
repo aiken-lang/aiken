@@ -188,6 +188,90 @@ fn format_value_literal_keeps_comments_with_lovelace() {
 }
 
 #[test]
+fn format_value_literal_with_named_fields() {
+    let source = r#"const value = {
+  policy_1: {
+    asset_1: 1,
+    #"bb": quantity,
+  },
+  #"00000000000000000000000000000000000000000000000000000000": {
+    asset_1: quantity,
+    "foo": 1,
+  },
+  lovelace: quantity,
+}
+"#;
+    let expected = r#"const value = {
+  lovelace: quantity,
+  #"00000000000000000000000000000000000000000000000000000000": {
+    "foo": 1,
+    asset_1: quantity,
+  },
+  policy_1: {
+    asset_1: 1,
+    #"bb": quantity,
+  },
+}
+"#;
+
+    pretty_assertions::assert_eq!(format_source(source), expected);
+    pretty_assertions::assert_eq!(format_source(expected), expected);
+}
+
+#[test]
+fn format_value_literal_preserves_comments_around_named_fields() {
+    let source = r#"const value = {
+      // policy
+      policy:
+        // assets
+        {
+          // asset
+          asset:
+            // quantity
+            quantity,
+          // before assets close
+        },
+      // before value close
+    }
+"#;
+    let expected = r#"const value = {
+  // policy
+  policy:
+    // assets
+    {
+      // asset
+      asset:
+        // quantity
+        quantity,
+      // before assets close
+    },
+  // before value close
+}
+"#;
+
+    pretty_assertions::assert_eq!(format_source(source), expected);
+    pretty_assertions::assert_eq!(format_source(expected), expected);
+}
+
+#[test]
+fn format_insert_value_builtin_as_a_value_literal() {
+    let expected = r#"const value = {
+  policy: {
+    asset: quantity,
+  },
+}
+"#;
+
+    for source in [
+        "const value = insert_value(policy, asset, quantity, {})\n",
+        "const value = builtin.insert_value(policy, asset, quantity, {})\n",
+    ] {
+        pretty_assertions::assert_eq!(format_source(source), expected);
+    }
+    pretty_assertions::assert_eq!(format_source(expected), expected);
+}
+
+#[test]
 fn format_value_literal_preserves_asset_name_encoding() {
     let source = r#"const value = {
       #"00000000000000000000000000000000000000000000000000000000": {

@@ -6126,6 +6126,24 @@ fn primitive_value_builtin_pipeline() {
 }
 
 #[test]
+fn named_value_literal_fields_compile_to_insert_value() {
+    let src = r#"
+        use aiken/builtin.{lookup_value}
+
+        test named_value_literal_fields() {
+            let policy = #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            let asset = #"bb"
+            let quantity = 42
+            let value = { policy: { asset: quantity } }
+
+            lookup_value(policy, asset, value) == quantity
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
 fn primitive_value_module_constant() {
     let src = r#"
         use aiken/builtin.{lookup_value}
