@@ -6,12 +6,17 @@ compilers without the intrinsic cannot compile it.
 From the repository root:
 
 ```sh
-cargo run -p aiken -- check examples/validated_value
+cargo run -p aiken -- check examples/validated_value --seed 1436 --max-success 1000
 ```
 
 `is_canonical_value` checks the stdlib `Value` invariants and returns a `Value`,
 failing on invalid input without sorting. `unsafe_coerce_value` performs no
 checks and requires those invariants to have been established already.
+
+The unit tests cover canonical ordering and rejected inputs. Two property tests
+consume dynamically generated raw pairs through the real stdlib `Value`,
+checking preservation, lookups, flattening, updates, cancellation, and ADA
+removal against checked construction.
 
 See [the compiler documentation](../../docs/unsafe-coercion.md)
 for the state-token trust requirements and the generated-code tests that

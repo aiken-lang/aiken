@@ -131,18 +131,12 @@ impl UntypedModule {
                 let Definition::DataType(data) = definition else {
                     return None;
                 };
-                let [constructor] = data.constructors.as_slice() else {
-                    return None;
-                };
-                let [field] = constructor.arguments.as_slice() else {
-                    return None;
-                };
-                (data.opaque && data.decorators.is_empty()).then(|| {
+                super::erased_opaque_inner(data).map(|inner| {
                     (
                         data.name.clone(),
                         super::coercion::OpaqueRepresentation {
                             parameters: data.typed_parameters.clone(),
-                            inner: field.tipo.clone(),
+                            inner: inner.clone(),
                         },
                     )
                 })
