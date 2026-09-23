@@ -50,6 +50,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         types: HashMap::new(),
         types_constructors: HashMap::new(),
         opaque_types: HashSet::new(),
+        opaque_representations: HashMap::new(),
         values: HashMap::new(),
         accessors: HashMap::new(),
         annotations: HashMap::new(),
@@ -585,6 +586,7 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
         types: HashMap::new(),
         types_constructors: HashMap::new(),
         opaque_types: HashSet::new(),
+        opaque_representations: HashMap::new(),
         values: HashMap::new(),
         accessors: HashMap::new(),
         annotations: HashMap::new(),
@@ -618,6 +620,24 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
             fields_tipo,
             ValueConstructorVariant::ModuleFn {
                 name: "unconstr_fields".to_string(),
+                field_map: None,
+                module: BUILTIN.to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    plutus.values.insert(
+        "unsafe_coerce".to_string(),
+        ValueConstructor::public(
+            Type::function(
+                vec![Type::generic_var(id_gen.next())],
+                Type::generic_var(id_gen.next()),
+            ),
+            ValueConstructorVariant::ModuleFn {
+                name: "unsafe_coerce".to_string(),
                 field_map: None,
                 module: BUILTIN.to_string(),
                 arity: 1,
@@ -1184,6 +1204,56 @@ pub fn prelude_functions(
     module_types: &HashMap<String, TypeInfo>,
 ) -> IndexMap<FunctionAccessKey, TypedFunction> {
     let mut functions = IndexMap::new();
+
+    // Type inference separately proves representation compatibility for every
+    // use, including higher-order uses. After opaque erasure this is identity.
+    let source = Type::generic_var(id_gen.next());
+    let target = Type::generic_var(id_gen.next());
+    functions.insert(
+        FunctionAccessKey {
+            module_name: BUILTIN.to_string(),
+            function_name: "unsafe_coerce".to_string(),
+        },
+        Function {
+            arguments: vec![TypedArg {
+                arg_name: ArgName::Named {
+                    name: "value".to_string(),
+                    label: "value".to_string(),
+                    location: Span::empty(),
+                },
+                is_validator_param: false,
+                location: Span::empty(),
+                annotation: None,
+                doc: None,
+                tipo: source.clone(),
+            }],
+            on_test_failure: OnTestFailure::FailImmediately,
+            body: TypedExpr::local_var("value", source, Span::empty()),
+            doc: Some(
+                indoc::indoc! {
+                    r#"
+                Coerce between types that differ only by erased opaque wrappers.
+
+                This performs no validation or traversal. The compiler checks
+                representation compatibility, not the target's invariants.
+                Callers must establish every opaque invariant before coercing,
+                for example by authenticating a datum whose minting policy and
+                every subsequent transition enforce those invariants.
+
+                Ordinary Data downcasts and constructor visibility are unchanged.
+                Functions and unresolved polymorphic conversions are rejected.
+                "#
+                }
+                .to_string(),
+            ),
+            location: Span::empty(),
+            name: "unsafe_coerce".to_string(),
+            public: true,
+            return_annotation: None,
+            return_type: target,
+            end_position: 0,
+        },
+    );
 
     let unconstr_index_body = TypedExpr::Call {
         location: Span::empty(),

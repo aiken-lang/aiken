@@ -58,6 +58,15 @@ impl Diagnostic for UnknownLabels {
 
 #[derive(Debug, thiserror::Error, Diagnostic, Clone)]
 pub enum Error {
+    #[error("I cannot prove that these types have the same erased representation.")]
+    #[diagnostic(code("illegal::unsafe_coercion"))]
+    #[diagnostic(help(
+        "unsafe_coerce only erases single-field, undecorated opaque wrappers. Annotate both types; unrelated types, functions, and unconstrained polymorphic casts are not supported. The caller must establish all opaque-type invariants."
+    ))]
+    UnsafeCoercion {
+        #[label("incompatible or unresolved coercion")]
+        location: Span,
+    },
     #[error("I discovered an {} chain with less than 2 expressions.", op.if_supports_color(Stdout, |s| s.purple()))]
     #[diagnostic(code("illegal::logical_op_chain"))]
     #[diagnostic(help(
@@ -1266,6 +1275,7 @@ impl ExtraData for Error {
             | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ExpectOnOpaqueType { .. }
             | Error::IllegalOpaqueType { .. }
+            | Error::UnsafeCoercion { .. }
             | Error::ValidatorMustReturnBool { .. }
             | Error::UnknownPurpose { .. }
             | Error::UnknownValidatorHandler { .. }
