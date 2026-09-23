@@ -67,8 +67,9 @@ unchanged.
 ## Representation restriction
 
 The source and result must have the same type after recursively erasing opaque
-wrappers with exactly one constructor, one field, and no decorators. This is
-the existing code-generation erasure rule. The compiler retains representation
+wrappers with exactly one constructor, one field, and no decorators. The type
+checker and code generator share the same helper for both wrapper eligibility
+and the erased inner type. The compiler retains representation
 metadata across module imports so nested stdlib dictionaries can be handled.
 
 The proof compares complete type structure, including generic arguments and
@@ -79,8 +80,11 @@ serialization round-trip is inserted.
 Examples of rejected conversions include `Int` to `ByteArray`, raw `Data` to a
 nested-map `Value`, and `List<Int>` to `List<ByteArray>`. Function representations
 and unconstrained polymorphic casts are also rejected. Representation proof is
-bounded to 256 recursive levels and 4096 nodes per endpoint; a proof exceeding
-those limits is rejected rather than attempting unbounded expansion.
+bounded to 256 recursive levels and 4096 visits per endpoint, including generic
+parameter binding, substitution, and type-variable links. Substitutions retain
+their caller's scope and resolve lazily during the budgeted traversal; no
+substituted type tree is scanned or copied beforehand. A proof exceeding those
+limits is rejected rather than attempting unbounded expansion.
 
 The result normally needs a type annotation, such as a function's result type.
 An explicitly annotated function alias and qualified, unqualified, renamed,
@@ -93,14 +97,28 @@ Type-checker tests cover local, imported, nested, generic, and decorated
 wrappers, aliases, pipelines, forward references, and incompatible higher-order
 uses. Existing ordinary opacity rejection tests remain in the suite.
 
+Budget tests cover exact acceptance/rejection boundaries, repeated parameters,
+linked types, recursive metadata, wide types, and nested substitution scopes.
+Another test compares proof metadata and backend erasure across ordinary,
+nested, decorated, and non-erased types.
+
 Code-generation tests compile a function with a dynamic nested-map argument,
 coerce it to an imported opaque value and back, and compare its optimized UPLC
 bytes with the function that uses the pairs directly. This prevents constant
 folding from hiding a traversal. The tests require identical code with both
 silent and verbose tracing, and matching execution results and budgets for
 0, 1, 8, and 64 policies. An annotated first-class alias has its own identical-
-code check.
+code check. Additional dynamic-input tests require identical code, results, and
+budgets for primitive types, the native UPLC `Value`, lists, pairs, tuples,
+options, and records. They exercise ordinary accessors and pattern matching,
+multiple specializations in one script, nested wrappers, and generic helpers
+imported through a second module. Imported module interfaces are serialized
+and reloaded before those tests compile the consumer.
 
 The example separately exercises the public stdlib `Value`, including a value
 containing ADA, `alpha`, and `beta`, and rejects incorrectly ordered maps,
-duplicate keys, zero quantities, and empty inner maps.
+duplicate keys, zero quantities, and empty inner maps. Two property tests use
+raw pairs generated independently by checked stdlib constructors and exercise
+data preservation, lookups, flattening, addition, cancellation, and ADA removal
+through the actual stdlib `Value`. CI runs 1000 cases per property with seed
+1436, including signed quantities and ADA/alpha/beta.

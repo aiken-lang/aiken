@@ -200,3 +200,67 @@ fn unsafe_coerce_rejects_decorated_wrapper() {
     ));
     assert!(matches!(result, Err((_, Error::UnsafeCoercion { .. }))));
 }
+
+#[test]
+fn unsafe_coerce_metadata_agrees_with_backend_erasure() {
+    use crate::{
+        ast::DataTypeKey,
+        tipo::{check_replaceable_opaque_type, coercion, convert_opaque_type},
+    };
+    use indexmap::IndexMap;
+
+    let (_, module) = check(parse(
+        r#"
+        pub opaque type Wrapped<a> { inner: a }
+        pub opaque type Nested<a> { inner: Wrapped<Wrapped<a>> }
+        pub opaque type Multi { first: Int, second: Int }
+        pub opaque type Choice { First(Int) Second(Int) }
+        pub type Regular { inner: Int }
+        @list
+        pub opaque type Listed { inner: Int }
+        @tag(42)
+        pub opaque type Tagged { inner: Int }
+    "#,
+    ))
+    .unwrap();
+    let definitions = module
+        .definitions
+        .iter()
+        .filter_map(|def| match def {
+            Definition::DataType(data) => Some((
+                DataTypeKey {
+                    module_name: module.name.clone(),
+                    defined_type: data.name.clone(),
+                },
+                data.clone(),
+            )),
+            _ => None,
+        })
+        .collect::<IndexMap<_, _>>();
+    let data_types = definitions.iter().collect::<IndexMap<_, _>>();
+    for (name, constructor) in &module.type_info.types {
+        let tipo = &constructor.tipo;
+        let erasable = matches!(name.as_str(), "Wrapped" | "Nested");
+        assert_eq!(
+            check_replaceable_opaque_type(tipo, &data_types),
+            erasable,
+            "{name}"
+        );
+        assert_eq!(
+            module.type_info.opaque_representations.contains_key(name),
+            erasable,
+            "{name}"
+        );
+        let erased = convert_opaque_type(tipo, &data_types, true);
+        assert!(
+            coercion::compatible(
+                tipo,
+                &erased,
+                &module.name,
+                &module.type_info.opaque_representations,
+                &HashMap::new()
+            ),
+            "{name}"
+        );
+    }
+}
