@@ -48,6 +48,7 @@ jobs:
           cargo run -r -- check examples/hello_world
           cargo run -r -- check examples/gift_card
           cargo run -r -- check examples/monorepo
+          cargo run -r -- check examples/validated_value
       - name: Run acceptance tests
         working-directory: examples/acceptance_tests
         run: |

@@ -106,6 +106,7 @@ pub(crate) fn infer_function(
         .unwrap_or_else(|| panic!("Preregistered type for fn {name} was not a fn"));
 
     let warnings = environment.warnings.clone();
+    let coercion_checkpoint = environment.unsafe_coercions.len();
 
     // ━━━ open new scope ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
     let initial_scope = environment.open_new_scope();
@@ -148,6 +149,7 @@ pub(crate) fn infer_function(
         hydrators.insert(name.to_string(), expr_typer.hydrator);
         environment.close_scope(initial_scope);
         *environment.warnings = warnings;
+        environment.unsafe_coercions.truncate(coercion_checkpoint);
 
         // Backtrack and infer callee first.
         let temp_scope = environment.open_new_scope();
@@ -1257,6 +1259,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         let tipo = self.instantiate(constructor.tipo, &mut HashMap::new(), select_location)?;
+
+        if matches!(&constructor.variant, ValueConstructorVariant::ModuleFn { name, module, .. }
+            if module == BUILTIN && name == "unsafe_coerce")
+        {
+            self.environment
+                .unsafe_coercions
+                .push((tipo.clone(), select_location));
+        }
 
         let constructor = match &constructor.variant {
             variant @ ValueConstructorVariant::ModuleFn { name, module, .. } => {
@@ -2783,6 +2793,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         // Instantiate generic variables into unbound variables for this usage
         let tipo = self.instantiate(tipo, &mut HashMap::new(), *location)?;
+
+        if matches!(&variant, ValueConstructorVariant::ModuleFn { name, module, .. }
+            if module == BUILTIN && name == "unsafe_coerce")
+        {
+            self.environment
+                .unsafe_coercions
+                .push((tipo.clone(), *location));
+        }
 
         Ok(ValueConstructor {
             public,

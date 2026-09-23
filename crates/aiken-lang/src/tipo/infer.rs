@@ -125,6 +125,45 @@ impl UntypedModule {
             definitions.push(definition);
         }
 
+        let opaque_representations = definitions
+            .iter()
+            .filter_map(|definition| {
+                let Definition::DataType(data) = definition else {
+                    return None;
+                };
+                let [constructor] = data.constructors.as_slice() else {
+                    return None;
+                };
+                let [field] = constructor.arguments.as_slice() else {
+                    return None;
+                };
+                (data.opaque && data.decorators.is_empty()).then(|| {
+                    (
+                        data.name.clone(),
+                        super::coercion::OpaqueRepresentation {
+                            parameters: data.typed_parameters.clone(),
+                            inner: field.tipo.clone(),
+                        },
+                    )
+                })
+            })
+            .collect::<HashMap<_, _>>();
+
+        for (tipo, location) in &environment.unsafe_coercions {
+            let (args, target) = tipo.function_types().expect("unsafe_coerce is a function");
+            if !super::coercion::compatible(
+                &args[0],
+                &target,
+                &module_name,
+                &opaque_representations,
+                modules,
+            ) {
+                return Err(Error::UnsafeCoercion {
+                    location: *location,
+                });
+            }
+        }
+
         // Generalise functions now that the entire module has been inferred
         let definitions = definitions
             .into_iter()
@@ -194,6 +233,7 @@ impl UntypedModule {
                 types,
                 types_constructors,
                 opaque_types,
+                opaque_representations,
                 values,
                 accessors,
                 annotations,

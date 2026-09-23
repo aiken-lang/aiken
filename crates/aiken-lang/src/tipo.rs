@@ -15,6 +15,7 @@ use std::{
 };
 use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
+pub(crate) mod coercion;
 pub(crate) mod environment;
 pub mod error;
 mod exhaustive;
@@ -1333,6 +1334,10 @@ pub struct TypeInfo {
     pub types: HashMap<String, TypeConstructor>,
     pub types_constructors: HashMap<String, Vec<String>>,
     pub opaque_types: HashSet<(String, String)>,
+    /// Representation metadata for the explicit `unsafe_coerce` intrinsic.
+    /// This does not export constructors or permit ordinary downcasts.
+    #[serde(default)]
+    pub opaque_representations: HashMap<String, coercion::OpaqueRepresentation>,
     pub values: HashMap<String, ValueConstructor>,
     pub accessors: HashMap<String, AccessorsMap>,
     pub annotations: HashMap<Annotation, Rc<Type>>,

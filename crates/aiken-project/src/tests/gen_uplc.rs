@@ -20,6 +20,8 @@ enum TestType {
     Validator(TypedValidator),
 }
 
+mod unsafe_coerce;
+
 fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbose_mode: bool) {
     let mut project = TestProject::new();
 
