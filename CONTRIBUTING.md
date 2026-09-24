@@ -25,7 +25,8 @@
 
    ***
 
-   > **Note** if you have nix installed, you can run `nix develop` to take advantage of the projects dev-shell flake. This will provide any needed tools and dependencies in a reproducible way.
+   > [!TIP]
+   > if you have nix installed, you can run `nix develop` to take advantage of the projects dev-shell flake. This will provide any needed tools and dependencies in a reproducible way.
 
    If everything runs fine without any errors you're good to go. If you do run into any errors please come chat with us on [Discord (#aiken)](https://discord.gg/JnWjkrErJr)
 
@@ -82,19 +83,6 @@
    - **crate**: something is gone now
    ```
 
-4. **Donation**
-
-   Want to give some financial support? Have a look at the ways to sponsor below for more details.
-
-   - [rvcas](https://github.com/sponsors/rvcas)
-   - [microproofs](https://github.com/sponsors/microproofs)
-   - [ktorz](https://github.com/sponsors/KtorZ)
-
-   Want to support with crypto?
-
-   - Our Ada address is `addr1q83nlzwu4zjeu927m8t24xa68upgmwgt5w29ww5ka695hc5rez2r4q7gcvj7z0ma6d88w3j220szsqk05sn43ghcsn4szvuklq`
-   - Our Ada handle is `$aiken_lang`
-
 ## Releasing
 
 To be able to create a release you need to be on the [maintainers](https://github.com/orgs/aiken-lang/teams/maintainers) team.
@@ -116,14 +104,6 @@ The process follows these steps:
 > tag-name = "v{{version}}"
 > ```
 
-> [!IMPORTANT]
->
-> Since v1.1.4, we have switched to producing statically linked binary with musl, preventing issues with openssl on various linux platforms. However, this changes the artifact name
-> from: `aiken-x86_64-unknown-linux-gnu.tar.gz` to `aiken-x86_64-unknown-linux-musl.tar.gz`. Consequently, we've patched `aikup` in version v0.0.11, but people using previous
-> version will fail to install aiken through aikup. So for a little a while, we need to manually re-upload a `-gnu.tar.gz` archive (which can be obtained by simply renaming the musl one) so that aikup can keep fetching artifacts on Linux prior to version `v0.0.11`. We can cease doing that once enough time has reasonably passed and enough people have switched to aikup.
->
-> Ideally, we should introduce an `upgrade` command to aikup, and have some kind of notification system that indicates to people that they should upgrade their aikup installer.
-
 ## About Issues
 
 ### :bug: How To Report A Bug
@@ -134,7 +114,8 @@ Open a [Bug Issue](https://github.com/aiken-lang/aiken/issues/new?template=bug.m
 
 Feel free to bring any idea as a [discussion [category: idea]](https://github.com/aiken-lang/aiken/discussions/new?category=ideas). Make sure to highlight your use case so we can understand the design space and agree on a solution.
 
-> **Note** Ideally, follow this simple template:
+> [!NOTE]
+> Ideally, follow this simple template:
 >
 > - What is your idea? Describe it in simple words. Provide a use case.
 > - Why is it a good idea?
@@ -144,6 +125,7 @@ Feel free to bring any idea as a [discussion [category: idea]](https://github.co
 
 Open a [Q&A Discussion](https://github.com/aiken-lang/aiken/discussions/new?category=q-a).
 
+> [!IMPORTANT]
 > Make sure to mark your question as _Answered_ once resolved!
 
 ## Need Help Getting Started?
