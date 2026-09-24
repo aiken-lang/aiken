@@ -714,7 +714,7 @@ pub fn convert_opaque_type(
     if check_replaceable_opaque_type(t, data_types) && matches!(t.as_ref(), Type::App { .. }) {
         let data_type = lookup_data_type_by_tipo(data_types, t).unwrap();
 
-        let new_type_fields = &data_type.typed_parameters;
+        let new_type_fields = data_type.typed_parameters;
 
         let mut mono_type_vec = vec![];
 
@@ -723,8 +723,7 @@ pub fn convert_opaque_type(
         }
         let mono_types = mono_type_vec.into_iter().collect();
 
-        let generic_type = erased_opaque_inner(&data_type)
-            .expect("replaceable opaque type has an erased representation");
+        let generic_type = &data_type.constructors[0].arguments[0].tipo;
 
         let mono_type = find_and_replace_generics(generic_type, &mono_types);
 
@@ -810,20 +809,19 @@ pub fn check_replaceable_opaque_type(
     t: &Type,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> bool {
-    lookup_data_type_by_tipo(data_types, t)
-        .is_some_and(|data_type| erased_opaque_inner(&data_type).is_some())
-}
+    let data_type = lookup_data_type_by_tipo(data_types, t);
 
-/// The shared erasure rule for code generation and representation proofs.
-/// Any decorator retains the wrapper's encoding, even with a single field.
-pub(crate) fn erased_opaque_inner(data_type: &TypedDataType) -> Option<&Rc<Type>> {
-    let [constructor] = data_type.constructors.as_slice() else {
-        return None;
-    };
-    let [field] = constructor.arguments.as_slice() else {
-        return None;
-    };
-    (data_type.opaque && data_type.decorators.is_empty()).then_some(&field.tipo)
+    if let Some(data_type) = data_type
+        && let [constructor] = &data_type.constructors[..]
+    {
+        return constructor.arguments.len() == 1
+            && data_type.opaque
+            // BIG WARNING: Adding any kind decorator
+            // will make the opaque type not replaceable
+            && data_type.decorators.is_empty();
+    }
+
+    false
 }
 
 pub fn find_and_replace_generics(
