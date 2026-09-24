@@ -14,8 +14,6 @@ use std::collections::HashMap;
 const DEFAULT_MODULE_NAME: &str = "my_module";
 const DEFAULT_PACKAGE: &str = "test/project";
 
-mod unsafe_coerce;
-
 fn parse(source_code: &str) -> UntypedModule {
     parse_as(source_code, DEFAULT_MODULE_NAME)
 }

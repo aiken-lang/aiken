@@ -4,8 +4,6 @@
 
 ### Added
 
-- **aiken-lang**: Add `aiken/builtin.unsafe_coerce` for unchecked, zero-cost conversions between types with identical erased opaque representations. Compile-time checks reject incompatible or unconstrained casts; callers remain responsible for opaque-type invariants.
-
 - **aiken-lang**: Add first-class UPLC `Value` support, exposed in Aiken as `Value`. This adds `insert_value`, `lookup_value`, `union_value`, `contains_value`, `value_data`, `un_value_data`, and `scale_value` to `aiken/builtin`, with canonical Plutus V3 conformance coverage. @Riley-Kilgore, @KtorZ
 - **aiken-lang**: Aiken now supports Value literals such as:
 

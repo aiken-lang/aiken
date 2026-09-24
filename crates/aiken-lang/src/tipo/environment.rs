@@ -55,7 +55,6 @@ pub struct Environment<'a> {
 
     /// Nominal types whose values may contain opaque data.
     pub opaque_types: HashSet<(String, String)>,
-    pub unsafe_coercions: Vec<(Rc<Type>, Span)>,
 
     /// Values defined in the current module (or the prelude)
     pub module_values: HashMap<String, ValueConstructor>,
@@ -1246,7 +1245,6 @@ impl<'a> Environment<'a> {
             module_types: prelude.types.clone(),
             module_types_constructors: prelude.types_constructors.clone(),
             opaque_types: HashSet::new(),
-            unsafe_coercions: Vec::new(),
             module_values: HashMap::new(),
             module_functions: HashMap::new(),
             module_validators: HashMap::new(),
