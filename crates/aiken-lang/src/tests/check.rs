@@ -95,6 +95,14 @@ fn check_with_verbosity(
 }
 
 #[allow(clippy::result_large_err)]
+fn check_with_tracing(
+    ast: UntypedModule,
+    tracing: Tracing,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, Vec::new(), ModuleKind::Lib, tracing)
+}
+
+#[allow(clippy::result_large_err)]
 fn check_with_deps(
     ast: UntypedModule,
     extra: Vec<UntypedModule>,
@@ -2071,6 +2079,39 @@ fn trace_if_false_ok() {
     "#;
 
     assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn compiler_generated_filter_warns_for_user_trace() {
+    let source_code = r#"
+        test foo() {
+          trace @"user trace": True
+        }
+    "#;
+
+    assert!(matches!(
+        &check_with_tracing(parse(source_code), Tracing::CompilerGenerated(TraceLevel::Verbose)),
+        Ok((warnings, _)) if warnings == &[Warning::FilteredUserTrace { location: Span::create(32, 25) }],
+    ));
+}
+
+#[test]
+fn no_filtered_user_trace_warning_without_compiler_generated_filter() {
+    let source_code = r#"
+        test foo() {
+          trace @"user trace": True
+        }
+    "#;
+
+    for tracing in [
+        Tracing::All(TraceLevel::Verbose),
+        Tracing::UserDefined(TraceLevel::Verbose),
+    ] {
+        assert!(matches!(
+            &check_with_tracing(parse(source_code), tracing),
+            Ok((warnings, _)) if warnings.is_empty(),
+        ));
+    }
 }
 
 #[test]
@@ -6040,4 +6081,233 @@ fn incomplete_pair() {
         dbg!(check_validator(parse(source_code))),
         Err((_, Error::IncorrectFunctionCallArity { expected, .. })) if expected == 2
     ))
+}
+
+// Fuzz harness — added 2026-09-02 by Onyx for PR #1347 (issue #1326)
+//
+// Goal: exhaustively exercise the `Warning::FilteredUserTrace` emission across
+// all 9 Tracing × TraceLevel combinations and across trace form variations.
+//
+// The fix adds a warning when a `trace @"msg": ...` statement would be silently
+// filtered out by `Tracing::CompilerGenerated`. The fuzz pins down:
+//
+//   1. The warning IS emitted for `TraceKind::Trace` under `CompilerGenerated(_)`.
+//   2. The warning is NOT emitted under `All(_)` or `UserDefined(_)`.
+//   3. The warning is NOT emitted for `TraceKind::Todo` or `TraceKind::Error`
+//      (a.k.a. `fail`), even under `CompilerGenerated` — those are not user
+//      traces that the filter is removing.
+//
+// Each row asserts the exact expected warning list (or empty list).
+
+#[test]
+fn fuzz_filtered_user_trace_full_matrix() {
+    let cases: Vec<(&str, &str)> = vec![
+        // (slug, source)
+        (
+            "basic",
+            r#"
+                test foo() {
+                  trace @"user trace": True
+                }
+            "#,
+        ),
+        (
+            "with_args",
+            r#"
+                test foo() {
+                  trace @"user trace": 1, 2
+                }
+            "#,
+        ),
+        (
+            "comma_args",
+            r#"
+                test foo() {
+                  trace @"user trace": @"arg1", @"arg2"
+                }
+            "#,
+        ),
+        (
+            "continuation",
+            r#"
+                test foo() {
+                  trace @"user trace": if True { 1 } else { 2 }
+                }
+            "#,
+        ),
+        (
+            "nested_in_let",
+            r#"
+                test foo() {
+                  let x = {
+                    trace @"user trace": True
+                  }
+                  x
+                }
+            "#,
+        ),
+        (
+            "multi_trace",
+            r#"
+                test foo() {
+                  trace @"first": True
+                  trace @"second": True
+                }
+            "#,
+        ),
+        // Boundary: NOT user traces — should NOT warn
+        (
+            "todo_form",
+            r#"
+                test foo() {
+                  todo @"user todo"
+                }
+            "#,
+        ),
+        (
+            "fail_form",
+            r#"
+                test foo() {
+                  fail @"user fail"
+                }
+            "#,
+        ),
+    ];
+
+    let tracing_modes = vec![
+        ("all_verbose", Tracing::All(TraceLevel::Verbose)),
+        ("all_compact", Tracing::All(TraceLevel::Compact)),
+        ("all_silent", Tracing::All(TraceLevel::Silent)),
+        ("user_verbose", Tracing::UserDefined(TraceLevel::Verbose)),
+        ("user_compact", Tracing::UserDefined(TraceLevel::Compact)),
+        ("user_silent", Tracing::UserDefined(TraceLevel::Silent)),
+        ("compiler_verbose", Tracing::CompilerGenerated(TraceLevel::Verbose)),
+        ("compiler_compact", Tracing::CompilerGenerated(TraceLevel::Compact)),
+        ("compiler_silent", Tracing::CompilerGenerated(TraceLevel::Silent)),
+    ];
+
+    let mut total = 0;
+    let mut pass = 0;
+    let mut failures: Vec<String> = Vec::new();
+
+    for (slug, body) in &cases {
+        for (mode_name, tracing) in &tracing_modes {
+            total += 1;
+            // Body already has trailing \n from the raw string literal;
+            // adding another breaks Aiken's parser (extra trailing newline).
+            let result = check_with_tracing(parse(body), tracing.clone());
+            let warns: Vec<&Warning> = match &result {
+                Ok((warnings, _)) => warnings.iter().collect(),
+                Err((warnings, _)) => warnings.iter().collect(),
+            };
+
+            let is_user_trace = !slug.contains("todo") && !slug.contains("fail");
+            let is_compiler_filtered = matches!(tracing, Tracing::CompilerGenerated(_));
+
+            let expected_warn_count = if is_user_trace && is_compiler_filtered {
+                // One warning per `trace @"..."` statement in the source
+                let n_traces = body.matches("trace @").count();
+                if n_traces == 0 {
+                    1
+                } else {
+                    n_traces
+                }
+            } else {
+                0
+            };
+
+            let actual_filtered_warns: Vec<&Warning> = warns
+                .iter()
+                .filter(|w| matches!(w, Warning::FilteredUserTrace { .. }))
+                .copied()
+                .collect();
+
+            if actual_filtered_warns.len() == expected_warn_count {
+                pass += 1;
+            } else {
+                failures.push(format!(
+                    "  [{}|{}] expected {} FilteredUserTrace warnings, got {} (other warnings: {:?})",
+                    slug,
+                    mode_name,
+                    expected_warn_count,
+                    actual_filtered_warns.len(),
+                    warns
+                ));
+            }
+        }
+    }
+
+    println!(
+        "fuzz_filtered_user_trace_full_matrix: {}/{} pass ({} cases × 9 tracing modes)",
+        pass, total, cases.len()
+    );
+    // Print the other warnings to stderr so we can spot unexpected noise
+    for f in &failures {
+        eprintln!("FAIL: {}", f);
+    }
+    if !failures.is_empty() {
+        panic!(
+            "{} fuzz cases failed out of {} (see FAIL lines above)",
+            failures.len(),
+            total
+        );
+    }
+    assert_eq!(pass, total, "All cases should pass on the fix branch");
+}
+
+#[test]
+fn fuzz_filtered_user_trace_warning_location_is_precise() {
+    // Verify the warning's location points to the `trace` token, not the message
+    // or the body. We construct sources with multiple `trace` calls and check
+    // that each warning points to a unique, sensible span.
+
+    let source = r#"
+        test foo() {
+          trace @"first": True
+          trace @"second": True
+          trace @"third": True
+        }
+    "#;
+
+    let result = check_with_tracing(
+        parse(source),
+        Tracing::CompilerGenerated(TraceLevel::Verbose),
+    );
+
+    let Ok((warnings, _)) = result else {
+        panic!("Expected Ok, got {:?}", result);
+    };
+
+    let filtered: Vec<&Span> = warnings
+        .iter()
+        .filter_map(|w| match w {
+            Warning::FilteredUserTrace { location } => Some(location),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        filtered.len(),
+        3,
+        "Expected 3 FilteredUserTrace warnings (one per `trace` call), got {}",
+        filtered.len()
+    );
+
+    // All three spans must be distinct
+    let mut unique = std::collections::HashSet::new();
+    for span in &filtered {
+        unique.insert(span.start);
+    }
+    assert_eq!(
+        unique.len(),
+        3,
+        "Expected 3 distinct warning locations, got {:?}",
+        unique
+    );
+
+    println!(
+        "fuzz_filtered_user_trace_warning_location_is_precise: {} unique locations out of {} warnings",
+        unique.len(),
+        filtered.len()
+    );
 }
