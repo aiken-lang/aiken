@@ -621,6 +621,23 @@ impl DefaultFunction {
                 }
             }
 
+            DefaultFunction::InsertCoin => {
+                if let (
+                    Term::Constant(currency),
+                    Term::Constant(token),
+                    Term::Constant(quantity),
+                    Term::Constant(value),
+                ) = (&arg_stack[0], &arg_stack[1], &arg_stack[2], &arg_stack[3])
+                {
+                    matches!(currency.as_ref(), Constant::ByteString(_))
+                        && matches!(token.as_ref(), Constant::ByteString(_))
+                        && matches!(quantity.as_ref(), Constant::Integer(_))
+                        && matches!(value.as_ref(), Constant::Value(_))
+                } else {
+                    false
+                }
+            }
+
             _ => false,
         }
     }

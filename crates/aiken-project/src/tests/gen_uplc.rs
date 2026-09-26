@@ -6104,16 +6104,15 @@ fn primitive_value_builtin_pipeline() {
         0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
     ];
 
-    let empty_value = Term::Constant(Constant::Value(uplc::ast::Value::empty()).into());
-    let inserted_value = Term::Builtin(DefaultFunction::InsertCoin)
-        .apply(Term::byte_string(policy.clone()))
-        .apply(Term::byte_string(vec![0xbb]))
-        .apply(Term::integer(42.into()))
-        .apply(empty_value);
+    let inserted_value = uplc::ast::Value::from_canonical_entries(vec![(
+        policy.clone(),
+        vec![(vec![0xbb], 42.into())],
+    )])
+    .unwrap();
     let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
         .apply(Term::byte_string(policy.clone()))
         .apply(Term::byte_string(vec![0xbb]))
-        .apply(inserted_value);
+        .apply(Term::Constant(Constant::Value(inserted_value).into()));
 
     assert_uplc(
         src,
@@ -6126,7 +6125,56 @@ fn primitive_value_builtin_pipeline() {
 }
 
 #[test]
-fn named_value_literal_fields_compile_to_insert_value() {
+fn nested_constant_insert_value_calls_fold_to_value_constant() {
+    let src = r#"
+        use aiken/builtin.{insert_value, lookup_value}
+
+        test nested_value_builtin_pipeline() {
+            let value =
+                insert_value(
+                    #"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    #"cc",
+                    -7,
+                    insert_value(
+                        #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        #"bb",
+                        42,
+                        {},
+                    ),
+                )
+
+            lookup_value(
+                #"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                #"cc",
+                value,
+            ) == -7
+        }
+    "#;
+
+    let first_policy = vec![0xaa; 28];
+    let second_policy = vec![0xbb; 28];
+    let value = uplc::ast::Value::from_canonical_entries(vec![
+        (first_policy, vec![(vec![0xbb], 42.into())]),
+        (second_policy.clone(), vec![(vec![0xcc], (-7).into())]),
+    ])
+    .unwrap();
+    let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
+        .apply(Term::byte_string(second_policy))
+        .apply(Term::byte_string(vec![0xcc]))
+        .apply(Term::Constant(Constant::Value(value).into()));
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::integer((-7).into()))
+            .apply(observed_quantity),
+        false,
+        true,
+    )
+}
+
+#[test]
+fn named_value_literal_fields_fold_to_value_constant() {
     let src = r#"
         use aiken/builtin.{lookup_value}
 
@@ -6136,11 +6184,66 @@ fn named_value_literal_fields_compile_to_insert_value() {
             let quantity = 42
             let value = { policy: { asset: quantity } }
 
-            lookup_value(policy, asset, value) == quantity
+            lookup_value(policy, asset, value) == 42
         }
     "#;
 
-    assert_uplc_evaluates_successfully(src);
+    let policy = vec![0xaa; 28];
+    let value = uplc::ast::Value::from_canonical_entries(vec![(
+        policy.clone(),
+        vec![(vec![0xbb], 42.into())],
+    )])
+    .unwrap();
+    let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
+        .apply(Term::byte_string(policy))
+        .apply(Term::byte_string(vec![0xbb]))
+        .apply(Term::Constant(Constant::Value(value).into()));
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::integer(42.into()))
+            .apply(observed_quantity),
+        false,
+        true,
+    )
+}
+
+#[test]
+fn invalid_constant_insert_value_call_is_not_folded() {
+    let src = r#"
+        use aiken/builtin.{lookup_value}
+
+        test invalid_value_builtin_pipeline() {
+            let policy = #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            let asset = #"bb"
+            let value = { policy: { asset: 42 } }
+
+            lookup_value(policy, asset, value) == 42
+        }
+    "#;
+
+    let policy = vec![0xaa; 33];
+    let inserted_value = Term::Builtin(DefaultFunction::InsertCoin)
+        .apply(Term::byte_string(policy.clone()))
+        .apply(Term::byte_string(vec![0xbb]))
+        .apply(Term::integer(42.into()))
+        .apply(Term::Constant(
+            Constant::Value(uplc::ast::Value::empty()).into(),
+        ));
+    let observed_quantity = Term::Builtin(DefaultFunction::LookupCoin)
+        .apply(Term::byte_string(policy))
+        .apply(Term::byte_string(vec![0xbb]))
+        .apply(inserted_value);
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::integer(42.into()))
+            .apply(observed_quantity),
+        true,
+        true,
+    )
 }
 
 #[test]
