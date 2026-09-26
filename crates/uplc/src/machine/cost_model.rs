@@ -2105,51 +2105,81 @@ impl BuiltinCosts {
                 mem: self.decode_utf8.mem.cost(args[0].to_ex_mem()),
                 cpu: self.decode_utf8.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::IfThenElse => ExBudget {
-                mem: self.if_then_else.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-                cpu: self.if_then_else.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::ChooseUnit => ExBudget {
-                mem: self
-                    .choose_unit
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .choose_unit
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::Trace => ExBudget {
-                mem: self
-                    .trace
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .trace
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::FstPair => ExBudget {
-                mem: self.fst_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::SndPair => ExBudget {
-                mem: self.snd_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem()),
-            },
-            // The list builtins below are constant-cost on every published cost
-            // model, yet `to_ex_mem()` on a list walks every element (including
-            // nested `Data`). Computing that size on each call turns list
-            // traversal/accumulation quadratic in wall time, so skip the walk
-            // whenever the costing functions cannot observe the argument sizes.
+            // `to_ex_mem()` walks lists, pairs and `Data` in full (including
+            // nested `Data`), yet the builtins taking such arguments are
+            // constant-cost on every published cost model. The arms that check
+            // `is_constant()` skip that walk when the costing functions cannot
+            // observe the argument sizes, so that evaluating e.g. `unConstrData`
+            // on a large script context does not take time proportional to its
+            // size.
+            DefaultFunction::IfThenElse => {
+                let (x, y, z) =
+                    if self.if_then_else.mem.is_constant() && self.if_then_else.cpu.is_constant() {
+                        (0, 0, 0)
+                    } else {
+                        (
+                            args[0].to_ex_mem(),
+                            args[1].to_ex_mem(),
+                            args[2].to_ex_mem(),
+                        )
+                    };
+
+                ExBudget {
+                    mem: self.if_then_else.mem.cost(x, y, z),
+                    cpu: self.if_then_else.cpu.cost(x, y, z),
+                }
+            }
+            DefaultFunction::ChooseUnit => {
+                let (x, y) =
+                    if self.choose_unit.mem.is_constant() && self.choose_unit.cpu.is_constant() {
+                        (0, 0)
+                    } else {
+                        (args[0].to_ex_mem(), args[1].to_ex_mem())
+                    };
+
+                ExBudget {
+                    mem: self.choose_unit.mem.cost(x, y),
+                    cpu: self.choose_unit.cpu.cost(x, y),
+                }
+            }
+            DefaultFunction::Trace => {
+                let (x, y) = if self.trace.mem.is_constant() && self.trace.cpu.is_constant() {
+                    (0, 0)
+                } else {
+                    (args[0].to_ex_mem(), args[1].to_ex_mem())
+                };
+
+                ExBudget {
+                    mem: self.trace.mem.cost(x, y),
+                    cpu: self.trace.cpu.cost(x, y),
+                }
+            }
+            DefaultFunction::FstPair => {
+                let x = if self.fst_pair.mem.is_constant() && self.fst_pair.cpu.is_constant() {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.fst_pair.mem.cost(x),
+                    cpu: self.fst_pair.cpu.cost(x),
+                }
+            }
+            DefaultFunction::SndPair => {
+                let x = if self.snd_pair.mem.is_constant() && self.snd_pair.cpu.is_constant() {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.snd_pair.mem.cost(x),
+                    cpu: self.snd_pair.cpu.cost(x),
+                }
+            }
+            // For the list builtins, the walk would also make list traversal and
+            // accumulation quadratic in wall time.
             DefaultFunction::ChooseList => {
                 let (x, y, z) =
                     if self.choose_list.mem.is_constant() && self.choose_list.cpu.is_constant() {
@@ -2215,42 +2245,64 @@ impl BuiltinCosts {
                     cpu: self.null_list.cpu.cost(x),
                 }
             }
-            DefaultFunction::ChooseData => ExBudget {
-                mem: self.choose_data.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
-                ),
-                cpu: self.choose_data.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::ConstrData => ExBudget {
-                mem: self
-                    .constr_data
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .constr_data
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::MapData => ExBudget {
-                mem: self.map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.map_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::ListData => ExBudget {
-                mem: self.list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.list_data.cpu.cost(args[0].to_ex_mem()),
-            },
+            DefaultFunction::ChooseData => {
+                let sizes =
+                    if self.choose_data.mem.is_constant() && self.choose_data.cpu.is_constant() {
+                        [0; 6]
+                    } else {
+                        [
+                            args[0].to_ex_mem(),
+                            args[1].to_ex_mem(),
+                            args[2].to_ex_mem(),
+                            args[3].to_ex_mem(),
+                            args[4].to_ex_mem(),
+                            args[5].to_ex_mem(),
+                        ]
+                    };
+                let [u, v, w, x, y, z] = sizes;
+
+                ExBudget {
+                    mem: self.choose_data.mem.cost(u, v, w, x, y, z),
+                    cpu: self.choose_data.cpu.cost(u, v, w, x, y, z),
+                }
+            }
+            DefaultFunction::ConstrData => {
+                let (x, y) =
+                    if self.constr_data.mem.is_constant() && self.constr_data.cpu.is_constant() {
+                        (0, 0)
+                    } else {
+                        (args[0].to_ex_mem(), args[1].to_ex_mem())
+                    };
+
+                ExBudget {
+                    mem: self.constr_data.mem.cost(x, y),
+                    cpu: self.constr_data.cpu.cost(x, y),
+                }
+            }
+            DefaultFunction::MapData => {
+                let x = if self.map_data.mem.is_constant() && self.map_data.cpu.is_constant() {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.map_data.mem.cost(x),
+                    cpu: self.map_data.cpu.cost(x),
+                }
+            }
+            DefaultFunction::ListData => {
+                let x = if self.list_data.mem.is_constant() && self.list_data.cpu.is_constant() {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.list_data.mem.cost(x),
+                    cpu: self.list_data.cpu.cost(x),
+                }
+            }
             DefaultFunction::IData => ExBudget {
                 mem: self.i_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.i_data.cpu.cost(args[0].to_ex_mem()),
@@ -2259,18 +2311,46 @@ impl BuiltinCosts {
                 mem: self.b_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.b_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::UnConstrData => ExBudget {
-                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::UnMapData => ExBudget {
-                mem: self.un_map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::UnListData => ExBudget {
-                mem: self.un_list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem()),
-            },
+            DefaultFunction::UnConstrData => {
+                let x = if self.un_constr_data.mem.is_constant()
+                    && self.un_constr_data.cpu.is_constant()
+                {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.un_constr_data.mem.cost(x),
+                    cpu: self.un_constr_data.cpu.cost(x),
+                }
+            }
+            DefaultFunction::UnMapData => {
+                let x = if self.un_map_data.mem.is_constant() && self.un_map_data.cpu.is_constant()
+                {
+                    0
+                } else {
+                    args[0].to_ex_mem()
+                };
+
+                ExBudget {
+                    mem: self.un_map_data.mem.cost(x),
+                    cpu: self.un_map_data.cpu.cost(x),
+                }
+            }
+            DefaultFunction::UnListData => {
+                let x =
+                    if self.un_list_data.mem.is_constant() && self.un_list_data.cpu.is_constant() {
+                        0
+                    } else {
+                        args[0].to_ex_mem()
+                    };
+
+                ExBudget {
+                    mem: self.un_list_data.mem.cost(x),
+                    cpu: self.un_list_data.cpu.cost(x),
+                }
+            }
             DefaultFunction::UnIData => ExBudget {
                 mem: self.un_i_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem()),
@@ -2293,16 +2373,19 @@ impl BuiltinCosts {
                 mem: self.serialise_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.serialise_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::MkPairData => ExBudget {
-                mem: self
-                    .mk_pair_data
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .mk_pair_data
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
+            DefaultFunction::MkPairData => {
+                let (x, y) =
+                    if self.mk_pair_data.mem.is_constant() && self.mk_pair_data.cpu.is_constant() {
+                        (0, 0)
+                    } else {
+                        (args[0].to_ex_mem(), args[1].to_ex_mem())
+                    };
+
+                ExBudget {
+                    mem: self.mk_pair_data.mem.cost(x, y),
+                    cpu: self.mk_pair_data.cpu.cost(x, y),
+                }
+            }
             DefaultFunction::MkNilData => ExBudget {
                 mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem()),
@@ -3985,6 +4068,12 @@ pub enum SixArguments {
 }
 
 impl SixArguments {
+    /// True when the function ignores all arguments, so the caller can skip
+    /// computing their sizes.
+    pub fn is_constant(&self) -> bool {
+        matches!(self, SixArguments::ConstantCost(_))
+    }
+
     pub fn cost(&self, _: i64, _: i64, _: i64, _: i64, _: i64, _: i64) -> i64 {
         match self {
             SixArguments::ConstantCost(c) => *c,
@@ -4121,11 +4210,13 @@ impl TryFrom<u8> for StepKind {
 mod tests {
     use super::*;
     use crate::{
-        ast::{Constant, Type},
+        ast::{Constant, Data, Type},
         builtins::DefaultFunction,
         machine::{runtime::BuiltinSemantics, value::Value},
     };
+    use pallas_primitives::conway::PlutusData;
     use pretty_assertions::assert_eq;
+    use std::rc::Rc;
 
     #[test]
     fn plutus_v3_divide_integer_always_uses_semantic_e_shape() {
@@ -4402,6 +4493,166 @@ mod tests {
 
         assert_eq!(304, budget.mem);
         assert_eq!(i64::MAX, budget.cpu);
+    }
+
+    #[test]
+    fn data_builtins_skip_argument_sizes_only_under_constant_costing() {
+        let entry = || {
+            Data::constr(
+                0,
+                vec![Data::bytestring(vec![0xab; 32]), Data::integer(1.into())],
+            )
+        };
+        let data_pair = |fst: PlutusData, snd: PlutusData| {
+            Rc::new(Constant::ProtoPair(
+                Type::Data,
+                Type::Data,
+                Rc::new(Constant::Data(fst)),
+                Rc::new(Constant::Data(snd)),
+            ))
+        };
+        let unit = || Value::Con(Constant::Unit.into());
+        // Every builtin that skips sizing under constant costing, applied to
+        // arguments holding `entries` nested records.
+        let cases = |entries: usize| {
+            let items: Vec<PlutusData> = (0..entries).map(|_| entry()).collect();
+            let record = Data::constr(0, vec![Data::list(items.clone())]);
+            let data_items: Vec<_> = items
+                .iter()
+                .map(|item| Rc::new(Constant::Data(item.clone())))
+                .collect();
+            let pair_items = items
+                .iter()
+                .map(|item| data_pair(item.clone(), item.clone()))
+                .collect();
+            let pair = Value::Con(data_pair(record.clone(), record.clone()));
+            let pair_type = Type::Pair(Rc::new(Type::Data), Rc::new(Type::Data));
+
+            vec![
+                (
+                    DefaultFunction::IfThenElse,
+                    vec![Value::bool(true), Value::data(record.clone()), unit()],
+                ),
+                (
+                    DefaultFunction::ChooseUnit,
+                    vec![unit(), Value::data(record.clone())],
+                ),
+                (
+                    DefaultFunction::Trace,
+                    vec![
+                        Value::string("trace".to_string()),
+                        Value::data(record.clone()),
+                    ],
+                ),
+                (DefaultFunction::FstPair, vec![pair.clone()]),
+                (DefaultFunction::SndPair, vec![pair]),
+                (
+                    DefaultFunction::ChooseData,
+                    vec![
+                        Value::data(record.clone()),
+                        unit(),
+                        unit(),
+                        unit(),
+                        unit(),
+                        unit(),
+                    ],
+                ),
+                (
+                    DefaultFunction::ConstrData,
+                    vec![
+                        Value::integer(0.into()),
+                        Value::list(Type::Data, data_items.clone()),
+                    ],
+                ),
+                (
+                    DefaultFunction::MapData,
+                    vec![Value::list(pair_type, pair_items)],
+                ),
+                (
+                    DefaultFunction::ListData,
+                    vec![Value::list(Type::Data, data_items)],
+                ),
+                (
+                    DefaultFunction::UnConstrData,
+                    vec![Value::data(record.clone())],
+                ),
+                (
+                    DefaultFunction::UnMapData,
+                    vec![Value::data(Data::map(
+                        items
+                            .iter()
+                            .map(|item| (item.clone(), item.clone()))
+                            .collect(),
+                    ))],
+                ),
+                (
+                    DefaultFunction::UnListData,
+                    vec![Value::data(Data::list(items))],
+                ),
+                (
+                    DefaultFunction::MkPairData,
+                    vec![Value::data(record.clone()), Value::data(record)],
+                ),
+            ]
+        };
+        let budget = |costs: &BuiltinCosts, fun: DefaultFunction, args: &[Value]| {
+            costs.to_ex_budget(fun, args, BuiltinSemantics::C).unwrap()
+        };
+        // The same builtin with a cpu cost that grows with the argument sizes,
+        // while its mem cost stays constant.
+        let size_dependent = |fun: DefaultFunction| {
+            let one = OneArgument::LinearCost(LinearSize {
+                intercept: 0,
+                slope: 1,
+            });
+            let two = TwoArguments::AddedSizes(AddedSizes {
+                intercept: 0,
+                slope: 1,
+            });
+            let three = ThreeArguments::AddedSizes(AddedSizes {
+                intercept: 0,
+                slope: 1,
+            });
+            let mut costs = BuiltinCosts::v3();
+            match fun {
+                DefaultFunction::IfThenElse => costs.if_then_else.cpu = three,
+                DefaultFunction::ChooseUnit => costs.choose_unit.cpu = two,
+                DefaultFunction::Trace => costs.trace.cpu = two,
+                DefaultFunction::FstPair => costs.fst_pair.cpu = one,
+                DefaultFunction::SndPair => costs.snd_pair.cpu = one,
+                // `SixArguments` has no size-dependent costing function.
+                DefaultFunction::ChooseData => return None,
+                DefaultFunction::ConstrData => costs.constr_data.cpu = two,
+                DefaultFunction::MapData => costs.map_data.cpu = one,
+                DefaultFunction::ListData => costs.list_data.cpu = one,
+                DefaultFunction::UnConstrData => costs.un_constr_data.cpu = one,
+                DefaultFunction::UnMapData => costs.un_map_data.cpu = one,
+                DefaultFunction::UnListData => costs.un_list_data.cpu = one,
+                DefaultFunction::MkPairData => costs.mk_pair_data.cpu = two,
+                _ => unreachable!("{fun:?}"),
+            }
+            Some(costs)
+        };
+        let size = |args: &[Value]| args.iter().map(Value::to_ex_mem).sum::<i64>();
+
+        for ((fun, small), (_, large)) in cases(1).into_iter().zip(cases(1000)) {
+            assert!(size(&large) > size(&small), "{fun:?}");
+
+            // Published costing functions are constant: sizes are irrelevant.
+            for costs in [BuiltinCosts::v1(), BuiltinCosts::v2(), BuiltinCosts::v3()] {
+                assert_eq!(
+                    budget(&costs, fun, &small),
+                    budget(&costs, fun, &large),
+                    "{fun:?}"
+                );
+            }
+
+            // A size-dependent costing function still observes the real sizes.
+            if let Some(costs) = size_dependent(fun) {
+                assert_eq!(size(&small), budget(&costs, fun, &small).cpu, "{fun:?}");
+                assert_eq!(size(&large), budget(&costs, fun, &large).cpu, "{fun:?}");
+            }
+        }
     }
 
     #[test]

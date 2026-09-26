@@ -19,6 +19,7 @@
 
 ### Changed
 
+- **uplc**: Skip computing argument sizes for the `Data`, pair and polymorphic builtins (`unConstrData`, `unListData`, `unMapData`, `constrData`, `listData`, `mapData`, `chooseData`, `mkPairData`, `fstPair`, `sndPair`, `ifThenElse`, `chooseUnit` and `trace`) whenever their costing functions are constant, as is already done for the list builtins. Execution budgets are unchanged, while evaluating scripts that inspect large `Data` values (such as the script context) gets several times faster. @colll78
 - **aiken-lang**: Add support for data-reification and constant-reification for values; and as a consequence, reify any value-like data into a value expression literal (i.e. anything isomorphic to `Dict<ByteArray, Dict<ByteArray, Int>>` now reifies to a value, with nice formatting. @KtorZ
 
 ### Fixed
