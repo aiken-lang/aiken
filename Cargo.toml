@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 description = "Cardano smart contract language and toolchain"
 documentation = "https://aiken-lang.org"
-version = "1.1.23"
+version = "1.1.24"
 edition = "2024"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -149,10 +149,10 @@ walkdir = "2.3.2"
 xdg = "2.5.2"
 zip = "0.6.4"
 
-uplc = { path = 'crates/uplc', version = "1.1.23" }
-aiken-lang = { path = "crates/aiken-lang", version = "1.1.23" }
-aiken-lsp = { path = "crates/aiken-lsp", version = "1.1.23" }
-aiken-project = { path = 'crates/aiken-project', version = "1.1.23" }
+uplc = { path = 'crates/uplc', version = "1.1.24" }
+aiken-lang = { path = "crates/aiken-lang", version = "1.1.24" }
+aiken-lsp = { path = "crates/aiken-lsp", version = "1.1.24" }
+aiken-project = { path = 'crates/aiken-project', version = "1.1.24" }
 
 [profile.dev.package.insta]
 opt-level = 3
