@@ -285,7 +285,7 @@ impl Error {
             return;
         }
 
-        println!("{self:?}")
+        eprintln!("{self:?}")
     }
 
     pub fn from_parse_errors(errs: Vec<ParseError>, path: &Path, src: &str) -> Vec<Self> {

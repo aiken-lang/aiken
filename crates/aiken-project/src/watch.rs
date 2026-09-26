@@ -1,4 +1,4 @@
-use crate::{Project, config::WorkspaceConfig, telemetry::EventTarget};
+use crate::{config::WorkspaceConfig, telemetry::EventTarget, Project};
 use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
 use owo_colors::{OwoColorize, Stream::Stderr};
@@ -141,15 +141,12 @@ where
     let mut errs: Vec<crate::error::Error> = Vec::new();
     let mut check_count = None;
 
-    let mut is_terminal = true;
-
     if let Ok(workspace) = WorkspaceConfig::load(&workspace_root) {
         let res_projects = workspace
             .members
             .into_iter()
             .map(|member| {
                 let event_target = EventTarget::default();
-                is_terminal = matches!(event_target, EventTarget::Terminal(_));
                 Project::new(member, event_target)
             })
             .collect::<Result<Vec<Project<_>>, crate::error::Error>>();
@@ -176,7 +173,6 @@ where
         }
     } else {
         let event_target = EventTarget::default();
-        is_terminal = matches!(event_target, EventTarget::Terminal(_));
         let mut project = match Project::new(workspace_root, event_target) {
             Ok(p) => Ok(p),
             Err(e) => {
@@ -199,7 +195,7 @@ where
 
     let warning_count = warnings.len();
 
-    if is_terminal && !suppress_warnings {
+    if !suppress_warnings {
         for warning in &warnings {
             eprintln!();
             warning.report()
@@ -207,25 +203,23 @@ where
     }
 
     if !errs.is_empty() {
-        if is_terminal {
-            for err in &errs {
-                err.report()
-            }
-
-            eprintln!(
-                "{}",
-                Summary {
-                    check_count,
-                    warning_count,
-                    error_count: errs.len(),
-                }
-            );
+        for err in &errs {
+            err.report()
         }
+
+        eprintln!(
+            "{}",
+            Summary {
+                check_count,
+                warning_count,
+                error_count: errs.len(),
+            }
+        );
 
         return Err(ExitFailure::into_report());
     }
 
-    if is_terminal && show_summary {
+    if show_summary {
         eprintln!(
             "{}",
             Summary {
