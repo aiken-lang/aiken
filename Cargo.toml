@@ -147,7 +147,7 @@ urlencoding = "2.1.2"
 vec1 = "1.10.1"
 walkdir = "2.3.2"
 xdg = "2.5.2"
-zip = "0.6.4"
+zip = "8.6.0"
 
 uplc = { path = 'crates/uplc', version = "1.1.24" }
 aiken-lang = { path = "crates/aiken-lang", version = "1.1.24" }
