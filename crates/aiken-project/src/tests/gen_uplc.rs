@@ -6811,3 +6811,165 @@ fn invalid_module_constant_returns_codegen_error() {
     assert_eq!(name, "test_module.x");
     assert!(matches!(*error, uplc::machine::Error::DivideByZero(..)));
 }
+
+#[test]
+fn list_switch_literal_second_position_with_tails() {
+    let src = r#"
+        fn f(xs: List<Int>) -> Int {
+          when xs is {
+            [0, 0, ..] -> 1
+            [_, ..] -> 2
+            [] -> 3
+          }
+        }
+
+        test foo() {
+          and {
+            f([0, 0]) == 1,
+            f([0, 0, 0]) == 1,
+            f([0, 0, 5, 6, 7]) == 1,
+            f([0, 1]) == 2,
+            f([1, 0]) == 2,
+            f([0, 1, 0, 0]) == 2,
+            f([0]) == 2,
+            f([7]) == 2,
+            f([]) == 3,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn list_switch_literal_later_position_with_tails() {
+    let src = r#"
+        fn f(xs: List<Int>) -> Int {
+          when xs is {
+            [_, _, 0, ..] -> 1
+            [_, _, ..] -> 2
+            [_, ..] -> 3
+            [] -> 4
+          }
+        }
+
+        test foo() {
+          and {
+            f([5, 5, 0]) == 1,
+            f([5, 5, 0, 9, 9]) == 1,
+            f([5, 5, 1]) == 2,
+            f([5, 5]) == 2,
+            f([5, 5, 1, 0]) == 2,
+            f([5]) == 3,
+            f([]) == 4,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn list_switch_multiple_tails_prefer_longest_fitting() {
+    let src = r#"
+        fn f(xs: List<Int>) -> Int {
+          when xs is {
+            [_, _, _, ..] -> 3
+            [_, _, ..] -> 2
+            [_, ..] -> 1
+            [] -> 0
+          }
+        }
+
+        test foo() {
+          and {
+            f([]) == 0,
+            f([1]) == 1,
+            f([1, 2]) == 2,
+            f([1, 2, 3]) == 3,
+            f([1, 2, 3, 4, 5]) == 3,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn list_switch_exact_length_has_priority_over_tail() {
+    let src = r#"
+        fn f(xs: List<Int>) -> Int {
+          when xs is {
+            [_, _] -> 2
+            [_, _, ..] -> 9
+            [_] -> 1
+            [] -> 0
+          }
+        }
+
+        fn g(xs: List<Int>) -> Int {
+          when xs is {
+            [a, b] -> a + b + 10
+            [0, 0, ..] -> 1
+            [_, ..] -> 2
+            [] -> 3
+          }
+        }
+
+        test foo() {
+          and {
+            f([]) == 0,
+            f([1]) == 1,
+            f([1, 2]) == 2,
+            f([1, 2, 3]) == 9,
+            g([0, 0]) == 10,
+            g([1, 2]) == 13,
+            g([0, 0, 0]) == 1,
+            g([1, 2, 3]) == 2,
+            g([1]) == 2,
+            g([]) == 3,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn list_switch_named_tails_and_bool() {
+    let src = r#"
+                fn f(xs: List<Bool>) -> Int {
+          when xs is {
+            [True, True, ..rest] -> if rest == [] { 10 } else { 11 }
+            [_, ..rest] -> if rest == [] { 20 } else { 21 }
+            [] -> 30
+          }
+        }
+
+        fn g(xs: List<Int>) -> Int {
+          when xs is {
+            [0, 0, ..rest] -> if rest == [] { 10 } else { 11 }
+            [_, ..rest] -> if rest == [] { 20 } else { 21 }
+            [] -> 30
+          }
+        }
+
+        test foo() {
+          and {
+            f([True, True]) == 10,
+            f([True, True, False, True]) == 11,
+            f([True, False]) == 21,
+            f([False, True, True]) == 21,
+            f([False]) == 20,
+            f([]) == 30,
+            g([0, 0]) == 10,
+            g([0, 0, 1, 2, 3]) == 11,
+            g([0, 1, 2]) == 21,
+            g([4]) == 20,
+            g([]) == 30,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}

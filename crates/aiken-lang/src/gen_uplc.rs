@@ -2851,13 +2851,38 @@ impl<'a> CodeGenerator<'a> {
                     },
                 );
 
-                let last_pattern = if tail_cases.is_empty() {
-                    *default.as_ref().unwrap().clone()
-                } else {
-                    let tree = tail_cases.last().unwrap();
-
-                    tree.1.clone()
+                // Case selection for a list of exactly `index` elements: an exact-length
+                // case wins; otherwise the longest tail pattern that fits; otherwise default.
+                let select_list_case = |index: usize| {
+                    cases
+                        .iter()
+                        .find(|(case, _)| matches!(case, CaseTest::List(i) if *i == index))
+                        .or_else(|| {
+                            tail_cases
+                                .iter()
+                                .filter(|(case, _)| {
+                                    matches!(case, CaseTest::ListWithTail(i) if *i <= index)
+                                })
+                                .max_by_key(|(case, _)| match case {
+                                    CaseTest::ListWithTail(i) => *i,
+                                    _ => unreachable!(),
+                                })
+                        })
+                        .map(|(_, tree)| tree.clone())
+                        .unwrap_or_else(|| *default.as_ref().unwrap().clone())
                 };
+
+                // Fallback for lists longer than any tested length: longest tail pattern.
+                let last_pattern = tail_cases
+                    .iter()
+                    .max_by_key(|(case, _)| match case {
+                        CaseTest::ListWithTail(i) => *i,
+                        _ => unreachable!(),
+                    })
+                    .map_or_else(
+                        || *default.as_ref().unwrap().clone(),
+                        |(_, tree)| tree.clone(),
+                    );
 
                 let builtins_for_pattern = builtins_path.merge(Builtins::new_from_list_case(
                     CaseTest::List(longest_pattern),
@@ -2878,18 +2903,7 @@ impl<'a> CodeGenerator<'a> {
                     (builtins_for_pattern, last_pattern),
                     |(mut builtins_for_pattern, acc), list_item| match list_item {
                         itertools::Position::First(index) | itertools::Position::Only(index) => {
-                            let (_, tree) = cases
-                                .iter()
-                                .chain(tail_cases.iter())
-                                .find(|x| match x.0 {
-                                    CaseTest::List(i) => i == index,
-                                    CaseTest::ListWithTail(i) => i <= index,
-                                    _ => unreachable!(),
-                                })
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    (CaseTest::Wild, *default.as_ref().unwrap().clone())
-                                });
+                            let tree = select_list_case(index);
 
                             let tail_name = if builtins_for_pattern.is_empty() {
                                 subject_name.clone()
@@ -2920,18 +2934,7 @@ impl<'a> CodeGenerator<'a> {
                         }
 
                         itertools::Position::Middle(index) | itertools::Position::Last(index) => {
-                            let (_, tree) = cases
-                                .iter()
-                                .chain(tail_cases.iter())
-                                .find(|x| match x.0 {
-                                    CaseTest::List(i) => i == index,
-                                    CaseTest::ListWithTail(i) => i <= index,
-                                    _ => unreachable!(),
-                                })
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    (CaseTest::Wild, *default.as_ref().unwrap().clone())
-                                });
+                            let tree = select_list_case(index);
 
                             let tail_name = if builtins_for_pattern.is_empty() {
                                 subject_name.clone()

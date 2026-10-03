@@ -13,6 +13,7 @@
 ### Fixed
 
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
+- **aiken-lang**: Fix list pattern matching selecting the wrong branch when several tail patterns (e.g. `[0, 0, ..]` and `[_, ..]`) are combined with `[]`: dispatch now picks the exact-length case if any, otherwise the longest fitting tail pattern. Fixes #1440. @Riley-Kilgore
 
 ## v1.1.24 - 2026-09-26
 
