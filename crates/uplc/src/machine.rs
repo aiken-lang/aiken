@@ -1052,4 +1052,52 @@ mod tests {
         assert!(matches!(machine.run(term), Err(Error::EvaluationFailure)));
         assert!(machine.frames.is_empty());
     }
+
+    #[test]
+    fn nested_constr_and_case_and_list_spines() {
+        // Constr fields and case branches are entered in place, closures
+        // escape from inside them, and list spines are consed onto, shared
+        // and split. Small enough to run under miri.
+        let eval = |src: &str| {
+            let program: Program<NamedDeBruijn> =
+                crate::parser::program(src).unwrap().try_into().unwrap();
+
+            program.eval(ExBudget::max()).result().unwrap()
+        };
+
+        let int = |i: i32| Term::Constant(Constant::Integer(i.into()).into());
+
+        assert_eq!(
+            eval(
+                "(program 1.1.0
+                  [ (lam f
+                      (case (constr 1 (con integer 7) f)
+                        (lam a (lam g (con integer 0)))
+                        (lam a (lam g
+                          [ g (constr 0 a (case (constr 0) (con integer 2))) ]))))
+                    (lam p (case p (lam x (lam y [(builtin addInteger) x y])))) ])"
+            ),
+            int(9)
+        );
+
+        assert_eq!(
+            eval(
+                "(program 1.1.0
+                  [ (lam cons
+                      [ (lam l
+                          [ (lam a
+                              [ (lam b
+                                  [ [ (builtin addInteger)
+                                      [ (force (builtin headList))
+                                        [ (force (builtin tailList)) b ] ] ]
+                                    [ (force (builtin headList))
+                                      [ [ (force (builtin dropList)) (con integer 2) ] a ] ] ])
+                                [ [ cons (con integer 30) ] l ] ])
+                            [ [ cons (con integer 20) ] [ [ cons (con integer 10) ] l ] ] ])
+                        (con (list integer) [1, 2]) ])
+                    (force (builtin mkCons)) ])"
+            ),
+            int(2)
+        );
+    }
 }

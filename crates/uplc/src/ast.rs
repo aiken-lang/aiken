@@ -27,10 +27,12 @@ use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use std::{
+    cell::{Cell, UnsafeCell},
     collections::BTreeMap,
     convert::AsRef,
     fmt::{self, Display},
     hash::{self, Hash},
+    mem::MaybeUninit,
     rc::Rc,
 };
 
@@ -467,10 +469,51 @@ pub enum Constant {
 /// A view onto a shared, immutable spine: cloning it, or taking any of its
 /// tails, is O(1) and allocates nothing. It dereferences to the slice of its
 /// elements.
-#[derive(Clone, Default)]
+///
+/// Spines keep free slots in front of their first element, so prepending to
+/// the frontmost view of a spine (the usual case when a list is built up one
+/// `mkCons` at a time, whether or not other views share it) writes into the
+/// next free slot instead of copying: mkCons is amortised O(1).
+#[derive(Clone)]
 pub struct ListSpine {
-    items: Rc<Vec<Rc<Constant>>>,
+    buf: Rc<SpineBuf>,
     start: usize,
+}
+
+/// Slots `front..` are initialised and never written again; slots `..front`
+/// are free. Only the view starting at `front` may claim slot `front - 1`.
+struct SpineBuf {
+    slots: Box<[UnsafeCell<MaybeUninit<Rc<Constant>>>]>,
+    front: Cell<usize>,
+}
+
+impl Drop for SpineBuf {
+    fn drop(&mut self) {
+        for slot in &mut self.slots[self.front.get()..] {
+            // SAFETY: slots from `front` onwards are initialised.
+            unsafe { slot.get_mut().assume_init_drop() }
+        }
+    }
+}
+
+impl SpineBuf {
+    /// A spine holding `items` with `free` free slots in front of them.
+    fn new(free: usize, items: impl ExactSizeIterator<Item = Rc<Constant>>) -> SpineBuf {
+        let mut slots = Vec::with_capacity(free + items.len());
+        slots.extend((0..free).map(|_| UnsafeCell::new(MaybeUninit::uninit())));
+        slots.extend(items.map(|item| UnsafeCell::new(MaybeUninit::new(item))));
+
+        SpineBuf {
+            slots: slots.into_boxed_slice(),
+            front: Cell::new(free),
+        }
+    }
+}
+
+impl Default for ListSpine {
+    fn default() -> Self {
+        Vec::new().into()
+    }
 }
 
 impl ListSpine {
@@ -479,29 +522,48 @@ impl ListSpine {
     /// alive until every view of the spine is dropped.
     pub fn skip(&self, n: usize) -> Option<ListSpine> {
         (n <= self.len()).then(|| ListSpine {
-            items: self.items.clone(),
+            buf: self.buf.clone(),
             start: self.start + n,
         })
     }
 
-    /// The list with `item` prepended. O(len) pointer copies: the spine is
-    /// shared, so it cannot grow in place.
+    /// The list with `item` prepended.
     pub fn cons(&self, item: Rc<Constant>) -> ListSpine {
-        let mut items = Vec::with_capacity(self.len() + 1);
-        items.push(item);
-        items.extend(self.iter().cloned());
+        let front = self.buf.front.get();
 
-        items.into()
+        if self.start == front && front > 0 {
+            let start = front - 1;
+
+            // SAFETY: slot `start` is free, and only this view (the one
+            // starting at `front`) may claim it. No reference into a free
+            // slot exists, since views only expose slots from their start.
+            unsafe { (*self.buf.slots[start].get()).write(item) };
+            self.buf.front.set(start);
+
+            return ListSpine {
+                buf: self.buf.clone(),
+                start,
+            };
+        }
+
+        // Double the room in front so a chain of conses copies O(1)
+        // amortised elements each.
+        let free = self.len().max(4);
+
+        ListSpine {
+            buf: Rc::new(SpineBuf::new(
+                free,
+                std::iter::once(item)
+                    .chain(self.iter().cloned())
+                    .collect::<Vec<_>>()
+                    .into_iter(),
+            )),
+            start: free,
+        }
     }
 
     pub fn into_vec(self) -> Vec<Rc<Constant>> {
-        match Rc::try_unwrap(self.items) {
-            Ok(mut items) => {
-                items.drain(..self.start);
-                items
-            }
-            Err(items) => items[self.start..].to_vec(),
-        }
+        self.to_vec()
     }
 }
 
@@ -509,14 +571,19 @@ impl std::ops::Deref for ListSpine {
     type Target = [Rc<Constant>];
 
     fn deref(&self) -> &Self::Target {
-        &self.items[self.start..]
+        let slots = &self.buf.slots[self.start..];
+
+        // SAFETY: `start >= front`, so these slots are initialised and are
+        // never written again while the spine is alive. `UnsafeCell` and
+        // `MaybeUninit` are `repr(transparent)`, so the layouts match.
+        unsafe { std::slice::from_raw_parts(slots.as_ptr().cast(), slots.len()) }
     }
 }
 
 impl From<Vec<Rc<Constant>>> for ListSpine {
     fn from(items: Vec<Rc<Constant>>) -> Self {
         ListSpine {
-            items: Rc::new(items),
+            buf: Rc::new(SpineBuf::new(0, items.into_iter())),
             start: 0,
         }
     }
@@ -1170,9 +1237,10 @@ impl Type {
 impl Constant {
     /// An equal constant sharing no allocation with `self`.
     ///
-    /// `Rc` reference counts are not atomic, so a constant that may end up
-    /// embedded in programs handled by different threads (e.g. tests run in
-    /// parallel) must not share `Rc`s with anything else.
+    /// `Rc` reference counts are not atomic, and neither is a list spine's
+    /// record of its free slots, so a constant that may end up embedded in
+    /// programs handled by different threads (e.g. tests run in parallel)
+    /// must not share `Rc`s or spines with anything else.
     pub fn deep_clone(&self) -> Constant {
         match self {
             Constant::ProtoList(tipo, items) => Constant::ProtoList(
@@ -2051,5 +2119,79 @@ mod tests {
             };
             prop_assert_eq!(left.contains(&right), expected_contains);
         }
+    }
+}
+
+#[cfg(test)]
+mod list_spine_tests {
+    use super::{Constant, ListSpine};
+    use std::rc::Rc;
+
+    fn int(i: i64) -> Rc<Constant> {
+        Rc::new(Constant::Integer(i.into()))
+    }
+
+    fn ints(list: &ListSpine) -> Vec<i64> {
+        list.iter()
+            .map(|c| match c.as_ref() {
+                Constant::Integer(i) => i64::try_from(i).unwrap(),
+                _ => unreachable!(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn cons_shares_and_branches() {
+        let base: ListSpine = vec![int(1), int(2)].into();
+        let a = base.cons(int(0));
+        // Claims a free slot in front of `a`'s spine.
+        let b = a.cons(int(-1));
+        // `a` is no longer the frontmost view, so this must copy.
+        let c = a.cons(int(-2));
+        let d = b.skip(2).unwrap().cons(int(9));
+
+        assert_eq!(ints(&base), vec![1, 2]);
+        assert_eq!(ints(&a), vec![0, 1, 2]);
+        assert_eq!(ints(&b), vec![-1, 0, 1, 2]);
+        assert_eq!(ints(&c), vec![-2, 0, 1, 2]);
+        assert_eq!(ints(&d), vec![9, 1, 2]);
+        assert!(b.skip(5).is_none());
+        assert!(b.skip(4).unwrap().is_empty());
+
+        let mut long = ListSpine::default();
+        for i in 0..100 {
+            long = long.cons(int(i));
+        }
+        let tail = long.skip(50).unwrap();
+        drop(long);
+        assert_eq!(ints(&tail), (0..50).rev().collect::<Vec<_>>());
+        assert_eq!(tail, tail.to_vec().into());
+    }
+
+    #[test]
+    fn cons_while_views_are_borrowed() {
+        let base: ListSpine = (0..3).map(int).collect();
+        let front = base.cons(int(-1));
+        let sibling = front.clone();
+
+        // Borrow both views' elements, then fill the free slots in front of
+        // them, through each view in turn.
+        let borrowed: &[Rc<Constant>] = &front;
+        let from_sibling = sibling.cons(int(-2));
+        let from_front = front.cons(int(-3));
+        let from_tail = from_sibling.skip(1).unwrap().cons(int(-4));
+
+        assert_eq!(borrowed.len(), 4);
+        assert_eq!(ints(&sibling), vec![-1, 0, 1, 2]);
+        assert_eq!(ints(&from_sibling), vec![-2, -1, 0, 1, 2]);
+        assert_eq!(ints(&from_front), vec![-3, -1, 0, 1, 2]);
+        assert_eq!(ints(&from_tail), vec![-4, -1, 0, 1, 2]);
+
+        // Dropping every view but one frees the spine's elements exactly once.
+        let empty = ListSpine::default().cons(int(1)).skip(1).unwrap();
+        drop((base, front, sibling, from_front, from_tail));
+        assert_eq!(ints(&from_sibling), vec![-2, -1, 0, 1, 2]);
+        assert_eq!(ints(&empty.cons(int(5))), vec![5]);
+        assert_eq!(from_sibling.into_vec().len(), 5);
     }
 }

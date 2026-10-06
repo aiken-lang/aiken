@@ -916,10 +916,10 @@ impl DefaultFunction {
                     ));
                 }
 
-                // Share the spine's elements instead of deep-cloning them:
-                // consing onto a list must stay O(len) in pointer copies, not
-                // O(total element size), or deep recursion over accumulated
-                // lists goes quadratic in host memory.
+                // Share the spine's elements instead of deep-cloning them, and
+                // prepend in place when this list is the front of its spine:
+                // building a list one mkCons at a time stays amortised O(1)
+                // per cons, in host time and memory alike.
                 let value = Value::list(r#type.clone(), list.cons(item));
 
                 Ok(value)
