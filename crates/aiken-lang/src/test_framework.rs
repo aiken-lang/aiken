@@ -13,12 +13,11 @@ use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::{OwoColorize, Stream, Stream::Stderr};
-use pallas_primitives::alonzo::{Constr, PlutusData};
+use pallas_primitives::alonzo::PlutusData;
 use patricia_tree::PatriciaMap;
 #[cfg(not(target_family = "wasm"))]
 use std::time::Duration;
 use std::{
-    borrow::Borrow,
     collections::BTreeMap,
     convert::TryFrom,
     fmt::{Debug, Display},
@@ -687,7 +686,8 @@ impl Prng {
                     Data::bytestring(digest.to_vec()), // Prng's seed
                     Data::bytestring(vec![]),          // Random choices
                 ],
-            ),
+            )
+            .into(),
         }
     }
 
@@ -700,7 +700,8 @@ impl Prng {
                     Data::integer(choices.len().into()),
                     Data::bytestring(choices.iter().rev().cloned().collect::<Vec<_>>()),
                 ],
-            ),
+            )
+            .into(),
             choices: choices.to_vec(),
         }
     }
@@ -732,35 +733,35 @@ impl Prng {
     /// values to replay). In such case, the replayed sequence is simply invalid and the fuzzer
     /// aborted altogether with 'None'.
     pub fn from_result(result: Term<NamedDeBruijn>) -> Option<(Self, PlutusData)> {
-        /// Interpret the given 'PlutusData' as one of two Prng constructors.
-        fn as_prng(cst: &PlutusData) -> Prng {
-            if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
-                if *tag == 121 + Prng::SEEDED
-                    && let [
-                        PlutusData::BoundedBytes(bytes),
-                        PlutusData::BoundedBytes(choices),
-                    ] = &fields[..]
+        /// Interpret the given 'Data' as one of two Prng constructors.
+        fn as_prng(cst: &Data) -> Prng {
+            if let Data::Constr(constr) = cst {
+                let fields = constr.fields.iter().collect::<Vec<_>>();
+
+                if constr.tag == 121 + Prng::SEEDED
+                    && let [Data::BoundedBytes(bytes), Data::BoundedBytes(choices)] = fields[..]
                 {
                     return Prng::Seeded {
                         choices: choices.to_vec(),
                         uplc: Data::constr(
                             Prng::SEEDED,
                             vec![
-                                PlutusData::BoundedBytes(bytes.to_owned()),
+                                Data::BoundedBytes(bytes.to_owned()),
                                 // Clear choices between seeded runs, to not
                                 // accumulate ALL choices ever made.
-                                PlutusData::BoundedBytes(vec![].into()),
+                                Data::bytestring(vec![]),
                             ],
-                        ),
+                        )
+                        .into(),
                     };
                 }
 
-                if *tag == 121 + Prng::REPLAYED
-                    && let [PlutusData::BigInt(..), PlutusData::BoundedBytes(choices)] = &fields[..]
+                if constr.tag == 121 + Prng::REPLAYED
+                    && let [Data::BigInt(..), Data::BoundedBytes(choices)] = fields[..]
                 {
                     return Prng::Replayed {
                         choices: choices.to_vec(),
-                        uplc: cst.clone(),
+                        uplc: cst.into(),
                     };
                 }
             }
@@ -769,20 +770,21 @@ impl Prng {
         }
 
         if let Term::Constant(rc) = &result
-            && let Constant::Data(PlutusData::Constr(Constr { tag, fields, .. })) = &rc.borrow()
+            && let Constant::Data(Data::Constr(constr)) = rc.as_ref()
         {
-            if *tag == 121 + Prng::SOME
-                && let [PlutusData::Array(elems)] = &fields[..]
-                && let [new_seed, value] = &elems[..]
+            if constr.tag == 121 + Prng::SOME
+                && let Some(Data::Array(elems)) = constr.fields.get(0)
+                && constr.fields.len() == 1
+                && let [new_seed, value] = elems.iter().collect::<Vec<_>>()[..]
             {
-                return Some((as_prng(new_seed), value.clone()));
+                return Some((as_prng(new_seed), value.into()));
             }
 
             // May occurs when replaying a fuzzer from a shrinked sequence of
             // choices. If we run out of choices, or a choice end up being
             // invalid as per the expectation, the fuzzer can't go further and
             // fail.
-            if *tag == 121 + Prng::NONE {
+            if constr.tag == 121 + Prng::NONE {
                 return None;
             }
         }

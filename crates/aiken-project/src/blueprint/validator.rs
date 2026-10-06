@@ -17,7 +17,7 @@ use serde;
 use std::borrow::Borrow;
 use uplc::{
     PlutusData,
-    ast::{Constant, SerializableProgram},
+    ast::{Constant, Data as UplcData, SerializableProgram},
 };
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -293,6 +293,7 @@ impl Validator<SerializableProgram> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
             Some((head, tail)) => {
+                let arg = UplcData::from(arg);
                 head.validate(definitions, &Constant::Data(arg.clone()))?;
                 Ok(Self {
                     program: self.program.map(|program| program.apply_data(arg.clone())),

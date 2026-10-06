@@ -1,6 +1,7 @@
 use crate::{
     ast::{
-        Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Type, Unique,
+        Constant, Data, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Type,
+        Unique,
     },
     builtins::DefaultFunction,
     machine::runtime::Compressable,
@@ -11,7 +12,7 @@ use pallas_codec::flat::{
     de::{self, Decode, Decoder},
     en::{self, Encode, Encoder},
 };
-use pallas_primitives::{Fragment, conway::PlutusData};
+use pallas_primitives::Fragment;
 use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
 const BUILTIN_TAG_WIDTH: u32 = 7;
@@ -688,7 +689,7 @@ impl Decode<'_> for Constant {
             [8] => {
                 let cbor = Vec::<u8>::decode(d)?;
 
-                let data = PlutusData::decode_fragment(&cbor)
+                let data = Data::decode_fragment(&cbor)
                     .map_err(|err| de::Error::Message(err.to_string()))?;
 
                 Ok(Constant::Data(data))
@@ -767,8 +768,8 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
         Type::Data => {
             let cbor = Vec::<u8>::decode(d)?;
 
-            let data = PlutusData::decode_fragment(&cbor)
-                .map_err(|err| de::Error::Message(err.to_string()))?;
+            let data =
+                Data::decode_fragment(&cbor).map_err(|err| de::Error::Message(err.to_string()))?;
 
             Ok(Constant::Data(data))
         }

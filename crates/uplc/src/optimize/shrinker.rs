@@ -11,7 +11,7 @@ use crate::{
 use blst::{blst_p1, blst_p2};
 use indexmap::IndexMap;
 use itertools::{FoldWhile, Itertools};
-use pallas_primitives::conway::{BigInt, PlutusData};
+use pallas_primitives::conway::BigInt;
 use std::{cmp::Ordering, collections::HashMap, iter, ops::Neg, rc::Rc};
 use strum::IntoEnumIterator;
 
@@ -2159,8 +2159,7 @@ impl Term<Name> {
                             *items = items
                                 .iter()
                                 .map(|item| {
-                                    let Constant::Data(PlutusData::BigInt(i)) = item.as_ref()
-                                    else {
+                                    let Constant::Data(Data::BigInt(i)) = item.as_ref() else {
                                         unreachable!(
                                             "unexpected item in integer list arg: {item:#?}"
                                         );
@@ -2582,7 +2581,7 @@ impl Term<Name> {
                     Term::Constant(c) => match (first_function, c.as_ref()) {
                         (
                             DefaultFunction::UnIData,
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(i))),
+                            Constant::Data(Data::BigInt(BigInt::Int(i))),
                         ) => {
                             changed = true;
                             context.inlined_apply_ids.push(arg_id);
@@ -2593,7 +2592,7 @@ impl Term<Name> {
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::data(Data::integer(i.clone()));
                         }
-                        (DefaultFunction::UnBData, Constant::Data(PlutusData::BoundedBytes(b))) => {
+                        (DefaultFunction::UnBData, Constant::Data(Data::BoundedBytes(b))) => {
                             changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::byte_string(b.clone().into());
@@ -2603,7 +2602,7 @@ impl Term<Name> {
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::data(Data::bytestring(b.clone()));
                         }
-                        (DefaultFunction::UnListData, Constant::Data(PlutusData::Array(l))) => {
+                        (DefaultFunction::UnListData, Constant::Data(Data::Array(l))) => {
                             changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::list_values(
@@ -2643,7 +2642,7 @@ impl Term<Name> {
                                     .collect_vec(),
                             ));
                         }
-                        (DefaultFunction::UnMapData, Constant::Data(PlutusData::Map(m))) => {
+                        (DefaultFunction::UnMapData, Constant::Data(Data::Map(m))) => {
                             changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::map_values(
@@ -3362,7 +3361,7 @@ mod tests {
         builtins::DefaultFunction,
         optimize::interner::CodeGenInterner,
     };
-    use pallas_primitives::conway::{BigInt, PlutusData};
+    use pallas_primitives::conway::BigInt;
     use pretty_assertions::assert_eq;
 
     fn compare_optimization(
@@ -3922,7 +3921,7 @@ mod tests {
             version: (1, 0, 0),
             term: Term::equals_data()
                 .apply(Term::i_data().apply(Term::un_i_data().apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                    Constant::Data(Data::BigInt(BigInt::Int(5.into()))).into(),
                 ))))
                 .apply(Term::i_data().apply(Term::integer(1.into())))
                 .lambda("x"),
@@ -3932,7 +3931,7 @@ mod tests {
             version: (1, 0, 0),
             term: Term::equals_data()
                 .apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                    Constant::Data(Data::BigInt(BigInt::Int(5.into()))).into(),
                 ))
                 .apply(Term::data(Data::integer(1.into())))
                 .lambda("x"),
@@ -3952,7 +3951,7 @@ mod tests {
             term: Term::equals_integer()
                 .apply(Term::un_i_data().apply(Term::i_data().apply(Term::integer(1.into()))))
                 .apply(Term::un_i_data().apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                    Constant::Data(Data::BigInt(BigInt::Int(5.into()))).into(),
                 )))
                 .lambda("x"),
         };

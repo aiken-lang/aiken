@@ -1,8 +1,7 @@
 use crate::{
-    ast::{Constant, Name, Term, Type, Value},
+    ast::{Constant, Data, Name, Term, Type, Value},
     builtins::DefaultFunction,
 };
-use pallas_primitives::alonzo::PlutusData;
 use std::rc::Rc;
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
@@ -73,8 +72,8 @@ where
         Term::Constant(Constant::Unit.into())
     }
 
-    pub fn data(d: PlutusData) -> Self {
-        Term::Constant(Constant::Data(d).into())
+    pub fn data(d: impl Into<Data>) -> Self {
+        Term::Constant(Constant::Data(d.into()).into())
     }
 
     pub fn empty_list() -> Self {
