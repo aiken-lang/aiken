@@ -1,7 +1,7 @@
 use aiken/collection/dict.{Dict}
 use aiken/collection/list
 use cardano/address
-use cardano/assets.{PolicyId, Value}
+use cardano/assets.{Assets, PolicyId}
 use cardano/transaction.{
   DatumHash, Input, Mint, NoDatum, Output, OutputReference, ScriptPurpose,
   Transaction,
@@ -117,7 +117,7 @@ fn assert_outputs(
   Void
 }
 
-fn assert_mint(mint: Value, our_policy_id: PolicyId, other_policy_id: PolicyId) {
+fn assert_mint(mint: Assets, our_policy_id: PolicyId, other_policy_id: PolicyId) {
   expect
     [
       (other_policy_id, "aiken", -14),
