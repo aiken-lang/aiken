@@ -226,7 +226,7 @@ pub(crate) fn eval_redeemer_cached(
                     cost_mdls
                         .plutus_v1
                         .as_ref()
-                        .ok_or(Error::CostModelNotFound(Language::PlutusV2))
+                        .ok_or(Error::CostModelNotFound(Language::PlutusV1))
                 })
                 .transpose()?,
         ),
