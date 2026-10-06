@@ -445,9 +445,10 @@ pub enum Constant {
     Bool(bool),
     // tag: 5
     // Elements are `Rc`-shared so list builtins (mkCons, tailList) can build
-    // derived lists without deep-cloning every element; see `deep_clone` for
-    // the thread-isolation caveat.
-    ProtoList(Type, Vec<Rc<Constant>>),
+    // derived lists without deep-cloning every element, and the spine itself
+    // is shared so tails are O(1); see `deep_clone` for the thread-isolation
+    // caveat.
+    ProtoList(Type, ListSpine),
     // tag: 6
     ProtoPair(Type, Type, Rc<Constant>, Rc<Constant>),
     // tag: 7
@@ -459,6 +460,102 @@ pub enum Constant {
     Bls12_381MlResult(Box<blst::blst_fp12>),
     // tag: 13
     Value(Value),
+}
+
+/// The elements of a builtin list constant.
+///
+/// A view onto a shared, immutable spine: cloning it, or taking any of its
+/// tails, is O(1) and allocates nothing. It dereferences to the slice of its
+/// elements.
+#[derive(Clone, Default)]
+pub struct ListSpine {
+    items: Rc<Vec<Rc<Constant>>>,
+    start: usize,
+}
+
+impl ListSpine {
+    /// The list without its first `n` elements, or `None` if it has fewer.
+    /// The tail shares this spine, so it also keeps the skipped elements
+    /// alive until every view of the spine is dropped.
+    pub fn skip(&self, n: usize) -> Option<ListSpine> {
+        (n <= self.len()).then(|| ListSpine {
+            items: self.items.clone(),
+            start: self.start + n,
+        })
+    }
+
+    /// The list with `item` prepended. O(len) pointer copies: the spine is
+    /// shared, so it cannot grow in place.
+    pub fn cons(&self, item: Rc<Constant>) -> ListSpine {
+        let mut items = Vec::with_capacity(self.len() + 1);
+        items.push(item);
+        items.extend(self.iter().cloned());
+
+        items.into()
+    }
+
+    pub fn into_vec(self) -> Vec<Rc<Constant>> {
+        match Rc::try_unwrap(self.items) {
+            Ok(mut items) => {
+                items.drain(..self.start);
+                items
+            }
+            Err(items) => items[self.start..].to_vec(),
+        }
+    }
+}
+
+impl std::ops::Deref for ListSpine {
+    type Target = [Rc<Constant>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.items[self.start..]
+    }
+}
+
+impl From<Vec<Rc<Constant>>> for ListSpine {
+    fn from(items: Vec<Rc<Constant>>) -> Self {
+        ListSpine {
+            items: Rc::new(items),
+            start: 0,
+        }
+    }
+}
+
+impl FromIterator<Rc<Constant>> for ListSpine {
+    fn from_iter<I: IntoIterator<Item = Rc<Constant>>>(iter: I) -> Self {
+        iter.into_iter().collect::<Vec<_>>().into()
+    }
+}
+
+impl IntoIterator for ListSpine {
+    type Item = Rc<Constant>;
+    type IntoIter = std::vec::IntoIter<Rc<Constant>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.into_vec().into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a ListSpine {
+    type Item = &'a Rc<Constant>;
+    type IntoIter = std::slice::Iter<'a, Rc<Constant>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl PartialEq for ListSpine {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+impl std::fmt::Debug for ListSpine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
 }
 
 impl Constant {

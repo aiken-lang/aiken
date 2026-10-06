@@ -672,7 +672,7 @@ impl Decode<'_> for Constant {
                     decode_constant_value(typ.clone().into(), d).map(Rc::new)
                 })?;
 
-                Ok(Constant::ProtoList(typ, list))
+                Ok(Constant::ProtoList(typ, list.into()))
             }
             [7, 7, 6, rest @ ..] => {
                 let mut rest = VecDeque::from(rest.to_vec());
@@ -751,7 +751,7 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
             let list: Vec<Rc<Constant>> =
                 d.decode_list_with(|d| decode_constant_value(sub_type.clone(), d).map(Rc::new))?;
 
-            Ok(Constant::ProtoList(sub_type.as_ref().clone(), list))
+            Ok(Constant::ProtoList(sub_type.as_ref().clone(), list.into()))
         }
         Type::Pair(type1, type2) => {
             let a = decode_constant_value(type1.clone(), d)?;
@@ -1079,15 +1079,16 @@ mod tests {
                     vec![
                         Constant::ProtoList(
                             Type::Integer,
-                            vec![Constant::Integer(7.into()).into()],
+                            vec![Constant::Integer(7.into()).into()].into(),
                         )
                         .into(),
                         Constant::ProtoList(
                             Type::Integer,
-                            vec![Constant::Integer(5.into()).into()],
+                            vec![Constant::Integer(5.into()).into()].into(),
                         )
                         .into(),
-                    ],
+                    ]
+                    .into(),
                 )
                 .into(),
             ),
@@ -1149,15 +1150,16 @@ mod tests {
                     vec![
                         Constant::ProtoList(
                             Type::Integer,
-                            vec![Constant::Integer(7.into()).into()],
+                            vec![Constant::Integer(7.into()).into()].into(),
                         )
                         .into(),
                         Constant::ProtoList(
                             Type::Integer,
-                            vec![Constant::Integer(5.into()).into()],
+                            vec![Constant::Integer(5.into()).into()].into(),
                         )
                         .into(),
-                    ],
+                    ]
+                    .into(),
                 )
                 .into(),
             ),

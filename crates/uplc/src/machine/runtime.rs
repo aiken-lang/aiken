@@ -920,11 +920,7 @@ impl DefaultFunction {
                 // consing onto a list must stay O(len) in pointer copies, not
                 // O(total element size), or deep recursion over accumulated
                 // lists goes quadratic in host memory.
-                let mut ret = Vec::with_capacity(list.len() + 1);
-                ret.push(item);
-                ret.extend(list.iter().map(Rc::clone));
-
-                let value = Value::list(r#type.clone(), ret);
+                let value = Value::list(r#type.clone(), list.cons(item));
 
                 Ok(value)
             }
@@ -945,7 +941,8 @@ impl DefaultFunction {
                 if list.is_empty() {
                     Err(Error::EmptyList(args[0].clone()))
                 } else {
-                    let value = Value::list(r#type.clone(), list[1..].to_vec());
+                    let value =
+                        Value::list(r#type.clone(), list.skip(1).expect("list is non-empty"));
 
                     Ok(value)
                 }
@@ -1130,7 +1127,7 @@ impl DefaultFunction {
                         l.deref()
                             .iter()
                             .map(|d| Rc::new(Constant::Data(d.clone())))
-                            .collect(),
+                            .collect::<crate::ast::ListSpine>(),
                     );
 
                     Ok(value)
@@ -1211,7 +1208,7 @@ impl DefaultFunction {
 
                 let constant = Constant::ProtoList(
                     Type::Pair(Rc::new(Type::Data), Rc::new(Type::Data)),
-                    vec![],
+                    vec![].into(),
                 );
 
                 let value = Value::Con(constant.into());
@@ -2068,11 +2065,7 @@ impl DefaultFunction {
                 } else {
                     let n = usize::try_from(n).unwrap_or(usize::MAX);
 
-                    if n >= list.len() {
-                        vec![]
-                    } else {
-                        list[n..].to_vec()
-                    }
+                    list.skip(n.min(list.len())).expect("n is within the list")
                 };
 
                 let value = Value::list(r#type.clone(), dropped);

@@ -474,7 +474,10 @@ impl Machine {
                     Constant::ProtoList(_, items) if items.is_empty() => (1, vec![], 2),
                     Constant::ProtoList(item_type, items) => {
                         let head = items[0].clone();
-                        let tail = Constant::ProtoList(item_type.clone(), items[1..].to_vec());
+                        let tail = Constant::ProtoList(
+                            item_type.clone(),
+                            items.skip(1).expect("list is non-empty"),
+                        );
 
                         (0, vec![Value::Con(head), Value::Con(tail.into())], 2)
                     }
@@ -702,7 +705,7 @@ mod tests {
         let inconsistent: Term<NamedDeBruijn> = Term::Constant(
             Constant::ProtoList(
                 crate::ast::Type::Integer,
-                vec![Rc::new(Constant::Value(crate::ast::Value::empty()))],
+                vec![Rc::new(Constant::Value(crate::ast::Value::empty()))].into(),
             )
             .into(),
         );

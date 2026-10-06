@@ -878,7 +878,7 @@ mod tests {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(Type::Unit, vec![]).into())
+                term: Term::Constant(Constant::ProtoList(Type::Unit, vec![].into()).into())
             }
         )
     }
@@ -891,7 +891,7 @@ mod tests {
             Program::<Name> {
                 version: (0, 0, 0),
                 term: Term::Constant(
-                    Constant::ProtoList(Type::Unit, vec![Constant::Unit.into()]).into()
+                    Constant::ProtoList(Type::Unit, vec![Constant::Unit.into()].into()).into()
                 )
             }
         )
@@ -912,6 +912,7 @@ mod tests {
                             Constant::Bool(false).into(),
                             Constant::Bool(true).into()
                         ]
+                        .into()
                     )
                     .into()
                 )
@@ -933,6 +934,7 @@ mod tests {
                             Constant::ByteString(vec![0x00]).into(),
                             Constant::ByteString(vec![0x01]).into(),
                         ]
+                        .into()
                     )
                     .into()
                 )
@@ -957,14 +959,16 @@ mod tests {
                                     Constant::Integer(14.into()).into(),
                                     Constant::Integer(42.into()).into()
                                 ]
+                                .into()
                             )
                             .into(),
                             Constant::ProtoList(
                                 Type::Integer,
-                                vec![Constant::Integer(1337.into()).into()]
+                                vec![Constant::Integer(1337.into()).into()].into()
                             )
                             .into()
                         ]
+                        .into()
                     )
                     .into()
                 )
@@ -992,7 +996,8 @@ mod tests {
                         vec![
                             Constant::Integer(14.into()).into(),
                             Constant::Integer(42.into()).into()
-                        ],
+                        ]
+                        .into(),
                     )
                     .into()
                 )
@@ -1063,7 +1068,8 @@ mod tests {
                             vec![
                                 Constant::Integer(14.into()).into(),
                                 Constant::Integer(42.into()).into()
-                            ],
+                            ]
+                            .into(),
                         )
                         .into()
                     )

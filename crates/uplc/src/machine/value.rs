@@ -3,7 +3,7 @@ use super::{
     runtime::{self, BuiltinRuntime, BuiltinSemantics},
 };
 use crate::{
-    ast::{Constant, NamedDeBruijn, Term, Type},
+    ast::{Constant, ListSpine, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
 };
 use num_bigint::BigInt;
@@ -147,8 +147,8 @@ impl Value {
         Value::Con(constant.into())
     }
 
-    pub fn list(typ: Type, n: Vec<Rc<Constant>>) -> Self {
-        let constant = Constant::ProtoList(typ, n);
+    pub fn list(typ: Type, n: impl Into<ListSpine>) -> Self {
+        let constant = Constant::ProtoList(typ, n.into());
 
         Value::Con(constant.into())
     }
@@ -215,7 +215,7 @@ impl Value {
         Ok((t1, t2, first, second))
     }
 
-    pub(super) fn unwrap_list(&self) -> Result<(&Type, &Vec<Rc<Constant>>), Error> {
+    pub(super) fn unwrap_list(&self) -> Result<(&Type, &ListSpine), Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(t, list) = inner else {
@@ -272,7 +272,7 @@ impl Value {
         Ok(item.as_ref())
     }
 
-    pub(super) fn unwrap_data_list(&self) -> Result<&Vec<Rc<Constant>>, Error> {
+    pub(super) fn unwrap_data_list(&self) -> Result<&ListSpine, Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Data, list) = inner else {
@@ -285,7 +285,7 @@ impl Value {
         Ok(list)
     }
 
-    pub(super) fn unwrap_int_list(&self) -> Result<&Vec<Rc<Constant>>, Error> {
+    pub(super) fn unwrap_int_list(&self) -> Result<&ListSpine, Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Integer, list) = inner else {
@@ -854,7 +854,8 @@ mod tests {
                     Constant::String("abcd".to_string()).into(),
                     Constant::String("é".to_string()).into(),
                     Constant::ByteString(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).into(),
-                ],
+                ]
+                .into(),
             )),
         );
 
