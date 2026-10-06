@@ -55,7 +55,7 @@ fn with_env(lam_cnt: usize, env: Env, term: Term<NamedDeBruijn>) -> Term<NamedDe
             if lam_cnt >= index {
                 Term::Var(name)
             } else {
-                env.get::<usize>(env.len() - (index - lam_cnt))
+                env.get(index - lam_cnt)
                     .cloned()
                     .map_or(Term::Var(name), value_as_term)
             }

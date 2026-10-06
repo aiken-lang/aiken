@@ -192,7 +192,7 @@ impl Machine {
     fn evaluate(&mut self, term: Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
         use MachineState::*;
 
-        let mut state = Compute(Rc::new(vec![]), Rc::new(term));
+        let mut state = Compute(Env::default(), Rc::new(term));
 
         loop {
             state = match state {
@@ -496,7 +496,7 @@ impl Machine {
     fn apply_evaluate(&mut self, function: Value, argument: Value) -> Result<MachineState, Error> {
         match function {
             Value::Lambda { body, mut env, .. } => {
-                Rc::make_mut(&mut env).push(argument);
+                env.push(argument);
 
                 Ok(MachineState::Compute(env, body))
             }
@@ -538,8 +538,8 @@ impl Machine {
         runtime.call(self.semantics, &mut self.traces)
     }
 
-    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value]) -> Result<Value, Error> {
-        env.get::<usize>(env.len() - usize::from(name.index))
+    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &Env) -> Result<Value, Error> {
+        env.get(usize::from(name.index))
             .cloned()
             .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone().into())))
     }
