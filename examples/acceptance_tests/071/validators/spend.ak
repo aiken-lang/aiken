@@ -3,7 +3,7 @@ use aiken/crypto.{Blake2b_224, Hash}
 use aiken/interval.{Finite}
 use aiken/option
 use cardano/assets.{
-  AssetName, PolicyId, Value, add, flatten, from_asset, negate, quantity_of,
+  AssetName, PolicyId, add, flatten, from_asset, negate, quantity_of,
 }
 use cardano/address.{Address, Script, VerificationKey}
 use cardano/transaction.{
