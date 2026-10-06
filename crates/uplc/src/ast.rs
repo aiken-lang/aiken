@@ -487,12 +487,53 @@ struct SpineBuf {
     front: Cell<usize>,
 }
 
+/// How many spines may be dropped inside one another before the elements of
+/// deeper ones are queued instead, so that dropping a deeply nested list or
+/// Data uses bounded stack.
+const MAX_NESTED_SPINE_DROPS: usize = 512;
+
+std::thread_local! {
+    /// How many spines are being dropped inside one another on this thread.
+    static SPINE_DROP_DEPTH: Cell<usize> = const { Cell::new(0) };
+
+    /// Elements of spines dropped too deep, left for the outermost spine drop.
+    static DEFERRED_SPINE_DROPS: std::cell::RefCell<Vec<Rc<Constant>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl Drop for SpineBuf {
     fn drop(&mut self) {
-        for slot in &mut self.slots[self.front.get()..] {
-            // SAFETY: slots from `front` onwards are initialised.
-            unsafe { slot.get_mut().assume_init_drop() }
+        let mut items = self.slots[self.front.get()..].iter_mut().map(|slot| {
+            // SAFETY: slots from `front` onwards are initialised, and each is
+            // read once here, after which the buffer is never read again.
+            unsafe { slot.get_mut().assume_init_read() }
+        });
+
+        let depth = SPINE_DROP_DEPTH.get();
+
+        if depth >= MAX_NESTED_SPINE_DROPS {
+            // Only fails while the thread is exiting, when its locals are
+            // being destroyed; the elements are then dropped right here.
+            let _ =
+                DEFERRED_SPINE_DROPS.try_with(|deferred| deferred.borrow_mut().extend(&mut items));
+            items.for_each(drop);
+            return;
         }
+
+        SPINE_DROP_DEPTH.set(depth + 1);
+        items.for_each(drop);
+
+        if depth == 0 {
+            while let Some(item) = DEFERRED_SPINE_DROPS
+                .try_with(|deferred| deferred.borrow_mut().pop())
+                .ok()
+                .flatten()
+            {
+                drop(item);
+            }
+        }
+
+        SPINE_DROP_DEPTH.set(depth);
     }
 }
 
@@ -1821,6 +1862,55 @@ mod tests {
     use pallas_primitives::{alonzo::PlutusData, conway};
     use proptest::prelude::*;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn drops_deep_lists_in_bounded_stack() {
+        use crate::ast::{Constant, ListSpine, Type};
+        use std::rc::Rc;
+
+        #[cfg(not(miri))]
+        const DEPTH: usize = 1_000_000;
+        #[cfg(miri)]
+        const DEPTH: usize = 2_000;
+
+        // Room for the nested drops allowed before queuing, even in a debug
+        // build, but far too little to drop the whole nesting recursively.
+        std::thread::Builder::new()
+            .stack_size(4 * 1024 * 1024)
+            .spawn(|| {
+                let mut list = Rc::new(Constant::ProtoList(Type::Data, ListSpine::default()));
+                let mut kept = Vec::new();
+
+                for i in 0..DEPTH {
+                    let spine = if i % 2 == 0 {
+                        ListSpine::from(vec![list, Rc::new(Constant::Integer(i.into()))])
+                    } else {
+                        // The second prepend goes into a free slot in
+                        // front of the first.
+                        let Constant::ProtoList(_, spine) = list.as_ref() else {
+                            unreachable!()
+                        };
+                        spine
+                            .cons(Rc::new(Constant::Integer(i.into())))
+                            .cons(Rc::new(Constant::Integer(i.into())))
+                    };
+
+                    list = Rc::new(Constant::ProtoList(Type::Data, spine));
+
+                    // Shared below the top, so parts of the list outlive
+                    // the first drop.
+                    if i % (DEPTH / 4) == 0 {
+                        kept.push(list.clone());
+                    }
+                }
+
+                drop(list);
+                drop(kept);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 
     // Data's negative integers are encoded with an offset of 1, as an unsigned payload. This is unlike
     // num_bigint's BigInt; so both types representations aren't quite compatible with one another.

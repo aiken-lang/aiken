@@ -1,5 +1,11 @@
 # Changelog
 
+## unreleased
+
+### Fixed
+
+- **uplc**: Drop deeply nested lists without overflowing the stack. @colll78
+
 ## v1.1.24 - 2026-09-26
 
 ### Added
