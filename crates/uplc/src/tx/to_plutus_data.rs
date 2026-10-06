@@ -1389,6 +1389,49 @@ impl ToPlutusData for TxInfo {
     }
 }
 
+impl TxInfo {
+    /// The script context of `redeemer` as Data, given this transaction info
+    /// already converted to Data. It is the Data of the `ScriptContext` that
+    /// `into_script_context` builds, without converting the transaction info
+    /// again.
+    pub(crate) fn script_context_data(
+        &self,
+        tx_info_data: &PlutusData,
+        redeemer: &Redeemer,
+        datum: Option<&PlutusData>,
+    ) -> Option<PlutusData> {
+        let redeemers = match self {
+            TxInfo::V1(tx_info) => &tx_info.redeemers,
+            TxInfo::V2(tx_info) => &tx_info.redeemers,
+            TxInfo::V3(tx_info) => &tx_info.redeemers,
+        };
+
+        let purpose = redeemers.iter().find_map(|(purpose, some_redeemer)| {
+            (redeemer.tag == some_redeemer.tag && redeemer.index == some_redeemer.index)
+                .then_some(purpose)
+        })?;
+
+        Some(match self {
+            TxInfo::V1(..) | TxInfo::V2(..) => wrap_multiple_with_constr(
+                0,
+                vec![
+                    tx_info_data.clone(),
+                    WithWrappedTransactionId(purpose).to_plutus_data(),
+                ],
+            ),
+            TxInfo::V3(..) => wrap_multiple_with_constr(
+                0,
+                vec![
+                    tx_info_data.clone(),
+                    redeemer.data.to_plutus_data(),
+                    WithNeverRegistrationDeposit(&purpose.clone().into_script_info(datum.cloned()))
+                        .to_plutus_data(),
+                ],
+            ),
+        })
+    }
+}
+
 impl ToPlutusData for ScriptContext {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
