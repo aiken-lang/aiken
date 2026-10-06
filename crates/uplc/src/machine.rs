@@ -1,4 +1,4 @@
-use std::{fmt::Display, rc::Rc};
+use std::{fmt::Display, ptr::NonNull, rc::Rc};
 
 use crate::ast::{Constant, NamedDeBruijn, Term, Type};
 use num_traits::ToPrimitive;
@@ -22,7 +22,7 @@ use self::{
 
 enum MachineState {
     Return(Value),
-    Compute(Env, Rc<Term<NamedDeBruijn>>),
+    Compute(Env, TermRef),
     Done(Term<NamedDeBruijn>),
 }
 
@@ -35,9 +35,57 @@ enum Frame {
     Force,
     /// The `constr` term being evaluated, the index of the next field to
     /// compute, and the fields computed so far.
-    Constr(Env, Rc<Term<NamedDeBruijn>>, usize, Vec<Value>),
+    Constr(Env, TermRef, Vec<Value>),
     /// The `case` term whose scrutinee is being evaluated.
-    Cases(Env, Rc<Term<NamedDeBruijn>>),
+    Cases(Env, TermRef),
+}
+
+/// A term to evaluate. The fields of `constr` and the branches of `case`
+/// are stored inline rather than behind their own `Rc`, so evaluation
+/// addresses them through the `Rc` that owns them instead of cloning each
+/// one into a new allocation whenever it is entered.
+#[derive(Clone)]
+struct TermRef {
+    owner: Rc<Term<NamedDeBruijn>>,
+    term: NonNull<Term<NamedDeBruijn>>,
+}
+
+impl TermRef {
+    #[inline(always)]
+    fn get(&self) -> &Term<NamedDeBruijn> {
+        // SAFETY: `term` points into the allocation kept alive by `owner`.
+        // Terms behind an `Rc` are never mutated while shared, and the
+        // machine never takes `&mut` to them, so the pointee is stable.
+        unsafe { self.term.as_ref() }
+    }
+
+    /// The `n`th inline child of this `constr` or `case` term.
+    #[inline(always)]
+    fn child(&self, n: usize) -> TermRef {
+        let (Term::Constr {
+            fields: children, ..
+        }
+        | Term::Case {
+            branches: children, ..
+        }) = self.get()
+        else {
+            unreachable!("only constr and case terms have inline children")
+        };
+
+        TermRef {
+            owner: self.owner.clone(),
+            term: NonNull::from(&children[n]),
+        }
+    }
+}
+
+impl From<Rc<Term<NamedDeBruijn>>> for TermRef {
+    #[inline(always)]
+    fn from(owner: Rc<Term<NamedDeBruijn>>) -> Self {
+        let term = NonNull::from(owner.as_ref());
+
+        TermRef { owner, term }
+    }
 }
 
 pub const TERM_COUNT: usize = 9;
@@ -192,7 +240,7 @@ impl Machine {
     fn evaluate(&mut self, term: Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
         use MachineState::*;
 
-        let mut state = Compute(Env::default(), Rc::new(term));
+        let mut state = Compute(Env::default(), Rc::new(term).into());
 
         loop {
             state = match state {
@@ -247,8 +295,8 @@ impl Machine {
     }
 
     #[inline(always)]
-    fn compute(&mut self, env: Env, term: Rc<Term<NamedDeBruijn>>) -> Result<MachineState, Error> {
-        match term.as_ref() {
+    fn compute(&mut self, env: Env, term: TermRef) -> Result<MachineState, Error> {
+        match term.get() {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
@@ -279,7 +327,7 @@ impl Machine {
                 self.frames
                     .push(Frame::AwaitFunTerm(env.clone(), argument.clone()));
 
-                Ok(MachineState::Compute(env, function.clone()))
+                Ok(MachineState::Compute(env, function.clone().into()))
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
@@ -291,7 +339,7 @@ impl Machine {
 
                 self.frames.push(Frame::Force);
 
-                Ok(MachineState::Compute(env, body.clone()))
+                Ok(MachineState::Compute(env, body.clone().into()))
             }
             Term::Error => Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
@@ -305,16 +353,12 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Constr)?;
 
                 match fields.first() {
-                    Some(field) => {
-                        let field = Rc::new(field.clone());
+                    Some(_) => {
+                        let field = term.child(0);
                         let resolved_fields = Vec::with_capacity(fields.len());
 
-                        self.frames.push(Frame::Constr(
-                            env.clone(),
-                            term.clone(),
-                            1,
-                            resolved_fields,
-                        ));
+                        self.frames
+                            .push(Frame::Constr(env.clone(), term, resolved_fields));
 
                         Ok(MachineState::Compute(env, field))
                     }
@@ -327,9 +371,11 @@ impl Machine {
             Term::Case { constr, .. } => {
                 self.step_and_maybe_spend(StepKind::Case)?;
 
-                self.frames.push(Frame::Cases(env.clone(), term.clone()));
+                let constr = constr.clone();
 
-                Ok(MachineState::Compute(env, constr.clone()))
+                self.frames.push(Frame::Cases(env.clone(), term));
+
+                Ok(MachineState::Compute(env, constr.into()))
             }
         }
     }
@@ -351,27 +397,25 @@ impl Machine {
             Frame::AwaitFunTerm(arg_env, arg) => {
                 self.frames.push(Frame::AwaitArg(value));
 
-                Ok(MachineState::Compute(arg_env, arg))
+                Ok(MachineState::Compute(arg_env, arg.into()))
             }
             Frame::AwaitArg(fun) => self.apply_evaluate(fun, value),
             Frame::AwaitFunValue(arg) => self.apply_evaluate(value, arg),
-            Frame::Constr(env, term, next, mut resolved_fields) => {
-                let Term::Constr { tag, fields } = term.as_ref() else {
+            Frame::Constr(env, term, mut resolved_fields) => {
+                let Term::Constr { tag, fields } = term.get() else {
                     unreachable!("FrameConstr always holds a constr term")
                 };
 
                 resolved_fields.push(value);
 
-                match fields.get(next) {
-                    Some(field) => {
-                        let field = Rc::new(field.clone());
+                let next = resolved_fields.len();
 
-                        self.frames.push(Frame::Constr(
-                            env.clone(),
-                            term,
-                            next + 1,
-                            resolved_fields,
-                        ));
+                match fields.get(next) {
+                    Some(_) => {
+                        let field = term.child(next);
+
+                        self.frames
+                            .push(Frame::Constr(env.clone(), term, resolved_fields));
 
                         Ok(MachineState::Compute(env, field))
                     }
@@ -381,13 +425,7 @@ impl Machine {
                     })),
                 }
             }
-            Frame::Cases(env, term) => {
-                let Term::Case { branches, .. } = term.as_ref() else {
-                    unreachable!("FrameCases always holds a case term")
-                };
-
-                self.case_evaluate(env, branches, value)
-            }
+            Frame::Cases(env, term) => self.case_evaluate(env, term, value),
         }
     }
 
@@ -395,15 +433,19 @@ impl Machine {
     fn case_evaluate(
         &mut self,
         env: Env,
-        branches: &[Term<NamedDeBruijn>],
+        term: TermRef,
         value: Value,
     ) -> Result<MachineState, Error> {
+        let Term::Case { branches, .. } = term.get() else {
+            unreachable!("FrameCases always holds a case term")
+        };
+
         match value {
             Value::Constr { tag, fields } => match branches.get(tag) {
-                Some(t) => {
+                Some(_) => {
                     self.transfer_arg_stack(Rc::unwrap_or_clone(fields));
 
-                    Ok(MachineState::Compute(env, Rc::new(t.clone())))
+                    Ok(MachineState::Compute(env, term.child(tag)))
                 }
                 None => Err(Error::MissingCaseBranch(
                     branches.to_vec(),
@@ -452,10 +494,10 @@ impl Machine {
                 }
 
                 match branches.get(tag) {
-                    Some(t) => {
+                    Some(_) => {
                         self.transfer_arg_stack(fields);
 
-                        Ok(MachineState::Compute(env, Rc::new(t.clone())))
+                        Ok(MachineState::Compute(env, term.child(tag)))
                     }
                     None => Err(Error::MissingCaseBranch(
                         branches.to_vec(),
@@ -470,7 +512,7 @@ impl Machine {
     #[inline(always)]
     fn force_evaluate(&mut self, value: Value) -> Result<MachineState, Error> {
         match value {
-            Value::Delay(body, env) => Ok(MachineState::Compute(env, body)),
+            Value::Delay(body, env) => Ok(MachineState::Compute(env, body.into())),
             Value::Builtin { fun, mut runtime } => {
                 if runtime.needs_force() {
                     runtime.consume_force();
@@ -498,7 +540,7 @@ impl Machine {
             Value::Lambda { body, mut env, .. } => {
                 env.push(argument);
 
-                Ok(MachineState::Compute(env, body))
+                Ok(MachineState::Compute(env, body.into()))
             }
             Value::Builtin { fun, runtime } => {
                 if runtime.is_arrow() && !runtime.needs_force() {
