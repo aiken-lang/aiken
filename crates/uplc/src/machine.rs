@@ -22,24 +22,27 @@ use self::{
 
 enum MachineState {
     Return(Context, Value),
-    Compute(Context, Env, Term<NamedDeBruijn>),
+    Compute(Context, Env, Rc<Term<NamedDeBruijn>>),
     Done(Term<NamedDeBruijn>),
 }
 
 #[derive(Clone)]
 enum Context {
     FrameAwaitArg(Value, Box<Context>),
-    FrameAwaitFunTerm(Env, Term<NamedDeBruijn>, Box<Context>),
+    FrameAwaitFunTerm(Env, Rc<Term<NamedDeBruijn>>, Box<Context>),
     FrameAwaitFunValue(Value, Box<Context>),
     FrameForce(Box<Context>),
+    /// The `constr` term being evaluated, the index of the next field to
+    /// compute, and the fields computed so far.
     FrameConstr(
         Env,
+        Rc<Term<NamedDeBruijn>>,
         usize,
-        Vec<Term<NamedDeBruijn>>,
         Vec<Value>,
         Box<Context>,
     ),
-    FrameCases(Env, Vec<Term<NamedDeBruijn>>, Box<Context>),
+    /// The `case` term whose scrutinee is being evaluated.
+    FrameCases(Env, Rc<Term<NamedDeBruijn>>, Box<Context>),
     NoFrame,
 }
 
@@ -180,7 +183,7 @@ impl Machine {
 
         self.spend_budget(startup_budget)?;
 
-        let mut state = Compute(Context::NoFrame, Rc::new(vec![]), term);
+        let mut state = Compute(Context::NoFrame, Rc::new(vec![]), Rc::new(term));
 
         loop {
             state = match state {
@@ -238,9 +241,9 @@ impl Machine {
         &mut self,
         context: Context,
         env: Env,
-        term: Term<NamedDeBruijn>,
+        term: Rc<Term<NamedDeBruijn>>,
     ) -> Result<MachineState, Error> {
-        match term {
+        match term.as_ref() {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
@@ -251,7 +254,10 @@ impl Machine {
             Term::Delay(body) => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
-                Ok(MachineState::Return(context, Value::Delay(body, env)))
+                Ok(MachineState::Return(
+                    context,
+                    Value::Delay(body.clone(), env),
+                ))
             }
             Term::Lambda {
                 parameter_name,
@@ -262,8 +268,8 @@ impl Machine {
                 Ok(MachineState::Return(
                     context,
                     Value::Lambda {
-                        parameter_name,
-                        body,
+                        parameter_name: parameter_name.clone(),
+                        body: body.clone(),
                         env,
                     },
                 ))
@@ -272,19 +278,15 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 Ok(MachineState::Compute(
-                    Context::FrameAwaitFunTerm(
-                        env.clone(),
-                        argument.as_ref().clone(),
-                        context.into(),
-                    ),
+                    Context::FrameAwaitFunTerm(env.clone(), argument.clone(), context.into()),
                     env,
-                    function.as_ref().clone(),
+                    function.clone(),
                 ))
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
-                Ok(MachineState::Return(context, Value::Con(x)))
+                Ok(MachineState::Return(context, Value::Con(x.clone())))
             }
             Term::Force(body) => {
                 self.step_and_maybe_spend(StepKind::Force)?;
@@ -292,50 +294,56 @@ impl Machine {
                 Ok(MachineState::Compute(
                     Context::FrameForce(context.into()),
                     env,
-                    body.as_ref().clone(),
+                    body.clone(),
                 ))
             }
             Term::Error => Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
 
-                let runtime: BuiltinRuntime = fun.into();
+                let runtime: BuiltinRuntime = (*fun).into();
 
                 Ok(MachineState::Return(
                     context,
-                    Value::Builtin { fun, runtime },
+                    Value::Builtin { fun: *fun, runtime },
                 ))
             }
-            Term::Constr { tag, mut fields } => {
+            Term::Constr { tag, fields } => {
                 self.step_and_maybe_spend(StepKind::Constr)?;
 
-                fields.reverse();
+                match fields.first() {
+                    Some(field) => {
+                        let field = Rc::new(field.clone());
+                        let resolved_fields = Vec::with_capacity(fields.len());
 
-                if !fields.is_empty() {
-                    let popped_field = fields.pop().unwrap();
-
-                    Ok(MachineState::Compute(
-                        Context::FrameConstr(env.clone(), tag, fields, vec![], context.into()),
-                        env,
-                        popped_field,
-                    ))
-                } else {
-                    Ok(MachineState::Return(
+                        Ok(MachineState::Compute(
+                            Context::FrameConstr(
+                                env.clone(),
+                                term.clone(),
+                                1,
+                                resolved_fields,
+                                context.into(),
+                            ),
+                            env,
+                            field,
+                        ))
+                    }
+                    None => Ok(MachineState::Return(
                         context,
                         Value::Constr {
-                            tag,
+                            tag: *tag,
                             fields: vec![],
                         },
-                    ))
+                    )),
                 }
             }
-            Term::Case { constr, branches } => {
+            Term::Case { constr, .. } => {
                 self.step_and_maybe_spend(StepKind::Case)?;
 
                 Ok(MachineState::Compute(
-                    Context::FrameCases(env.clone(), branches, context.into()),
+                    Context::FrameCases(env.clone(), term.clone(), context.into()),
                     env,
-                    constr.as_ref().clone(),
+                    constr.clone(),
                 ))
             }
         }
@@ -360,96 +368,121 @@ impl Machine {
             )),
             Context::FrameAwaitArg(fun, ctx) => self.apply_evaluate(*ctx, fun, value),
             Context::FrameAwaitFunValue(arg, ctx) => self.apply_evaluate(*ctx, value, arg),
-            Context::FrameConstr(env, tag, mut fields, mut resolved_fields, ctx) => {
+            Context::FrameConstr(env, term, next, mut resolved_fields, ctx) => {
+                let Term::Constr { tag, fields } = term.as_ref() else {
+                    unreachable!("FrameConstr always holds a constr term")
+                };
+
                 resolved_fields.push(value);
 
-                if !fields.is_empty() {
-                    let popped_field = fields.pop().unwrap();
+                match fields.get(next) {
+                    Some(field) => {
+                        let field = Rc::new(field.clone());
 
-                    Ok(MachineState::Compute(
-                        Context::FrameConstr(env.clone(), tag, fields, resolved_fields, ctx),
-                        env,
-                        popped_field,
-                    ))
-                } else {
-                    Ok(MachineState::Return(
+                        Ok(MachineState::Compute(
+                            Context::FrameConstr(env.clone(), term, next + 1, resolved_fields, ctx),
+                            env,
+                            field,
+                        ))
+                    }
+                    None => Ok(MachineState::Return(
                         *ctx,
                         Value::Constr {
-                            tag,
+                            tag: *tag,
                             fields: resolved_fields,
                         },
-                    ))
+                    )),
                 }
             }
-            Context::FrameCases(env, branches, ctx) => match value {
-                Value::Constr { tag, fields } => match branches.get(tag) {
+            Context::FrameCases(env, term, ctx) => {
+                let Term::Case { branches, .. } = term.as_ref() else {
+                    unreachable!("FrameCases always holds a case term")
+                };
+
+                self.case_evaluate(*ctx, env, branches, value)
+            }
+        }
+    }
+
+    fn case_evaluate(
+        &mut self,
+        context: Context,
+        env: Env,
+        branches: &[Term<NamedDeBruijn>],
+        value: Value,
+    ) -> Result<MachineState, Error> {
+        match value {
+            Value::Constr { tag, fields } => match branches.get(tag) {
+                Some(t) => Ok(MachineState::Compute(
+                    transfer_arg_stack(fields, context),
+                    env,
+                    Rc::new(t.clone()),
+                )),
+                None => Err(Error::MissingCaseBranch(
+                    branches.to_vec(),
+                    Value::Constr { tag, fields },
+                )),
+            },
+            Value::Con(constant) => {
+                if !matches!(self.semantics, BuiltinSemantics::E) {
+                    return Err(Error::NonConstrScrutinized(Value::Con(constant)));
+                }
+
+                let (tag, fields, max_branches) = match constant.as_ref() {
+                    Constant::Unit => (0, vec![], 1),
+                    Constant::Bool(false) => (0, vec![], 2),
+                    Constant::Bool(true) => (1, vec![], 2),
+                    Constant::Integer(integer) => {
+                        let Some(tag) = integer.to_usize() else {
+                            return Err(Error::MissingCaseBranch(
+                                branches.to_vec(),
+                                Value::Con(constant),
+                            ));
+                        };
+
+                        (tag, vec![], usize::MAX)
+                    }
+                    Constant::ProtoList(_, items) if items.is_empty() => (1, vec![], 2),
+                    Constant::ProtoList(item_type, items) => {
+                        let head = items[0].clone();
+                        let tail = Constant::ProtoList(item_type.clone(), items[1..].to_vec());
+
+                        (0, vec![Value::Con(head), Value::Con(tail.into())], 2)
+                    }
+                    Constant::ProtoPair(_, _, first, second) => (
+                        0,
+                        vec![Value::Con(first.clone()), Value::Con(second.clone())],
+                        1,
+                    ),
+                    _ => return Err(Error::NonConstrScrutinized(Value::Con(constant))),
+                };
+
+                if branches.len() > max_branches {
+                    return Err(Error::MissingCaseBranch(
+                        branches.to_vec(),
+                        Value::Con(constant),
+                    ));
+                }
+
+                match branches.get(tag) {
                     Some(t) => Ok(MachineState::Compute(
-                        transfer_arg_stack(fields, *ctx),
+                        transfer_arg_stack(fields, context),
                         env,
-                        t.clone(),
+                        Rc::new(t.clone()),
                     )),
                     None => Err(Error::MissingCaseBranch(
-                        branches,
-                        Value::Constr { tag, fields },
+                        branches.to_vec(),
+                        Value::Con(constant),
                     )),
-                },
-                Value::Con(constant) => {
-                    if !matches!(self.semantics, BuiltinSemantics::E) {
-                        return Err(Error::NonConstrScrutinized(Value::Con(constant)));
-                    }
-
-                    let (tag, fields, max_branches) = match constant.as_ref() {
-                        Constant::Unit => (0, vec![], 1),
-                        Constant::Bool(false) => (0, vec![], 2),
-                        Constant::Bool(true) => (1, vec![], 2),
-                        Constant::Integer(integer) => {
-                            let Some(tag) = integer.to_usize() else {
-                                return Err(Error::MissingCaseBranch(
-                                    branches,
-                                    Value::Con(constant),
-                                ));
-                            };
-
-                            (tag, vec![], usize::MAX)
-                        }
-                        Constant::ProtoList(_, items) if items.is_empty() => (1, vec![], 2),
-                        Constant::ProtoList(item_type, items) => {
-                            let head = items[0].clone();
-                            let tail = Constant::ProtoList(item_type.clone(), items[1..].to_vec());
-
-                            (0, vec![Value::Con(head), Value::Con(tail.into())], 2)
-                        }
-                        Constant::ProtoPair(_, _, first, second) => (
-                            0,
-                            vec![Value::Con(first.clone()), Value::Con(second.clone())],
-                            1,
-                        ),
-                        _ => return Err(Error::NonConstrScrutinized(Value::Con(constant))),
-                    };
-
-                    if branches.len() > max_branches {
-                        return Err(Error::MissingCaseBranch(branches, Value::Con(constant)));
-                    }
-
-                    match branches.get(tag) {
-                        Some(t) => Ok(MachineState::Compute(
-                            transfer_arg_stack(fields, *ctx),
-                            env,
-                            t.clone(),
-                        )),
-                        None => Err(Error::MissingCaseBranch(branches, Value::Con(constant))),
-                    }
                 }
-                v => Err(Error::NonConstrScrutinized(v)),
-            },
+            }
+            v => Err(Error::NonConstrScrutinized(v)),
         }
     }
 
     fn force_evaluate(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
         match value {
-            Value::Delay(body, env) => {
-                Ok(MachineState::Compute(context, env, body.as_ref().clone()))
-            }
+            Value::Delay(body, env) => Ok(MachineState::Compute(context, env, body)),
             Value::Builtin { fun, mut runtime } => {
                 if runtime.needs_force() {
                     runtime.consume_force();
@@ -481,7 +514,7 @@ impl Machine {
             Value::Lambda { body, mut env, .. } => {
                 Rc::make_mut(&mut env).push(argument);
 
-                Ok(MachineState::Compute(context, env, body.as_ref().clone()))
+                Ok(MachineState::Compute(context, env, body))
             }
             Value::Builtin { fun, runtime } => {
                 if runtime.is_arrow() && !runtime.needs_force() {
