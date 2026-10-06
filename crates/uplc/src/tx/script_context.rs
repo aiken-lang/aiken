@@ -1140,7 +1140,7 @@ mod tests {
         ast::Data,
         tx::{
             ResolvedInput, SlotConfig,
-            script_context::{TxInfo, TxInfoV3},
+            script_context::{ScriptContext, TxInfo, TxInfoV3},
             to_plutus_data::ToPlutusData,
         },
     };
@@ -1149,6 +1149,34 @@ mod tests {
         conway::{ExUnits, PlutusData, Redeemer, RedeemerTag, TransactionInput, TransactionOutput},
     };
     use pallas_traverse::{Era, MultiEraTx};
+
+    trait IntoScriptContextChecked {
+        fn into_script_context_checked(
+            self,
+            redeemer: &Redeemer,
+            datum: Option<&PlutusData>,
+        ) -> Option<ScriptContext>;
+    }
+
+    impl IntoScriptContextChecked for TxInfo {
+        /// `into_script_context`, also checking that `script_context_data`
+        /// gives the same Data from the converted transaction info.
+        fn into_script_context_checked(
+            self,
+            redeemer: &Redeemer,
+            datum: Option<&PlutusData>,
+        ) -> Option<ScriptContext> {
+            let data = self.script_context_data(&self.to_plutus_data(), redeemer, datum);
+            let script_context = self.into_script_context(redeemer, datum);
+
+            assert_eq!(
+                data,
+                script_context.as_ref().map(ToPlutusData::to_plutus_data)
+            );
+
+            script_context
+        }
+    }
 
     fn fixture_tx_info(transaction: &str, inputs: &str, outputs: &str) -> TxInfo {
         let transaction_bytes = hex::decode(transaction).unwrap();
@@ -1210,7 +1238,7 @@ mod tests {
             "81a300581d7039f47fd3b388ef53c48f08de24766d3e55dade6cae908cc24e0f\
              4f3e011a3b9aca00028201d81843d87980",
         )
-        .into_script_context(&redeemer, datum.as_ref())
+        .into_script_context_checked(&redeemer, datum.as_ref())
         .unwrap();
 
         // NOTE: The initial snapshot has been generated using the Haskell
@@ -1270,7 +1298,7 @@ mod tests {
             "81a200581d600000000000000000000000000000000000000000000000000000\
              0000011a000f4240",
         )
-        .into_script_context(&redeemer, None)
+        .into_script_context_checked(&redeemer, None)
         .unwrap();
 
         // NOTE: The initial snapshot has been generated using the Haskell
@@ -1345,7 +1373,7 @@ mod tests {
             "81a200581d600000000000000000000000000000000000000000000000000000\
              0000011a000f4240",
         )
-        .into_script_context(&redeemer, None)
+        .into_script_context_checked(&redeemer, None)
         .unwrap();
 
         // NOTE: The initial snapshot has been generated using the Haskell
@@ -1394,7 +1422,7 @@ mod tests {
             "81a200581d600000000000000000000000000000000000000000000000000000\
              0000011a000f4240",
         )
-        .into_script_context(&redeemer, None)
+        .into_script_context_checked(&redeemer, None)
         .unwrap();
 
         // NOTE: The initial snapshot has been generated using the Haskell
@@ -1464,7 +1492,7 @@ mod tests {
             "81a200581d600000000000000000000000000000000000000000000000000000\
              0000011a000f4240",
         )
-        .into_script_context(&redeemer, None)
+        .into_script_context_checked(&redeemer, None)
         .unwrap();
 
         // NOTE: The initial snapshot has been generated using the Haskell
@@ -1517,7 +1545,7 @@ mod tests {
             "81a200581d600000000000000000000000000000000000000000000000000000\
              0000011a000f4240",
         )
-        .into_script_context(&redeemer, None)
+        .into_script_context_checked(&redeemer, None)
         .unwrap();
 
         // NOTE: The initial snapshot has been generated using the Haskell
@@ -1575,7 +1603,7 @@ mod tests {
              330034910b5f746d70313a20566f6964001615330024910b5f746d70303a2056\
              6f696400165734ae7155ceaab9e5573eae855d21",
         )
-        .into_script_context(&redeemer, None)
+        .into_script_context_checked(&redeemer, None)
         .unwrap();
 
         // NOTE: The initial snapshot has been generated using the Haskell

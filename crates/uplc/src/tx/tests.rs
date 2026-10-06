@@ -1,9 +1,11 @@
-use super::{ResolvedInput, SlotConfig, eval_phase_two};
+use super::{
+    DataLookupTable, ResolvedInput, SlotConfig, eval::eval_redeemer, eval_phase_two, iter_redeemers,
+};
 use crate::machine::cost_model::ExBudget;
 use pallas_codec::utils::MaybeIndefArray;
 use pallas_primitives::{
     Fragment,
-    conway::{CostModels, TransactionInput, TransactionOutput},
+    conway::{CostModels, Redeemer, RedeemerTag, TransactionInput, TransactionOutput},
 };
 use pallas_traverse::{Era, MultiEraTx};
 
@@ -1808,4 +1810,131 @@ fn apply_params_to_script_rejects_invalid_params_without_panicking() {
         super::apply_params_to_script(NON_ARRAY_PARAMS_CBOR, &[]),
         Err(super::error::Error::ApplyParamsError)
     ));
+}
+
+#[test]
+fn eval_phase_two_reuses_context_across_redeemers() {
+    // Three spends, a mint and a withdrawal that all run the same Plutus V3
+    // script, so one evaluation builds the transaction's context and decodes the
+    // script once for all five redeemers.
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../test_data/tx/shared_script.json")).unwrap();
+    let hex = |value: &serde_json::Value| hex::decode(value.as_str().unwrap()).unwrap();
+    let number = |value: &serde_json::Value| value.as_u64().unwrap();
+
+    let tx_bytes = hex(&fixture["transaction"]);
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes).unwrap();
+    let tx = multi_era_tx.as_conway().unwrap();
+
+    let utxos: Vec<ResolvedInput> = fixture["inputs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|utxo| ResolvedInput {
+            input: TransactionInput::decode_fragment(&hex(&utxo["input"])).unwrap(),
+            output: TransactionOutput::decode_fragment(&hex(&utxo["output"])).unwrap(),
+        })
+        .collect();
+
+    let cost_mdls = CostModels::decode_fragment(&hex(&fixture["cost_models"])).unwrap();
+
+    let slot_config = SlotConfig {
+        zero_time: number(&fixture["slot_config"]["zero_time"]),
+        zero_slot: number(&fixture["slot_config"]["zero_slot"]),
+        slot_length: number(&fixture["slot_config"]["slot_length"]) as u32,
+    };
+
+    let initial_budget = ExBudget {
+        cpu: number(&fixture["budget"]["cpu"]) as i64,
+        mem: number(&fixture["budget"]["mem"]) as i64,
+    };
+
+    let results = eval_phase_two(
+        tx,
+        &utxos,
+        Some(&cost_mdls),
+        Some(&initial_budget),
+        &slot_config,
+        false,
+        |_| (),
+    )
+    .unwrap();
+
+    // Every redeemer gives what evaluating it on its own gives, with the budget
+    // the redeemers before it left.
+    let lookup_table = DataLookupTable::from_transaction(tx, &utxos);
+    let mut remaining_budget = initial_budget;
+
+    let redeemers = tx.transaction_witness_set.redeemer.as_ref().unwrap();
+
+    for ((key, data, ex_units), (redeemer, eval_result)) in iter_redeemers(redeemers).zip(&results)
+    {
+        let (alone, alone_result) = eval_redeemer(
+            tx,
+            &utxos,
+            &slot_config,
+            &Redeemer {
+                tag: key.tag,
+                index: key.index,
+                data: data.clone(),
+                ex_units,
+            },
+            &lookup_table,
+            Some(&cost_mdls),
+            &remaining_budget,
+        )
+        .unwrap();
+
+        assert_eq!(redeemer, &alone);
+        assert_eq!(eval_result.cost(), alone_result.cost());
+        assert_eq!(eval_result.result().ok(), alone_result.result().ok());
+
+        remaining_budget.cpu -= redeemer.ex_units.steps as i64;
+        remaining_budget.mem -= redeemer.ex_units.mem as i64;
+    }
+
+    // The budgets the evaluator gave before it shared anything across redeemers.
+    let budgets: Vec<(RedeemerTag, u32, ExBudget)> = results
+        .iter()
+        .map(|(redeemer, _)| {
+            (
+                redeemer.tag,
+                redeemer.index,
+                ExBudget {
+                    mem: redeemer.ex_units.mem as i64,
+                    cpu: redeemer.ex_units.steps as i64,
+                },
+            )
+        })
+        .collect();
+
+    let spend = ExBudget {
+        mem: 1188070,
+        cpu: 397426880,
+    };
+
+    assert_eq!(
+        budgets,
+        vec![
+            (RedeemerTag::Spend, 0, spend),
+            (RedeemerTag::Spend, 1, spend),
+            (RedeemerTag::Spend, 2, spend),
+            (
+                RedeemerTag::Mint,
+                1,
+                ExBudget {
+                    mem: 1196860,
+                    cpu: 400019056,
+                },
+            ),
+            (
+                RedeemerTag::Reward,
+                0,
+                ExBudget {
+                    mem: 1197530,
+                    cpu: 401496663,
+                },
+            ),
+        ]
+    );
 }

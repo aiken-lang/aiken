@@ -163,6 +163,8 @@ fn eval_phase_two_with_override_and_optional_protocol(
 
             let mut remaining_budget = *initial_budget.unwrap_or(&ExBudget::default());
 
+            let mut cache = eval::TxEvalCache::default();
+
             for (key, data, ex_units) in iter_redeemers(rs) {
                 let redeemer = Redeemer {
                     tag: key.tag,
@@ -173,29 +175,17 @@ fn eval_phase_two_with_override_and_optional_protocol(
 
                 with_redeemer(&redeemer);
 
-                let (redeemer, eval_result) =
-                    if let Some(protocol_major_version) = protocol_major_version {
-                        eval::eval_redeemer_with_protocol(
-                            tx,
-                            utxos,
-                            slot_config,
-                            &redeemer,
-                            &lookup_table,
-                            cost_mdls,
-                            &remaining_budget,
-                            protocol_major_version,
-                        )?
-                    } else {
-                        eval::eval_redeemer(
-                            tx,
-                            utxos,
-                            slot_config,
-                            &redeemer,
-                            &lookup_table,
-                            cost_mdls,
-                            &remaining_budget,
-                        )?
-                    };
+                let (redeemer, eval_result) = eval::eval_redeemer_cached(
+                    tx,
+                    utxos,
+                    slot_config,
+                    &redeemer,
+                    &lookup_table,
+                    cost_mdls,
+                    &remaining_budget,
+                    protocol_major_version,
+                    &mut cache,
+                )?;
 
                 // The subtraction is safe here because ex units are checked during evaluation.
                 // Redeemer would fail already if budget was negative.
