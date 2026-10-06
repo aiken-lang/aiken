@@ -9,7 +9,7 @@ use crate::{
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
 use pallas_primitives::conway::{self, PlutusData};
-use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
+use std::{mem::size_of, ops::Deref, rc::Rc};
 
 pub(super) type Env = Rc<Vec<Value>>;
 
@@ -338,7 +338,7 @@ impl Value {
         if i.is_zero() {
             1
         } else {
-            (integer_log2(i.abs()) / 64) + 1
+            ((i.bits() as i64 - 1) / 64) + 1
         }
     }
 
@@ -355,50 +355,32 @@ impl Value {
     }
 
     fn data_to_ex_mem_inner(data: &PlutusData) -> i64 {
-        let mut stack: VecDeque<&PlutusData> = VecDeque::new();
+        // The order nodes are visited in does not matter for a sum.
+        let mut stack: Vec<&PlutusData> = vec![data];
         let mut total = 0;
-        stack.push_front(data);
 
-        while let Some(item) = stack.pop_front() {
+        while let Some(item) = stack.pop() {
             // each time we deconstruct a data we add 4 memory units
             total += 4;
             match item {
                 PlutusData::Constr(c) => {
                     // note currently tag is not factored into cost of memory
-                    // create new stack with of items from the list of data
-                    let mut new_stack: VecDeque<&PlutusData> =
-                        VecDeque::from_iter(c.fields.deref().iter());
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
+                    stack.extend(c.fields.iter());
                 }
                 PlutusData::Map(m) => {
-                    let mut new_stack: VecDeque<&PlutusData>;
-                    // create new stack with of items from the list of pairs of data
-                    new_stack = m.iter().fold(VecDeque::new(), |mut acc, d| {
-                        acc.push_back(&d.0);
-                        acc.push_back(&d.1);
-                        acc
-                    });
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
+                    for (k, v) in m.iter() {
+                        stack.push(k);
+                        stack.push(v);
+                    }
                 }
                 PlutusData::BigInt(i) => {
-                    let i = from_pallas_bigint(i);
-
-                    total += Self::integer_to_ex_mem(&i);
+                    total += pallas_bigint_to_ex_mem(i);
                 }
                 PlutusData::BoundedBytes(b) => {
                     total += Self::byte_string_to_ex_mem(b.deref());
                 }
                 PlutusData::Array(a) => {
-                    // create new stack with of items from the list of data
-                    let mut new_stack: VecDeque<&PlutusData> =
-                        VecDeque::from_iter(a.deref().iter());
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
+                    stack.extend(a.iter());
                 }
             }
         }
@@ -406,17 +388,17 @@ impl Value {
     }
     pub(super) fn data_node_count(&self) -> Result<i64, Error> {
         let data = self.unwrap_data()?;
-        let mut stack = VecDeque::from([data]);
+        let mut stack = vec![data];
         let mut count = 0_i64;
 
-        while let Some(item) = stack.pop_front() {
+        while let Some(item) = stack.pop() {
             count += 1;
             match item {
                 PlutusData::Constr(constr) => stack.extend(constr.fields.iter()),
                 PlutusData::Map(entries) => {
                     for (key, value) in entries.iter() {
-                        stack.push_back(key);
-                        stack.push_back(value);
+                        stack.push(key);
+                        stack.push(value);
                     }
                 }
                 PlutusData::Array(items) => stack.extend(items.iter()),
@@ -511,15 +493,41 @@ impl TryFrom<&Value> for Constant {
 }
 
 pub fn integer_log2(i: BigInt) -> i64 {
-    if i.is_zero() {
-        return 0;
+    integer_log2_ref(&i)
+}
+
+/// The base-2 logarithm of the magnitude of `i`, rounded down; 0 for 0.
+pub(super) fn integer_log2_ref(i: &BigInt) -> i64 {
+    match i.bits() {
+        0 => 0,
+        bits => bits as i64 - 1,
     }
+}
 
-    let (_, bytes) = i.to_bytes_be();
+/// The memory size of a Data integer, without converting it to a BigInt
+/// unless it is a negative bignum.
+fn pallas_bigint_to_ex_mem(n: &conway::BigInt) -> i64 {
+    let bits = match n {
+        conway::BigInt::Int(i) => {
+            let magnitude = i128::from(*i).unsigned_abs();
+            (u128::BITS - magnitude.leading_zeros()) as u64
+        }
+        conway::BigInt::BigUInt(bytes) => {
+            let bytes: &[u8] = bytes;
+            match bytes.iter().position(|b| *b != 0) {
+                None => 0,
+                Some(first) => {
+                    (8 - bytes[first].leading_zeros()) as u64 + 8 * (bytes.len() - first - 1) as u64
+                }
+            }
+        }
+        conway::BigInt::BigNInt(_) => from_pallas_bigint(n).bits(),
+    };
 
-    match bytes.first() {
-        None => unreachable!("empty number?"),
-        Some(u) => (8 - u.leading_zeros() - 1) as i64 + 8 * (bytes.len() - 1) as i64,
+    if bits == 0 {
+        1
+    } else {
+        ((bits as i64 - 1) / 64) + 1
     }
 }
 
@@ -557,10 +565,13 @@ mod tests {
         ast::{Constant, Type},
         machine::{
             runtime::BuiltinSemantics,
-            value::{Value, integer_log2},
+            value::{
+                Value, from_pallas_bigint, integer_log2, pallas_bigint_to_ex_mem, to_pallas_bigint,
+            },
         },
     };
     use num_bigint::BigInt;
+    use pallas_primitives::conway;
     use std::rc::Rc;
 
     #[test]
@@ -653,6 +664,35 @@ mod tests {
             Value::Con(Constant::Integer(BigInt::parse_bytes("999999999999999999999999999999999999999999999999999999999999999999999999999999999999".as_bytes(), 10).unwrap()).into());
 
         assert_eq!(value.to_ex_mem(), 5);
+    }
+
+    #[test]
+    fn data_integer_ex_mem_matches_integer_ex_mem() {
+        let mut samples: Vec<BigInt> = vec![0.into(), 1.into(), (-1).into()];
+
+        for shift in [7, 8, 31, 32, 63, 64, 65, 127, 128, 129, 200] {
+            let power: BigInt = BigInt::from(1) << shift;
+            for n in [&power - 1, power.clone(), &power + 1] {
+                samples.push(-&n);
+                samples.push(n);
+            }
+        }
+
+        for n in samples {
+            let pallas = to_pallas_bigint(&n);
+            assert_eq!(from_pallas_bigint(&pallas), n);
+            assert_eq!(
+                pallas_bigint_to_ex_mem(&pallas),
+                Value::integer(n.clone()).to_ex_mem(),
+                "{n}"
+            );
+        }
+
+        // Non-canonical big naturals with leading zero bytes.
+        let padded = conway::BigInt::BigUInt(vec![0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0].into());
+        assert_eq!(pallas_bigint_to_ex_mem(&padded), 2);
+        let zero = conway::BigInt::BigUInt(vec![0, 0].into());
+        assert_eq!(pallas_bigint_to_ex_mem(&zero), 1);
     }
 
     #[test]
