@@ -246,6 +246,7 @@ impl Machine {
         Ok(())
     }
 
+    #[inline(always)]
     fn compute(&mut self, env: Env, term: Rc<Term<NamedDeBruijn>>) -> Result<MachineState, Error> {
         match term.as_ref() {
             Term::Var(name) => {
@@ -333,6 +334,7 @@ impl Machine {
         }
     }
 
+    #[inline(always)]
     fn return_compute(&mut self, value: Value) -> Result<MachineState, Error> {
         let Some(frame) = self.frames.pop() else {
             if self.unbudgeted_steps[9] > 0 {
@@ -389,6 +391,7 @@ impl Machine {
         }
     }
 
+    #[inline(always)]
     fn case_evaluate(
         &mut self,
         env: Env,
@@ -464,6 +467,7 @@ impl Machine {
         }
     }
 
+    #[inline(always)]
     fn force_evaluate(&mut self, value: Value) -> Result<MachineState, Error> {
         match value {
             Value::Delay(body, env) => Ok(MachineState::Compute(env, body)),
@@ -488,6 +492,7 @@ impl Machine {
         }
     }
 
+    #[inline(always)]
     fn apply_evaluate(&mut self, function: Value, argument: Value) -> Result<MachineState, Error> {
         match function {
             Value::Lambda { body, mut env, .. } => {
