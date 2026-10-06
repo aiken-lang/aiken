@@ -21,29 +21,23 @@ use self::{
 };
 
 enum MachineState {
-    Return(Context, Value),
-    Compute(Context, Env, Rc<Term<NamedDeBruijn>>),
+    Return(Value),
+    Compute(Env, Rc<Term<NamedDeBruijn>>),
     Done(Term<NamedDeBruijn>),
 }
 
-#[derive(Clone)]
-enum Context {
-    FrameAwaitArg(Value, Box<Context>),
-    FrameAwaitFunTerm(Env, Rc<Term<NamedDeBruijn>>, Box<Context>),
-    FrameAwaitFunValue(Value, Box<Context>),
-    FrameForce(Box<Context>),
+/// A pending continuation. The machine keeps them on a stack, with the next
+/// one to resume on top.
+enum Frame {
+    AwaitArg(Value),
+    AwaitFunTerm(Env, Rc<Term<NamedDeBruijn>>),
+    AwaitFunValue(Value),
+    Force,
     /// The `constr` term being evaluated, the index of the next field to
     /// compute, and the fields computed so far.
-    FrameConstr(
-        Env,
-        Rc<Term<NamedDeBruijn>>,
-        usize,
-        Vec<Value>,
-        Box<Context>,
-    ),
+    Constr(Env, Rc<Term<NamedDeBruijn>>, usize, Vec<Value>),
     /// The `case` term whose scrutinee is being evaluated.
-    FrameCases(Env, Rc<Term<NamedDeBruijn>>, Box<Context>),
-    NoFrame,
+    Cases(Env, Rc<Term<NamedDeBruijn>>),
 }
 
 pub const TERM_COUNT: usize = 9;
@@ -89,6 +83,7 @@ pub struct Machine {
     pub traces: Vec<Trace>,
     pub spend_counter: Option<[i64; (TERM_COUNT + BUILTIN_COUNT) * 2]>,
     semantics: BuiltinSemantics,
+    frames: Vec<Frame>,
 }
 
 impl Machine {
@@ -108,6 +103,7 @@ impl Machine {
             traces: vec![],
             spend_counter: None,
             semantics,
+            frames: vec![],
         }
     }
 
@@ -129,6 +125,7 @@ impl Machine {
             traces: vec![],
             spend_counter: None,
             semantics,
+            frames: vec![],
         }
     }
 
@@ -148,6 +145,7 @@ impl Machine {
             traces: vec![],
             spend_counter: Some([0; (TERM_COUNT + BUILTIN_COUNT) * 2]),
             semantics,
+            frames: vec![],
         }
     }
 
@@ -169,12 +167,11 @@ impl Machine {
             traces: vec![],
             spend_counter: Some([0; (TERM_COUNT + BUILTIN_COUNT) * 2]),
             semantics,
+            frames: vec![],
         }
     }
 
     pub fn run(&mut self, term: Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
-        use MachineState::*;
-
         if !self.semantics.supports_values() {
             Self::assert_no_values(&term)?;
         }
@@ -183,12 +180,24 @@ impl Machine {
 
         self.spend_budget(startup_budget)?;
 
-        let mut state = Compute(Context::NoFrame, Rc::new(vec![]), Rc::new(term));
+        let result = self.evaluate(term);
+
+        // A failed evaluation leaves its pending frames on the stack; drop them
+        // now instead of keeping what they hold alive with the machine.
+        self.frames.clear();
+
+        result
+    }
+
+    fn evaluate(&mut self, term: Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
+        use MachineState::*;
+
+        let mut state = Compute(Rc::new(vec![]), Rc::new(term));
 
         loop {
             state = match state {
-                Compute(context, env, t) => self.compute(context, env, t)?,
-                Return(context, value) => self.return_compute(context, value)?,
+                Compute(env, t) => self.compute(env, t)?,
+                Return(value) => self.return_compute(value)?,
                 Done(t) => {
                     return Ok(t);
                 }
@@ -237,27 +246,19 @@ impl Machine {
         Ok(())
     }
 
-    fn compute(
-        &mut self,
-        context: Context,
-        env: Env,
-        term: Rc<Term<NamedDeBruijn>>,
-    ) -> Result<MachineState, Error> {
+    fn compute(&mut self, env: Env, term: Rc<Term<NamedDeBruijn>>) -> Result<MachineState, Error> {
         match term.as_ref() {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
                 let val = self.lookup_var(name.as_ref(), &env)?;
 
-                Ok(MachineState::Return(context, val))
+                Ok(MachineState::Return(val))
             }
             Term::Delay(body) => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
-                Ok(MachineState::Return(
-                    context,
-                    Value::Delay(body.clone(), env),
-                ))
+                Ok(MachineState::Return(Value::Delay(body.clone(), env)))
             }
             Term::Lambda {
                 parameter_name,
@@ -265,37 +266,31 @@ impl Machine {
             } => {
                 self.step_and_maybe_spend(StepKind::Lambda)?;
 
-                Ok(MachineState::Return(
-                    context,
-                    Value::Lambda {
-                        parameter_name: parameter_name.clone(),
-                        body: body.clone(),
-                        env,
-                    },
-                ))
+                Ok(MachineState::Return(Value::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: body.clone(),
+                    env,
+                }))
             }
             Term::Apply { function, argument } => {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
-                Ok(MachineState::Compute(
-                    Context::FrameAwaitFunTerm(env.clone(), argument.clone(), context.into()),
-                    env,
-                    function.clone(),
-                ))
+                self.frames
+                    .push(Frame::AwaitFunTerm(env.clone(), argument.clone()));
+
+                Ok(MachineState::Compute(env, function.clone()))
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
-                Ok(MachineState::Return(context, Value::Con(x.clone())))
+                Ok(MachineState::Return(Value::Con(x.clone())))
             }
             Term::Force(body) => {
                 self.step_and_maybe_spend(StepKind::Force)?;
 
-                Ok(MachineState::Compute(
-                    Context::FrameForce(context.into()),
-                    env,
-                    body.clone(),
-                ))
+                self.frames.push(Frame::Force);
+
+                Ok(MachineState::Compute(env, body.clone()))
             }
             Term::Error => Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
@@ -303,10 +298,7 @@ impl Machine {
 
                 let runtime: BuiltinRuntime = (*fun).into();
 
-                Ok(MachineState::Return(
-                    context,
-                    Value::Builtin { fun: *fun, runtime },
-                ))
+                Ok(MachineState::Return(Value::Builtin { fun: *fun, runtime }))
             }
             Term::Constr { tag, fields } => {
                 self.step_and_maybe_spend(StepKind::Constr)?;
@@ -316,59 +308,52 @@ impl Machine {
                         let field = Rc::new(field.clone());
                         let resolved_fields = Vec::with_capacity(fields.len());
 
-                        Ok(MachineState::Compute(
-                            Context::FrameConstr(
-                                env.clone(),
-                                term.clone(),
-                                1,
-                                resolved_fields,
-                                context.into(),
-                            ),
-                            env,
-                            field,
-                        ))
+                        self.frames.push(Frame::Constr(
+                            env.clone(),
+                            term.clone(),
+                            1,
+                            resolved_fields,
+                        ));
+
+                        Ok(MachineState::Compute(env, field))
                     }
-                    None => Ok(MachineState::Return(
-                        context,
-                        Value::Constr {
-                            tag: *tag,
-                            fields: vec![],
-                        },
-                    )),
+                    None => Ok(MachineState::Return(Value::Constr {
+                        tag: *tag,
+                        fields: vec![],
+                    })),
                 }
             }
             Term::Case { constr, .. } => {
                 self.step_and_maybe_spend(StepKind::Case)?;
 
-                Ok(MachineState::Compute(
-                    Context::FrameCases(env.clone(), term.clone(), context.into()),
-                    env,
-                    constr.clone(),
-                ))
+                self.frames.push(Frame::Cases(env.clone(), term.clone()));
+
+                Ok(MachineState::Compute(env, constr.clone()))
             }
         }
     }
 
-    fn return_compute(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
-        match context {
-            Context::NoFrame => {
-                if self.unbudgeted_steps[9] > 0 {
-                    self.spend_unbudgeted_steps()?;
-                }
-
-                let term = discharge::value_as_term(value);
-
-                Ok(MachineState::Done(term))
+    fn return_compute(&mut self, value: Value) -> Result<MachineState, Error> {
+        let Some(frame) = self.frames.pop() else {
+            if self.unbudgeted_steps[9] > 0 {
+                self.spend_unbudgeted_steps()?;
             }
-            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
-            Context::FrameAwaitFunTerm(arg_env, arg, ctx) => Ok(MachineState::Compute(
-                Context::FrameAwaitArg(value, ctx),
-                arg_env,
-                arg,
-            )),
-            Context::FrameAwaitArg(fun, ctx) => self.apply_evaluate(*ctx, fun, value),
-            Context::FrameAwaitFunValue(arg, ctx) => self.apply_evaluate(*ctx, value, arg),
-            Context::FrameConstr(env, term, next, mut resolved_fields, ctx) => {
+
+            let term = discharge::value_as_term(value);
+
+            return Ok(MachineState::Done(term));
+        };
+
+        match frame {
+            Frame::Force => self.force_evaluate(value),
+            Frame::AwaitFunTerm(arg_env, arg) => {
+                self.frames.push(Frame::AwaitArg(value));
+
+                Ok(MachineState::Compute(arg_env, arg))
+            }
+            Frame::AwaitArg(fun) => self.apply_evaluate(fun, value),
+            Frame::AwaitFunValue(arg) => self.apply_evaluate(value, arg),
+            Frame::Constr(env, term, next, mut resolved_fields) => {
                 let Term::Constr { tag, fields } = term.as_ref() else {
                     unreachable!("FrameConstr always holds a constr term")
                 };
@@ -379,45 +364,44 @@ impl Machine {
                     Some(field) => {
                         let field = Rc::new(field.clone());
 
-                        Ok(MachineState::Compute(
-                            Context::FrameConstr(env.clone(), term, next + 1, resolved_fields, ctx),
-                            env,
-                            field,
-                        ))
+                        self.frames.push(Frame::Constr(
+                            env.clone(),
+                            term,
+                            next + 1,
+                            resolved_fields,
+                        ));
+
+                        Ok(MachineState::Compute(env, field))
                     }
-                    None => Ok(MachineState::Return(
-                        *ctx,
-                        Value::Constr {
-                            tag: *tag,
-                            fields: resolved_fields,
-                        },
-                    )),
+                    None => Ok(MachineState::Return(Value::Constr {
+                        tag: *tag,
+                        fields: resolved_fields,
+                    })),
                 }
             }
-            Context::FrameCases(env, term, ctx) => {
+            Frame::Cases(env, term) => {
                 let Term::Case { branches, .. } = term.as_ref() else {
                     unreachable!("FrameCases always holds a case term")
                 };
 
-                self.case_evaluate(*ctx, env, branches, value)
+                self.case_evaluate(env, branches, value)
             }
         }
     }
 
     fn case_evaluate(
         &mut self,
-        context: Context,
         env: Env,
         branches: &[Term<NamedDeBruijn>],
         value: Value,
     ) -> Result<MachineState, Error> {
         match value {
             Value::Constr { tag, fields } => match branches.get(tag) {
-                Some(t) => Ok(MachineState::Compute(
-                    transfer_arg_stack(fields, context),
-                    env,
-                    Rc::new(t.clone()),
-                )),
+                Some(t) => {
+                    self.transfer_arg_stack(fields);
+
+                    Ok(MachineState::Compute(env, Rc::new(t.clone())))
+                }
                 None => Err(Error::MissingCaseBranch(
                     branches.to_vec(),
                     Value::Constr { tag, fields },
@@ -465,11 +449,11 @@ impl Machine {
                 }
 
                 match branches.get(tag) {
-                    Some(t) => Ok(MachineState::Compute(
-                        transfer_arg_stack(fields, context),
-                        env,
-                        Rc::new(t.clone()),
-                    )),
+                    Some(t) => {
+                        self.transfer_arg_stack(fields);
+
+                        Ok(MachineState::Compute(env, Rc::new(t.clone())))
+                    }
                     None => Err(Error::MissingCaseBranch(
                         branches.to_vec(),
                         Value::Con(constant),
@@ -480,9 +464,9 @@ impl Machine {
         }
     }
 
-    fn force_evaluate(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
+    fn force_evaluate(&mut self, value: Value) -> Result<MachineState, Error> {
         match value {
-            Value::Delay(body, env) => Ok(MachineState::Compute(context, env, body)),
+            Value::Delay(body, env) => Ok(MachineState::Compute(env, body)),
             Value::Builtin { fun, mut runtime } => {
                 if runtime.needs_force() {
                     runtime.consume_force();
@@ -493,7 +477,7 @@ impl Machine {
                         Value::Builtin { fun, runtime }
                     };
 
-                    Ok(MachineState::Return(context, res))
+                    Ok(MachineState::Return(res))
                 } else {
                     let term = discharge::value_as_term(Value::Builtin { fun, runtime });
 
@@ -504,17 +488,12 @@ impl Machine {
         }
     }
 
-    fn apply_evaluate(
-        &mut self,
-        context: Context,
-        function: Value,
-        argument: Value,
-    ) -> Result<MachineState, Error> {
+    fn apply_evaluate(&mut self, function: Value, argument: Value) -> Result<MachineState, Error> {
         match function {
             Value::Lambda { body, mut env, .. } => {
                 Rc::make_mut(&mut env).push(argument);
 
-                Ok(MachineState::Compute(context, env, body))
+                Ok(MachineState::Compute(env, body))
             }
             Value::Builtin { fun, runtime } => {
                 if runtime.is_arrow() && !runtime.needs_force() {
@@ -528,7 +507,7 @@ impl Machine {
                         Value::Builtin { fun, runtime }
                     };
 
-                    Ok(MachineState::Return(context, res))
+                    Ok(MachineState::Return(res))
                 } else {
                     let term = discharge::value_as_term(Value::Builtin { fun, runtime });
 
@@ -558,6 +537,13 @@ impl Machine {
         env.get::<usize>(env.len() - usize::from(name.index))
             .cloned()
             .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone().into())))
+    }
+
+    /// Pushes the fields of a scrutinised constructor as pending arguments,
+    /// the first field on top.
+    fn transfer_arg_stack(&mut self, args: Vec<Value>) {
+        self.frames
+            .extend(args.into_iter().rev().map(Frame::AwaitFunValue));
     }
 
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
@@ -606,16 +592,6 @@ impl Machine {
     }
 }
 
-fn transfer_arg_stack(mut args: Vec<Value>, ctx: Context) -> Context {
-    if args.is_empty() {
-        ctx
-    } else {
-        let popped_field = args.pop().unwrap();
-
-        transfer_arg_stack(args, Context::FrameAwaitFunValue(popped_field, ctx.into()))
-    }
-}
-
 impl From<&Constant> for Type {
     fn from(constant: &Constant) -> Self {
         match constant {
@@ -642,7 +618,11 @@ mod tests {
     use num_bigint::BigInt;
     use std::rc::Rc;
 
-    use super::{Error, cost_model::ExBudget, runtime::Compressable};
+    use super::{
+        Error, Machine,
+        cost_model::{CostModel, ExBudget},
+        runtime::Compressable,
+    };
     use crate::{
         ast::{Constant, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
@@ -987,5 +967,39 @@ mod tests {
         let final_term = eval_result.result().unwrap();
 
         assert_eq!(final_term, Term::bool(true))
+    }
+
+    #[test]
+    fn failed_run_drops_pending_frames() {
+        // `[(lam x x) (error)]` fails while the lambda still awaits its argument.
+        let term: Term<NamedDeBruijn> = Term::Apply {
+            function: Term::Lambda {
+                parameter_name: NamedDeBruijn {
+                    text: "x".to_string(),
+                    index: 0.into(),
+                }
+                .into(),
+                body: Term::Var(
+                    NamedDeBruijn {
+                        text: "x".to_string(),
+                        index: 1.into(),
+                    }
+                    .into(),
+                )
+                .into(),
+            }
+            .into(),
+            argument: Term::Error.into(),
+        };
+
+        let mut machine = Machine::new(
+            Language::PlutusV3,
+            CostModel::default(),
+            ExBudget::default(),
+            200,
+        );
+
+        assert!(matches!(machine.run(term), Err(Error::EvaluationFailure)));
+        assert!(machine.frames.is_empty());
     }
 }
