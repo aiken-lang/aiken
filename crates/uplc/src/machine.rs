@@ -320,7 +320,7 @@ impl Machine {
                     }
                     None => Ok(MachineState::Return(Value::Constr {
                         tag: *tag,
-                        fields: vec![],
+                        fields: Rc::new(vec![]),
                     })),
                 }
             }
@@ -377,7 +377,7 @@ impl Machine {
                     }
                     None => Ok(MachineState::Return(Value::Constr {
                         tag: *tag,
-                        fields: resolved_fields,
+                        fields: Rc::new(resolved_fields),
                     })),
                 }
             }
@@ -401,7 +401,7 @@ impl Machine {
         match value {
             Value::Constr { tag, fields } => match branches.get(tag) {
                 Some(t) => {
-                    self.transfer_arg_stack(fields);
+                    self.transfer_arg_stack(Rc::unwrap_or_clone(fields));
 
                     Ok(MachineState::Compute(env, Rc::new(t.clone())))
                 }

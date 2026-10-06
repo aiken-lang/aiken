@@ -26,9 +26,12 @@ pub enum Value {
         fun: DefaultFunction,
         runtime: BuiltinRuntime,
     },
+    /// Fields are shared so that copying a constructor value (variable
+    /// lookup, environment capture) is O(1) instead of a deep copy of the
+    /// whole structure.
     Constr {
         tag: usize,
-        fields: Vec<Value>,
+        fields: Rc<Vec<Value>>,
     },
 }
 

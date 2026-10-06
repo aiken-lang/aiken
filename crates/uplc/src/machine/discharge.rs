@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::{NamedDeBruijn, Term};
 
 use super::value::{Env, Value};
@@ -37,7 +39,10 @@ pub(super) fn value_as_term(value: Value) -> Term<NamedDeBruijn> {
         ),
         Value::Constr { tag, fields } => Term::Constr {
             tag,
-            fields: fields.into_iter().map(value_as_term).collect(),
+            fields: Rc::unwrap_or_clone(fields)
+                .into_iter()
+                .map(value_as_term)
+                .collect(),
         },
     }
 }
