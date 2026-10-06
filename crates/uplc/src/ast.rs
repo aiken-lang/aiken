@@ -623,16 +623,26 @@ impl std::ops::Deref for ListSpine {
 
 impl From<Vec<Rc<Constant>>> for ListSpine {
     fn from(items: Vec<Rc<Constant>>) -> Self {
-        ListSpine {
-            buf: Rc::new(SpineBuf::new(0, items.into_iter())),
-            start: 0,
-        }
+        items.into_iter().collect()
     }
 }
 
 impl FromIterator<Rc<Constant>> for ListSpine {
     fn from_iter<I: IntoIterator<Item = Rc<Constant>>>(iter: I) -> Self {
-        iter.into_iter().collect::<Vec<_>>().into()
+        // Without free slots, the elements are collected straight into the
+        // spine's slots (in place, when they come from a `Vec`).
+        let slots = iter
+            .into_iter()
+            .map(|item| UnsafeCell::new(MaybeUninit::new(item)))
+            .collect();
+
+        ListSpine {
+            buf: Rc::new(SpineBuf {
+                slots,
+                front: Cell::new(0),
+            }),
+            start: 0,
+        }
     }
 }
 
