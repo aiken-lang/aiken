@@ -479,15 +479,9 @@ impl Machine {
     ) -> Result<MachineState, Error> {
         match function {
             Value::Lambda { body, mut env, .. } => {
-                let e = Rc::make_mut(&mut env);
+                Rc::make_mut(&mut env).push(argument);
 
-                e.push(argument);
-
-                Ok(MachineState::Compute(
-                    context,
-                    Rc::new(e.clone()),
-                    body.as_ref().clone(),
-                ))
+                Ok(MachineState::Compute(context, env, body.as_ref().clone()))
             }
             Value::Builtin { fun, runtime } => {
                 if runtime.is_arrow() && !runtime.needs_force() {
