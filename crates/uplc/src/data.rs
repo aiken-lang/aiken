@@ -628,3 +628,405 @@ fn encode_array<W: Write>(
 
     Ok(())
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use crate::{
+        ast::{NamedDeBruijn, Program, Term},
+        builtins::DefaultFunction,
+        machine::cost_model::ExBudget,
+    };
+    use pallas_crypto::hash::Hasher;
+    use pallas_primitives::{Constr as PallasConstr, Fragment};
+    use proptest::{collection::vec, prelude::*};
+    use std::collections::HashSet;
+
+    /// Any `PlutusData`, with every encoding variant pallas keeps.
+    pub(crate) fn arb_plutus_data() -> impl Strategy<Value = PlutusData> {
+        let int = prop_oneof![
+            any::<i64>().prop_map(minicbor::data::Int::from),
+            any::<u64>().prop_map(minicbor::data::Int::from),
+            any::<u64>().prop_map(|n| minicbor::data::Int::try_from(-1 - i128::from(n)).unwrap()),
+        ];
+
+        let leaf = prop_oneof![
+            int.prop_map(|i| PlutusData::BigInt(BigInt::Int(pallas_primitives::Int(i)))),
+            // Big integers, including non-canonical ones (leading zeros, or
+            // small enough for `Int`).
+            vec(any::<u8>(), 0..20).prop_map(|b| PlutusData::BigInt(BigInt::BigUInt(b.into()))),
+            vec(any::<u8>(), 0..20).prop_map(|b| PlutusData::BigInt(BigInt::BigNInt(b.into()))),
+            // Byte strings on either side of the 64-byte chunk size.
+            vec(any::<u8>(), 0..140).prop_map(|b| PlutusData::BoundedBytes(b.into())),
+        ];
+
+        let tag = prop_oneof![
+            (121u64..=127).prop_map(|tag| (tag, None)),
+            (1280u64..=1400).prop_map(|tag| (tag, None)),
+            any::<u64>().prop_map(|ix| (102, Some(ix))),
+        ];
+
+        leaf.prop_recursive(4, 64, 5, move |inner| {
+            let array = |indefinite: bool, items| {
+                if indefinite {
+                    MaybeIndefArray::Indef(items)
+                } else {
+                    MaybeIndefArray::Def(items)
+                }
+            };
+
+            prop_oneof![
+                (tag.clone(), any::<bool>(), vec(inner.clone(), 0..5)).prop_map(
+                    move |((tag, any_constructor), indefinite, fields)| {
+                        PlutusData::Constr(PallasConstr {
+                            tag,
+                            any_constructor,
+                            fields: array(indefinite, fields),
+                        })
+                    }
+                ),
+                (any::<bool>(), vec((inner.clone(), inner.clone()), 0..4)).prop_map(
+                    |(indefinite, entries)| PlutusData::Map(if indefinite {
+                        KeyValuePairs::Indef(entries)
+                    } else {
+                        KeyValuePairs::Def(entries)
+                    })
+                ),
+                (any::<bool>(), vec(inner, 0..5)).prop_map(move |(indefinite, items)| {
+                    PlutusData::Array(array(indefinite, items))
+                }),
+            ]
+        })
+    }
+
+    /// The `serialiseData` encoding as it was computed from `PlutusData`
+    /// before `Data` existed.
+    fn reencode(data: &PlutusData) -> Vec<u8> {
+        fn go(data: &PlutusData, e: &mut minicbor::Encoder<&mut Vec<u8>>) {
+            match data {
+                PlutusData::Constr(constr) => {
+                    e.tag(Tag::new(constr.tag)).unwrap();
+                    if constr.tag == 102 {
+                        e.array(2).unwrap();
+                        e.encode(constr.any_constructor.unwrap_or_default())
+                            .unwrap();
+                    }
+                    array(&constr.fields, e);
+                }
+                PlutusData::Map(entries) => {
+                    e.map(entries.len() as u64).unwrap();
+                    for (k, v) in entries.iter() {
+                        go(k, e);
+                        go(v, e);
+                    }
+                }
+                PlutusData::Array(items) => array(items, e),
+                PlutusData::BoundedBytes(bytes) => {
+                    e.encode(bytes).unwrap();
+                }
+                PlutusData::BigInt(i) => {
+                    e.encode(i).unwrap();
+                }
+            }
+        }
+
+        fn array(items: &MaybeIndefArray<PlutusData>, e: &mut minicbor::Encoder<&mut Vec<u8>>) {
+            if items.is_empty() {
+                e.array(0).unwrap();
+            } else {
+                e.begin_array().unwrap();
+                for item in items.iter() {
+                    go(item, e);
+                }
+                e.end().unwrap();
+            }
+        }
+
+        let mut bytes = Vec::new();
+        go(data, &mut minicbor::Encoder::new(&mut bytes));
+        bytes
+    }
+
+    /// The addresses of every node below `data`.
+    fn nodes(data: &Data, found: &mut HashSet<*const Constant>) {
+        let mut visit = |item: &Rc<Constant>| {
+            found.insert(Rc::as_ptr(item));
+            match item.as_ref() {
+                Constant::Data(data) => nodes(data, found),
+                Constant::ProtoPair(_, _, key, value) => {
+                    for child in [key, value] {
+                        found.insert(Rc::as_ptr(child));
+                        nodes(as_data(child), found);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        };
+
+        match data {
+            Data::Constr(constr) => constr.fields.items.iter().for_each(&mut visit),
+            Data::Array(array) => array.items.iter().for_each(&mut visit),
+            Data::Map(map) => map.entries.iter().for_each(&mut visit),
+            Data::BigInt(_) | Data::BoundedBytes(_) => {}
+        }
+    }
+
+    fn equals_data(left: Data, right: Data) -> (Term<NamedDeBruijn>, ExBudget) {
+        let program = Program::<NamedDeBruijn> {
+            version: (1, 1, 0),
+            term: Term::Builtin(DefaultFunction::EqualsData)
+                .apply(Term::data(left))
+                .apply(Term::data(right)),
+        };
+
+        let result = program.eval(ExBudget::default());
+        let cost = result.cost();
+
+        (result.result().unwrap(), cost)
+    }
+
+    proptest! {
+        #[test]
+        fn encodes_like_pallas(pallas in arb_plutus_data()) {
+            let bytes = pallas.encode_fragment().unwrap();
+            let data = Data::from(&pallas);
+
+            prop_assert_eq!(&data.to_cbor(), &bytes);
+            prop_assert_eq!(&data.to_hex(), &hex::encode(&bytes));
+            // cryptoxide's hashing is not miri-clean.
+            if !cfg!(miri) {
+                prop_assert_eq!(
+                    Hasher::<256>::hash(&data.to_cbor()),
+                    Hasher::<256>::hash_cbor(&pallas)
+                );
+            }
+
+            // CBOR in, Data, CBOR out.
+            let decoded = Data::decode_fragment(&bytes).unwrap();
+            prop_assert_eq!(&decoded.to_cbor(), &bytes);
+            prop_assert_eq!(&PlutusData::from(&decoded).encode_fragment().unwrap(), &bytes);
+            prop_assert_eq!(&PlutusData::from(decoded).encode_fragment().unwrap(), &bytes);
+        }
+
+        #[test]
+        fn serialises_like_pallas(pallas in arb_plutus_data()) {
+            let serialised = Data::from(&pallas).serialise();
+
+            prop_assert_eq!(&serialised, &reencode(&pallas));
+            prop_assert_eq!(&serialised, &crate::plutus_data_to_bytes(&pallas));
+        }
+
+        #[test]
+        fn debugs_like_pallas(pallas in arb_plutus_data()) {
+            prop_assert_eq!(format!("{:?}", Data::from(&pallas)), format!("{pallas:?}"));
+            prop_assert_eq!(format!("{:#?}", Data::from(&pallas)), format!("{pallas:#?}"));
+        }
+
+        #[test]
+        fn compares_like_pallas(left in arb_plutus_data(), right in arb_plutus_data()) {
+            let (data_left, data_right) = (Data::from(&left), Data::from(&right));
+
+            prop_assert_eq!(data_left.cmp(&data_right), left.cmp(&right));
+            prop_assert_eq!(data_left == data_right, left == right);
+            prop_assert_eq!(data_left.cmp(&data_left.clone()), Ordering::Equal);
+            prop_assert_eq!(data_left.cmp(&data_left.deep_clone()), Ordering::Equal);
+        }
+
+        #[test]
+        fn deep_clone_shares_nothing(pallas in arb_plutus_data()) {
+            let data = Data::from(&pallas);
+            let copy = data.deep_clone();
+
+            let (mut original, mut copied) = (HashSet::new(), HashSet::new());
+            nodes(&data, &mut original);
+            nodes(&copy, &mut copied);
+
+            prop_assert_eq!(original.len(), copied.len());
+            prop_assert!(original.is_disjoint(&copied));
+            prop_assert_eq!(copy.to_cbor(), data.to_cbor());
+        }
+    }
+
+    #[test]
+    fn round_trips_every_encoding() {
+        let mut chunked = vec![0x5f, 0x58, 0x40];
+        chunked.extend([0xab; 64]);
+        chunked.extend([0x41, 0xcd, 0xff]);
+
+        for hex in [
+            // integers, including non-canonical big integers
+            "00",
+            "17",
+            "1b7fffffffffffffff",
+            "1bffffffffffffffff",
+            "20",
+            "3bffffffffffffffff",
+            "c240",
+            "c24101",
+            "c243000001",
+            "c249010000000000000000",
+            "c340",
+            "c34100",
+            "c349010000000000000000",
+            // byte strings, up to and over one chunk
+            "40",
+            "4100",
+            &format!("5840{}", "ab".repeat(64)),
+            &hex::encode(&chunked),
+            // arrays
+            "80",
+            "9fff",
+            "8101",
+            "9f01ff",
+            "829f01ff80",
+            // maps
+            "a0",
+            "bfff",
+            "a10102",
+            "bf0102ff",
+            "a1a0bfff",
+            // constructors, in each tag form
+            "d87980",
+            "d8799fff",
+            "d8798101",
+            "d8799f01ff",
+            "d87f80",
+            "d9050080",
+            "d905789f01ff",
+            "d86682188080",
+            "d866821bffffffffffffffff9f01ff",
+        ] {
+            let bytes = hex::decode(hex).unwrap();
+            let data = Data::decode_fragment(&bytes).unwrap();
+
+            assert_eq!(data.to_hex(), hex, "{data:?}");
+            assert_eq!(
+                data.serialise(),
+                reencode(&PlutusData::decode_fragment(&bytes).unwrap()),
+                "{hex}"
+            );
+        }
+    }
+
+    #[test]
+    fn serialises_canonically() {
+        for (hex, serialised) in [
+            ("9fff", "80"),
+            ("8101", "9f01ff"),
+            ("bf0102ff", "a10102"),
+            ("bfff", "a0"),
+            ("d8798101", "d8799f01ff"),
+            ("d8799fff", "d87980"),
+            ("d86682188081a0", "d8668218809fa0ff"),
+        ] {
+            let data = Data::decode_fragment(&hex::decode(hex).unwrap()).unwrap();
+
+            assert_eq!(hex::encode(data.serialise()), serialised, "{hex}");
+        }
+    }
+
+    #[test]
+    fn rejects_what_pallas_rejects() {
+        for hex in ["", "ff", "d87a", "f6", "9f01", "6161", "c2ff"] {
+            let bytes = hex::decode(hex).unwrap();
+
+            assert_eq!(
+                Data::decode_fragment(&bytes).map_err(|e| e.to_string()),
+                PlutusData::decode_fragment(&bytes)
+                    .map(Data::from)
+                    .map_err(|e| e.to_string()),
+                "{hex}"
+            );
+        }
+    }
+
+    #[test]
+    fn equals_data_on_shared_and_unshared_trees() {
+        let items = (0..50).map(|i| Data::integer(i.into())).collect::<Vec<_>>();
+        let data = Data::constr(3, vec![Data::list(items.clone()), Data::map(vec![])]);
+
+        let true_term = Term::bool(true);
+        let false_term = Term::bool(false);
+
+        let (shared, shared_cost) = equals_data(data.clone(), data.clone());
+        let (unshared, unshared_cost) = equals_data(data.clone(), data.deep_clone());
+        assert_eq!(shared, true_term);
+        assert_eq!(unshared, true_term);
+        assert_eq!(shared_cost, unshared_cost);
+
+        // Equal regardless of how either side is encoded.
+        let indefinite = Data::Constr(Constr::new(
+            3,
+            Array::def([
+                Data::Array(Array::def(items.clone())),
+                Data::Map(Map::indef([])),
+            ]),
+        ));
+        let (result, cost) = equals_data(data.clone(), indefinite);
+        assert_eq!(result, true_term);
+        assert_eq!(cost, shared_cost);
+
+        // Sharing a prefix, but differing in the last element.
+        let mut other_items = items;
+        *other_items.last_mut().unwrap() = Data::integer(1000.into());
+        let other = Data::constr(3, vec![Data::list(other_items), Data::map(vec![])]);
+        let (result, _) = equals_data(data.clone(), other.clone());
+        assert_eq!(result, false_term);
+        assert_eq!(data.cmp(&other), Ordering::Less);
+    }
+
+    #[test]
+    fn children_are_shared() {
+        let fields = Data::list((0..10).map(|i| Data::integer(i.into())).collect());
+        let Data::Array(fields) = fields else {
+            unreachable!()
+        };
+        let constr = Constr::new(0, Array::from_data_list(fields.as_data_list().clone()));
+
+        assert!(constr.fields.as_data_list().ptr_eq(fields.as_data_list()));
+        assert!(Rc::ptr_eq(
+            &constr.fields.as_data_list()[3],
+            &fields.as_data_list()[3]
+        ));
+    }
+
+    #[test]
+    fn drops_deep_data_in_bounded_stack() {
+        #[cfg(not(miri))]
+        const DEPTH: usize = 1_000_000;
+        #[cfg(miri)]
+        const DEPTH: usize = 2_000;
+
+        // Room for the nested drops allowed before queuing, even in a debug
+        // build, but far too little to drop the whole nesting recursively.
+        std::thread::Builder::new()
+            .stack_size(4 * 1024 * 1024)
+            .spawn(|| {
+                let mut data = Data::bytestring(vec![]);
+                for i in 0..DEPTH {
+                    data = match i % 3 {
+                        0 => Data::constr(0, vec![data, Data::integer(i.into())]),
+                        1 => Data::list(vec![data]),
+                        _ => Data::map(vec![(Data::bytestring(vec![]), data)]),
+                    };
+                }
+
+                // Shared below the top, so part of the tree outlives the
+                // first drop.
+                let inner = match &data {
+                    Data::Constr(constr) => constr.fields.get(0),
+                    Data::Array(array) => array.get(0),
+                    Data::Map(map) => map.iter().next().map(|(_, value)| value),
+                    Data::BigInt(_) | Data::BoundedBytes(_) => None,
+                }
+                .unwrap()
+                .clone();
+
+                drop(data);
+                drop(inner);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+}

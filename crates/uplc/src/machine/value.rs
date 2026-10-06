@@ -652,7 +652,8 @@ pub fn to_pallas_bigint(n: &BigInt) -> conway::BigInt {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{Constant, Type},
+        ast::{Constant, Data, Type},
+        data::tests::arb_plutus_data,
         machine::{
             runtime::BuiltinSemantics,
             value::{
@@ -661,7 +662,8 @@ mod tests {
         },
     };
     use num_bigint::BigInt;
-    use pallas_primitives::conway;
+    use pallas_primitives::{PlutusData, conway};
+    use proptest::prelude::*;
     use std::rc::Rc;
 
     #[test]
@@ -863,5 +865,41 @@ mod tests {
 
         assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::C), 9);
         assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::D), 5);
+    }
+
+    /// Data sizing as it was computed from `PlutusData` before `Data` existed.
+    fn pallas_data_ex_mem(data: &PlutusData) -> (i64, i64) {
+        let mut stack = vec![data];
+        let (mut size, mut nodes) = (0, 0);
+
+        while let Some(item) = stack.pop() {
+            size += 4;
+            nodes += 1;
+            match item {
+                PlutusData::Constr(c) => stack.extend(c.fields.iter()),
+                PlutusData::Map(m) => {
+                    for (k, v) in m.iter() {
+                        stack.push(k);
+                        stack.push(v);
+                    }
+                }
+                PlutusData::BigInt(i) => size += pallas_bigint_to_ex_mem(i),
+                PlutusData::BoundedBytes(b) => size += Value::byte_string_to_ex_mem(b),
+                PlutusData::Array(a) => stack.extend(a.iter()),
+            }
+        }
+
+        (size, nodes)
+    }
+
+    proptest! {
+        #[test]
+        fn sizes_data_like_pallas(pallas in arb_plutus_data()) {
+            let value = Value::data(Data::from(&pallas));
+            let (size, nodes) = pallas_data_ex_mem(&pallas);
+
+            prop_assert_eq!(value.to_ex_mem(), size);
+            prop_assert_eq!(value.data_node_count().unwrap(), nodes);
+        }
     }
 }
