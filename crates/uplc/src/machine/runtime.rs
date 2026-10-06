@@ -6,7 +6,7 @@ use super::{
 use crate::{
     ast::{Constant, Data, Type},
     builtins::DefaultFunction,
-    machine::value::integer_log2,
+    machine::value::integer_log2_ref,
     plutus_data_to_bytes,
 };
 use bitvec::{order::Msb0, vec::BitVec};
@@ -1625,10 +1625,9 @@ impl DefaultFunction {
                 // >= 0 && < INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH
 
                 if size.is_zero()
-                    && integer_log2(input.clone())
-                        >= 8 * INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH
+                    && integer_log2_ref(input) >= 8 * INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH
                 {
-                    let required = integer_log2(input.clone()) / 8 + 1;
+                    let required = integer_log2_ref(input) / 8 + 1;
 
                     return Err(Error::IntegerToByteStringSizeTooBig(
                         required.into(),

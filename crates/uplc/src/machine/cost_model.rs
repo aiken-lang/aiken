@@ -1,4 +1,4 @@
-use super::value::integer_log2;
+use super::value::integer_log2_ref;
 use super::{Error, Value, runtime::BuiltinSemantics};
 use crate::builtins::DefaultFunction;
 use num_bigint::BigInt;
@@ -2725,7 +2725,7 @@ impl BuiltinCosts {
             }
             DefaultFunction::ExpModInteger => {
                 let modulus = args[2].unwrap_integer()?;
-                if modulus <= &0.into() || integer_log2(modulus.clone()) >= 8191 {
+                if modulus <= &0.into() || integer_log2_ref(modulus) >= 8191 {
                     return Err(Error::OutsideNaturalBounds(modulus.clone()));
                 }
 
