@@ -8,10 +8,13 @@
 
 ### Changed
 
+- **uplc**: Speed up the CEK machine: a step no longer clones the term it computes or allocates a continuation frame, applying a lambda no longer copies its environment twice, and integers and `Data` are sized without allocating. Phase-two evaluation also builds each transaction's script context data and decodes each script once per transaction instead of once per redeemer. The `benchmarks/` suite runs 1.9× faster and a set of 798 real and synthetic transactions 1.7× faster. Results and execution budgets are unchanged. @colll78
+- **uplc**: Make CEK evaluation scale linearly with the program: applying a closure no longer copies its environment, `case` no longer copies the fields of a constructor value, and `tailList`, `dropList` and `mkCons` no longer copy the list. Deep recursion, walking or building large lists, and summing large SOP lists go from quadratic to linear time and memory, and the `benchmarks/` suite runs 1.4× faster with 40% less peak memory. Results and execution budgets are unchanged. This is a breaking change of the `uplc` API: `Constant::ProtoList` now holds a `uplc::ast::ListSpine` instead of a `Vec<Rc<Constant>>`. A `ListSpine` dereferences to `[Rc<Constant>]`, converts from a `Vec` with `From` and is built from an iterator with `collect`, and `Value::list` accepts either a `ListSpine` or a `Vec`. In `uplc::machine::value`, the fields of `Value::Constr` are now an `Rc<Vec<Value>>`, and closures capture an `Env` instead of an `Rc<Vec<Value>>`. @colll78
 - **uplc**: Represent Plutus Data with a new `uplc::ast::Data` type whose children are shared, so that `unConstrData`, `unListData`, `unMapData`, `constrData`, `listData`, `mapData` and `mkPairData` no longer copy their argument, and the transaction info Data is shared by every script context of a transaction instead of being copied for each redeemer. Results, execution budgets and encodings are unchanged. This is a breaking change of the `uplc` API: `Constant::Data` now holds a `uplc::ast::Data` instead of a pallas `PlutusData`; the two convert into one another with `From`, and `Program::apply_data` and `Term::data` accept either. `uplc::ast::Data`'s former helpers (`Data::integer`, `Data::bytestring`, `Data::list`, `Data::map`, `Data::constr`, `Data::to_hex`) are now associated functions and methods of the new type. @colll78
 
 ### Fixed
 
+- **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
 
 ## v1.1.24 - 2026-09-26
