@@ -1160,18 +1160,21 @@ mod tests {
 
     impl IntoScriptContextChecked for TxInfo {
         /// `into_script_context`, also checking that `script_context_data`
-        /// gives the same Data from the converted transaction info.
+        /// gives the same Data, down to its encoding, from the converted
+        /// transaction info.
         fn into_script_context_checked(
             self,
             redeemer: &Redeemer,
             datum: Option<&PlutusData>,
         ) -> Option<ScriptContext> {
-            let data = self.script_context_data(&self.to_plutus_data(), redeemer, datum);
+            let data = self.script_context_data(&self.to_plutus_data().into(), redeemer, datum);
             let script_context = self.into_script_context(redeemer, datum);
 
             assert_eq!(
-                data,
-                script_context.as_ref().map(ToPlutusData::to_plutus_data)
+                data.as_ref().map(Data::to_cbor),
+                script_context
+                    .as_ref()
+                    .map(|context| context.to_plutus_data().encode_fragment().unwrap())
             );
 
             script_context
@@ -1212,12 +1215,12 @@ mod tests {
 
     #[test]
     fn script_context_simple_send() {
-        let datum = Some(Data::constr(0, Vec::new()));
+        let datum = Some(Data::constr(0, Vec::new()).into());
 
         let redeemer = Redeemer {
             tag: RedeemerTag::Spend,
             index: 0,
-            data: Data::constr(0, Vec::new()),
+            data: Data::constr(0, Vec::new()).into(),
             ex_units: ExUnits {
                 mem: 1000000,
                 steps: 100000000,
@@ -1254,7 +1257,7 @@ mod tests {
         let redeemer = Redeemer {
             tag: RedeemerTag::Mint,
             index: 1,
-            data: Data::integer(42.into()),
+            data: Data::integer(42.into()).into(),
             ex_units: ExUnits {
                 mem: 1000000,
                 steps: 100000000,
@@ -1314,7 +1317,7 @@ mod tests {
         let redeemer = Redeemer {
             tag: RedeemerTag::Propose,
             index: 3,
-            data: Data::constr(0, vec![]),
+            data: Data::constr(0, vec![]).into(),
             ex_units: ExUnits {
                 mem: 1000000,
                 steps: 100000000,
@@ -1389,7 +1392,7 @@ mod tests {
         let redeemer = Redeemer {
             tag: RedeemerTag::Propose,
             index: 0,
-            data: Data::constr(0, vec![]),
+            data: Data::constr(0, vec![]).into(),
             ex_units: ExUnits {
                 mem: 1000000,
                 steps: 100000000,
@@ -1438,7 +1441,7 @@ mod tests {
         let redeemer = Redeemer {
             tag: RedeemerTag::Cert,
             index: 20,
-            data: Data::constr(0, vec![]),
+            data: Data::constr(0, vec![]).into(),
             ex_units: ExUnits {
                 mem: 1000000,
                 steps: 100000000,
@@ -1508,7 +1511,7 @@ mod tests {
         let redeemer = Redeemer {
             tag: RedeemerTag::Vote,
             index: 0,
-            data: Data::constr(0, vec![Data::integer(42.into())]),
+            data: Data::constr(0, vec![Data::integer(42.into())]).into(),
             ex_units: ExUnits {
                 mem: 1000000,
                 steps: 100000000,
@@ -1561,7 +1564,7 @@ mod tests {
         let redeemer = Redeemer {
             tag: RedeemerTag::Reward,
             index: 0,
-            data: Data::constr(0, vec![]),
+            data: Data::constr(0, vec![]).into(),
             ex_units: ExUnits {
                 mem: 1000000,
                 steps: 100000000,

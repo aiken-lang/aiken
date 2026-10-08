@@ -1,12 +1,12 @@
 use crate::{
-    ast::{Constant, Program, Term, Type},
+    ast::{Constant, Data, Program, Term, Type},
+    data::Constr,
     flat::Binder,
     machine::{
         runtime::{Compressable, convert_tag_to_constr},
         value::from_pallas_bigint,
     },
 };
-use pallas_primitives::conway::{Constr, PlutusData};
 use pretty::RcDoc;
 use std::ascii::escape_default;
 
@@ -351,9 +351,9 @@ impl Constant {
     }
 
     // This feels a little awkward here; not sure if it should be upstreamed to pallas
-    fn to_doc_list_plutus_data(data: &PlutusData) -> RcDoc<'_, ()> {
+    fn to_doc_list_plutus_data(data: &Data) -> RcDoc<'_, ()> {
         match data {
-            PlutusData::Constr(Constr {
+            Data::Constr(Constr {
                 tag,
                 any_constructor,
                 fields,
@@ -369,7 +369,7 @@ impl Constant {
                     RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
-            PlutusData::Map(kvp) => RcDoc::text("Map")
+            Data::Map(kvp) => RcDoc::text("Map")
                 .append(RcDoc::space())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
@@ -383,14 +383,14 @@ impl Constant {
                     RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
-            PlutusData::BigInt(bi) => RcDoc::text("I")
+            Data::BigInt(bi) => RcDoc::text("I")
                 .append(RcDoc::space())
                 .append(RcDoc::text(from_pallas_bigint(bi).to_string())),
-            PlutusData::BoundedBytes(bs) => RcDoc::text("B")
+            Data::BoundedBytes(bs) => RcDoc::text("B")
                 .append(RcDoc::space())
                 .append(RcDoc::text("#"))
                 .append(RcDoc::text(hex::encode(bs.to_vec()))),
-            PlutusData::Array(a) => RcDoc::text("List")
+            Data::Array(a) => RcDoc::text("List")
                 .append(RcDoc::space())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(

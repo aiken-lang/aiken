@@ -19,11 +19,10 @@ use indexmap::IndexMap;
 use itertools::{Itertools, Position};
 use std::{ops::Deref, rc::Rc};
 use uplc::{
-    KeyValuePairs, PlutusData,
     ast::{Constant as UplcConstant, Data, Name, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
-    machine::{runtime::Compressable, value::to_pallas_bigint},
+    machine::runtime::Compressable,
 };
 
 pub type Variant = String;
@@ -688,9 +687,9 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Option<Vec
 
 fn convert_constant_to_data(constant: &UplcConstant) -> Option<UplcConstant> {
     let data = match constant {
-        UplcConstant::Integer(i) => PlutusData::BigInt(to_pallas_bigint(i)),
-        UplcConstant::ByteString(b) => PlutusData::BoundedBytes(b.clone().into()),
-        UplcConstant::String(s) => PlutusData::BoundedBytes(s.as_bytes().to_vec().into()),
+        UplcConstant::Integer(i) => Data::integer(i.clone()),
+        UplcConstant::ByteString(b) => Data::bytestring(b.clone()),
+        UplcConstant::String(s) => Data::bytestring(s.as_bytes().to_vec()),
         UplcConstant::Bool(b) => Data::constr((*b).into(), vec![]),
         UplcConstant::ProtoList(list_type, constants) => {
             if matches!(list_type, UplcType::Pair(_, _)) {
@@ -710,7 +709,7 @@ fn convert_constant_to_data(constant: &UplcConstant) -> Option<UplcConstant> {
                     })
                     .collect::<Option<Vec<_>>>()?;
 
-                PlutusData::Map(KeyValuePairs::Def(entries))
+                Data::map(entries)
             } else {
                 let items = constants
                     .iter()
@@ -738,10 +737,10 @@ fn convert_constant_to_data(constant: &UplcConstant) -> Option<UplcConstant> {
         UplcConstant::Data(data) => data.clone(),
         UplcConstant::Unit => Data::constr(0, vec![]),
         UplcConstant::Bls12_381G1Element(element) => {
-            PlutusData::BoundedBytes(element.deref().clone().compress().into())
+            Data::bytestring(element.deref().clone().compress())
         }
         UplcConstant::Bls12_381G2Element(element) => {
-            PlutusData::BoundedBytes(element.deref().clone().compress().into())
+            Data::bytestring(element.deref().clone().compress())
         }
         UplcConstant::Bls12_381MlResult(_) => return None,
         UplcConstant::Value(value) => value.to_data_checked().ok()?,

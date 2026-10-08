@@ -753,8 +753,7 @@ mod tests {
             let result = DefaultFunction::UnValueData.call(
                 semantics,
                 &[super::value::Value::Con(
-                    Constant::Data(crate::PlutusData::Map(crate::KeyValuePairs::Def(vec![])))
-                        .into(),
+                    Constant::Data(crate::ast::Data::map(vec![])).into(),
                 )],
                 &mut vec![],
             );

@@ -6,8 +6,8 @@ use super::{
 use crate::{
     ast::{Constant, Data, Type},
     builtins::DefaultFunction,
+    data::{Array, Constr, Map},
     machine::value::integer_log2_ref,
-    plutus_data_to_bytes,
 };
 use bitvec::{order::Msb0, vec::BitVec};
 use itertools::Itertools;
@@ -15,8 +15,8 @@ use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::{FromPrimitive, Signed, ToPrimitive, Zero};
 use once_cell::sync::Lazy;
-use pallas_primitives::conway::{Language, PlutusData};
-use std::{mem::size_of, ops::Deref, rc::Rc};
+use pallas_primitives::conway::Language;
+use std::{mem::size_of, rc::Rc};
 
 static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
     BigInt::from_bytes_be(
@@ -958,30 +958,22 @@ impl DefaultFunction {
                 let con = args[0].unwrap_data()?;
 
                 match con {
-                    PlutusData::Constr(_) => Ok(args[1].clone()),
-                    PlutusData::Map(_) => Ok(args[2].clone()),
-                    PlutusData::Array(_) => Ok(args[3].clone()),
-                    PlutusData::BigInt(_) => Ok(args[4].clone()),
-                    PlutusData::BoundedBytes(_) => Ok(args[5].clone()),
+                    Data::Constr(_) => Ok(args[1].clone()),
+                    Data::Map(_) => Ok(args[2].clone()),
+                    Data::Array(_) => Ok(args[3].clone()),
+                    Data::BigInt(_) => Ok(args[4].clone()),
+                    Data::BoundedBytes(_) => Ok(args[5].clone()),
                 }
             }
             DefaultFunction::ConstrData => {
                 let i = args[0].unwrap_integer()?;
                 let l = args[1].unwrap_data_list()?;
 
-                let data_list: Vec<PlutusData> = l
-                    .iter()
-                    .map(|item| match item.as_ref() {
-                        Constant::Data(d) => d.clone(),
-                        _ => unreachable!(),
-                    })
-                    .collect();
-
                 let i: u64 = i.try_into().map_err(|_| Error::OverflowError)?;
 
-                let constr_data = Data::constr(i, data_list);
+                let constr_data = Constr::new(i, Array::from_data_list(l.clone()));
 
-                let value = Value::data(constr_data);
+                let value = Value::data(Data::Constr(constr_data));
 
                 Ok(value)
             }
@@ -998,59 +990,34 @@ impl DefaultFunction {
                     ));
                 }
 
-                let mut map = Vec::new();
-
-                for item in list {
-                    let Constant::ProtoPair(Type::Data, Type::Data, left, right) = item.as_ref()
-                    else {
-                        unreachable!()
-                    };
-
-                    let (Constant::Data(key), Constant::Data(value)) =
-                        (left.as_ref(), right.as_ref())
-                    else {
-                        unreachable!()
-                    };
-
-                    map.push((key.clone(), value.clone()));
-                }
-
-                let value = Value::data(PlutusData::Map(map.into()));
+                let value = Value::data(Data::Map(Map::from_pair_list(list.clone())));
 
                 Ok(value)
             }
             DefaultFunction::ListData => {
                 let list = args[0].unwrap_data_list()?;
 
-                let data_list: Vec<PlutusData> = list
-                    .iter()
-                    .map(|item| match item.as_ref() {
-                        Constant::Data(d) => d.clone(),
-                        _ => unreachable!(),
-                    })
-                    .collect();
-
-                let value = Value::data(Data::list(data_list));
+                let value = Value::data(Data::Array(Array::from_data_list(list.clone())));
 
                 Ok(value)
             }
             DefaultFunction::IData => {
                 let i = args[0].unwrap_integer()?;
 
-                let value = Value::data(PlutusData::BigInt(to_pallas_bigint(i)));
+                let value = Value::data(Data::BigInt(to_pallas_bigint(i)));
 
                 Ok(value)
             }
             DefaultFunction::BData => {
                 let b = args[0].unwrap_byte_string()?;
 
-                let value = Value::data(PlutusData::BoundedBytes(b.clone().into()));
+                let value = Value::data(Data::BoundedBytes(b.clone().into()));
 
                 Ok(value)
             }
             DefaultFunction::UnConstrData => match &args[0] {
                 v @ Value::Con(inner) => {
-                    let Constant::Data(PlutusData::Constr(c)) = inner.as_ref() else {
+                    let Constant::Data(Data::Constr(c)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnConstrData".to_string(),
                             v.clone(),
@@ -1066,15 +1033,7 @@ impl DefaultFunction {
                                 .into(),
                         )
                         .into(),
-                        Constant::ProtoList(
-                            Type::Data,
-                            c.fields
-                                .deref()
-                                .iter()
-                                .map(|d| Rc::new(Constant::Data(d.clone())))
-                                .collect(),
-                        )
-                        .into(),
+                        Constant::ProtoList(Type::Data, c.fields.as_data_list().clone()).into(),
                     );
 
                     let value = Value::Con(constant.into());
@@ -1085,7 +1044,7 @@ impl DefaultFunction {
             },
             DefaultFunction::UnMapData => match &args[0] {
                 v @ Value::Con(inner) => {
-                    let Constant::Data(PlutusData::Map(m)) = inner.as_ref() else {
+                    let Constant::Data(Data::Map(m)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnMapData".to_string(),
                             v.clone(),
@@ -1094,17 +1053,7 @@ impl DefaultFunction {
 
                     let constant = Constant::ProtoList(
                         Type::Pair(Type::Data.into(), Type::Data.into()),
-                        m.deref()
-                            .iter()
-                            .map(|p| -> Rc<Constant> {
-                                Rc::new(Constant::ProtoPair(
-                                    Type::Data,
-                                    Type::Data,
-                                    Constant::Data(p.0.clone()).into(),
-                                    Constant::Data(p.1.clone()).into(),
-                                ))
-                            })
-                            .collect(),
+                        m.as_pair_list().clone(),
                     );
 
                     let value = Value::Con(constant.into());
@@ -1115,20 +1064,14 @@ impl DefaultFunction {
             },
             DefaultFunction::UnListData => match &args[0] {
                 v @ Value::Con(inner) => {
-                    let Constant::Data(PlutusData::Array(l)) = inner.as_ref() else {
+                    let Constant::Data(Data::Array(l)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnListData".to_string(),
                             v.clone(),
                         ));
                     };
 
-                    let value = Value::list(
-                        Type::Data,
-                        l.deref()
-                            .iter()
-                            .map(|d| Rc::new(Constant::Data(d.clone())))
-                            .collect::<crate::ast::ListSpine>(),
-                    );
+                    let value = Value::list(Type::Data, l.as_data_list().clone());
 
                     Ok(value)
                 }
@@ -1136,7 +1079,7 @@ impl DefaultFunction {
             },
             DefaultFunction::UnIData => match &args[0] {
                 v @ Value::Con(inner) => {
-                    let Constant::Data(PlutusData::BigInt(b)) = inner.as_ref() else {
+                    let Constant::Data(Data::BigInt(b)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnIData".to_string(),
                             v.clone(),
@@ -1151,7 +1094,7 @@ impl DefaultFunction {
             },
             DefaultFunction::UnBData => match &args[0] {
                 v @ Value::Con(inner) => {
-                    let Constant::Data(PlutusData::BoundedBytes(b)) = inner.as_ref() else {
+                    let Constant::Data(Data::BoundedBytes(b)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnBData".to_string(),
                             v.clone(),
@@ -1168,28 +1111,28 @@ impl DefaultFunction {
                 let d1 = args[0].unwrap_data()?;
                 let d2 = args[1].unwrap_data()?;
 
-                let value = Value::bool(d1.eq(d2));
+                let value = Value::bool(std::ptr::eq(d1, d2) || d1.eq(d2));
 
                 Ok(value)
             }
             DefaultFunction::SerialiseData => {
                 let d = args[0].unwrap_data()?;
 
-                let serialized_data = plutus_data_to_bytes(d);
+                let serialized_data = d.serialise();
 
                 let value = Value::byte_string(serialized_data);
 
                 Ok(value)
             }
             DefaultFunction::MkPairData => {
-                let d1 = args[0].unwrap_data()?;
-                let d2 = args[1].unwrap_data()?;
+                args[0].unwrap_data()?;
+                args[1].unwrap_data()?;
 
                 let constant = Constant::ProtoPair(
                     Type::Data,
                     Type::Data,
-                    Constant::Data(d1.clone()).into(),
-                    Constant::Data(d2.clone()).into(),
+                    args[0].unwrap_constant_rc()?,
+                    args[1].unwrap_constant_rc()?,
                 );
 
                 let value = Value::Con(constant.into());

@@ -1,5 +1,19 @@
 # Changelog
 
+## unreleased
+
+### Added
+
+- **uplc**: Make `TxInfo::script_context_data` public, so that callers evaluating several redeemers of one transaction can convert the transaction info to `Data` once and share it between every script context. @colll78
+
+### Changed
+
+- **uplc**: Represent Plutus Data with a new `uplc::ast::Data` type whose children are shared, so that `unConstrData`, `unListData`, `unMapData`, `constrData`, `listData`, `mapData` and `mkPairData` no longer copy their argument, and the transaction info Data is shared by every script context of a transaction instead of being copied for each redeemer. Results, execution budgets and encodings are unchanged. This is a breaking change of the `uplc` API: `Constant::Data` now holds a `uplc::ast::Data` instead of a pallas `PlutusData`; the two convert into one another with `From`, and `Program::apply_data` and `Term::data` accept either. `uplc::ast::Data`'s former helpers (`Data::integer`, `Data::bytestring`, `Data::list`, `Data::map`, `Data::constr`, `Data::to_hex`) are now associated functions and methods of the new type. @colll78
+
+### Fixed
+
+- **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
+
 ## v1.1.24 - 2026-09-26
 
 ### Added

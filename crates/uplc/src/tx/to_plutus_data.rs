@@ -37,6 +37,16 @@ fn wrap_multiple_with_constr(index: u64, data: Vec<PlutusData>) -> PlutusData {
     })
 }
 
+/// A list, encoded as an indefinite array unless it is empty, as the
+/// `listData` builtin encodes it.
+fn list_data(items: Vec<PlutusData>) -> PlutusData {
+    PlutusData::Array(if items.is_empty() {
+        MaybeIndefArray::Def(items)
+    } else {
+        MaybeIndefArray::Indef(items)
+    })
+}
+
 fn wrap_with_constr(index: u64, data: PlutusData) -> PlutusData {
     wrap_multiple_with_constr(index, vec![data])
 }
@@ -179,7 +189,7 @@ where
     A: ToPlutusData,
 {
     fn to_plutus_data(&self) -> PlutusData {
-        Data::list(self.iter().map(|p| p.to_plutus_data()).collect())
+        list_data(self.iter().map(|p| p.to_plutus_data()).collect())
     }
 }
 
@@ -419,7 +429,7 @@ impl ToPlutusData for ScriptRef {
 
 impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<TransactionOutput>>> {
     fn to_plutus_data(&self) -> PlutusData {
-        Data::list(
+        list_data(
             self.0
                 .0
                 .iter()
@@ -431,7 +441,7 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<Transacti
 
 impl ToPlutusData for WithZeroAdaAsset<'_, Vec<TransactionOutput>> {
     fn to_plutus_data(&self) -> PlutusData {
-        Data::list(
+        list_data(
             self.0
                 .iter()
                 .map(|p| WithZeroAdaAsset(p).to_plutus_data())
@@ -809,7 +819,7 @@ impl<'a> ToPlutusData
     for WithOptionDatum<'a, WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo>>>>
 {
     fn to_plutus_data(&self) -> PlutusData {
-        Data::list(
+        list_data(
             self.0
                 .0
                 .0
@@ -825,7 +835,7 @@ impl<'a> ToPlutusData
 
 impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo>>> {
     fn to_plutus_data(&self) -> PlutusData {
-        Data::list(
+        list_data(
             self.0
                 .0
                 .iter()
@@ -1090,7 +1100,7 @@ impl ToPlutusData for ProtocolParamUpdate {
             push(33, WithArrayRational(p).to_plutus_data());
         }
 
-        Data::map(pparams)
+        PlutusData::Map(KeyValuePairs::Def(pparams))
     }
 }
 
@@ -1394,12 +1404,16 @@ impl TxInfo {
     /// already converted to Data. It is the Data of the `ScriptContext` that
     /// `into_script_context` builds, without converting the transaction info
     /// again.
-    pub(crate) fn script_context_data(
+    ///
+    /// `tx_info_data` is shared, not copied: convert the transaction info
+    /// once, with `Data::from(tx_info.to_plutus_data())`, and every
+    /// redeemer's script context holds that same Data.
+    pub fn script_context_data(
         &self,
-        tx_info_data: &PlutusData,
+        tx_info_data: &Data,
         redeemer: &Redeemer,
         datum: Option<&PlutusData>,
-    ) -> Option<PlutusData> {
+    ) -> Option<Data> {
         let redeemers = match self {
             TxInfo::V1(tx_info) => &tx_info.redeemers,
             TxInfo::V2(tx_info) => &tx_info.redeemers,
@@ -1411,21 +1425,23 @@ impl TxInfo {
                 .then_some(purpose)
         })?;
 
+        // Encoded as `wrap_multiple_with_constr` encodes it.
         Some(match self {
-            TxInfo::V1(..) | TxInfo::V2(..) => wrap_multiple_with_constr(
+            TxInfo::V1(..) | TxInfo::V2(..) => Data::constr(
                 0,
                 vec![
                     tx_info_data.clone(),
-                    WithWrappedTransactionId(purpose).to_plutus_data(),
+                    WithWrappedTransactionId(purpose).to_plutus_data().into(),
                 ],
             ),
-            TxInfo::V3(..) => wrap_multiple_with_constr(
+            TxInfo::V3(..) => Data::constr(
                 0,
                 vec![
                     tx_info_data.clone(),
-                    redeemer.data.to_plutus_data(),
+                    redeemer.data.to_plutus_data().into(),
                     WithNeverRegistrationDeposit(&purpose.clone().into_script_info(datum.cloned()))
-                        .to_plutus_data(),
+                        .to_plutus_data()
+                        .into(),
                 ],
             ),
         })

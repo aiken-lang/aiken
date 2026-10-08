@@ -3,12 +3,12 @@ use super::{
     runtime::{self, BuiltinRuntime, BuiltinSemantics},
 };
 use crate::{
-    ast::{Constant, ListSpine, NamedDeBruijn, Term, Type},
+    ast::{Constant, Data, ListSpine, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
 };
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
-use pallas_primitives::conway::{self, PlutusData};
+use pallas_primitives::conway;
 use std::{mem::size_of, ops::Deref, rc::Rc};
 
 /// Number of bindings per environment chunk. Extending a shared environment
@@ -153,7 +153,7 @@ impl Value {
         Value::Con(constant.into())
     }
 
-    pub fn data(d: PlutusData) -> Self {
+    pub fn data(d: Data) -> Self {
         let constant = Constant::Data(d);
 
         Value::Con(constant.into())
@@ -225,7 +225,7 @@ impl Value {
         Ok((t, list))
     }
 
-    pub(super) fn unwrap_data(&self) -> Result<&PlutusData, Error> {
+    pub(super) fn unwrap_data(&self) -> Result<&Data, Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::Data(data) = inner else {
@@ -440,36 +440,36 @@ impl Value {
         }
     }
 
-    pub fn data_to_ex_mem(&self, data: &PlutusData) -> i64 {
+    pub fn data_to_ex_mem(&self, data: &Data) -> i64 {
         Self::data_to_ex_mem_inner(data)
     }
 
-    fn data_to_ex_mem_inner(data: &PlutusData) -> i64 {
+    fn data_to_ex_mem_inner(data: &Data) -> i64 {
         // The order nodes are visited in does not matter for a sum.
-        let mut stack: Vec<&PlutusData> = vec![data];
+        let mut stack: Vec<&Data> = vec![data];
         let mut total = 0;
 
         while let Some(item) = stack.pop() {
             // each time we deconstruct a data we add 4 memory units
             total += 4;
             match item {
-                PlutusData::Constr(c) => {
+                Data::Constr(c) => {
                     // note currently tag is not factored into cost of memory
                     stack.extend(c.fields.iter());
                 }
-                PlutusData::Map(m) => {
+                Data::Map(m) => {
                     for (k, v) in m.iter() {
                         stack.push(k);
                         stack.push(v);
                     }
                 }
-                PlutusData::BigInt(i) => {
+                Data::BigInt(i) => {
                     total += pallas_bigint_to_ex_mem(i);
                 }
-                PlutusData::BoundedBytes(b) => {
+                Data::BoundedBytes(b) => {
                     total += Self::byte_string_to_ex_mem(b.deref());
                 }
-                PlutusData::Array(a) => {
+                Data::Array(a) => {
                     stack.extend(a.iter());
                 }
             }
@@ -484,15 +484,15 @@ impl Value {
         while let Some(item) = stack.pop() {
             count += 1;
             match item {
-                PlutusData::Constr(constr) => stack.extend(constr.fields.iter()),
-                PlutusData::Map(entries) => {
+                Data::Constr(constr) => stack.extend(constr.fields.iter()),
+                Data::Map(entries) => {
                     for (key, value) in entries.iter() {
                         stack.push(key);
                         stack.push(value);
                     }
                 }
-                PlutusData::Array(items) => stack.extend(items.iter()),
-                PlutusData::BigInt(_) | PlutusData::BoundedBytes(_) => {}
+                Data::Array(items) => stack.extend(items.iter()),
+                Data::BigInt(_) | Data::BoundedBytes(_) => {}
             }
         }
 
@@ -652,7 +652,8 @@ pub fn to_pallas_bigint(n: &BigInt) -> conway::BigInt {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{Constant, Type},
+        ast::{Constant, Data, Type},
+        data::tests::arb_plutus_data,
         machine::{
             runtime::BuiltinSemantics,
             value::{
@@ -661,7 +662,8 @@ mod tests {
         },
     };
     use num_bigint::BigInt;
-    use pallas_primitives::conway;
+    use pallas_primitives::{PlutusData, conway};
+    use proptest::prelude::*;
     use std::rc::Rc;
 
     #[test]
@@ -863,5 +865,41 @@ mod tests {
 
         assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::C), 9);
         assert_eq!(value.to_ex_mem_with_semantics(BuiltinSemantics::D), 5);
+    }
+
+    /// Data sizing as it was computed from `PlutusData` before `Data` existed.
+    fn pallas_data_ex_mem(data: &PlutusData) -> (i64, i64) {
+        let mut stack = vec![data];
+        let (mut size, mut nodes) = (0, 0);
+
+        while let Some(item) = stack.pop() {
+            size += 4;
+            nodes += 1;
+            match item {
+                PlutusData::Constr(c) => stack.extend(c.fields.iter()),
+                PlutusData::Map(m) => {
+                    for (k, v) in m.iter() {
+                        stack.push(k);
+                        stack.push(v);
+                    }
+                }
+                PlutusData::BigInt(i) => size += pallas_bigint_to_ex_mem(i),
+                PlutusData::BoundedBytes(b) => size += Value::byte_string_to_ex_mem(b),
+                PlutusData::Array(a) => stack.extend(a.iter()),
+            }
+        }
+
+        (size, nodes)
+    }
+
+    proptest! {
+        #[test]
+        fn sizes_data_like_pallas(pallas in arb_plutus_data()) {
+            let value = Value::data(Data::from(&pallas));
+            let (size, nodes) = pallas_data_ex_mem(&pallas);
+
+            prop_assert_eq!(value.to_ex_mem(), size);
+            prop_assert_eq!(value.data_node_count().unwrap(), nodes);
+        }
     }
 }

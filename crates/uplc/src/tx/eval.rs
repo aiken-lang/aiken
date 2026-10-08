@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     PlutusData,
-    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    ast::{Data, FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
     tx::{
         phase_one::redeemer_tag_to_string,
@@ -61,7 +61,8 @@ pub fn eval_redeemer_with_protocol(
 
 /// What the redeemers of one transaction share: its transaction info for each
 /// Plutus version, already converted to Data, and its decoded scripts. Both are
-/// built on first use and then reused for every other redeemer.
+/// built on first use and then reused for every other redeemer. The Data is
+/// shared, so each redeemer's script context holds it without copying it.
 ///
 /// The cache lives for a single evaluation of one transaction and is dropped
 /// with it; nothing is kept across transactions. It holds at most one
@@ -70,7 +71,7 @@ pub fn eval_redeemer_with_protocol(
 /// its resolved inputs, which the caller already holds in memory.
 #[derive(Default)]
 pub(crate) struct TxEvalCache {
-    tx_infos: [Option<(TxInfo, PlutusData)>; 3],
+    tx_infos: [Option<(TxInfo, Data)>; 3],
     programs: HashMap<Vec<u8>, Program<NamedDeBruijn>>,
 }
 
@@ -81,7 +82,7 @@ impl TxEvalCache {
         tx: &MintedTx,
         utxos: &[ResolvedInput],
         slot_config: &SlotConfig,
-    ) -> Result<&(TxInfo, PlutusData), Error> {
+    ) -> Result<&(TxInfo, Data), Error> {
         let slot = match lang {
             Language::PlutusV1 => 0,
             Language::PlutusV2 => 1,
@@ -94,7 +95,7 @@ impl TxEvalCache {
                 Language::PlutusV2 => TxInfoV2::from_transaction(tx, utxos, slot_config)?,
                 Language::PlutusV3 => TxInfoV3::from_transaction(tx, utxos, slot_config)?,
             };
-            let data = tx_info.to_plutus_data();
+            let data = tx_info.to_plutus_data().into();
 
             self.tx_infos[slot] = Some((tx_info, data));
         }
@@ -161,7 +162,7 @@ pub(crate) fn eval_redeemer_cached(
         protocol_major_version: Option<u16>,
         datum: Option<PlutusData>,
         redeemer: &Redeemer,
-        (tx_info, tx_info_data): &(TxInfo, PlutusData),
+        (tx_info, tx_info_data): &(TxInfo, Data),
         program: Program<NamedDeBruijn>,
     ) -> Result<(Redeemer, EvalResult), Error> {
         let script_context = tx_info

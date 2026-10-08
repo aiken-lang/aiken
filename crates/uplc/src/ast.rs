@@ -8,7 +8,6 @@ use crate::{
             CostModel, ExBudget, initialize_cost_model, initialize_cost_model_with_protocol,
         },
         eval_result::EvalResult,
-        value::to_pallas_bigint,
     },
     optimize::interner::CodeGenInterner,
     tx::script_context::PlutusScript,
@@ -17,7 +16,7 @@ use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
 use pallas_primitives::{
-    alonzo::{Constr, PlutusData},
+    alonzo::PlutusData,
     conway::{self, Language},
 };
 use pallas_traverse::ComputeHash;
@@ -35,6 +34,8 @@ use std::{
     mem::MaybeUninit,
     rc::Rc,
 };
+
+pub use crate::data::Data;
 
 /// This represents a program in Untyped Plutus Core.
 /// A program contains a version tuple and a term.
@@ -66,10 +67,10 @@ where
 
     /// A convenient and faster version that `apply_term` since the program doesn't need to be
     /// re-interned (constant Data do not introduce new bindings).
-    pub fn apply_data(&self, plutus_data: PlutusData) -> Self {
+    pub fn apply_data(&self, data: impl Into<Data>) -> Self {
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
-            argument: Rc::new(Term::Constant(Constant::Data(plutus_data).into())),
+            argument: Rc::new(Term::Constant(Constant::Data(data.into()).into())),
         };
 
         Program {
@@ -414,7 +415,7 @@ impl<T> TryInto<PlutusData> for Term<T> {
     fn try_into(self) -> Result<PlutusData, String> {
         match self {
             Term::Constant(rc) => match &*rc {
-                Constant::Data(data) => Ok(data.to_owned()),
+                Constant::Data(data) => Ok(data.into()),
                 _ => Err("not a data".to_string()),
             },
             _ => Err("not a data".to_string()),
@@ -456,7 +457,7 @@ pub enum Constant {
     // tag: 7
     // Apply(Box<Constant>, Type),
     // tag: 8
-    Data(PlutusData),
+    Data(Data),
     Bls12_381G1Element(Box<blst::blst_p1>),
     Bls12_381G2Element(Box<blst::blst_p2>),
     Bls12_381MlResult(Box<blst::blst_fp12>),
@@ -487,12 +488,53 @@ struct SpineBuf {
     front: Cell<usize>,
 }
 
+/// How many spines may be dropped inside one another before the elements of
+/// deeper ones are queued instead, so that dropping a deeply nested list or
+/// Data uses bounded stack.
+const MAX_NESTED_SPINE_DROPS: usize = 512;
+
+std::thread_local! {
+    /// How many spines are being dropped inside one another on this thread.
+    static SPINE_DROP_DEPTH: Cell<usize> = const { Cell::new(0) };
+
+    /// Elements of spines dropped too deep, left for the outermost spine drop.
+    static DEFERRED_SPINE_DROPS: std::cell::RefCell<Vec<Rc<Constant>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl Drop for SpineBuf {
     fn drop(&mut self) {
-        for slot in &mut self.slots[self.front.get()..] {
-            // SAFETY: slots from `front` onwards are initialised.
-            unsafe { slot.get_mut().assume_init_drop() }
+        let mut items = self.slots[self.front.get()..].iter_mut().map(|slot| {
+            // SAFETY: slots from `front` onwards are initialised, and each is
+            // read once here, after which the buffer is never read again.
+            unsafe { slot.get_mut().assume_init_read() }
+        });
+
+        let depth = SPINE_DROP_DEPTH.get();
+
+        if depth >= MAX_NESTED_SPINE_DROPS {
+            // Only fails while the thread is exiting, when its locals are
+            // being destroyed; the elements are then dropped right here.
+            let _ =
+                DEFERRED_SPINE_DROPS.try_with(|deferred| deferred.borrow_mut().extend(&mut items));
+            items.for_each(drop);
+            return;
         }
+
+        SPINE_DROP_DEPTH.set(depth + 1);
+        items.for_each(drop);
+
+        if depth == 0 {
+            while let Some(item) = DEFERRED_SPINE_DROPS
+                .try_with(|deferred| deferred.borrow_mut().pop())
+                .ok()
+                .flatten()
+            {
+                drop(item);
+            }
+        }
+
+        SPINE_DROP_DEPTH.set(depth);
     }
 }
 
@@ -562,6 +604,12 @@ impl ListSpine {
         }
     }
 
+    /// Whether both views start at the same element of the same spine, and
+    /// so hold the same elements.
+    pub(crate) fn ptr_eq(&self, other: &ListSpine) -> bool {
+        Rc::ptr_eq(&self.buf, &other.buf) && self.start == other.start
+    }
+
     pub fn into_vec(self) -> Vec<Rc<Constant>> {
         self.to_vec()
     }
@@ -582,16 +630,26 @@ impl std::ops::Deref for ListSpine {
 
 impl From<Vec<Rc<Constant>>> for ListSpine {
     fn from(items: Vec<Rc<Constant>>) -> Self {
-        ListSpine {
-            buf: Rc::new(SpineBuf::new(0, items.into_iter())),
-            start: 0,
-        }
+        items.into_iter().collect()
     }
 }
 
 impl FromIterator<Rc<Constant>> for ListSpine {
     fn from_iter<I: IntoIterator<Item = Rc<Constant>>>(iter: I) -> Self {
-        iter.into_iter().collect::<Vec<_>>().into()
+        // Without free slots, the elements are collected straight into the
+        // spine's slots (in place, when they come from a `Vec`).
+        let slots = iter
+            .into_iter()
+            .map(|item| UnsafeCell::new(MaybeUninit::new(item)))
+            .collect();
+
+        ListSpine {
+            buf: Rc::new(SpineBuf {
+                slots,
+                front: Cell::new(0),
+            }),
+            start: 0,
+        }
     }
 }
 
@@ -975,7 +1033,7 @@ impl Value {
         Ok(Self::from_normalized(entries))
     }
 
-    fn to_data_unchecked(&self) -> PlutusData {
+    fn to_data_unchecked(&self) -> Data {
         Data::map(
             self.entries
                 .iter()
@@ -999,7 +1057,7 @@ impl Value {
         )
     }
 
-    pub fn to_data_checked(&self) -> Result<PlutusData, ValueError> {
+    pub fn to_data_checked(&self) -> Result<Data, ValueError> {
         if self.total_size > VALUE_DATA_MAX_SIZE {
             Err(ValueError::ValueDataInputTooLarge(self.total_size))
         } else {
@@ -1007,19 +1065,19 @@ impl Value {
         }
     }
 
-    pub fn from_data(data: &PlutusData) -> Result<Self, ValueError> {
-        let PlutusData::Map(outer) = data else {
+    pub fn from_data(data: &Data) -> Result<Self, ValueError> {
+        let Data::Map(outer) = data else {
             return Err(ValueError::ExpectedDataMap);
         };
         let mut entries = ValueEntries::with_capacity(outer.len());
 
         for (currency, tokens) in outer.iter() {
-            let PlutusData::BoundedBytes(currency) = currency else {
+            let Data::BoundedBytes(currency) = currency else {
                 return Err(ValueError::ExpectedDataBytes);
             };
             Self::check_key(currency)?;
 
-            let PlutusData::Map(tokens) = tokens else {
+            let Data::Map(tokens) = tokens else {
                 return Err(ValueError::ExpectedDataMap);
             };
 
@@ -1032,12 +1090,12 @@ impl Value {
 
             let mut inner: Vec<(Vec<u8>, i128)> = Vec::with_capacity(tokens.len());
             for (token, quantity) in tokens.iter() {
-                let PlutusData::BoundedBytes(token) = token else {
+                let Data::BoundedBytes(token) = token else {
                     return Err(ValueError::ExpectedDataBytes);
                 };
                 Self::check_key(token)?;
 
-                let PlutusData::BigInt(quantity) = quantity else {
+                let Data::BigInt(quantity) = quantity else {
                     return Err(ValueError::ExpectedDataInteger);
                 };
                 let quantity = pallas_bigint_to_i128(quantity)?;
@@ -1143,68 +1201,6 @@ fn pallas_bigint_to_i128(quantity: &conway::BigInt) -> Result<i128, ValueError> 
         .map_err(|_| ValueError::DataQuantityOutOfBounds)
 }
 
-pub struct Data;
-
-// TODO: See about moving these builders upstream to Pallas?
-impl Data {
-    pub fn to_hex(data: PlutusData) -> String {
-        let mut bytes = Vec::new();
-        pallas_codec::minicbor::Encoder::new(&mut bytes)
-            .encode(data)
-            .expect("failed to encode Plutus Data as cbor?");
-        hex::encode(bytes)
-    }
-
-    pub fn integer(i: BigInt) -> PlutusData {
-        PlutusData::BigInt(to_pallas_bigint(&i))
-    }
-
-    pub fn bytestring(bytes: Vec<u8>) -> PlutusData {
-        PlutusData::BoundedBytes(bytes.into())
-    }
-
-    pub fn map(kvs: Vec<(PlutusData, PlutusData)>) -> PlutusData {
-        PlutusData::Map(kvs.into())
-    }
-
-    pub fn list(xs: Vec<PlutusData>) -> PlutusData {
-        PlutusData::Array(if xs.is_empty() {
-            conway::MaybeIndefArray::Def(xs)
-        } else {
-            conway::MaybeIndefArray::Indef(xs)
-        })
-    }
-
-    pub fn constr(ix: u64, fields: Vec<PlutusData>) -> PlutusData {
-        let fields = if fields.is_empty() {
-            conway::MaybeIndefArray::Def(fields)
-        } else {
-            conway::MaybeIndefArray::Indef(fields)
-        };
-
-        // NOTE: see https://github.com/input-output-hk/plutus/blob/9538fc9829426b2ecb0628d352e2d7af96ec8204/plutus-core/plutus-core/src/PlutusCore/Data.hs#L139-L155
-        if ix < 7 {
-            PlutusData::Constr(Constr {
-                tag: 121 + ix,
-                any_constructor: None,
-                fields,
-            })
-        } else if ix < 128 {
-            PlutusData::Constr(Constr {
-                tag: 1280 + ix - 7,
-                any_constructor: None,
-                fields,
-            })
-        } else {
-            PlutusData::Constr(Constr {
-                tag: 102,
-                any_constructor: Some(ix),
-                fields,
-            })
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Bool,
@@ -1256,6 +1252,7 @@ impl Constant {
                 Rc::new(fst.deep_clone()),
                 Rc::new(snd.deep_clone()),
             ),
+            Constant::Data(data) => Constant::Data(data.deep_clone()),
             // The remaining variants own their contents outright.
             other => other.clone(),
         }
@@ -1818,9 +1815,58 @@ mod tests {
     use crate::ast::{Data, Value, ValueEntries, ValueError};
     use num_bigint::{BigInt, Sign};
     use pallas_codec::minicbor;
-    use pallas_primitives::{alonzo::PlutusData, conway};
+    use pallas_primitives::conway;
     use proptest::prelude::*;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn drops_deep_lists_in_bounded_stack() {
+        use crate::ast::{Constant, ListSpine, Type};
+        use std::rc::Rc;
+
+        #[cfg(not(miri))]
+        const DEPTH: usize = 1_000_000;
+        #[cfg(miri)]
+        const DEPTH: usize = 2_000;
+
+        // Room for the nested drops allowed before queuing, even in a debug
+        // build, but far too little to drop the whole nesting recursively.
+        std::thread::Builder::new()
+            .stack_size(4 * 1024 * 1024)
+            .spawn(|| {
+                let mut list = Rc::new(Constant::ProtoList(Type::Data, ListSpine::default()));
+                let mut kept = Vec::new();
+
+                for i in 0..DEPTH {
+                    let spine = if i % 2 == 0 {
+                        ListSpine::from(vec![list, Rc::new(Constant::Integer(i.into()))])
+                    } else {
+                        // The second prepend goes into a free slot in
+                        // front of the first.
+                        let Constant::ProtoList(_, spine) = list.as_ref() else {
+                            unreachable!()
+                        };
+                        spine
+                            .cons(Rc::new(Constant::Integer(i.into())))
+                            .cons(Rc::new(Constant::Integer(i.into())))
+                    };
+
+                    list = Rc::new(Constant::ProtoList(Type::Data, spine));
+
+                    // Shared below the top, so parts of the list outlive
+                    // the first drop.
+                    if i % (DEPTH / 4) == 0 {
+                        kept.push(list.clone());
+                    }
+                }
+
+                drop(list);
+                drop(kept);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 
     // Data's negative integers are encoded with an offset of 1, as an unsigned payload. This is unlike
     // num_bigint's BigInt; so both types representations aren't quite compatible with one another.
@@ -1838,13 +1884,10 @@ mod tests {
         assert_eq!(large_negative_num_decoded, -1 - large_negative_num);
     }
 
-    fn data_value_with_quantity(quantity: conway::BigInt) -> PlutusData {
+    fn data_value_with_quantity(quantity: conway::BigInt) -> Data {
         Data::map(vec![(
             Data::bytestring(vec![0]),
-            Data::map(vec![(
-                Data::bytestring(vec![0]),
-                PlutusData::BigInt(quantity),
-            )]),
+            Data::map(vec![(Data::bytestring(vec![0]), Data::BigInt(quantity))]),
         )])
     }
 

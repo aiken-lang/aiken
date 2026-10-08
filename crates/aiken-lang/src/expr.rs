@@ -948,14 +948,16 @@ impl UntypedExpr {
         tipo: Rc<Type>,
     ) -> Result<Self, String> {
         Self::reify_with(data_types, cst, tipo, |data_types, cst, tipo| match cst {
-            uplc::ast::Constant::Data(data) => UntypedExpr::do_reify_data(data_types, data, tipo),
+            uplc::ast::Constant::Data(data) => {
+                UntypedExpr::do_reify_data(data_types, data.into(), tipo)
+            }
 
             uplc::ast::Constant::Integer(i) => {
-                UntypedExpr::do_reify_data(data_types, Data::integer(i), tipo)
+                UntypedExpr::do_reify_data(data_types, Data::integer(i).into(), tipo)
             }
 
             uplc::ast::Constant::ByteString(bytes) => {
-                UntypedExpr::do_reify_data(data_types, Data::bytestring(bytes), tipo)
+                UntypedExpr::do_reify_data(data_types, Data::bytestring(bytes).into(), tipo)
             }
 
             uplc::ast::Constant::ProtoList(_, args) => match tipo.deref() {
@@ -1408,11 +1410,11 @@ impl UntypedExpr {
                     UntypedExpr::do_reify_data(
                         data_types,
                         Data::list(
-                            kvs.to_vec()
-                                .into_iter()
-                                .map(|(k, v)| Data::list(vec![k, v]))
+                            kvs.iter()
+                                .map(|(k, v)| Data::list(vec![k.into(), v.into()]))
                                 .collect(),
-                        ),
+                        )
+                        .into(),
                         tipo,
                     )
                 }

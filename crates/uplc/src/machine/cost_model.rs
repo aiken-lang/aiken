@@ -4214,7 +4214,6 @@ mod tests {
         builtins::DefaultFunction,
         machine::{runtime::BuiltinSemantics, value::Value},
     };
-    use pallas_primitives::conway::PlutusData;
     use pretty_assertions::assert_eq;
     use std::rc::Rc;
 
@@ -4503,7 +4502,7 @@ mod tests {
                 vec![Data::bytestring(vec![0xab; 32]), Data::integer(1.into())],
             )
         };
-        let data_pair = |fst: PlutusData, snd: PlutusData| {
+        let data_pair = |fst: Data, snd: Data| {
             Rc::new(Constant::ProtoPair(
                 Type::Data,
                 Type::Data,
@@ -4515,7 +4514,7 @@ mod tests {
         // Every builtin that skips sizing under constant costing, applied to
         // arguments holding `entries` nested records.
         let cases = |entries: usize| {
-            let items: Vec<PlutusData> = (0..entries).map(|_| entry()).collect();
+            let items: Vec<Data> = (0..entries).map(|_| entry()).collect();
             let record = Data::constr(0, vec![Data::list(items.clone())]);
             let data_items: Vec<_> = items
                 .iter()

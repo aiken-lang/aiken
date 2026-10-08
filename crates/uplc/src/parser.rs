@@ -1,11 +1,10 @@
 use crate::{
     ast::{Constant, Data, Name, Program, Term, Type, Value},
     builtins::DefaultFunction,
-    machine::{runtime::Compressable, value::to_pallas_bigint},
+    machine::runtime::Compressable,
 };
 use interner::Interner;
 use num_bigint::BigInt;
-use pallas_primitives::alonzo::PlutusData;
 use peg::{error::ParseError, str::LineCol};
 use std::{ops::Neg, rc::Rc, str::FromStr};
 
@@ -260,7 +259,7 @@ peg::parser! {
           / [ ^ '"' ]
           / expected!("or any valid ascii character")
 
-        rule data() -> PlutusData
+        rule data() -> Data
           = _* "Constr" _+ t:decimal() _+ fs:plutus_list() {?
             Ok(Data::constr(
                 u64::try_from(t).or(Err("tag"))?,
@@ -268,23 +267,23 @@ peg::parser! {
             ))
           }
           / _* "Map" _+ kvps:plutus_key_value_pairs() {
-            PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
+            Data::map(kvps)
           }
           / _* "List" _+ ls:plutus_list() { Data::list(ls) }
-          / _* "I" _+ n:big_number() { PlutusData::BigInt(to_pallas_bigint(&n)) }
+          / _* "I" _+ n:big_number() { Data::integer(n) }
           / _* "B" _+ "#" i:ident()* {?
-            Ok(PlutusData::BoundedBytes(
-              hex::decode(String::from_iter(i)).or(Err("bytes"))?.into()
+            Ok(Data::bytestring(
+              hex::decode(String::from_iter(i)).or(Err("bytes"))?
             ))
           }
 
-        rule plutus_list() -> Vec<PlutusData>
+        rule plutus_list() -> Vec<Data>
           = "[" _* xs:(data() ** comma()) _* "]" { xs }
 
-        rule plutus_key_value_pairs() -> Vec<(PlutusData, PlutusData)>
+        rule plutus_key_value_pairs() -> Vec<(Data, Data)>
           = "[" _* kvps:(plutus_key_value_pair() ** comma()) _* "]" { kvps }
 
-        rule plutus_key_value_pair() -> (PlutusData, PlutusData)
+        rule plutus_key_value_pair() -> (Data, Data)
           = "(" _* k:data() comma() v:data() _* ")" { (k, v) }
 
         rule list(type_info: Option<&Type>) -> Vec<Constant>
@@ -410,7 +409,7 @@ peg::parser! {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{Constant, Name, Program, Term, Type, Unique},
+        ast::{Constant, Data, Name, Program, Term, Type, Unique},
         builtins::DefaultFunction,
     };
     use num_bigint::BigInt;
@@ -503,12 +502,7 @@ mod tests {
         let uplc = "(program 1.0.0 (con data(B #AF00)))";
         assert_eq!(
             super::program(uplc).unwrap().term,
-            Term::Constant(
-                Constant::Data(pallas_primitives::alonzo::PlutusData::BoundedBytes(
-                    vec![0xAF, 0x00].into(),
-                ))
-                .into(),
-            )
+            Term::Constant(Constant::Data(Data::bytestring(vec![0xAF, 0x00])).into(),)
         );
     }
 

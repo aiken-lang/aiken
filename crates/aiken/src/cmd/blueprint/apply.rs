@@ -107,7 +107,7 @@ pub fn exec(
             None => blueprint.construct_parameter_incrementally(
                 module.as_deref(),
                 validator.as_deref(),
-                ask_schema,
+                |schema, definitions| ask_schema(schema, definitions).map(PlutusData::from),
             ),
         }
         .map_err(|err| Error::Blueprint(err.into()))?;
@@ -119,7 +119,7 @@ pub fn exec(
                 .if_supports_color(Stderr, |s| s.bold()),
             {
                 let padding = "\n              ";
-                multiline(48, UplcData::to_hex(data.clone())).join(padding)
+                multiline(48, UplcData::from(&data).to_hex()).join(padding)
             }
         );
 
@@ -165,7 +165,7 @@ pub fn exec(
 fn ask_schema(
     schema: &Annotated<Schema>,
     definitions: &Definitions<Annotated<Schema>>,
-) -> Result<PlutusData, blueprint::error::Error> {
+) -> Result<UplcData, blueprint::error::Error> {
     match schema.annotated {
         Schema::Data(Data::Integer) => {
             let input = prompt_primitive("an integer", schema)?;

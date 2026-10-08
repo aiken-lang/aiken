@@ -4,10 +4,7 @@ use super::{
     schema::{Annotated, Constructor, Data, Declaration, Items, Schema},
 };
 use std::{iter, ops::Deref};
-use uplc::{
-    PlutusData,
-    ast::{Constant, Data as UplcData},
-};
+use uplc::ast::{Constant, Data as UplcData};
 
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Parameter {
@@ -289,7 +286,7 @@ fn expect_data(term: &Constant) -> Result<(), Error> {
 
 fn expect_data_integer(term: &Constant) -> Result<(), Error> {
     if let Constant::Data(data) = term
-        && matches!(data, PlutusData::BigInt(..))
+        && matches!(data, UplcData::BigInt(..))
     {
         return Ok(());
     }
@@ -299,7 +296,7 @@ fn expect_data_integer(term: &Constant) -> Result<(), Error> {
 
 fn expect_data_bytes(term: &Constant) -> Result<(), Error> {
     if let Constant::Data(data) = term
-        && matches!(data, PlutusData::BoundedBytes(..))
+        && matches!(data, UplcData::BoundedBytes(..))
     {
         return Ok(());
     }
@@ -308,7 +305,7 @@ fn expect_data_bytes(term: &Constant) -> Result<(), Error> {
 }
 
 fn expect_data_list(term: &Constant) -> Result<Vec<Constant>, Error> {
-    if let Constant::Data(PlutusData::Array(elems)) = term {
+    if let Constant::Data(UplcData::Array(elems)) = term {
         return Ok(elems
             .iter()
             .map(|elem| Constant::Data(elem.to_owned()))
@@ -324,7 +321,7 @@ fn expect_data_list(term: &Constant) -> Result<Vec<Constant>, Error> {
 }
 
 fn expect_data_map(term: &Constant) -> Result<Vec<(Constant, Constant)>, Error> {
-    if let Constant::Data(PlutusData::Map(pairs)) = term {
+    if let Constant::Data(UplcData::Map(pairs)) = term {
         return Ok(pairs
             .iter()
             .map(|(k, v)| (Constant::Data(k.to_owned()), Constant::Data(v.to_owned())))
@@ -341,8 +338,8 @@ fn expect_data_map(term: &Constant) -> Result<Vec<(Constant, Constant)>, Error> 
 }
 
 fn expect_data_constr(term: &Constant, index: usize) -> Result<Vec<Constant>, Error> {
-    if let Constant::Data(PlutusData::Constr(constr)) = term
-        && let PlutusData::Constr(expected) = UplcData::constr(index as u64, vec![])
+    if let Constant::Data(UplcData::Constr(constr)) = term
+        && let UplcData::Constr(expected) = UplcData::constr(index as u64, vec![])
         && expected.tag == constr.tag
         && expected.any_constructor == constr.any_constructor
     {
