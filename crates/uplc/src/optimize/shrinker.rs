@@ -2156,13 +2156,19 @@ impl Term<Name> {
                             assert!(*tipo == Type::Data);
                             *tipo = Type::Integer;
 
-                            for item in items {
-                                let Constant::Data(PlutusData::BigInt(i)) = item.as_ref() else {
-                                    unreachable!("unexpected item in integer list arg: {item:#?}");
-                                };
+                            *items = items
+                                .iter()
+                                .map(|item| {
+                                    let Constant::Data(PlutusData::BigInt(i)) = item.as_ref()
+                                    else {
+                                        unreachable!(
+                                            "unexpected item in integer list arg: {item:#?}"
+                                        );
+                                    };
 
-                                *item = Rc::new(Constant::Integer(from_pallas_bigint(i)));
-                            }
+                                    Rc::new(Constant::Integer(from_pallas_bigint(i)))
+                                })
+                                .collect();
                         }
                         arg => {
                             context.integer_list_convert = true;

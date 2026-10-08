@@ -4338,7 +4338,7 @@ impl<'a> CodeGenerator<'a> {
                                                 value.into(),
                                             ))
                                         })
-                                        .collect_vec(),
+                                        .collect(),
                                 )
                                 .into(),
                             )),

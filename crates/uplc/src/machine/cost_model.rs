@@ -4521,7 +4521,7 @@ mod tests {
                 .iter()
                 .map(|item| Rc::new(Constant::Data(item.clone())))
                 .collect();
-            let pair_items = items
+            let pair_items: Vec<_> = items
                 .iter()
                 .map(|item| data_pair(item.clone(), item.clone()))
                 .collect();

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::{NamedDeBruijn, Term};
 
 use super::value::{Env, Value};
@@ -37,7 +39,10 @@ pub(super) fn value_as_term(value: Value) -> Term<NamedDeBruijn> {
         ),
         Value::Constr { tag, fields } => Term::Constr {
             tag,
-            fields: fields.into_iter().map(value_as_term).collect(),
+            fields: Rc::unwrap_or_clone(fields)
+                .into_iter()
+                .map(value_as_term)
+                .collect(),
         },
     }
 }
@@ -50,7 +55,7 @@ fn with_env(lam_cnt: usize, env: Env, term: Term<NamedDeBruijn>) -> Term<NamedDe
             if lam_cnt >= index {
                 Term::Var(name)
             } else {
-                env.get::<usize>(env.len() - (index - lam_cnt))
+                env.get(index - lam_cnt)
                     .cloned()
                     .map_or(Term::Var(name), value_as_term)
             }

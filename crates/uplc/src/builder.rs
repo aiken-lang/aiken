@@ -78,7 +78,7 @@ where
     }
 
     pub fn empty_list() -> Self {
-        Term::Constant(Constant::ProtoList(Type::Data, vec![]).into())
+        Term::Constant(Constant::ProtoList(Type::Data, vec![].into()).into())
     }
 
     pub fn list_values(vals: Vec<Constant>) -> Self {
@@ -95,7 +95,11 @@ where
 
     pub fn empty_map() -> Self {
         Term::Constant(
-            Constant::ProtoList(Type::Pair(Type::Data.into(), Type::Data.into()), vec![]).into(),
+            Constant::ProtoList(
+                Type::Pair(Type::Data.into(), Type::Data.into()),
+                vec![].into(),
+            )
+            .into(),
         )
     }
 
@@ -588,7 +592,7 @@ impl Term<Name> {
             .apply(
                 Term::var("xs")
                     .delayed_choose_list(
-                        Term::Constant(Constant::ProtoList(inner_type, vec![]).into()),
+                        Term::Constant(Constant::ProtoList(inner_type, vec![].into()).into()),
                         Term::mk_cons()
                             .apply(Term::var("x"))
                             .apply(

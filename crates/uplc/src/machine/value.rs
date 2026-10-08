@@ -3,7 +3,7 @@ use super::{
     runtime::{self, BuiltinRuntime, BuiltinSemantics},
 };
 use crate::{
-    ast::{Constant, NamedDeBruijn, Term, Type},
+    ast::{Constant, ListSpine, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
 };
 use num_bigint::BigInt;
@@ -11,7 +11,94 @@ use num_traits::{Signed, ToPrimitive, Zero};
 use pallas_primitives::conway::{self, PlutusData};
 use std::{mem::size_of, ops::Deref, rc::Rc};
 
-pub(super) type Env = Rc<Vec<Value>>;
+/// Number of bindings per environment chunk. Extending a shared environment
+/// copies at most one chunk, so applications cost O(ENV_CHUNK) instead of
+/// O(depth), while most lookups stay within the first one or two chunks.
+const ENV_CHUNK: usize = 8;
+
+/// A persistent environment of values, indexed by de Bruijn index (1 is the
+/// most recent binding).
+///
+/// Bindings live in a chain of chunks, newest first. Every chunk but the
+/// newest is full, so the chain is depth / ENV_CHUNK long. Closures share
+/// the chunks they capture; only the newest chunk is ever copied on write.
+#[derive(Clone, Debug, Default)]
+pub struct Env(Option<Rc<EnvChunk>>);
+
+#[derive(Debug)]
+pub struct EnvChunk {
+    values: Vec<Value>,
+    parent: Env,
+}
+
+impl Clone for EnvChunk {
+    fn clone(&self) -> Self {
+        let mut values = Vec::with_capacity(ENV_CHUNK);
+        values.extend_from_slice(&self.values);
+
+        EnvChunk {
+            values,
+            parent: self.parent.clone(),
+        }
+    }
+}
+
+impl Env {
+    pub fn push(&mut self, value: Value) {
+        match &mut self.0 {
+            Some(chunk) if chunk.values.len() < ENV_CHUNK => {
+                Rc::make_mut(chunk).values.push(value);
+            }
+            _ => {
+                let mut values = Vec::with_capacity(ENV_CHUNK);
+                values.push(value);
+
+                let parent = Env(self.0.take());
+
+                self.0 = Some(Rc::new(EnvChunk { values, parent }));
+            }
+        }
+    }
+
+    /// The value bound at de Bruijn index `index`, if any.
+    #[inline]
+    pub fn get(&self, mut index: usize) -> Option<&Value> {
+        if index == 0 {
+            return None;
+        }
+
+        let mut chunk = self.0.as_deref()?;
+
+        loop {
+            let len = chunk.values.len();
+
+            if index <= len {
+                return Some(&chunk.values[len - index]);
+            }
+
+            index -= len;
+            chunk = chunk.parent.0.as_deref()?;
+        }
+    }
+
+    /// Bindings from the most recent to the oldest.
+    pub fn iter(&self) -> impl Iterator<Item = &Value> {
+        let mut chunk = self.0.as_deref();
+
+        std::iter::from_fn(move || {
+            let current = chunk?;
+            chunk = current.parent.0.as_deref();
+            Some(current.values.iter().rev())
+        })
+        .flatten()
+    }
+}
+
+impl PartialEq for Env {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -26,9 +113,12 @@ pub enum Value {
         fun: DefaultFunction,
         runtime: BuiltinRuntime,
     },
+    /// Fields are shared so that copying a constructor value (variable
+    /// lookup, environment capture) is O(1) instead of a deep copy of the
+    /// whole structure.
     Constr {
         tag: usize,
-        fields: Vec<Value>,
+        fields: Rc<Vec<Value>>,
     },
 }
 
@@ -57,8 +147,8 @@ impl Value {
         Value::Con(constant.into())
     }
 
-    pub fn list(typ: Type, n: Vec<Rc<Constant>>) -> Self {
-        let constant = Constant::ProtoList(typ, n);
+    pub fn list(typ: Type, n: impl Into<ListSpine>) -> Self {
+        let constant = Constant::ProtoList(typ, n.into());
 
         Value::Con(constant.into())
     }
@@ -125,7 +215,7 @@ impl Value {
         Ok((t1, t2, first, second))
     }
 
-    pub(super) fn unwrap_list(&self) -> Result<(&Type, &Vec<Rc<Constant>>), Error> {
+    pub(super) fn unwrap_list(&self) -> Result<(&Type, &ListSpine), Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(t, list) = inner else {
@@ -182,7 +272,7 @@ impl Value {
         Ok(item.as_ref())
     }
 
-    pub(super) fn unwrap_data_list(&self) -> Result<&Vec<Rc<Constant>>, Error> {
+    pub(super) fn unwrap_data_list(&self) -> Result<&ListSpine, Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Data, list) = inner else {
@@ -195,7 +285,7 @@ impl Value {
         Ok(list)
     }
 
-    pub(super) fn unwrap_int_list(&self) -> Result<&Vec<Rc<Constant>>, Error> {
+    pub(super) fn unwrap_int_list(&self) -> Result<&ListSpine, Error> {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Integer, list) = inner else {
@@ -764,7 +854,8 @@ mod tests {
                     Constant::String("abcd".to_string()).into(),
                     Constant::String("é".to_string()).into(),
                     Constant::ByteString(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).into(),
-                ],
+                ]
+                .into(),
             )),
         );
 
