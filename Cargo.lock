@@ -68,7 +68,7 @@ dependencies = [
  "openssl",
  "openssl-probe",
  "ordinal",
- "owo-colors 3.5.0",
+ "owo-colors",
  "pallas-addresses",
  "pallas-codec",
  "pallas-primitives",
@@ -98,7 +98,7 @@ dependencies = [
  "miette",
  "num-bigint",
  "ordinal",
- "owo-colors 3.5.0",
+ "owo-colors",
  "pallas-primitives",
  "patricia_tree",
  "petgraph",
@@ -125,7 +125,7 @@ dependencies = [
  "lsp-server",
  "lsp-types",
  "miette",
- "owo-colors 3.5.0",
+ "owo-colors",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -160,7 +160,7 @@ dependencies = [
  "num-bigint",
  "numfmt",
  "ordinal",
- "owo-colors 3.5.0",
+ "owo-colors",
  "pallas-addresses",
  "pallas-codec",
  "pallas-crypto",
@@ -301,17 +301,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acb1161c6b64d1c3d83108213c2a2533a342ac225aabd0bda218278c2ddb00c0"
 dependencies = [
  "nom",
-]
-
-[[package]]
-name = "atty"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
-dependencies = [
- "hermit-abi 0.1.19",
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -1448,15 +1437,6 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-abi"
-version = "0.1.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
-dependencies = [
- "libc",
-]
-
-[[package]]
-name = "hermit-abi"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
@@ -1823,6 +1803,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 
 [[package]]
+name = "is-terminal"
+version = "0.4.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
+dependencies = [
+ "hermit-abi",
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "is_ci"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2056,7 +2047,7 @@ dependencies = [
  "backtrace-ext",
  "cfg-if",
  "miette-derive",
- "owo-colors 4.4.0",
+ "owo-colors",
  "supports-color 3.0.2",
  "supports-hyperlinks",
  "supports-unicode",
@@ -2292,7 +2283,7 @@ version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
 dependencies = [
- "hermit-abi 0.5.3",
+ "hermit-abi",
  "libc",
 ]
 
@@ -2403,18 +2394,13 @@ checksum = "7ccdf383374cdcb741d97663d98155028638ce24e1f4b2ae544d91460a3a0670"
 
 [[package]]
 name = "owo-colors"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
-dependencies = [
- "supports-color 1.3.1",
-]
-
-[[package]]
-name = "owo-colors"
 version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c45bb4a6ae1280ec0803b1ef9d3455eb50f01efbbe1447ab020f1d54fba9d8"
+dependencies = [
+ "supports-color 2.1.0",
+ "supports-color 3.0.2",
+]
 
 [[package]]
 name = "pallas-addresses"
@@ -3399,11 +3385,11 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "supports-color"
-version = "1.3.1"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ba6faf2ca7ee42fdd458f4347ae0a9bd6bcc445ad7cb57ad82b383f18870d6f"
+checksum = "d6398cde53adc3c4557306a96ce67b302968513830a77a95b2b17305d9719a89"
 dependencies = [
- "atty",
+ "is-terminal",
  "is_ci",
 ]
 
