@@ -1,7 +1,11 @@
 use super::{
-    DataLookupTable, ResolvedInput, SlotConfig, eval::eval_redeemer, eval_phase_two, iter_redeemers,
+    DataLookupTable, ResolvedInput, ScriptCache, SlotConfig, eval::eval_redeemer, eval_phase_two,
+    eval_phase_two_raw_with_protocol, eval_phase_two_raw_with_script_cache, iter_redeemers,
 };
-use crate::machine::cost_model::ExBudget;
+use crate::{
+    ast::{DeBruijn, Program, Term},
+    machine::cost_model::ExBudget,
+};
 use pallas_codec::utils::MaybeIndefArray;
 use pallas_primitives::{
     Fragment,
@@ -1937,4 +1941,131 @@ fn eval_phase_two_reuses_context_across_redeemers() {
             ),
         ]
     );
+}
+
+#[test]
+fn eval_phase_two_reuses_scripts_across_transactions() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../test_data/tx/shared_script.json")).unwrap();
+    let hex = |value: &serde_json::Value| hex::decode(value.as_str().unwrap()).unwrap();
+    let number = |value: &serde_json::Value| value.as_u64().unwrap();
+
+    let tx_bytes = hex(&fixture["transaction"]);
+    let utxos: Vec<(Vec<u8>, Vec<u8>)> = fixture["inputs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|utxo| (hex(&utxo["input"]), hex(&utxo["output"])))
+        .collect();
+    let cost_mdls = hex(&fixture["cost_models"]);
+    let budget = (
+        number(&fixture["budget"]["cpu"]),
+        number(&fixture["budget"]["mem"]),
+    );
+    let slot_config = (
+        number(&fixture["slot_config"]["zero_time"]),
+        number(&fixture["slot_config"]["zero_slot"]),
+        number(&fixture["slot_config"]["slot_length"]) as u32,
+    );
+
+    let uncached = eval_phase_two_raw_with_protocol(
+        &tx_bytes,
+        &utxos,
+        Some(&cost_mdls),
+        budget,
+        slot_config,
+        10,
+        false,
+        |_| (),
+    )
+    .unwrap();
+
+    let mut script_cache = ScriptCache::default();
+
+    // The first evaluation decodes the script the five redeemers share and keeps
+    // it; the second one finds it there. Both give what evaluating without the
+    // cache gives.
+    for _ in 0..2 {
+        let cached = eval_phase_two_raw_with_script_cache(
+            &tx_bytes,
+            &utxos,
+            Some(&cost_mdls),
+            budget,
+            slot_config,
+            10,
+            false,
+            |_| (),
+            &mut script_cache,
+        )
+        .unwrap();
+
+        assert_eq!(script_cache.len(), 1);
+        assert_eq!(cached.len(), uncached.len());
+
+        for ((redeemer, eval_result), (uncached_redeemer, uncached_result)) in
+            cached.iter().zip(&uncached)
+        {
+            assert_eq!(redeemer, uncached_redeemer);
+            assert_eq!(eval_result.cost(), uncached_result.cost());
+            assert_eq!(eval_result.result().ok(), uncached_result.result().ok());
+        }
+    }
+}
+
+/// A serialised script of a little over `len` bytes, which differs from the
+/// scripts made with another `fill`.
+fn script(fill: u8, len: usize) -> Vec<u8> {
+    Program::<DeBruijn> {
+        version: (1, 1, 0),
+        term: Term::byte_string(vec![fill; len]),
+    }
+    .to_cbor()
+    .unwrap()
+}
+
+#[test]
+fn script_cache_evicts_the_least_recently_used_script() {
+    let (a, b, c) = (script(1, 10), script(2, 10), script(3, 10));
+    let mut script_cache = ScriptCache::with_limits(2, usize::MAX);
+
+    script_cache.program(&a).unwrap();
+    script_cache.program(&b).unwrap();
+    script_cache.program(&a).unwrap();
+    script_cache.program(&c).unwrap();
+
+    assert_eq!(script_cache.len(), 2);
+    assert!(script_cache.contains(&a));
+    assert!(!script_cache.contains(&b));
+    assert!(script_cache.contains(&c));
+}
+
+#[test]
+fn script_cache_keeps_its_scripts_within_the_byte_limit() {
+    let (a, b, c) = (script(1, 100), script(2, 100), script(3, 150));
+    let mut script_cache = ScriptCache::with_limits(usize::MAX, b.len() + c.len());
+
+    script_cache.program(&a).unwrap();
+    script_cache.program(&b).unwrap();
+    script_cache.program(&c).unwrap();
+
+    assert_eq!(script_cache.len(), 2);
+    assert!(!script_cache.contains(&a));
+    assert!(script_cache.contains(&b));
+    assert!(script_cache.contains(&c));
+}
+
+#[test]
+fn script_cache_decodes_scripts_it_cannot_keep() {
+    let script = script(1, 100);
+
+    let mut too_small = ScriptCache::with_limits(usize::MAX, script.len() - 1);
+    let mut no_room = ScriptCache::with_limits(0, usize::MAX);
+
+    let decoded = ScriptCache::default().program(&script).unwrap();
+
+    assert_eq!(too_small.program(&script).unwrap(), decoded);
+    assert_eq!(no_room.program(&script).unwrap(), decoded);
+
+    assert!(too_small.is_empty());
+    assert!(no_room.is_empty());
 }
