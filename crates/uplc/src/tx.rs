@@ -6,6 +6,7 @@ use crate::{
     machine::{cost_model::ExBudget, eval_result::EvalResult},
 };
 use error::Error;
+pub use eval::ScriptCache;
 use pallas_addresses::ScriptHash;
 use pallas_primitives::{
     Fragment,
@@ -101,6 +102,7 @@ pub fn eval_phase_two_with_override(
         override_scripts,
         run_phase_one,
         with_redeemer,
+        &mut ScriptCache::default(),
     )
 }
 
@@ -128,6 +130,36 @@ pub fn eval_phase_two_with_override_and_protocol(
         override_scripts,
         run_phase_one,
         with_redeemer,
+        &mut ScriptCache::default(),
+    )
+}
+
+/// Like eval_phase_two_with_protocol, but decodes scripts through `script_cache`,
+/// so that a cache kept across transactions saves decoding the same scripts
+/// again. Results are the same as without the cache.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_phase_two_with_script_cache(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    cost_mdls: Option<&CostModels>,
+    initial_budget: Option<&ExBudget>,
+    slot_config: &SlotConfig,
+    protocol_major_version: u16,
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+    script_cache: &mut ScriptCache,
+) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
+    eval_phase_two_with_override_and_optional_protocol(
+        tx,
+        utxos,
+        cost_mdls,
+        initial_budget,
+        slot_config,
+        Some(protocol_major_version),
+        HashMap::new(),
+        run_phase_one,
+        with_redeemer,
+        script_cache,
     )
 }
 
@@ -142,6 +174,7 @@ fn eval_phase_two_with_override_and_optional_protocol(
     override_scripts: HashMap<ScriptHash, PlutusScript>,
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
+    script_cache: &mut ScriptCache,
 ) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
@@ -163,7 +196,7 @@ fn eval_phase_two_with_override_and_optional_protocol(
 
             let mut remaining_budget = *initial_budget.unwrap_or(&ExBudget::default());
 
-            let mut cache = eval::TxEvalCache::default();
+            let mut cache = eval::TxEvalCache::new(script_cache);
 
             for (key, data, ex_units) in iter_redeemers(rs) {
                 let redeemer = Redeemer {
@@ -223,6 +256,7 @@ pub fn eval_phase_two_raw(
         None,
         run_phase_one,
         with_redeemer,
+        &mut ScriptCache::default(),
     )
 }
 
@@ -248,6 +282,35 @@ pub fn eval_phase_two_raw_with_protocol(
         Some(protocol_major_version),
         run_phase_one,
         with_redeemer,
+        &mut ScriptCache::default(),
+    )
+}
+
+/// Like eval_phase_two_raw_with_protocol, but decodes scripts through
+/// `script_cache`, so that a cache kept across transactions saves decoding the
+/// same scripts again. Results are the same as without the cache.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_phase_two_raw_with_script_cache(
+    tx_bytes: &[u8],
+    utxos_bytes: &[(Vec<u8>, Vec<u8>)],
+    cost_mdls_bytes: Option<&[u8]>,
+    initial_budget: (u64, u64),
+    slot_config: (u64, u64, u32),
+    protocol_major_version: u16,
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+    script_cache: &mut ScriptCache,
+) -> Result<Vec<(Vec<u8>, EvalResult)>, Error> {
+    eval_phase_two_raw_with_optional_protocol(
+        tx_bytes,
+        utxos_bytes,
+        cost_mdls_bytes,
+        initial_budget,
+        slot_config,
+        Some(protocol_major_version),
+        run_phase_one,
+        with_redeemer,
+        script_cache,
     )
 }
 
@@ -261,6 +324,7 @@ fn eval_phase_two_raw_with_optional_protocol(
     protocol_major_version: Option<u16>,
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
+    script_cache: &mut ScriptCache,
 ) -> Result<Vec<(Vec<u8>, EvalResult)>, Error> {
     let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, tx_bytes)
         .or_else(|e| MultiEraTx::decode_for_era(Era::Babbage, tx_bytes).map_err(|_| e))
@@ -292,28 +356,18 @@ fn eval_phase_two_raw_with_optional_protocol(
 
     match multi_era_tx {
         MultiEraTx::Conway(tx) => {
-            let result = if let Some(protocol_major_version) = protocol_major_version {
-                eval_phase_two_with_protocol(
-                    &tx,
-                    &utxos,
-                    cost_mdls.as_ref(),
-                    Some(&budget),
-                    &sc,
-                    protocol_major_version,
-                    run_phase_one,
-                    with_redeemer,
-                )
-            } else {
-                eval_phase_two(
-                    &tx,
-                    &utxos,
-                    cost_mdls.as_ref(),
-                    Some(&budget),
-                    &sc,
-                    run_phase_one,
-                    with_redeemer,
-                )
-            };
+            let result = eval_phase_two_with_override_and_optional_protocol(
+                &tx,
+                &utxos,
+                cost_mdls.as_ref(),
+                Some(&budget),
+                &sc,
+                protocol_major_version,
+                HashMap::new(),
+                run_phase_one,
+                with_redeemer,
+                script_cache,
+            );
 
             match result {
                 Ok(redeemers) => Ok(redeemers

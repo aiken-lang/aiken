@@ -5,6 +5,7 @@
 ### Added
 
 - **uplc**: Make `TxInfo::script_context_data` public, so that callers evaluating several redeemers of one transaction can convert the transaction info to `Data` once and share it between every script context. @colll78
+- **uplc**: Add `uplc::tx::ScriptCache` and `eval_phase_two_with_script_cache` and `eval_phase_two_raw_with_script_cache`, so that callers evaluating many transactions can keep decoded scripts across them instead of decoding the same scripts for every transaction. `ScriptCache::with_limits` bounds the cache by its number of scripts and their total serialised size, evicting the least recently used scripts first. Results, execution budgets and errors are the same with or without the cache. @colll78
 
 ### Changed
 

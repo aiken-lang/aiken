@@ -59,26 +59,152 @@ pub fn eval_redeemer_with_protocol(
     )
 }
 
+/// Decoded scripts, keyed by their serialised bytes, so that a script is decoded
+/// once and then reused by every redeemer that runs it.
+///
+/// Each evaluation of a transaction uses a fresh cache unless one is passed in,
+/// for instance to [`super::eval_phase_two_with_script_cache`]. A cache that is
+/// kept across transactions saves decoding the same scripts again; give it
+/// limits with [`ScriptCache::with_limits`] so that it cannot grow without
+/// bound. Evaluation results do not depend on what the cache holds.
+#[derive(Debug, Default)]
+pub struct ScriptCache {
+    programs: HashMap<Vec<u8>, CachedProgram>,
+    limits: Option<ScriptCacheLimits>,
+    script_bytes: usize,
+    clock: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ScriptCacheLimits {
+    max_scripts: usize,
+    max_script_bytes: usize,
+}
+
+#[derive(Debug)]
+struct CachedProgram {
+    program: Program<NamedDeBruijn>,
+    last_used: u64,
+}
+
+impl ScriptCache {
+    /// A cache that holds at most `max_scripts` scripts whose serialised sizes
+    /// add up to at most `max_script_bytes`. Making room evicts the least
+    /// recently used scripts first, and a script larger than `max_script_bytes`
+    /// is never cached.
+    ///
+    /// A decoded script takes many times its serialised size in memory, so
+    /// choose `max_script_bytes` with that in mind.
+    pub fn with_limits(max_scripts: usize, max_script_bytes: usize) -> Self {
+        ScriptCache {
+            limits: Some(ScriptCacheLimits {
+                max_scripts,
+                max_script_bytes,
+            }),
+            ..ScriptCache::default()
+        }
+    }
+
+    /// The number of scripts in the cache.
+    pub fn len(&self) -> usize {
+        self.programs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.programs.is_empty()
+    }
+
+    /// Whether the cache holds the decoding of these serialised script bytes.
+    pub fn contains(&self, script: &[u8]) -> bool {
+        self.programs.contains_key(script)
+    }
+
+    pub fn clear(&mut self) {
+        self.programs.clear();
+        self.script_bytes = 0;
+    }
+
+    pub(crate) fn program(&mut self, script: &[u8]) -> Result<Program<NamedDeBruijn>, Error> {
+        self.clock += 1;
+
+        if let Some(cached) = self.programs.get_mut(script) {
+            cached.last_used = self.clock;
+            return Ok(cached.program.clone());
+        }
+
+        let mut buffer = Vec::new();
+        let program: Program<NamedDeBruijn> =
+            Program::<FakeNamedDeBruijn>::from_cbor(script, &mut buffer)?.into();
+
+        if self.make_room(script.len()) {
+            self.script_bytes += script.len();
+            self.programs.insert(
+                script.to_vec(),
+                CachedProgram {
+                    program: program.clone(),
+                    last_used: self.clock,
+                },
+            );
+        }
+
+        Ok(program)
+    }
+
+    /// Evicts the least recently used scripts until one of `len` bytes fits, or
+    /// returns false when it can never fit.
+    fn make_room(&mut self, len: usize) -> bool {
+        let Some(limits) = self.limits else {
+            return true;
+        };
+
+        if limits.max_scripts == 0 || len > limits.max_script_bytes {
+            return false;
+        }
+
+        while self.programs.len() >= limits.max_scripts
+            || self.script_bytes + len > limits.max_script_bytes
+        {
+            let oldest = self
+                .programs
+                .iter()
+                .min_by_key(|(_, cached)| cached.last_used)
+                .map(|(script, _)| script.clone())
+                .expect("a full cache holds at least one script");
+
+            self.programs.remove(&oldest);
+            self.script_bytes -= oldest.len();
+        }
+
+        true
+    }
+}
+
 /// What the redeemers of one transaction share: its transaction info for each
 /// Plutus version, already converted to Data, its resolved spent inputs and its
 /// decoded scripts. Each is built on first use and then reused for every other
 /// redeemer. The Data is shared, so each redeemer's script context holds it
 /// without copying it.
 ///
-/// The cache lives for a single evaluation of one transaction and is dropped
-/// with it; nothing is kept across transactions. It holds at most one
-/// transaction info per Plutus version, one resolved output per spent input and
-/// one program per distinct script the transaction's redeemers run, so its size
-/// is bounded by the transaction and its resolved inputs, which the caller
-/// already holds in memory.
-#[derive(Default)]
-pub(crate) struct TxEvalCache {
+/// The transaction info and spent inputs live for a single evaluation of one
+/// transaction and are dropped with it. They hold at most one transaction info
+/// per Plutus version and one resolved output per spent input, so their size is
+/// bounded by the transaction and its resolved inputs, which the caller already
+/// holds in memory. The scripts live as long as the [`ScriptCache`] they are in.
+pub(crate) struct TxEvalCache<'a> {
     tx_infos: [Option<(TxInfo, Data)>; 3],
     spend_inputs: Option<Vec<TxInInfo>>,
-    programs: HashMap<Vec<u8>, Program<NamedDeBruijn>>,
+    scripts: &'a mut ScriptCache,
 }
 
-impl TxEvalCache {
+impl<'a> TxEvalCache<'a> {
+    pub(crate) fn new(scripts: &'a mut ScriptCache) -> Self {
+        TxEvalCache {
+            tx_infos: [None, None, None],
+            spend_inputs: None,
+            scripts,
+        }
+    }
+
     fn tx_info(
         &mut self,
         lang: &Language,
@@ -107,17 +233,7 @@ impl TxEvalCache {
     }
 
     fn program(&mut self, script: &[u8]) -> Result<Program<NamedDeBruijn>, Error> {
-        if let Some(program) = self.programs.get(script) {
-            return Ok(program.clone());
-        }
-
-        let mut buffer = Vec::new();
-        let program: Program<NamedDeBruijn> =
-            Program::<FakeNamedDeBruijn>::from_cbor(script, &mut buffer)?.into();
-
-        self.programs.insert(script.to_vec(), program.clone());
-
-        Ok(program)
+        self.scripts.program(script)
     }
 }
 
@@ -141,7 +257,7 @@ fn eval_redeemer_with_optional_protocol(
         cost_mdls_opt,
         initial_budget,
         protocol_major_version,
-        &mut TxEvalCache::default(),
+        &mut TxEvalCache::new(&mut ScriptCache::default()),
     )
 }
 
@@ -155,7 +271,7 @@ pub(crate) fn eval_redeemer_cached(
     cost_mdls_opt: Option<&CostModels>,
     initial_budget: &ExBudget,
     protocol_major_version: Option<u16>,
-    cache: &mut TxEvalCache,
+    cache: &mut TxEvalCache<'_>,
 ) -> Result<(Redeemer, EvalResult), Error> {
     #[allow(clippy::too_many_arguments)]
     fn do_eval_redeemer(
