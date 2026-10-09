@@ -1,6 +1,6 @@
 use super::{
     Error,
-    script_context::{ResolvedInput, SlotConfig, TxInfo, find_script},
+    script_context::{ResolvedInput, SlotConfig, TxInInfo, TxInfo, find_script_cached},
     to_plutus_data::ToPlutusData,
 };
 use crate::{
@@ -60,18 +60,21 @@ pub fn eval_redeemer_with_protocol(
 }
 
 /// What the redeemers of one transaction share: its transaction info for each
-/// Plutus version, already converted to Data, and its decoded scripts. Both are
-/// built on first use and then reused for every other redeemer. The Data is
-/// shared, so each redeemer's script context holds it without copying it.
+/// Plutus version, already converted to Data, its resolved spent inputs and its
+/// decoded scripts. Each is built on first use and then reused for every other
+/// redeemer. The Data is shared, so each redeemer's script context holds it
+/// without copying it.
 ///
 /// The cache lives for a single evaluation of one transaction and is dropped
 /// with it; nothing is kept across transactions. It holds at most one
-/// transaction info per Plutus version and one program per distinct script the
-/// transaction's redeemers run, so its size is bounded by the transaction and
-/// its resolved inputs, which the caller already holds in memory.
+/// transaction info per Plutus version, one resolved output per spent input and
+/// one program per distinct script the transaction's redeemers run, so its size
+/// is bounded by the transaction and its resolved inputs, which the caller
+/// already holds in memory.
 #[derive(Default)]
 pub(crate) struct TxEvalCache {
     tx_infos: [Option<(TxInfo, Data)>; 3],
+    spend_inputs: Option<Vec<TxInInfo>>,
     programs: HashMap<Vec<u8>, Program<NamedDeBruijn>>,
 }
 
@@ -216,7 +219,8 @@ pub(crate) fn eval_redeemer_cached(
         Ok((new_redeemer, eval_result))
     }
 
-    let (script, datum) = find_script(redeemer, tx, utxos, lookup_table)?;
+    let (script, datum) =
+        find_script_cached(redeemer, tx, utxos, lookup_table, &mut cache.spend_inputs)?;
 
     let (lang, script, cost_mdl) = match script {
         PlutusScript::V1(script) => (
