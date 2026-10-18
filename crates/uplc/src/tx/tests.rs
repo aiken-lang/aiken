@@ -228,6 +228,7 @@ fn test_eval_0() {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -500,6 +501,7 @@ fn test_eval_1() {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -612,6 +614,7 @@ fn test_eval_2() {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -882,6 +885,7 @@ fn test_eval_3() {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -990,6 +994,7 @@ fn test_eval_4() {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -1077,6 +1082,7 @@ fn test_eval_5() {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -1187,6 +1193,7 @@ fn test_eval_6() {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -1297,6 +1304,7 @@ fn test_eval_7() {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -1558,6 +1566,7 @@ fn test_eval_8() {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -1664,6 +1673,7 @@ fn eval_missing_redeemer() {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -1747,6 +1757,7 @@ fn eval_extraneous_redeemer() {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
+        unknown: Default::default(),
     };
 
     let initial_budget = ExBudget {
@@ -1826,13 +1837,18 @@ fn eval_phase_two_reuses_context_across_redeemers() {
     let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes).unwrap();
     let tx = multi_era_tx.as_conway().unwrap();
 
-    let utxos: Vec<ResolvedInput> = fixture["inputs"]
+    let utxos_bytes: Vec<(Vec<u8>, Vec<u8>)> = fixture["inputs"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|utxo| ResolvedInput {
-            input: TransactionInput::decode_fragment(&hex(&utxo["input"])).unwrap(),
-            output: TransactionOutput::decode_fragment(&hex(&utxo["output"])).unwrap(),
+        .map(|utxo| (hex(&utxo["input"]), hex(&utxo["output"])))
+        .collect();
+
+    let utxos: Vec<ResolvedInput> = utxos_bytes
+        .iter()
+        .map(|(input, output)| ResolvedInput {
+            input: TransactionInput::decode_fragment(input).unwrap(),
+            output: TransactionOutput::decode_fragment(output).unwrap(),
         })
         .collect();
 

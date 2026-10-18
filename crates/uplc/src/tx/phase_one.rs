@@ -5,17 +5,16 @@ use super::{
 use crate::tx::script_context::sort_reward_accounts;
 use itertools::Itertools;
 use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
-use pallas_codec::utils::Nullable;
 use pallas_primitives::conway::{
-    Certificate, GovAction, MintedTx, PolicyId, RedeemerTag, Redeemers, RedeemersKey,
-    RewardAccount, StakeCredential, TransactionOutput, Voter,
+    Certificate, GovAction, PolicyId, RedeemerTag, Redeemers, RedeemersKey, RewardAccount,
+    StakeCredential, TransactionOutput, Tx, Voter,
 };
 
 type ScriptsNeeded = Vec<(ScriptPurpose, ScriptHash)>;
 
 // subset of phase-1 ledger checks related to scripts
 pub fn eval_phase_one(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     lookup_table: &DataLookupTable,
 ) -> Result<(), Error> {
@@ -57,7 +56,7 @@ pub fn validate_missing_scripts(
     Ok(())
 }
 
-pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsNeeded, Error> {
+pub fn scripts_needed(tx: &Tx, utxos: &[ResolvedInput]) -> Result<ScriptsNeeded, Error> {
     let mut needed = Vec::new();
 
     let txb = tx.transaction_body.clone();
@@ -84,10 +83,10 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
 
     let mut reward = txb
         .withdrawals
-        .as_deref()
+        .as_ref()
         .map(|w| {
-            w.iter()
-                .filter_map(|(acnt, _)| {
+            w.keys()
+                .filter_map(|acnt| {
                     let address = Address::from_bytes(acnt).unwrap();
 
                     if let Address::Stake(a) = address
@@ -134,10 +133,10 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
 
     let mut mint = txb
         .mint
-        .as_deref()
+        .as_ref()
         .map(|m| {
-            m.iter()
-                .map(|(policy_id, _)| (ScriptPurpose::Minting(*policy_id), *policy_id))
+            m.keys()
+                .map(|policy_id| (ScriptPurpose::Minting(*policy_id), *policy_id))
                 .collect::<ScriptsNeeded>()
         })
         .unwrap_or_default();
@@ -149,10 +148,10 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
             m.iter()
                 .enumerate()
                 .filter_map(|(ix, procedure)| match procedure.gov_action {
-                    GovAction::ParameterChange(_, _, Nullable::Some(hash)) => {
+                    GovAction::ParameterChange(_, _, Some(hash)) => {
                         Some((ScriptPurpose::Proposing(ix, procedure.clone()), hash))
                     }
-                    GovAction::TreasuryWithdrawals(_, Nullable::Some(hash)) => {
+                    GovAction::TreasuryWithdrawals(_, Some(hash)) => {
                         Some((ScriptPurpose::Proposing(ix, procedure.clone()), hash))
                     }
                     GovAction::HardForkInitiation(..)
@@ -169,10 +168,10 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
 
     let mut voting = txb
         .voting_procedures
-        .as_deref()
+        .as_ref()
         .map(|m| {
-            m.iter()
-                .filter_map(|(voter, _)| match voter {
+            m.keys()
+                .filter_map(|voter| match voter {
                     Voter::ConstitutionalCommitteeScript(hash) | Voter::DRepScript(hash) => {
                         Some((ScriptPurpose::Voting(voter.clone()), *hash))
                     }
@@ -196,7 +195,7 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
 
 /// hasExactSetOfRedeemers in Ledger Spec, but we pass `txscripts` directly
 pub fn has_exact_set_of_redeemers(
-    tx: &MintedTx,
+    tx: &Tx,
     needed: &ScriptsNeeded,
     lookup_table: &DataLookupTable,
 ) -> Result<(), Error> {
@@ -234,8 +233,8 @@ pub fn has_exact_set_of_redeemers(
                 })
                 .collect(),
             Redeemers::Map(kv) => kv
-                .iter()
-                .map(|(k, _)| RedeemersKey {
+                .keys()
+                .map(|k| RedeemersKey {
                     index: k.index,
                     tag: k.tag,
                 })
@@ -276,7 +275,7 @@ pub fn has_exact_set_of_redeemers(
 /// according to the type of the script purpose, and the index according to the
 /// placement of script purpose inside its container.
 fn build_redeemer_key(
-    tx: &MintedTx,
+    tx: &Tx,
     script_purpose: &ScriptPurpose,
 ) -> Result<Option<RedeemersKey>, Error> {
     let tx_body = tx.transaction_body.clone();
@@ -285,8 +284,8 @@ fn build_redeemer_key(
         ScriptPurpose::Minting(hash) => {
             let policy_ids: Vec<&PolicyId> = tx_body
                 .mint
-                .as_deref()
-                .map(|m| m.iter().map(|(policy_id, _)| policy_id).sorted().collect())
+                .as_ref()
+                .map(|m| m.keys().sorted().collect())
                 .unwrap_or_default();
 
             let redeemer_key =
@@ -324,8 +323,8 @@ fn build_redeemer_key(
         ScriptPurpose::Rewarding(racnt) => {
             let mut reward_accounts: Vec<&RewardAccount> = tx_body
                 .withdrawals
-                .as_deref()
-                .map(|m| m.iter().map(|(acnt, _)| acnt).collect())
+                .as_ref()
+                .map(|m| m.keys().collect())
                 .unwrap_or_default();
 
             reward_accounts.sort_by(|acnt_a, acnt_b| sort_reward_accounts(acnt_a, acnt_b));
@@ -369,11 +368,11 @@ fn build_redeemer_key(
         ScriptPurpose::Voting(v) => {
             let redeemer_key = tx_body
                 .voting_procedures
-                .as_deref()
+                .as_ref()
                 .map(|m| {
                     m.iter()
                         .sorted_by(|(a, _), (b, _)| sort_voters(a, b))
-                        .position(|x| &x.0 == v)
+                        .position(|(voter, _)| voter == v)
                 })
                 .unwrap_or_default()
                 .map(|index| RedeemersKey {
