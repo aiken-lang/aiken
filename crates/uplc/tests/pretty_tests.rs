@@ -34,6 +34,16 @@ fn constant_list_integer() {
 }
 
 #[test]
+fn constant_list_of_bls_elements_prints_its_element_type() {
+    for tipo in [Type::Bls12_381G1Element, Type::Bls12_381G2Element] {
+        let term = Term::<Name>::Constant(Constant::ProtoList(tipo, vec![].into()).into());
+        let printed = term.to_pretty();
+
+        round_trip(term, &printed);
+    }
+}
+
+#[test]
 fn constant_pair_bool_bytestring() {
     round_trip(
         Term::<Name>::Constant(
