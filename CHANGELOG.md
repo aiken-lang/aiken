@@ -22,6 +22,7 @@
 - **aiken-project**: Fix a crash when two `aiken` commands download the same package at once. @MicroProofs
 - **aiken-lang**: Fix `when` on a list selecting the wrong clause, or crashing the compiler, when its clauses use spreads of different lengths. Scripts containing such a `when` may compile to a different hash, including those that already behaved correctly. @logicalmechanism
 - **uplc**: Fix the optimizer moving a failing expression, such as an `expect`, into a function defined after it, so that it ran only when the function was called. Scripts can compile to a different hash, for example validators with a `ByteArray` parameter, even when they have no such expression. @MicroProofs
+- **uplc**: Fix a compiler crash (`FreeUnique`) on a three-argument builtin such as `slice_bytearray` called several times with the same arguments, when its first argument isn't a constant. @MicroProofs
 
 ## v1.1.24 - 2026-09-26
 

@@ -3205,11 +3205,16 @@ impl Program<Name> {
                                 id_vec
                             };
 
-                            while let Some(node) = id_vec.pop() {
-                                if !matches!(node.term, Term::Constant { .. }) {
-                                    continue;
-                                }
+                            // Only a prefix of constant arguments is hoisted: a prefix with any
+                            // other argument has no definition the longer ones could build on.
+                            if let Some(position) = id_vec
+                                .iter()
+                                .position(|node| !matches!(node.term, Term::Constant { .. }))
+                            {
+                                id_vec.truncate(position);
+                            }
 
+                            while let Some(node) = id_vec.pop() {
                                 let mut id_only_vec =
                                     id_vec.iter().map(|item| item.curried_id).collect_vec();
 

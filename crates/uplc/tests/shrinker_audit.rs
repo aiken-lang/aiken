@@ -1005,6 +1005,43 @@ fn remove_no_inlines_marker_around_a_failing_term_does_not_hide_it() {
 // builtin_curry_reducer
 // ---------------------------------------------------------------------------
 
+#[test]
+fn builtin_curry_reducer_three_arg_builtin_with_a_failing_first_argument() {
+    // Three sites of `sliceByteString (unIData d) 2 b_i`. The
+    // prefix `sliceByteString (unIData d)` isn't a constant, so nothing that
+    // extends it is hoisted: hoisting `prefix 2` used to refer to a prefix
+    // variable that was never defined (`FreeUnique` in `afterwards()`).
+    let site = |b: &str| {
+        format!(
+            "[(builtin sliceByteString) [(builtin unIData) d] (con integer 2) (con bytestring #{b})]"
+        )
+    };
+    let src = program(&format!(
+        "(lam d [(builtin appendByteString) {} [(builtin appendByteString) {} {}]])",
+        site("aabbcc"),
+        site("ddeeff"),
+        site("001122")
+    ));
+
+    assert_sound_on(&src, &[on(&[GOOD], true), on(&[BAD], false)]);
+}
+
+#[test]
+fn builtin_curry_reducer_three_arg_builtin_with_a_variable_first_argument() {
+    // Same shape with a plain variable as the first argument
+    // (`sliceByteString s 2 b_i`), a well-typed program.
+    let site =
+        |b: &str| format!("[(builtin sliceByteString) s (con integer 2) (con bytestring #{b})]");
+    let src = program(&format!(
+        "(lam s [(builtin appendByteString) {} [(builtin appendByteString) {} {}]])",
+        site("aabbcc"),
+        site("ddeeff"),
+        site("001122")
+    ));
+
+    assert_sound_on(&src, &[on(&["(con integer 1)"], true)]);
+}
+
 // ---------------------------------------------------------------------------
 // typed_list_convert_arg
 // ---------------------------------------------------------------------------
