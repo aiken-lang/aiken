@@ -981,6 +981,33 @@ fn builtin_eval_reducer_folds_only_what_the_machine_accepts() {
     }
 }
 
+/// A builtin that produces a BLS point must not fold into a point constant: points have no flat
+/// encoding, and `bls381_compressor`, which turns point constants into `uncompress` calls, runs
+/// before the folding passes.
+#[test]
+fn builtin_eval_reducer_does_not_fold_a_call_that_produces_a_bls_point() {
+    let g1_hash = "[(builtin bls12_381_G1_hashToGroup) (con bytestring #abcd) (con bytestring #)]";
+    let g2_hash = "[(builtin bls12_381_G2_hashToGroup) (con bytestring #abcd) (con bytestring #)]";
+    let g1_compress = "(builtin bls12_381_G1_compress)";
+    let g2_compress = "(builtin bls12_381_G2_compress)";
+
+    for (label, term) in [
+        ("g1 hashToGroup", format!("[{g1_compress} {g1_hash}]")),
+        ("g2 hashToGroup", format!("[{g2_compress} {g2_hash}]")),
+    ] {
+        let run = assert_sound_on(&program(&term), &[on(&[], true)]).remove(0);
+
+        let encoded = run.optimized().clone().to_debruijn().unwrap().to_cbor();
+
+        assert!(
+            encoded.is_ok(),
+            "{label}: the optimized program can't be flat encoded: {:?}\n{}",
+            encoded.err(),
+            run.text()
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // remove_no_inlines
 // ---------------------------------------------------------------------------

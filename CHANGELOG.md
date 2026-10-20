@@ -23,6 +23,7 @@
 - **aiken-lang**: Fix `when` on a list selecting the wrong clause, or crashing the compiler, when its clauses use spreads of different lengths. Scripts containing such a `when` may compile to a different hash, including those that already behaved correctly. @logicalmechanism
 - **uplc**: Fix the optimizer moving a failing expression, such as an `expect`, into a function defined after it, so that it ran only when the function was called. Scripts can compile to a different hash, for example validators with a `ByteArray` parameter, even when they have no such expression. @MicroProofs
 - **uplc**: Fix a compiler crash (`FreeUnique`) on a three-argument builtin such as `slice_bytearray` called several times with the same arguments, when its first argument isn't a constant. @MicroProofs
+- **uplc**: Fix `aiken build` crashing with "BLS12-381 G1 points are not supported for flat encoding" on a script that computes a BLS12-381 point from constants, such as `bls12_381_g1_hash_to_group(#"abcd", #"")`, while `aiken check` passed and reported too low a cost. @MicroProofs
 
 ## v1.1.24 - 2026-09-26
 

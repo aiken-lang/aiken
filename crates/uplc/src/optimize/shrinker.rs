@@ -550,26 +550,6 @@ impl DefaultFunction {
                 })
             }
 
-            DefaultFunction::Bls12_381_G1_Equal | DefaultFunction::Bls12_381_G1_Add => {
-                arg_stack.iter().all(|arg| {
-                    if let Term::Constant(c) = arg {
-                        matches!(c.as_ref(), Constant::Bls12_381G1Element(_))
-                    } else {
-                        false
-                    }
-                })
-            }
-
-            DefaultFunction::Bls12_381_G2_Equal | DefaultFunction::Bls12_381_G2_Add => {
-                arg_stack.iter().all(|arg| {
-                    if let Term::Constant(c) = arg {
-                        matches!(c.as_ref(), Constant::Bls12_381G2Element(_))
-                    } else {
-                        false
-                    }
-                })
-            }
-
             DefaultFunction::ConstrData => {
                 if let (Term::Constant(c), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
                     if let (Constant::Integer(i), Constant::ProtoList(Type::Data, _)) =
@@ -579,24 +559,6 @@ impl DefaultFunction {
                     } else {
                         false
                     }
-                } else {
-                    false
-                }
-            }
-
-            DefaultFunction::Bls12_381_G1_HashToGroup
-            | DefaultFunction::Bls12_381_G2_HashToGroup => arg_stack.iter().all(|arg| {
-                if let Term::Constant(c) = arg {
-                    matches!(c.as_ref(), Constant::ByteString(..))
-                } else {
-                    false
-                }
-            }),
-
-            DefaultFunction::Bls12_381_G1_ScalarMul | DefaultFunction::Bls12_381_G2_ScalarMul => {
-                if let (Term::Constant(c1), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
-                    matches!(c1.as_ref(), Constant::Integer(..))
-                        && matches!(c2.as_ref(), Constant::Bls12_381G1Element(..))
                 } else {
                     false
                 }
@@ -672,6 +634,9 @@ impl DefaultFunction {
                 }
             }
 
+            // A builtin that returns a BLS12-381 point or Miller-loop result is never folded:
+            // the constant has no Flat encoding, and `bls381_compressor`, which turns point
+            // constants into `uncompress` calls, has already run.
             _ => false,
         }
     }
