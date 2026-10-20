@@ -1091,3 +1091,93 @@ fn typed_list_convert_arg_keeps_already_typed_constant_lists_of_points() {
 
     assert_sound_on(&src, &[on(&[GOOD], true)]);
 }
+
+// ---------------------------------------------------------------------------
+// split_body_lambda
+// ---------------------------------------------------------------------------
+
+/// `split_body_lambda` hoists an unapplied lambda over an argument that can't fail: a value, or a
+/// partially applied builtin.
+#[test]
+fn split_body_lambda_hoists_over_values() {
+    // a value argument
+    {
+        // The argument is a string constant: a value the inliner leaves alone
+        // (it is used twice), so only `split_body_lambda` rewrites the shape.
+        // Moving the unapplied `z` outside is harmless for a value. The rule
+        // fires: `z` now encloses the application of `v`.
+        let src = program(
+            "(lam s [(lam v (lam z [(builtin appendString) v [(builtin appendString) v [(builtin appendString) z s]]])) \
+                (con string \"a\")])",
+        );
+
+        let runs = assert_sound_on(
+            &src,
+            &[on(&["(con string \"b\")", "(con string \"c\")"], true)],
+        );
+
+        let text = runs[0].text();
+
+        assert!(
+            text.starts_with("(program 1.0.0 (lam s (lam z [ (lam v"),
+            "{text}"
+        );
+    }
+
+    // a partial builtin
+    {
+        let src = program(
+            "(lam s [(lam v (lam z [(builtin appendString) [v z] [v s]])) \
+                [(builtin appendString) (con string \"a\")]])",
+        );
+
+        let runs = assert_sound_on(
+            &src,
+            &[on(&["(con string \"b\")", "(con string \"c\")"], true)],
+        );
+
+        let text = runs[0].text();
+
+        assert!(
+            text.starts_with("(program 1.0.0 (lam s (lam z [ (lam v"),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn split_body_lambda_does_not_defer_a_failing_argument_under_a_returned_closure() {
+    // `unIData d` runs before the closure is returned. Hoisting `z` above it
+    // would give `(lam d (lam z [(lam v v) [(builtin unIData) d]]))`, which
+    // returns a closure for d = B #aa.
+    let src = program("(lam d [(lam v (lam z v)) [(builtin unIData) d]])");
+
+    assert_sound_on(&src, &[on(&[GOOD], true), on(&[BAD], false)]);
+}
+
+/// A builtin applied before it is forced fails, however it is forced afterwards. The full
+/// optimizer never shows `split_body_lambda` this shape (`builtin_force_reducer` first replaces
+/// the builtin with its forced wrapper), so the rule runs alone here.
+#[test]
+#[ignore = "split_body_lambda's is_value counts forces and applications in any order, so it hoists a lambda over a builtin applied before it is forced; not reachable from Aiken, not fixed"]
+fn split_body_lambda_does_not_defer_a_builtin_applied_before_it_is_forced() {
+    for partial in [
+        "(force [(builtin ifThenElse) (con bool True)])",
+        "[(force [(builtin ifThenElse) (con bool True)]) (con integer 1)]",
+        "(force (force [(builtin fstPair) (con (pair integer integer) (1, 2))]))",
+    ] {
+        let src = program(&format!("(lam d [(lam v (lam z v)) {partial}])"));
+        let program = reference(&parse(&src));
+        let arg = parse_term(GOOD);
+
+        assert_eq!(run(program.apply_term(&arg)), Outcome::Error, "{partial}");
+
+        let split = program.split_body_lambda_reducer();
+        assert_eq!(
+            run(split.apply_term(&arg)),
+            Outcome::Error,
+            "{partial}: {}",
+            compact(&split)
+        );
+    }
+}

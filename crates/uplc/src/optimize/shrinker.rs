@@ -83,6 +83,40 @@ impl Default for IdGen {
 
 pub const NO_INLINE: &str = "__no_inline__";
 
+/// Whether evaluating `term` can't fail and does nothing: a variable, a constant, a lambda, a
+/// delay, or a builtin forced and applied to values no more than it takes, short of running.
+fn is_value(term: &Term<Name>) -> bool {
+    let mut head = term;
+    let mut forces = 0;
+    let mut args = 0;
+
+    loop {
+        match head {
+            Term::Apply { function, argument } if is_value(argument) => {
+                args += 1;
+                head = function;
+            }
+            Term::Force(inner) => {
+                forces += 1;
+                head = inner;
+            }
+            _ => break,
+        }
+    }
+
+    match head {
+        Term::Builtin(builtin) => {
+            forces <= builtin.force_count() as usize
+                && (args == 0 || forces == builtin.force_count() as usize)
+                && args < builtin.arity()
+        }
+        Term::Var(_) | Term::Constant(_) | Term::Lambda { .. } | Term::Delay(_) => {
+            forces == 0 && args == 0
+        }
+        _ => false,
+    }
+}
+
 #[derive(PartialEq, PartialOrd, Default, Debug, Clone)]
 pub struct VarLookup {
     found: bool,
@@ -1902,6 +1936,20 @@ impl Term<Name> {
         let mut function_dependencies = vec![vec![]];
 
         loop {
+            // An unapplied lambda ends up above every binding collected so far. Stop before it
+            // when one of those bindings can fail, so that the failure isn't deferred into the
+            // lambda (or skipped when the lambda is never called).
+            if let Term::Lambda { body, .. } = current_term
+                && !matches!(arg_stack.last(), Some(Args::Apply(..)))
+                && function_groups
+                    .iter()
+                    .flatten()
+                    .any(|(_, arg)| !is_value(arg))
+            {
+                Rc::make_mut(body).split_body_lambda();
+                break;
+            }
+
             match current_term {
                 Term::Apply { function, argument } => {
                     current_term = Rc::make_mut(function);
