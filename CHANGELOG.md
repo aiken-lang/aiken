@@ -5,6 +5,7 @@
 ### Added
 
 - **uplc**: Make `TxInfo::script_context_data` public, so that callers evaluating several redeemers of one transaction can convert the transaction info to `Data` once and share it between every script context. @colll78
+- **uplc**: Add `Program::lower`, which makes a generated program runnable without optimizing it, so it can be compared with the optimized one. @MicroProofs
 
 ### Changed
 
