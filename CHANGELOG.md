@@ -15,7 +15,8 @@
 ### Fixed
 
 - **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
-- **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
+- **uplc**: Drop deeply nested lists and `Data`, and decode, compare (`equalsData`) and serialise (`serialiseData`) deeply nested `Data`, without overflowing the stack. @colll78
+- **uplc**: Decode `Data` as Plutus does, rejecting what pallas accepts but Plutus does not: byte strings and big integers with a chunk of more than 64 bytes, a big integer tag not written in a single byte (`d8 02 41 01`), and a tag 102 constructor that is not exactly a pair of an index and fields. @colll78
 
 ## v1.1.24 - 2026-09-26
 
