@@ -78,8 +78,11 @@ impl LocalPackages {
 
     #[allow(clippy::result_large_err)]
     fn remove_extra_packages(&self, manifest: &Manifest, root_path: &Path) -> Result<(), Error> {
-        for (package, _version) in self.extra_local_packages(manifest) {
-            let path = root_path.join(paths::build_deps_package(&package));
+        for package in self.extra_local_packages(manifest) {
+            let path = root_path.join(paths::build_deps_package(
+                &package.name,
+                package.subdir.as_ref(),
+            ));
 
             if path.exists() {
                 fs::remove_dir_all(&path)?;
@@ -88,17 +91,16 @@ impl LocalPackages {
 
         Ok(())
     }
-    pub fn extra_local_packages(&self, manifest: &Manifest) -> Vec<(PackageName, String)> {
+    pub fn extra_local_packages(&self, manifest: &Manifest) -> Vec<&Dependency> {
         let manifest_packages: HashSet<_> = manifest
             .packages
             .iter()
-            .map(|p| (&p.name, &p.version))
+            .map(|p| (&p.name, &p.version, &p.subdir))
             .collect();
 
         self.packages
             .iter()
-            .filter(|dep| !manifest_packages.contains(&(&dep.name, &dep.version)))
-            .map(|dep| (dep.name.clone(), dep.version.clone()))
+            .filter(|dep| !manifest_packages.contains(&(&dep.name, &dep.version, &dep.subdir)))
             .collect()
     }
 
@@ -111,10 +113,12 @@ impl LocalPackages {
             .iter()
             .filter(|p| {
                 &p.name != root
-                    && !matches!(
-                        self.packages.iter().find(|p2| p2.name == p.name),
-                        Some(Dependency { version, .. }) if paths::is_git_sha_or_tag(version) && &p.version == version,
-                    )
+                    && !self.packages.iter().any(|local| {
+                        local.name == p.name
+                            && local.subdir == p.subdir
+                            && local.version == p.version
+                            && paths::is_git_sha_or_tag(&local.version)
+                    })
             })
             .collect()
     }
@@ -130,6 +134,7 @@ impl From<&Manifest> for LocalPackages {
                     name: p.name.clone(),
                     version: p.version.clone(),
                     source: p.source,
+                    subdir: p.subdir.clone(),
                 })
                 .collect(),
         }
@@ -246,4 +251,57 @@ where
     }
 
     manifest.save(root_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Platform;
+    use std::collections::BTreeMap;
+
+    fn manifest(subdirs: &[Option<&str>]) -> Manifest {
+        let packages = subdirs
+            .iter()
+            .map(|subdir| Package {
+                name: PackageName {
+                    owner: "example".to_string(),
+                    repo: "contracts".to_string(),
+                },
+                version: "v1.0.0".to_string(),
+                requirements: vec![],
+                source: Platform::Github,
+                subdir: subdir.map(|s| s.parse().unwrap()),
+            })
+            .collect();
+        Manifest {
+            requirements: vec![],
+            packages,
+            etags: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn installed_packages_are_tracked_per_subdir() {
+        let root = PackageName {
+            owner: "example".to_string(),
+            repo: "app".to_string(),
+        };
+        let installed = LocalPackages::from(&manifest(&[None, Some("onchain")]));
+
+        let same = manifest(&[None, Some("onchain")]);
+        assert!(
+            installed
+                .missing_local_packages(&same.packages, &root)
+                .is_empty()
+        );
+        assert!(installed.extra_local_packages(&same).is_empty());
+
+        let moved = manifest(&[None, Some("other")]);
+        let missing = installed.missing_local_packages(&moved.packages, &root);
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].subdir.as_ref().unwrap().as_str(), "other");
+        let extra = installed.extra_local_packages(&moved);
+        assert_eq!(extra.len(), 1);
+        assert_eq!(extra[0].subdir.as_ref().unwrap().as_str(), "onchain");
+    }
 }

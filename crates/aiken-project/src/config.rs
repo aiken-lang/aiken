@@ -356,6 +356,8 @@ pub struct Dependency {
     pub name: PackageName,
     pub version: String,
     pub source: Platform,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subdir: Option<crate::package_subdir::PackageSubdir>,
 }
 
 impl Display for Platform {
@@ -392,6 +394,7 @@ impl ProjectConfig {
                     _ => "1.5.0".to_string(),
                 },
                 source: Platform::Github,
+                subdir: None,
             }],
             config: BTreeMap::new(),
         }
@@ -419,7 +422,7 @@ impl ProjectConfig {
 
     pub fn insert(mut self, dependency: &Dependency, and_replace: bool) -> Option<Self> {
         for existing in self.dependencies.iter_mut() {
-            if existing.name == dependency.name {
+            if existing.name == dependency.name && existing.subdir == dependency.subdir {
                 return if and_replace {
                     existing.version.clone_from(&dependency.version);
                     Some(self)
@@ -507,6 +510,50 @@ mod tests {
                 prop::collection::vec(inner.clone(), 0..3).prop_map(SimpleExpr::List)
             ]
         })
+    }
+
+    fn dependency(subdir: Option<&str>, version: &str) -> Dependency {
+        Dependency {
+            name: PackageName {
+                owner: "example".to_string(),
+                repo: "contracts".to_string(),
+            },
+            version: version.to_string(),
+            source: Platform::Github,
+            subdir: subdir.map(|s| s.parse().unwrap()),
+        }
+    }
+
+    #[test]
+    fn insert_matches_on_subdir() {
+        let config: ProjectConfig =
+            toml::from_str("name = 'example/app'\nversion = '0.0.0'").unwrap();
+        let root = dependency(None, "v1");
+        let onchain = dependency(Some("onchain"), "v1");
+        let config = config
+            .insert(&root, false)
+            .unwrap()
+            .insert(&onchain, false)
+            .unwrap();
+        assert!(config.clone().insert(&onchain, false).is_none());
+
+        let upgraded = dependency(Some("onchain"), "v2");
+        let config = config.insert(&upgraded, true).unwrap();
+        assert_eq!(config.dependencies, vec![root, upgraded]);
+    }
+
+    #[test]
+    fn subdir_is_optional_in_toml() {
+        let root = toml::to_string(&dependency(None, "v1")).unwrap();
+        assert!(!root.contains("subdir"));
+        assert_eq!(
+            toml::from_str::<Dependency>(&root).unwrap(),
+            dependency(None, "v1")
+        );
+
+        let onchain = toml::to_string(&dependency(Some("onchain"), "v1")).unwrap();
+        assert!(onchain.contains("subdir = \"onchain\""));
+        assert!(toml::from_str::<Dependency>(&onchain.replace("onchain", "../x")).is_err());
     }
 
     #[derive(Deserialize, Serialize)]
