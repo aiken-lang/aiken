@@ -283,6 +283,7 @@ fn lookup_declaration(
         Declaration::Inline(ref data) => Annotated {
             title: decl.title.clone(),
             description: decl.description.clone(),
+            alias: None,
             annotated: Schema::Data(*(*data).clone()),
         },
         Declaration::Referenced(ref reference) => {
@@ -295,6 +296,7 @@ fn lookup_declaration(
                     .description
                     .clone()
                     .or_else(|| schema.description.clone()),
+                alias: schema.alias.clone(),
                 annotated: schema.annotated.clone(),
             }
         }

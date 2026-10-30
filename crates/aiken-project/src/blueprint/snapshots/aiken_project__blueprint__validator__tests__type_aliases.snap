@@ -1,5 +1,6 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
+assertion_line: 752
 description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime = Int\n\npub type AlwaysNone = Never\n\npub type MyDatum {\n    Either(AlwaysNone)\n    OrElse(Pair<POSIXTime, Bool>)\n}\n\npub type MyRedeemer<a> {\n    fst_field: List<a>,\n    snd_field: Pairs<a, POSIXTime>\n}\n\nvalidator recursive_types {\n  spend(datum: Option<MyDatum>, redeemer: MyRedeemer<Asset>, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
@@ -141,6 +142,9 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
     },
     "test_module/POSIXTime": {
       "title": "POSIXTime",
+      "alias": {
+        "$ref": "#/definitions/Int"
+      },
       "dataType": "integer"
     }
   }

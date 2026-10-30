@@ -24,6 +24,8 @@ pub struct Annotated<T> {
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub alias: Option<Reference>,
     #[serde(flatten)]
     pub annotated: T,
 }
@@ -33,6 +35,7 @@ impl<T> Annotated<T> {
         Annotated {
             title,
             description: None,
+            alias: None,
             annotated: to_annotate,
         }
     }
@@ -112,6 +115,7 @@ impl Schema {
         Schema::Data(Data::AnyOf(vec![Annotated {
             title: None,
             description: None,
+            alias: None,
             annotated: Constructor {
                 index: 0,
                 fields: vec![],
@@ -132,6 +136,7 @@ impl Schema {
             Annotated {
                 title: Some("False".to_string()),
                 description: None,
+                alias: None,
                 annotated: Constructor {
                     index: 0,
                     fields: vec![],
@@ -140,6 +145,7 @@ impl Schema {
             Annotated {
                 title: Some("True".to_string()),
                 description: None,
+                alias: None,
                 annotated: Constructor {
                     index: 1,
                     fields: vec![],
@@ -180,6 +186,7 @@ impl<T> From<T> for Annotated<T> {
         Annotated {
             title: None,
             description: None,
+            alias: None,
             annotated,
         }
     }
@@ -199,6 +206,7 @@ impl Annotated<Schema> {
                     Ok::<_, Error>(Annotated {
                         title: Some("Wrapped Redeemer".to_string()),
                         description: Some("A redeemer wrapped in an extra constructor to make multi-validator detection possible on-chain.".to_string()),
+                        alias: None,
                         annotated: Schema::Data(Data::AnyOf(vec![Constructor {
                             index: REDEEMER_DISCRIMINANT,
                             fields: vec![Declaration::Referenced(schema).into()],
@@ -235,6 +243,7 @@ impl Annotated<Schema> {
                 Annotated {
                     title: title.cloned(),
                     description: None,
+                    alias: None,
                     annotated,
                 }
             } else {
@@ -254,6 +263,7 @@ impl Annotated<Schema> {
                         "Data" => Ok(Annotated {
                             title: title.or(Some("Data".to_string())),
                             description: Some("Any Plutus data.".to_string()),
+                            alias: None,
                             annotated: Schema::Data(Data::Opaque),
                         }),
 
@@ -296,22 +306,26 @@ impl Annotated<Schema> {
                         "Void" => Ok(Annotated {
                             title: title.or(Some("Unit".to_string())),
                             description: None,
+                            alias: None,
                             annotated: Schema::void(),
                         }),
 
                         "Bool" => Ok(Annotated {
                             title: title.or(Some("Bool".to_string())),
                             description: None,
+                            alias: None,
                             annotated: Schema::bool(),
                         }),
 
                         "Ordering" => Ok(Annotated {
                             title: title.or(Some("Ordering".to_string())),
                             description: None,
+                            alias: None,
                             annotated: Schema::Data(Data::AnyOf(vec![
                                 Annotated {
                                     title: Some("Less".to_string()),
                                     description: None,
+                                    alias: None,
                                     annotated: Constructor {
                                         index: 0,
                                         fields: vec![],
@@ -320,6 +334,7 @@ impl Annotated<Schema> {
                                 Annotated {
                                     title: Some("Equal".to_string()),
                                     description: None,
+                                    alias: None,
                                     annotated: Constructor {
                                         index: 1,
                                         fields: vec![],
@@ -328,6 +343,7 @@ impl Annotated<Schema> {
                                 Annotated {
                                     title: Some("Greater".to_string()),
                                     description: None,
+                                    alias: None,
                                     annotated: Constructor {
                                         index: 2,
                                         fields: vec![],
@@ -340,10 +356,12 @@ impl Annotated<Schema> {
                             Ok(Annotated {
                                 title: title.or(Some("Never".to_string())),
                                 description: None,
+                                alias: None,
                                 annotated: Schema::Data(Data::AnyOf(vec![
                                     Annotated {
                                         title: Some("Never".to_string()),
                                         description: Some("Nothing.".to_string()),
+                                        alias: None,
                                         annotated: Constructor {
                                             index: 1,
                                             fields: vec![],
@@ -365,10 +383,12 @@ impl Annotated<Schema> {
                             Ok(Annotated {
                                 title: title.or(Some("Option".to_string())),
                                 description: None,
+                                alias: None,
                                 annotated: Schema::Data(Data::AnyOf(vec![
                                     Annotated {
                                         title: Some("Some".to_string()),
                                         description: Some("An optional value.".to_string()),
+                                        alias: None,
                                         annotated: Constructor {
                                             index: 0,
                                             fields: vec![Declaration::Referenced(generic).into()],
@@ -377,6 +397,7 @@ impl Annotated<Schema> {
                                     Annotated {
                                         title: Some("None".to_string()),
                                         description: Some("Nothing.".to_string()),
+                                        alias: None,
                                         annotated: Constructor {
                                             index: 1,
                                             fields: vec![],
@@ -453,6 +474,7 @@ impl Annotated<Schema> {
                 Ok(Annotated {
                     title: title.or(Some(data_type.name.clone())),
                     description: data_type.doc.clone().map(|s| s.trim().to_string()),
+                    alias: None,
                     annotated,
                 })
             }),
@@ -470,6 +492,7 @@ impl Annotated<Schema> {
                     Ok(Annotated {
                         title: title.or(Some("Pair".to_owned())),
                         description: None,
+                        alias: None,
                         annotated: Schema::Pair(left, right),
                     })
                 })
@@ -489,6 +512,7 @@ impl Annotated<Schema> {
                     Ok(Annotated {
                         title: title.or(Some("Tuple".to_owned())),
                         description: None,
+                        alias: None,
                         annotated: Schema::Data(Data::List(Items::Many(elems))),
                     })
                 })
@@ -522,6 +546,30 @@ impl Annotated<Schema> {
 
             Type::Fn { .. } => Err(Error::new(ErrorContext::UnexpectedFunction, type_info)),
         }
+        .inspect(|reference| {
+            let alias_target = type_info.clone().set_alias(None);
+            let alias = type_info
+                .alias()
+                .map(|_| Reference::from_type(alias_target.as_ref(), type_parameters));
+
+            let alias_is_named_type = matches!(
+                alias_target.as_ref(),
+                Type::App { module, .. } if !module.is_empty()
+            );
+
+            let should_attach_alias = alias
+                .as_ref()
+                .is_some_and(|alias| {
+                    alias != reference
+                        && (definitions.try_lookup(alias).is_some() || alias_is_named_type)
+                });
+
+            if should_attach_alias
+                && let Some(schema) = definitions.get_mut(reference)
+            {
+                schema.alias = alias;
+            }
+        })
     }
 }
 
@@ -565,6 +613,7 @@ impl Data {
                 fields.push(Annotated {
                     title: field.label.clone(),
                     description: field.doc.clone().map(|s| s.trim().to_string()),
+                    alias: None,
                     annotated: Declaration::Referenced(reference),
                 });
             }
@@ -589,6 +638,7 @@ impl Data {
             let variant = Annotated {
                 title: Some(constructor.name.clone()),
                 description: constructor.doc.clone().map(|s| s.trim().to_string()),
+                alias: None,
                 annotated: Constructor { index, fields },
             };
 
@@ -1350,6 +1400,7 @@ pub mod tests {
         let schema = Annotated {
             title: Some("foo".to_string()),
             description: None,
+            alias: None,
             annotated: Schema::Integer,
         };
         assert_json(
@@ -1366,6 +1417,7 @@ pub mod tests {
         let schema = Annotated {
             title: Some("foo".to_string()),
             description: Some("Lorem Ipsum".to_string()),
+            alias: None,
             annotated: Schema::String,
         };
         assert_json(
