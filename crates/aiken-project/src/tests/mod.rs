@@ -28,6 +28,8 @@ use std::{
 
 mod gen_uplc;
 
+mod compile_time_exponential_1377;
+
 // TODO: Possible refactor this out of the module and have it used by `Project`. The idea would
 // be to make this struct below the actual project, and wrap it in another metadata struct
 // which contains all the config and I/O stuff regarding the project.
