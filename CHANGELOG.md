@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken**: Add `verify generate` with environment-bound UAL bundles, stale checking-file cleanup, and write-free `--no-environment` and `--dry-run` modes without changing the root blueprint. @Riley-Kilgore
 - **aiken-project**: Lower onchain annotations into in-memory UAL bundles with export-identical function code, derived interfaces, complete purpose premises, universal validator contexts and self-validated document bindings. @Riley-Kilgore
 - **aiken-project**: Emit opt-in UAL compiled-interface blueprints with one entry per validator, all six V3 invocations, preserved parameter encodings and recursive definitions, and recomputed script hashes without changing `aiken build` output. @Riley-Kilgore
 - **aiken-project**: Validate PREDICATE and PROPERTY annotations during check and build, resolving onchain scopes and fragment dependencies with source diagnostics, collision checks, and annotation-aware unused-import warnings. @Riley-Kilgore

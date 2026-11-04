@@ -85,6 +85,12 @@ enum AddModuleBy {
     Path(PathBuf),
 }
 
+#[derive(Clone, Copy)]
+enum DependencyMode {
+    Download,
+    ReadOnly,
+}
+
 pub struct Project<T>
 where
     T: EventListener,
@@ -250,7 +256,13 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, Tracing::silent(), None, false)?;
+        self.type_check(
+            &mut modules,
+            Tracing::silent(),
+            None,
+            false,
+            DependencyMode::Download,
+        )?;
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
@@ -397,6 +409,28 @@ where
     }
 
     pub fn compile(&mut self, options: Options) -> Result<(), Vec<Error>> {
+        self.compile_with_dependencies(options, DependencyMode::Download)
+    }
+
+    /// Type-check using only an existing dependency installation, without writing
+    /// build artifacts, lockfiles, or caches. Run `aiken build` first when
+    /// dependencies are missing or stale. Only `CodeGenMode::NoOp` is accepted.
+    pub fn compile_read_only(&mut self, options: Options) -> Result<(), Vec<Error>> {
+        if !matches!(options.code_gen_mode, CodeGenMode::NoOp) {
+            return Err(vec![Error::from(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Read-only compilation requires CodeGenMode::NoOp.",
+            ))]);
+        }
+
+        self.compile_with_dependencies(options, DependencyMode::ReadOnly)
+    }
+
+    fn compile_with_dependencies(
+        &mut self,
+        options: Options,
+        dependency_mode: DependencyMode,
+    ) -> Result<(), Vec<Error>> {
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
@@ -412,7 +446,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, options.tracing, env, true)?;
+        self.type_check(&mut modules, options.tracing, env, true, dependency_mode)?;
 
         self.annotation_model().map_err(|errors| {
             errors
@@ -721,8 +755,17 @@ where
         Ok(serde_json::from_reader(BufReader::new(blueprint))?)
     }
 
-    fn with_dependencies(&mut self, parsed_packages: &mut ParsedModules) -> Result<(), Vec<Error>> {
-        let manifest = deps::download(&self.event_listener, &self.root, &self.config)?;
+    fn with_dependencies(
+        &mut self,
+        parsed_packages: &mut ParsedModules,
+        dependency_mode: DependencyMode,
+    ) -> Result<(), Vec<Error>> {
+        let manifest = match dependency_mode {
+            DependencyMode::Download => {
+                deps::download(&self.event_listener, &self.root, &self.config)?
+            }
+            DependencyMode::ReadOnly => deps::load_read_only(&self.root, &self.config)?,
+        };
 
         for package in manifest.packages {
             let lib = self.root.join(paths::build_deps_package(&package.name));
@@ -926,10 +969,11 @@ where
         tracing: Tracing,
         env: Option<&str>,
         validate_module_name: bool,
+        dependency_mode: DependencyMode,
     ) -> Result<(), Vec<Error>> {
         let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
-        self.with_dependencies(modules)?;
+        self.with_dependencies(modules, dependency_mode)?;
 
         modules.extends_glossary(&mut self.glossary);
 
@@ -1408,5 +1452,49 @@ mod assurance_integration_tests {
         assert_eq!(model.fragments.len(), 2);
         assert_eq!(model.fragments["«example»"].imports, ["proofs"]);
         assert!(fixture.project.warnings().is_empty());
+    }
+
+    #[test]
+    fn read_only_compiles_fresh_project_without_artifacts() {
+        let mut fixture = Fixture::new("pub fn identity(value: Int) -> Int { value }");
+        let snapshot = |root: &Path| {
+            ["", "lib", "aiken.toml", "lib/example.ak"].map(|relative| {
+                let path = root.join(relative);
+                let metadata = fs::metadata(&path).unwrap();
+                (
+                    metadata.modified().unwrap(),
+                    metadata.is_file().then(|| fs::read(path).unwrap()),
+                )
+            })
+        };
+        let before = snapshot(&fixture.project.root);
+
+        fixture
+            .project
+            .compile_read_only(Options::default())
+            .unwrap();
+
+        assert!(fixture.project.checked_modules.get("example").is_some());
+        assert!(fixture.project.annotation_model().is_ok());
+        assert_eq!(snapshot(&fixture.project.root), before);
+        assert_eq!(fs::read_dir(&fixture.project.root).unwrap().count(), 2);
+        assert!(!fixture.project.root.join("build").exists());
+        assert!(!fixture.project.root.join("aiken.lock").exists());
+    }
+
+    #[test]
+    fn read_only_rejects_codegen_before_creating_artifacts() {
+        let mut fixture = Fixture::new("pub fn identity(value: Int) -> Int { value }");
+        let errors = fixture
+            .project
+            .compile_read_only(Options {
+                code_gen_mode: CodeGenMode::Build(false),
+                ..Options::default()
+            })
+            .unwrap_err();
+
+        assert!(errors[0].to_string().contains("CodeGenMode::NoOp"));
+        assert_eq!(fs::read_dir(&fixture.project.root).unwrap().count(), 2);
+        assert!(!fixture.project.root.join("plutus.json").exists());
     }
 }

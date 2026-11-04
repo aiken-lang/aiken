@@ -1,0 +1,5 @@
+name = "fixtures/verify_generate"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "Assurance CLI integration fixture"

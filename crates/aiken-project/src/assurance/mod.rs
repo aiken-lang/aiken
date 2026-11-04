@@ -4,6 +4,7 @@
 
 pub mod bundle;
 mod function;
+pub mod generate;
 pub(crate) mod lean;
 mod parser;
 mod purpose;
