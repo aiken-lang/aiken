@@ -1,6 +1,6 @@
 //! Opt-in compiled-interface emission; ordinary blueprint serialization is unchanged.
 
-mod graph;
+pub(crate) mod graph;
 #[cfg(test)]
 mod tests;
 

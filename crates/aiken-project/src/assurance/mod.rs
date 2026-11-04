@@ -1,10 +1,12 @@
-//! Lean-free validation of source annotations after Aiken type checking.
+//! Lean-free annotation validation and in-memory UAL bundle generation.
 //!
-//! This model contains source text and identities, not compiled targets or lowered
-//! propositions. Lean elaboration and its accepted syntax profile belong to the consumer.
+//! Lean elaboration and its accepted syntax profile belong to the consumer.
 
+pub mod bundle;
+mod function;
 pub(crate) mod lean;
 mod parser;
+mod purpose;
 
 #[cfg(test)]
 mod tests;
@@ -99,6 +101,8 @@ pub enum ErrorKind {
     UnknownHandler,
     DuplicateProperty,
     HelperCollision,
+    MixedExecutionSettings,
+    PurposeLowering,
 }
 
 /// An insertion template, not an automatically applicable execution-policy choice.

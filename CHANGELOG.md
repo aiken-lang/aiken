@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken-project**: Lower onchain annotations into in-memory UAL bundles with export-identical function code, derived interfaces, complete purpose premises, universal validator contexts and self-validated document bindings. @Riley-Kilgore
 - **aiken-project**: Emit opt-in UAL compiled-interface blueprints with one entry per validator, all six V3 invocations, preserved parameter encodings and recursive definitions, and recomputed script hashes without changing `aiken build` output. @Riley-Kilgore
 - **aiken-project**: Validate PREDICATE and PROPERTY annotations during check and build, resolving onchain scopes and fragment dependencies with source diagnostics, collision checks, and annotation-aware unused-import warnings. @Riley-Kilgore
 - **aiken-lang**: Add `@onchain(steps: n, semantics: c|e)` on functions and validators, retaining normalized verification metadata through type checking and formatting while rejecting invalid settings and non-exportable function interfaces. @Riley-Kilgore

@@ -43,7 +43,7 @@ pub(super) fn helpers(body: &str, offset: usize) -> Vec<(String, Span)> {
                 }
                 declaration = matches!(name, "def" | "abbrev");
             }
-            Token::Other => declaration = false,
+            Token::Other(_) => declaration = false,
         }
     }
     result
@@ -262,19 +262,19 @@ impl<'a> Iterator for Segments<'a> {
     }
 }
 
-enum Token {
+pub(super) enum Token {
     Name(Span),
-    Other,
+    Other(Span),
 }
 
 /// Deliberately lexical: no Lean dependency, command elaboration, or body validation.
-struct Lexer<'a> {
+pub(super) struct Lexer<'a> {
     source: &'a str,
     position: usize,
 }
 
 impl<'a> Lexer<'a> {
-    fn new(source: &'a str) -> Self {
+    pub(super) fn new(source: &'a str) -> Self {
         Self {
             source,
             position: 0,
@@ -399,11 +399,17 @@ impl Iterator for Lexer<'_> {
         let start = self.position;
         let char = self.remaining().chars().next()?;
         if self.raw_string() {
-            return Some(Token::Other);
+            return Some(Token::Other(Span {
+                start,
+                end: self.position,
+            }));
         }
         if matches!(char, '"' | '\'') {
             self.quoted(char);
-            return Some(Token::Other);
+            return Some(Token::Other(Span {
+                start,
+                end: self.position,
+            }));
         }
         if char == '`' {
             self.advance();
@@ -411,7 +417,10 @@ impl Iterator for Lexer<'_> {
                 self.advance();
             }
             self.name();
-            return Some(Token::Other);
+            return Some(Token::Other(Span {
+                start,
+                end: self.position,
+            }));
         }
         if self.name() {
             return Some(Token::Name(Span {
@@ -420,7 +429,10 @@ impl Iterator for Lexer<'_> {
             }));
         }
         self.advance();
-        Some(Token::Other)
+        Some(Token::Other(Span {
+            start,
+            end: self.position,
+        }))
     }
 }
 

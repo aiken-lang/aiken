@@ -20,7 +20,7 @@ pub enum Error {
 const SINGLE_SCHEMAS: &[&str] = &["keys", "values", "left", "right", "not"];
 const SCHEMA_ARRAYS: &[&str] = &["fields", "oneOf", "anyOf", "allOf"];
 
-pub(super) fn validate(document: &Value) -> Result<(), Error> {
+pub(crate) fn validate(document: &Value) -> Result<(), Error> {
     let mut pending = Vec::new();
     if let Some(definitions) = document.get("definitions").and_then(Value::as_object) {
         for (name, schema) in definitions {
@@ -46,6 +46,19 @@ pub(super) fn validate(document: &Value) -> Result<(), Error> {
                         &mut pending,
                     );
                 }
+            }
+        }
+    }
+    if let Some(functions) = document.get("functions").and_then(Value::as_object) {
+        for (name, function) in functions {
+            let path = format!("/functions/{}", escape(name));
+            if let Some(arguments) = function.get("arguments").and_then(Value::as_array) {
+                for (index, schema) in arguments.iter().enumerate() {
+                    pending.push((format!("{path}/arguments/{index}"), schema));
+                }
+            }
+            if let Some(result) = function.get("result") {
+                pending.push((format!("{path}/result"), result));
             }
         }
     }
