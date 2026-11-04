@@ -155,14 +155,14 @@ fn extract_zip<R: Read + io::Seek, P: AsRef<Path>>(
 
         let filepath = file
             .enclosed_name()
-            .ok_or(ZipError::InvalidArchive("Invalid file path"))?
+            .ok_or(ZipError::InvalidArchive("Invalid file path".into()))?
             .iter()
             .skip(1)
             .collect::<PathBuf>();
 
         let outpath = directory.as_ref().join(filepath);
 
-        if file.name().ends_with('/') {
+        if file.name()?.ends_with('/') {
             fs::create_dir_all(&outpath)?;
         } else {
             if let Some(p) = outpath.parent()
