@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken-lang**: Add `@onchain(steps: n, semantics: c|e)` on functions and validators, retaining normalized verification metadata through type checking and formatting while rejecting invalid settings and non-exportable function interfaces. @Riley-Kilgore
 - **aiken-lang**: Lex opaque `//@ … @//` annotation regions with byte spans and diagnostics for nesting or missing closers, and preserve their bytes through formatting and LSP edits. @Riley-Kilgore
 - **aiken-ual**: Add standalone UAL document and evidence models, canonical JSON serialization, pinned offline schema validation, SHA-256 digests and cross-document binding checks without Lean or Z3 dependencies. @Riley-Kilgore
 - **uplc**: Make `TxInfo::script_context_data` public, so that callers evaluating several redeemers of one transaction can convert the transaction info to `Data` once and share it between every script context. @colll78

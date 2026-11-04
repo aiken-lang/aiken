@@ -74,6 +74,8 @@ pub struct Module<Info, Definitions> {
     pub docs: Vec<String>,
     pub type_info: Info,
     pub definitions: Vec<Definitions>,
+    #[serde(default)]
+    pub definition_decorators: Vec<DefinitionDecorators>,
     pub lines: LineNumbers,
     pub kind: ModuleKind,
 }
@@ -439,16 +441,38 @@ impl TypedDataType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DefinitionDecorators {
+    pub location: Span,
+    pub decorators: Vec<Decorator>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Decorator {
     pub kind: DecoratorKind,
     pub location: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DecoratorKind {
     Tag { value: usize, base: Base },
     List,
+    Onchain { arguments: Vec<OnchainArgument> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct OnchainArgument {
+    pub name: String,
+    pub value: OnchainValue,
+    pub location: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum OnchainValue {
+    Int { value: String, base: Base },
+    Name { name: String },
+    String { value: String },
+    ByteString { value: String },
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

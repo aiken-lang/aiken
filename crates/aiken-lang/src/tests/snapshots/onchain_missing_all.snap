@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/check.rs
+assertion_line: 6064
+description: "@onchain()\nfn foo(value: Int) -> Int { value }"
+expression: diagnostic
+---
+decorators::validation
+I found an incorrect usage of decorators.
+
+@onchain requires a positive 'steps' setting.

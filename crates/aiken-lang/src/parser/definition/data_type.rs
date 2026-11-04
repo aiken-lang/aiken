@@ -14,6 +14,38 @@ pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseErro
             Ok(value) => ast::DecoratorKind::Tag { value, base },
         },
     );
+    let integer = just(Token::Minus)
+        .or(just(Token::NewLineMinus))
+        .or_not()
+        .then(select! { Token::Int { value, base } => (value, base) })
+        .map(|(negative, (value, base))| ast::OnchainValue::Int {
+            value: if negative.is_some() {
+                format!("-{value}")
+            } else {
+                value
+            },
+            base,
+        });
+    let value = choice((
+        integer,
+        select! {
+            Token::Name { name } => ast::OnchainValue::Name { name },
+            Token::UpName { name } => ast::OnchainValue::Name { name },
+            Token::String { value } => ast::OnchainValue::String { value },
+            Token::ByteString { value } => ast::OnchainValue::ByteString { value },
+        },
+    ));
+    let arguments = select! { Token::Name { name } => name, Token::UpName { name } => name }
+        .then_ignore(just(Token::Colon))
+        .then(value)
+        .map_with_span(|(name, value), location| ast::OnchainArgument {
+            name,
+            value,
+            location,
+        })
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .delimited_by(just(Token::LeftParen), just(Token::RightParen));
 
     just(Token::At)
         .ignore_then(choice((
@@ -21,6 +53,11 @@ pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseErro
                 tag_value.delimited_by(just(Token::LeftParen), just(Token::RightParen)),
             ),
             select! { Token::Name { name } if name == "list" => ast::DecoratorKind::List },
+            select! { Token::Name { name } if name == "onchain" => name }
+                .ignore_then(arguments.or_not())
+                .map(|arguments| ast::DecoratorKind::Onchain {
+                    arguments: arguments.unwrap_or_default(),
+                }),
         )))
         .map_with_span(|kind, span| ast::Decorator {
             kind,

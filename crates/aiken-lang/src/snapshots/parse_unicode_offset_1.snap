@@ -65,6 +65,7 @@ Module {
             },
         ),
     ],
+    definition_decorators: [],
     lines: LineNumbers {
         line_starts: [
             0,

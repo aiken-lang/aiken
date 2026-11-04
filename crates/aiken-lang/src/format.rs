@@ -36,13 +36,20 @@ pub fn pretty(writer: &mut String, module: UntypedModule, extra: ModuleExtra, sr
         doc_comments: Vec::new(),
         empty_lines: &extra.empty_lines,
         module_comments: Vec::new(),
-        verbatim_comments: !extra.assurance_comments.is_empty(),
+        verbatim_comments: !extra.assurance_comments.is_empty()
+            || !module.definition_decorators.is_empty()
+            || module.definitions.iter().any(|definition| {
+                matches!(definition, Definition::DataType(data_type)
+                    if data_type.decorators.iter()
+                        .chain(data_type.constructors.iter().flat_map(|constructor| &constructor.decorators))
+                        .any(|decorator| matches!(decorator.kind, crate::ast::DecoratorKind::Onchain { .. })))
+            }),
         source: src,
     };
 
     if intermediate.verbatim_comments {
-        // Keep all trivia in one source-ordered stream around opaque regions.
-        // Modules without regions retain the existing comment formatting path.
+        // Keep all trivia source-ordered around opaque regions and decorators.
+        // Other modules retain the existing comment formatting path.
         intermediate.comments = [
             (&extra.comments, 2),
             (&extra.doc_comments, 3),
@@ -335,7 +342,35 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn module<'a>(&mut self, module: &'a UntypedModule) -> Document<'a> {
-        let defs = self.definitions(&module.definitions);
+        let defs = if module.definition_decorators.is_empty() {
+            self.definitions(&module.definitions)
+        } else {
+            let mut metadata = module.definition_decorators.iter().peekable();
+            join(
+                module.definitions.iter().map(|definition| {
+                    let decorators = metadata
+                        .next_if(|entry| entry.location == definition.location())
+                        .map(|entry| entry.decorators.as_slice())
+                        .unwrap_or_default();
+                    let start = decorators
+                        .first()
+                        .map(|decorator| decorator.location.start)
+                        .unwrap_or_else(|| definition.location().start);
+                    let comments = self.pop_comments(start);
+                    let prefix = self.decorator(decorators);
+                    let declaration_comments = self.pop_comments(definition.location().start);
+                    let declaration = self.documented_definition(definition);
+                    let declaration = commented(declaration, declaration_comments);
+                    commented(
+                        prefix
+                            .append(if decorators.is_empty() { nil() } else { line() })
+                            .append(declaration),
+                        comments,
+                    )
+                }),
+                lines(2),
+            )
+        };
 
         // Now that `defs` has been collected, only freestanding comments (//)
         // and doc comments (///) remain. Freestanding comments aren't associated
@@ -2326,6 +2361,11 @@ impl<'comments> Formatter<'comments> {
     pub fn decorator<'a>(&mut self, decorators: &'a [Decorator]) -> Document<'a> {
         let document = join(
             decorators.iter().map(|d| {
+                let comments = self.pop_comments(if self.verbatim_comments {
+                    d.location.start
+                } else {
+                    0
+                });
                 let document = match &d.kind {
                     crate::ast::DecoratorKind::Tag { value, base } => {
                         docvec![
@@ -2338,9 +2378,32 @@ impl<'comments> Formatter<'comments> {
                         ]
                     }
                     crate::ast::DecoratorKind::List => "@list".to_doc(),
+                    crate::ast::DecoratorKind::Onchain { arguments } => "@onchain"
+                        .to_doc()
+                        .append(wrap_args(arguments.iter().map(|argument| {
+                            let comments = self.pop_comments(argument.location.start);
+                            let value = match &argument.value {
+                                crate::ast::OnchainValue::Int { value, base } => {
+                                    self.int(value, base)
+                                }
+                                crate::ast::OnchainValue::Name { name } => name.to_doc(),
+                                crate::ast::OnchainValue::String { value } => self.string(value),
+                                crate::ast::OnchainValue::ByteString { value } => {
+                                    Document::String(escape(value)).surround("\"", "\"")
+                                }
+                            };
+                            (
+                                commented(
+                                    argument.name.to_doc().append(": ").append(value),
+                                    comments,
+                                ),
+                                false,
+                            )
+                        })))
+                        .group(),
                 };
                 if self.verbatim_comments {
-                    commented(document, self.pop_comments(d.location.start))
+                    commented(document, comments)
                 } else {
                     document
                 }
