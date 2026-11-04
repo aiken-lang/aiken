@@ -78,6 +78,28 @@ impl ParsedModule {
                 error: error.into(),
             })?;
 
+        if !self.extra.assurance_comments.is_empty() {
+            warnings.retain(|warning| {
+                let aiken_lang::tipo::error::Warning::UnusedImportedModule { name, .. } = warning
+                else {
+                    return true;
+                };
+                if crate::assurance::references_namespace(&self.code, &self.extra, name) {
+                    return false;
+                }
+                !ast.definitions().any(|definition| {
+                    let Definition::Use(import) = definition else {
+                        return false;
+                    };
+                    if import.as_name.as_ref().or_else(|| import.module.last()) != Some(name) {
+                        return false;
+                    }
+                    let namespace = crate::assurance::lean::namespace(&import.module.join("/"));
+                    crate::assurance::references_namespace(&self.code, &self.extra, &namespace)
+                })
+            });
+        }
+
         let warnings = warnings
             .into_iter()
             .map(|w| Warning::from_type_warning(w, self.path.clone(), self.code.clone()))
@@ -649,5 +671,122 @@ impl Deref for CheckedModules {
 impl DerefMut for CheckedModules {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+#[cfg(test)]
+mod assurance_tests {
+    use super::*;
+    use crate::tests::TestProject;
+
+    fn infer(project: &mut TestProject, name: &str, source: &str) -> (CheckedModule, Vec<Warning>) {
+        let (mut ast, extra) = aiken_lang::parser::module(source, ModuleKind::Lib).unwrap();
+        ast.name = name.to_string();
+        ParsedModule {
+            path: PathBuf::from(format!("{name}.ak")),
+            name: name.to_string(),
+            code: source.to_string(),
+            kind: ModuleKind::Lib,
+            package: project.package.to_string(),
+            ast,
+            extra,
+        }
+        .infer(
+            &project.id_gen,
+            &project.package.to_string(),
+            Tracing::silent(),
+            None,
+            true,
+            &mut project.module_sources,
+            &mut project.module_types,
+            &mut project.functions,
+            &mut project.constants,
+            &mut project.data_types,
+        )
+        .unwrap()
+    }
+
+    fn module_warning(warning: &Warning) -> bool {
+        matches!(
+            warning,
+            Warning::Type {
+                warning: aiken_lang::tipo::error::Warning::UnusedImportedModule { .. },
+                ..
+            }
+        )
+    }
+
+    #[test]
+    fn annotation_only_modules_preserve_imports_and_aliases() {
+        let mut project = TestProject::new();
+        let (dependency, warnings) = infer(
+            &mut project,
+            "proofs/helpers",
+            "//@ PREDICATE def allowed : Prop := True @//",
+        );
+        assert!(dependency.ast.definitions.is_empty());
+        assert!(warnings.is_empty());
+        let (checked, warnings) = infer(
+            &mut project,
+            "consumer",
+            "use proofs/helpers as predicates\n//@ PREDICATE def valid : Prop := predicates.allowed @//",
+        );
+        assert!(!warnings.iter().any(module_warning));
+        let Definition::Use(import) = &checked.ast.definitions[0] else {
+            panic!("typed modules must retain their imports");
+        };
+        assert_eq!(import.module, ["proofs", "helpers"]);
+        assert_eq!(import.as_name.as_deref(), Some("predicates"));
+    }
+
+    #[test]
+    fn namespace_references_suppress_only_the_matching_import_warning() {
+        for body in [
+            "predicates.allowed",
+            "proofs.helpers.allowed",
+            "(predicates.allowed)",
+        ] {
+            let mut project = TestProject::new();
+            infer(&mut project, "proofs/helpers", "");
+            let (_, warnings) = infer(
+                &mut project,
+                "consumer",
+                &format!(
+                    "use proofs/helpers as predicates\n//@ PREDICATE def valid : Prop := {body} @//\nfn unused() {{ True }}"
+                ),
+            );
+            assert!(!warnings.iter().any(module_warning), "{body}");
+            assert!(warnings.iter().any(|warning| matches!(
+                warning,
+                Warning::Type {
+                    warning: aiken_lang::tipo::error::Warning::UnusedPrivateFunction { .. },
+                    ..
+                }
+            )));
+        }
+    }
+
+    #[test]
+    fn non_references_keep_unused_import_warnings() {
+        for annotation in [
+            "",
+            "//@ PREDICATE def valid : Prop := True @//",
+            "//@ PREDICATE def valid : Prop := otherpredicates.allowed @//",
+            "//@ PREDICATE def valid : Prop := predicates_extra.allowed @//",
+            "//@ PREDICATE def valid : Prop := outer.predicates.allowed @//",
+            "//@ PREDICATE def valid : String := \"predicates.allowed\" @//",
+            "//@ PREDICATE def valid : Prop := True -- predicates.allowed\n @//",
+            "//@ PREDICATE def valid : Prop := /- predicates.allowed -/ True @//",
+            "//@ PROPERTY valid for target \"predicates.allowed\" True @//",
+        ] {
+            let mut project = TestProject::new();
+            infer(&mut project, "proofs/helpers", "");
+            let (_, warnings) = infer(
+                &mut project,
+                "consumer",
+                &format!("use proofs/helpers as predicates\n{annotation}"),
+            );
+            assert!(warnings.iter().any(module_warning), "{annotation}");
+        }
     }
 }

@@ -1,3 +1,4 @@
+pub mod assurance;
 pub mod blueprint;
 pub mod config;
 pub mod deps;
@@ -182,6 +183,11 @@ where
 
     pub fn modules(&self) -> Vec<CheckedModule> {
         self.checked_modules.values().cloned().collect()
+    }
+
+    /// Resolve assurance annotations from the currently checked module graph.
+    pub fn annotation_model(&self) -> Result<assurance::AnnotationModel, Vec<assurance::Error>> {
+        assurance::validate(self.checked_modules.values())
     }
 
     pub fn importable_modules(&self) -> Vec<String> {
@@ -407,6 +413,13 @@ where
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
         self.type_check(&mut modules, options.tracing, env, true)?;
+
+        self.annotation_model().map_err(|errors| {
+            errors
+                .into_iter()
+                .map(|error| Error::Assurance(Box::new(error)))
+                .collect::<Vec<_>>()
+        })?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -1303,4 +1316,97 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
             .to_str()
             .expect("is_aiken_path(): to_str"),
     )
+}
+
+#[cfg(test)]
+mod assurance_integration_tests {
+    use super::*;
+    use crate::error::GetSource;
+    use miette::Diagnostic;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct NoopListener;
+    impl EventListener for NoopListener {}
+
+    struct Fixture {
+        project: Project<NoopListener>,
+    }
+
+    impl Fixture {
+        fn new(source: &str) -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let root = std::env::temp_dir().join(format!(
+                "aiken-assurance-integration-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(root.join("lib")).unwrap();
+            let config: ProjectConfig =
+                toml::from_str("name = \"test/assurance\"\nversion = \"0.0.0\"\nplutus = \"v3\"")
+                    .unwrap();
+            config.save(&root).unwrap();
+            std::fs::write(root.join("lib/example.ak"), source).unwrap();
+            Self {
+                project: Project::new_with_config(config, root, NoopListener),
+            }
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.project.root);
+        }
+    }
+
+    #[test]
+    fn compile_surfaces_assurance_diagnostics_before_check_or_build() {
+        for code_gen_mode in [CodeGenMode::NoOp, CodeGenMode::Build(false)] {
+            let source = "//@ UNKNOWN invalid @//";
+            let mut fixture = Fixture::new(source);
+            let errors = fixture
+                .project
+                .compile(Options {
+                    code_gen_mode,
+                    ..Options::default()
+                })
+                .unwrap_err();
+            let error = errors
+                .iter()
+                .find(|error| matches!(error, Error::Assurance(_)))
+                .expect("annotation errors must reach the normal compiler diagnostics");
+            assert_eq!(error.src().as_deref(), Some(source));
+            assert_eq!(
+                error.path(),
+                Some(fixture.project.root.join("lib/example.ak"))
+            );
+            assert!(error.source_code().is_some());
+            assert!(error.labels().unwrap().next().is_some());
+            assert!(fixture.project.annotation_model().is_err());
+            assert!(!fixture.project.root.join("plutus.json").exists());
+        }
+    }
+
+    #[test]
+    fn no_annotation_modules_compile_unchanged() {
+        let mut fixture = Fixture::new("pub fn identity(value: Int) -> Int { value }");
+        fixture.project.compile(Options::default()).unwrap();
+        assert!(fixture.project.annotation_model().is_ok());
+        assert!(fixture.project.warnings().is_empty());
+    }
+
+    #[test]
+    fn annotation_only_module_graph_compiles_together() {
+        let mut fixture =
+            Fixture::new("use proofs\n//@ PREDICATE def valid : Prop := proofs.allowed @//");
+        std::fs::write(
+            fixture.project.root.join("lib/proofs.ak"),
+            "//@ PREDICATE def allowed : Prop := True @//",
+        )
+        .unwrap();
+        fixture.project.compile(Options::default()).unwrap();
+        let model = fixture.project.annotation_model().unwrap();
+        assert_eq!(model.fragments.len(), 2);
+        assert_eq!(model.fragments["«example»"].imports, ["proofs"]);
+        assert!(fixture.project.warnings().is_empty());
+    }
 }
