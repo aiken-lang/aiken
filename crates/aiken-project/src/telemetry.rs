@@ -11,9 +11,14 @@ use std::{
 };
 pub use terminal::Terminal;
 use uplc::machine::cost_model::ExBudget;
+pub use verification::{
+    VerificationProperty, VerificationReport, VerificationTrust, VerificationVerdict,
+    verification_json_schema,
+};
 
 mod json;
 mod terminal;
+mod verification;
 
 pub trait EventListener {
     fn handle_event(&self, _event: Event) {}
@@ -49,6 +54,12 @@ pub enum Event {
     },
     RunningTests,
     RunningBenchmarks,
+    StartingVerification {
+        trust: VerificationTrust,
+    },
+    FinishedVerification {
+        report: VerificationReport,
+    },
     FinishedTests {
         seed: u32,
         coverage_mode: CoverageMode,

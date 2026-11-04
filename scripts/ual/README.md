@@ -96,6 +96,60 @@ Generation binds the manifest's exact bytes. Keep the manifest and generated
 UAL inputs outside the clean sibling source trees; the run sidecar is separate
 from the environment artifact consumed by generation.
 
+## Check every property with UAL-12
+
+After capturing the environment above, run from the Aiken project:
+
+```sh
+aiken verify check --environment environment.json --timeout 300
+aiken verify check --show-json-schema
+```
+
+`--environment` defaults to `environment.json` in the invocation directory.
+`--timeout` is a positive wall-clock limit in seconds for the Lean invocation;
+on Unix a timeout terminates the dedicated Lake/Lean/Z3 process group. Solver
+identity inspection is also bounded. `--env`, `--trace-level` and
+`--trace-filter` have the same meaning as for `verify generate`.
+
+The command generates the bundle, writes `assurance/Check.lean` with both
+environment-capture imports, and invokes `lake env lean` in the configured
+workspace. The pinned consumer has no JSON verdict-report option: this revision
+uses its exact per-property messages and final summary, not the Python runner's
+human-readable output. A consumer pin update must select the corresponding
+verdict protocol deliberately; unsupported pins fail closed.
+
+TTY output includes a property table and counterexample logs. Non-TTY stdout is
+a structured JSON report; compiler diagnostics and the raw consumer log go to
+stderr. Workspace invocations emit one report per member and fail if any member
+fails. `--show-json-schema` works without a project or consumer installation.
+Both outputs state the SMT/no-reconstructed-Lean-proof trust boundary, actual
+Z3 path and SHA-256, installed consumer/ledger/Blaster revisions, and that results
+are relative to each checking context's CEK step budget.
+
+Only an all-verified run with a consistent summary, successful Lean exit and
+successful evidence publication exits zero. Missing, duplicate, unknown or
+malformed verdicts, mismatched summaries, timeouts and consumer errors fail.
+The full consumer log remains in `assurance/verification.log`. A successful run
+also writes `run-report.json` and `verification-artifact.zip` containing the
+exact inputs, environment, driver, log and trust report. It publishes
+`verified-assurance.json` last, with `smt-check` evidence bound to each
+`checkingContextHash` and the scoped function/script hashes. Old evidence and
+run artifacts are removed before generation, so a failed rerun cannot leave a
+stale success marker. Root `plutus.json` is untouched.
+
+The pinned evidence schema requires one `scriptHash` for a validator-scoped
+property, and the consumer checks it against every scoped validator. A property
+spanning distinct validator hashes therefore cannot receive valid evidence at
+this pin: publication fails explicitly. Split such claims into separate
+properties or wait for an upstream evidence format that can bind multiple
+validator hashes; Aiken does not weaken the schema or invent a binding.
+
+A helper's successful property does not verify validators that use it. The
+report warns about uncovered validators using scoped helpers, including
+transitive calls and imported aliases. Adding a property scoped to the validator
+removes that advisory warning; it does not enlarge another property's claim.
+
+
 ## Prerequisites and pins
 
 - Bash, Python 3.11+, Git, and access to the approved public GitHub repositories.

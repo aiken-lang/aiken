@@ -210,7 +210,7 @@ fn is_checking_file(name: &str) -> bool {
 }
 
 /// Replace rather than truncate: existing symlinks/hard links cannot redirect writes.
-fn replace_file(path: &Path, bytes: &[u8]) -> miette::Result<()> {
+pub(super) fn replace_file(path: &Path, bytes: &[u8]) -> miette::Result<()> {
     let temporary = path.with_extension(format!("json.{}.tmp", std::process::id()));
     let mut file = fs::File::create_new(&temporary).into_diagnostic()?;
     let result = file.write_all(bytes).and_then(|()| {
@@ -226,7 +226,7 @@ fn replace_file(path: &Path, bytes: &[u8]) -> miette::Result<()> {
 }
 
 /// Convert UTC days since the Unix epoch using the Gregorian 400-year cycle.
-fn civil_date(days: u64) -> miette::Result<String> {
+pub(super) fn civil_date(days: u64) -> miette::Result<String> {
     // UAL dates have exactly four year digits.
     if days > 2_932_896 {
         return Err(miette::miette!(

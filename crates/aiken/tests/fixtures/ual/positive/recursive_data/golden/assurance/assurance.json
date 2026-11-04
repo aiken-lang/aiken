@@ -103,7 +103,7 @@
       },
       "statement": {
         "formal": {
-          "language": "lean",
+          "language": "ual",
           "source": "\n  ∀ (leaf : Int), fixtures__preserve_returns (Data.Constr 0 [Data.I leaf]) (Data.Constr 0 [Data.I leaf])\n"
         },
         "text": "Every well-formed leaf of the recursive tree is returned unchanged."

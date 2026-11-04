@@ -45,7 +45,7 @@ expression: snapshot(&bundle)
         "statement": {
           "text": "All non-spending invocations fail.",
           "formal": {
-            "language": "lean",
+            "language": "ual",
             "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((¬ (∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d))) → (\n    isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
           }
         },
@@ -61,7 +61,7 @@ expression: snapshot(&bundle)
         "statement": {
           "text": "A nonpositive minimum rejects spending.",
           "formal": {
-            "language": "lean",
+            "language": "ual",
             "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    minimum ≤ 0 → isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
           }
         },

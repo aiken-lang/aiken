@@ -98,6 +98,36 @@ impl ConsumerWorkspace {
         Ok(Self { directory })
     }
 
+    pub(super) fn lean_command(&self, driver: &Path) -> Command {
+        let mut command = self.lake_command();
+        command.args(["env", "lean"]).arg(driver);
+        command
+    }
+
+    pub(super) fn lake_command(&self) -> Command {
+        let mut command = Command::new("lake");
+        command.current_dir(&self.directory);
+        command
+    }
+
+    pub(super) fn verification_revisions(
+        &self,
+    ) -> miette::Result<(BTreeMap<String, String>, Vec<String>)> {
+        let run = self.inspect_revisions()?;
+        Ok((
+            run.revisions
+                .into_iter()
+                .map(|(name, revision)| {
+                    (
+                        name.to_owned(),
+                        revision.actual.unwrap_or_else(|| "unknown".to_owned()),
+                    )
+                })
+                .collect(),
+            run.warnings,
+        ))
+    }
+
     /// Capture through a temporary driver, validate before replacing the manifest,
     /// and retain pin warnings separately from the consumer's closed JSON format.
     pub fn capture_environment(&self, output: &Path) -> miette::Result<PathBuf> {
@@ -265,7 +295,7 @@ fn write_record(path: &Path, run: &EnvironmentRun<'_>) -> miette::Result<()> {
         .wrap_err_with(|| format!("cannot write environment run record {}", path.display()))
 }
 
-fn lean_path_literal(path: &Path) -> miette::Result<String> {
+pub(super) fn lean_path_literal(path: &Path) -> miette::Result<String> {
     let text = path
         .to_str()
         .ok_or_else(|| miette::miette!("Lean driver path is not UTF-8"))?;
@@ -291,10 +321,10 @@ fn lean_path_literal(path: &Path) -> miette::Result<String> {
     Ok(literal)
 }
 
-struct TemporaryDirectory(PathBuf);
+pub(super) struct TemporaryDirectory(pub(super) PathBuf);
 
 impl TemporaryDirectory {
-    fn new() -> miette::Result<Self> {
+    pub(super) fn new() -> miette::Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let builder = fs::DirBuilder::new();
         #[cfg(unix)]

@@ -340,7 +340,7 @@ pub fn lower(
             statement: ual::Statement {
                 text: property.description.clone(),
                 formal: Some(ual::FormalStatement {
-                    language: "lean".to_owned(),
+                    language: "ual".to_owned(),
                     source: propositions.remove(&property.id),
                     uri: None,
                     uses: (!property.uses.is_empty()).then(|| property.uses.clone()),

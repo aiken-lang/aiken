@@ -3,12 +3,14 @@
 //! Lean elaboration and its accepted syntax profile belong to the consumer.
 
 pub mod bundle;
+pub mod check;
 pub mod consumer;
 mod function;
 pub mod generate;
 pub(crate) mod lean;
 mod parser;
 mod purpose;
+mod scope;
 
 #[cfg(test)]
 mod tests;

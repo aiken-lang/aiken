@@ -102,7 +102,7 @@
       },
       "statement": {
         "formal": {
-          "language": "lean",
+          "language": "ual",
           "source": "\n  ∀ (old proposed : Int), larger old proposed → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n",
           "uses": [
             "fixtures"

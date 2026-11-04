@@ -97,6 +97,19 @@ fn snapshot(bundle: &Bundle) -> Value {
 }
 
 #[test]
+fn compiled_interface_properties_select_the_ual_profile() {
+    let bundle = bundle(FUNCTION);
+    let assurance = bundle.assurance();
+    for property in &assurance.properties {
+        let formal = property.statement.formal.as_ref().unwrap();
+        let language = &assurance.languages.as_ref().unwrap()[&formal.language];
+        // The pinned consumer rejects plain Lean for compiled-interface checking.
+        assert_eq!(language.name, "UAL");
+        assert_eq!(language.version, "1.0");
+    }
+}
+
+#[test]
 fn fixture_1_native_function_bundle() {
     insta::assert_json_snapshot!(snapshot(&bundle(FUNCTION)));
 }

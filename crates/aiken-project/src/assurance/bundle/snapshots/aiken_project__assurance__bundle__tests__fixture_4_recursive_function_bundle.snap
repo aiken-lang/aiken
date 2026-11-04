@@ -45,7 +45,7 @@ expression: snapshot(&bundle(RECURSIVE))
         "statement": {
           "text": "The recursive tree is returned unchanged.",
           "formal": {
-            "language": "lean",
+            "language": "ual",
             "source": "\n  ∀ (tree : Data), fixtures__preserve_returns tree tree\n"
           }
         },
