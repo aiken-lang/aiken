@@ -1,0 +1,234 @@
+---
+source: crates/aiken-project/src/blueprint/dialect/tests.rs
+expression: compiled
+---
+{
+  "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+  "preamble": {
+    "title": "test/project",
+    "description": "Aiken contracts for project 'test/project'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "test-compiler"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "id": "fixtures_contracts__recursive",
+      "title": "fixtures/contracts.recursive",
+      "redeemer": {
+        "oneOf": [
+          {
+            "title": "redeemer",
+            "schema": {
+              "$ref": "#/definitions/fixtures~1contracts~1LinkedList<Int>"
+            },
+            "purpose": "spend"
+          },
+          {
+            "schema": {},
+            "purpose": "mint"
+          },
+          {
+            "schema": {},
+            "purpose": "withdraw"
+          },
+          {
+            "schema": {},
+            "purpose": "publish"
+          },
+          {
+            "schema": {},
+            "purpose": "vote"
+          },
+          {
+            "schema": {},
+            "purpose": "propose"
+          }
+        ]
+      },
+      "datum": {
+        "oneOf": [
+          {
+            "title": "datum",
+            "schema": {
+              "$ref": "#/definitions/fixtures~1contracts~1Expr"
+            },
+            "purpose": "spend"
+          },
+          {
+            "schema": {},
+            "purpose": "mint"
+          },
+          {
+            "schema": {},
+            "purpose": "withdraw"
+          },
+          {
+            "schema": {},
+            "purpose": "publish"
+          },
+          {
+            "schema": {},
+            "purpose": "vote"
+          },
+          {
+            "schema": {},
+            "purpose": "propose"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "title": "seed",
+          "schema": {
+            "$ref": "#/definitions/fixtures~1contracts~1LinkedList<Int>"
+          }
+        }
+      ],
+      "interface": {
+        "callingConvention": "ledger-v3",
+        "invocations": [
+          {
+            "purpose": "spend",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "mint",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "withdraw",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "publish",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "vote",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "propose",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          }
+        ]
+      },
+      "compiledCode": "<redacted>",
+      "hash": "<redacted>"
+    }
+  ],
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "fixtures/contracts/Expr": {
+      "title": "Expr",
+      "anyOf": [
+        {
+          "title": "Val",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "Sum",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/fixtures~1contracts~1Expr"
+            },
+            {
+              "$ref": "#/definitions/fixtures~1contracts~1Expr"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/contracts/LinkedList<Int>": {
+      "title": "LinkedList",
+      "anyOf": [
+        {
+          "title": "Cons",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "$ref": "#/definitions/fixtures~1contracts~1LinkedList<Int>"
+            }
+          ]
+        },
+        {
+          "title": "Nil",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    }
+  },
+  "$vocabulary": {
+    "https://cips.cardano.org/cips/cip57": true,
+    "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+  }
+}

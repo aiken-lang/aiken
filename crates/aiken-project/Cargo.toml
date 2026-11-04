@@ -14,6 +14,7 @@ build = "build.rs"
 
 [dependencies]
 aiken-lang.workspace = true
+aiken-ual.workspace = true
 askama = { workspace = true, features = ["urlencode"] }
 camino.workspace = true
 ciborium.workspace = true
