@@ -1,0 +1,5 @@
+name = "fixtures/ual_negative"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "Draft UAL producer negative regression fixture"

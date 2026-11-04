@@ -58,6 +58,7 @@ dependencies = [
  "aiken-lang",
  "aiken-lsp",
  "aiken-project",
+ "aiken-ual",
  "clap",
  "clap_complete",
  "color-print",

@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken**: Add phase-1 UAL CLI conformance projects, portable fake-environment golden bundles, diagnostic negatives and source-digest regression coverage to workspace CI tests. @Riley-Kilgore
 - **aiken**: Add `verify generate` with environment-bound UAL bundles, stale checking-file cleanup, and write-free `--no-environment` and `--dry-run` modes without changing the root blueprint. @Riley-Kilgore
 - **aiken-project**: Lower onchain annotations into in-memory UAL bundles with export-identical function code, derived interfaces, complete purpose premises, universal validator contexts and self-validated document bindings. @Riley-Kilgore
 - **aiken-project**: Emit opt-in UAL compiled-interface blueprints with one entry per validator, all six V3 invocations, preserved parameter encodings and recursive definitions, and recomputed script hashes without changing `aiken build` output. @Riley-Kilgore
@@ -21,6 +22,7 @@
 
 ### Fixed
 
+- **aiken-project**: Reject references to project predicate fragments missing from a property's import closure, including references from its reachable predicates. @Riley-Kilgore
 - **aiken-lang**: Correct single-line and end-of-file diagnostic coordinate bounds so the LSP can report unterminated annotation regions without failing. @Riley-Kilgore
 - **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78

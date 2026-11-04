@@ -1,0 +1,113 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "80e6e9a56695ee7496f577ef6be2bb28010c7b4059003e6624a1ba2388df2259"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "preserves_leaf": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "023689f8cd9c706ea31aaf712982febf7ceb6abaf1b0d398bc29397d7aada1a9"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-preserves_leaf.json"
+    }
+  },
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "fixtures/Tree": {
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ],
+          "index": 0,
+          "title": "Leaf"
+        },
+        {
+          "dataType": "constructor",
+          "fields": [
+            {
+              "$ref": "#/definitions/fixtures~1Tree"
+            },
+            {
+              "$ref": "#/definitions/fixtures~1Tree"
+            }
+          ],
+          "index": 1,
+          "title": "Branch"
+        }
+      ],
+      "title": "Tree"
+    }
+  },
+  "functions": {
+    "fixtures__preserve": {
+      "arguments": [
+        {
+          "$ref": "#/definitions/fixtures~1Tree"
+        }
+      ],
+      "compiledCode": "46010100200101",
+      "hash": {
+        "alg": "sha256",
+        "digest": "c90e8da9268f3028169138ddeabce8d611885e4773f224c474261f3e65d4be28"
+      },
+      "plutusVersion": "v3",
+      "result": {
+        "$ref": "#/definitions/fixtures~1Tree"
+      },
+      "serialization": "cbor-flat"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "name": "UAL",
+      "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "fixtures"
+    ],
+    "created": "2026-11-04",
+    "description": "UAL phase-1 recursive Data function producer fixture",
+    "license": "Apache-2.0",
+    "title": "fixtures/ual_recursive_data",
+    "version": "1.0.0"
+  },
+  "properties": [
+    {
+      "checkingContext": "preserves_leaf",
+      "id": "preserves_leaf",
+      "scope": {
+        "functions": [
+          "fixtures__preserve"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "lean",
+          "source": "\n  ∀ (leaf : Int), fixtures__preserve_returns (Data.Constr 0 [Data.I leaf]) (Data.Constr 0 [Data.I leaf])\n"
+        },
+        "text": "Every well-formed leaf of the recursive tree is returned unchanged."
+      }
+    }
+  ]
+}

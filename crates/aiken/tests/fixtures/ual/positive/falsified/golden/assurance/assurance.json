@@ -1,0 +1,105 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "a7efc7aa08c3e9c9e2efce5087180d76d3704f3bebf4ba1b214e5f763095240b"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "equal_bid_outbids": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "83c6c3d731f7a68550679694fb60eb3f705bf3296acec9189c1670a97e2d480f"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-equal_bid_outbids.json"
+    }
+  },
+  "definitions": {
+    "Bool": {
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 0,
+          "title": "False"
+        },
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 1,
+          "title": "True"
+        }
+      ],
+      "title": "Bool"
+    },
+    "Int": {
+      "dataType": "integer"
+    }
+  },
+  "functions": {
+    "fixtures__outbids": {
+      "arguments": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ],
+      "compiledCode": "500101002232337100026eb4008dd68011",
+      "hash": {
+        "alg": "sha256",
+        "digest": "31b6a638822fbcfbc099803b82b0d363e0ec887aa7bd5b5f116d3557407500a3"
+      },
+      "plutusVersion": "v3",
+      "result": {
+        "dataType": "#boolean"
+      },
+      "serialization": "cbor-flat"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "name": "UAL",
+      "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "fixtures"
+    ],
+    "created": "2026-11-04",
+    "description": "UAL phase-1 deliberately false proposition producer fixture",
+    "license": "Apache-2.0",
+    "title": "fixtures/ual_falsified",
+    "version": "1.0.0"
+  },
+  "properties": [
+    {
+      "checkingContext": "equal_bid_outbids",
+      "id": "equal_bid_outbids",
+      "scope": {
+        "functions": [
+          "fixtures__outbids"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "lean",
+          "source": "\n  ∀ (old proposed : Int), old = proposed → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n"
+        },
+        "text": "An equal proposed bid returns true (deliberately false)."
+      }
+    }
+  ]
+}

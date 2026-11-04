@@ -102,6 +102,7 @@ pub enum ErrorKind {
     UnknownHandler,
     DuplicateProperty,
     HelperCollision,
+    MissingFragment,
     MixedExecutionSettings,
     PurposeLowering,
 }
@@ -622,6 +623,34 @@ fn check_helpers(
                 }
             }
             pending.extend(fragment.imports.iter().rev().map(String::as_str));
+        }
+        // Project fragment namespaces are known without elaborating Lean. Do not
+        // attempt to resolve arbitrary consumer names, binders or builtins.
+        for id in model.fragments.keys() {
+            if !seen_fragments.contains(id.as_str())
+                && (lean::references_namespace(&property.body, id)
+                    || seen_fragments.iter().any(|available| {
+                        model.fragments[*available]
+                            .predicates
+                            .iter()
+                            .any(|predicate| lean::references_namespace(&predicate.body, id))
+                    }))
+            {
+                let mut error = Error::new(
+                    modules[property.module.as_str()],
+                    ErrorKind::MissingFragment,
+                    property.body_location,
+                    format!(
+                        "Fragment '{id}' is not available in property '{}' fragment closure.",
+                        property.id
+                    ),
+                );
+                error.help = Some(format!(
+                    "Import module '{}' where its predicate helpers are referenced.",
+                    model.fragments[id].module
+                ));
+                errors.push(error);
+            }
         }
     }
 }

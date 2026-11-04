@@ -251,3 +251,72 @@ fn multi_module_purpose_scopes_model() {
     );
     insta::assert_json_snapshot!(model);
 }
+
+#[test]
+fn property_requires_referenced_project_fragment_in_its_import_closure() {
+    for (imports, body, missing) in [
+        ("", "helpers.valid", true),
+        ("use helpers\n", "helpers.valid", false),
+        ("", "True -- helpers.valid", false),
+        ("", "True /- helpers.valid -/", false),
+    ] {
+        let mut project = TestProject::new();
+        let helper = check(
+            &mut project,
+            "helpers",
+            "//@ PREDICATE\ndef valid : Prop := True\n@//",
+        );
+        let source = format!(
+            "{imports}@onchain(steps: 100, semantics: e)\npub fn f() {{ True }}\n//@ PROPERTY p for f \"fragment closure\" {body}\n@//"
+        );
+        let module = check(&mut project, "local", &source);
+        let result = validate([&helper, &module]);
+        if missing {
+            let errors = result.unwrap_err();
+            assert_eq!(errors.len(), 1);
+            assert_eq!(errors[0].kind, ErrorKind::MissingFragment);
+            assert!(
+                errors[0]
+                    .message
+                    .contains("Fragment 'helpers' is not available")
+            );
+            assert_block_label(&errors[0], &source);
+        } else {
+            result.unwrap();
+        }
+    }
+}
+
+#[test]
+fn fragment_helper_dependencies_must_be_in_the_transitive_closure() {
+    for imported in [false, true] {
+        let mut project = TestProject::new();
+        let base = check(
+            &mut project,
+            "base",
+            "//@ PREDICATE def valid : Prop := True @//",
+        );
+        let imports = if imported { "use base\n" } else { "" };
+        let bridge = check(
+            &mut project,
+            "bridge",
+            &format!("{imports}//@ PREDICATE def bridged : Prop := base.valid @//"),
+        );
+        let source = "use bridge\n@onchain(steps: 100, semantics: e) pub fn f() { True }\n//@ PROPERTY p for f \"transitive closure\" bridge.bridged @//";
+        let module = check(&mut project, "local", source);
+        let result = validate([&base, &bridge, &module]);
+        if imported {
+            result.unwrap();
+        } else {
+            let errors = result.unwrap_err();
+            assert_eq!(errors.len(), 1);
+            assert_eq!(errors[0].kind, ErrorKind::MissingFragment);
+            assert!(
+                errors[0]
+                    .message
+                    .contains("Fragment 'base' is not available")
+            );
+            assert_block_label(&errors[0], source);
+        }
+    }
+}
