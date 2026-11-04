@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken-lang**: Lex opaque `//@ … @//` annotation regions with byte spans and diagnostics for nesting or missing closers, and preserve their bytes through formatting and LSP edits. @Riley-Kilgore
 - **aiken-ual**: Add standalone UAL document and evidence models, canonical JSON serialization, pinned offline schema validation, SHA-256 digests and cross-document binding checks without Lean or Z3 dependencies. @Riley-Kilgore
 - **uplc**: Make `TxInfo::script_context_data` public, so that callers evaluating several redeemers of one transaction can convert the transaction info to `Data` once and share it between every script context. @colll78
 
@@ -15,6 +16,7 @@
 
 ### Fixed
 
+- **aiken-lang**: Correct single-line and end-of-file diagnostic coordinate bounds so the LSP can report unterminated annotation regions without failing. @Riley-Kilgore
 - **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
 

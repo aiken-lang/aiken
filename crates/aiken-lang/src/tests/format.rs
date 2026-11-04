@@ -9,6 +9,143 @@ fn format_source(src: &str) -> String {
 }
 
 #[test]
+fn assurance_regions_preserve_bytes_and_are_idempotent() {
+    let region =
+        "//@ opaque\r\n\t∀ x → ¬ (λ y => y) // literal @ and x@// text\r\n  \r\n\u{2003}@//";
+    let source = format!("{region}\nfn answer(){{42}}\n{region}\n");
+    let formatted = format_source(&source);
+    assert_eq!(formatted.matches(region).count(), 2);
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_standalone_and_trailing() {
+    let region = "//@\n\tunknown syntax { [ @ // remains opaque  \r\n@//";
+    for source in [region.to_string(), format!("\n{region}\n\n")] {
+        let formatted = format_source(&source);
+        assert_eq!(formatted, format!("{region}\n"));
+        assert_eq!(format_source(&formatted), formatted);
+    }
+
+    let formatted = format_source(&format!("fn answer() {{ 42 }}\n{region}"));
+    assert!(formatted.ends_with(&format!("{region}\n")));
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_preserve_comment_order() {
+    let source = concat!(
+        "//// module before\n",
+        "//@ first @//\n",
+        "//// module after\n",
+        "// ordinary before\n",
+        "/// documentation before\n",
+        "//@ second @//\n",
+        "/// documentation after\n",
+        "// ordinary after\n",
+        "fn first() { 1 }\n",
+        "/// between before\n",
+        "//@ between @//\n",
+        "/// between after\n",
+        "fn second() { 2 }\n",
+        "/// trailing before\n",
+        "//@ trailing @//\n",
+        "// trailing after\n",
+    );
+    let formatted = format_source(source);
+    let ordered = [
+        "//// module before",
+        "//@ first @//",
+        "//// module after",
+        "// ordinary before",
+        "/// documentation before",
+        "//@ second @//",
+        "/// documentation after",
+        "// ordinary after",
+        "fn first",
+        "/// between before",
+        "//@ between @//",
+        "/// between after",
+        "fn second",
+        "/// trailing before",
+        "//@ trailing @//",
+        "// trailing after",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_keep_import_anchors() {
+    let source = "//@ top @//\nuse zeta\n//@ middle @//\nuse alpha\n//@ end @//";
+    let formatted = format_source(source);
+    let ordered = [
+        "//@ top @//",
+        "use zeta",
+        "//@ middle @//",
+        "use alpha",
+        "//@ end @//",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_keep_decorator_order() {
+    let source = concat!(
+        "/// before type\n",
+        "//@ before decorators @//\n",
+        "@tag(7)\n",
+        "//@ between decorators @//\n",
+        "@list\n",
+        "//@ after decorators @//\n",
+        "type Datum { value: Int }\n",
+        "type Choice {\n",
+        "  @tag(1)\n",
+        "  //@ before constructor @//\n",
+        "  First\n",
+        "  @tag(2)\n",
+        "  //@ before second constructor @//\n",
+        "  Second\n",
+        "}\n",
+    );
+    let formatted = format_source(source);
+    let ordered = [
+        "/// before type",
+        "//@ before decorators @//",
+        "@tag(7)",
+        "//@ between decorators @//",
+        "@list",
+        "//@ after decorators @//",
+        "type Datum",
+        "type Choice",
+        "@tag(1)",
+        "//@ before constructor @//",
+        "First",
+        "@tag(2)",
+        "//@ before second constructor @//",
+        "Second",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_inside_functions_do_not_reindent() {
+    let region = "//@\r\nunindented λ\r\n\t \t// text @\r\n @//";
+    let source = format!("fn answer() {{\n  {region}\n42\n}}\n");
+    let formatted = format_source(&source);
+    assert!(formatted.contains(region));
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
 fn format_comment_at_end_of_file() {
     assert_format!(
         r#"

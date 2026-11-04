@@ -6,12 +6,25 @@ pub struct ModuleExtra {
     pub module_comments: Vec<Span>,
     pub doc_comments: Vec<Span>,
     pub comments: Vec<Span>,
+    /// Opaque annotation regions, including their opening and closing delimiters.
+    #[serde(default)]
+    pub assurance_comments: Vec<Span>,
     pub empty_lines: Vec<usize>,
 }
 
 impl ModuleExtra {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    /// Borrow delimiter-inclusive region text from the source used to lex this module.
+    pub fn assurance_comments<'a>(
+        &'a self,
+        src: &'a str,
+    ) -> impl Iterator<Item = Comment<'a>> + 'a {
+        self.assurance_comments
+            .iter()
+            .map(move |span| Comment::from((span, src)))
     }
 }
 
