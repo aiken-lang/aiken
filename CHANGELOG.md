@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken**: Add `verify env` to capture the loaded UAL consumer environment using a configured ledger workspace, preserving upstream manifest bytes for generation and recording revision mismatches in a separate run sidecar. @Riley-Kilgore
 - **aiken**: Add pinned UAL consumer workspace setup with offline toolchain preflight, sibling Lake overrides, Game smoke verification and read-only repeat runs. @Riley-Kilgore
 - **aiken**: Add phase-1 UAL CLI conformance projects, portable fake-environment golden bundles, diagnostic negatives and source-digest regression coverage to workspace CI tests. @Riley-Kilgore
 - **aiken**: Add `verify generate` with environment-bound UAL bundles, stale checking-file cleanup, and write-free `--no-environment` and `--dry-run` modes without changing the root blueprint. @Riley-Kilgore

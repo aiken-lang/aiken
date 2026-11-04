@@ -1,8 +1,9 @@
-//! Lean-free annotation validation and in-memory UAL bundle generation.
+//! UAL annotation validation, bundle generation and consumer integration.
 //!
 //! Lean elaboration and its accepted syntax profile belong to the consumer.
 
 pub mod bundle;
+pub mod consumer;
 mod function;
 pub mod generate;
 pub(crate) mod lean;

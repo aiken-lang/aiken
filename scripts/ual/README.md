@@ -20,6 +20,82 @@ environment exposes both `CardanoLedgerApi.V3` and
 `UAL_WORKSPACE` here configures this setup script's root, not an Aiken CLI setting.
 The committed Game fixture instead runs from `<root>/PlutusCoreBlaster`.
 
+## Capture an environment with UAL-11
+
+Provision the sibling workspace using the existing UAL-18 setup above before
+running the CLI. Aiken does not install, download, select, or pin toolchains;
+put the installed Lean 4.24.0 binaries and the assurance Z3 with `recfun-finder`
+on `PATH`:
+
+```sh
+export PATH="${ELAN_HOME:-$HOME/.elan}/toolchains/leanprover--lean4---v4.24.0/bin:$PATH"
+# Also put the directory containing your assurance z3 on PATH.
+```
+
+Configure the **ledger checkout**, not the sibling setup root, in `aiken.toml`:
+
+```toml
+[assurance]
+workspace = "../ual-workspace/CardanoLedgerApiBlaster"
+```
+
+`[assurance].workspace` takes precedence over `AIKEN_ASSURANCE_WORKSPACE`.
+A relative TOML path resolves against the directory containing `aiken.toml`;
+a relative environment-variable path resolves against the invocation working
+directory. With no configured TOML workspace, the CLI uses
+`AIKEN_ASSURANCE_WORKSPACE`. This also permits capture outside an Aiken project,
+without any `aiken.toml`:
+
+```sh
+export AIKEN_ASSURANCE_WORKSPACE="$HOME/ual-workspace/CardanoLedgerApiBlaster"
+aiken verify env
+aiken verify env --out /path/to/environment.json
+```
+
+`UAL_WORKSPACE` only chooses the setup script's **sibling root**;
+`AIKEN_ASSURANCE_WORKSPACE` chooses the CLI's **CardanoLedgerApiBlaster directory**.
+Neither setting substitutes for the other. The default output is
+`environment.json` in the invocation working directory. Relative `--out` paths
+also resolve there, not in the configured consumer workspace.
+
+The CLI runs `lake env lean` in the configured ledger directory and loads these
+imports in order:
+
+```lean
+import PlutusCore.UPLC.BlueprintEncoding.Assurance
+import CardanoLedgerApi.V3
+```
+
+Both imports are required for UAL-12 to reproduce the loaded environment,
+including ledger property helpers. Use CardanoLedgerApiBlaster
+[`997b9ca`](https://github.com/input-output-hk/CardanoLedgerApiBlaster/tree/997b9caafb3f72f45d866929c2f561945d036e10),
+from `feat/ual-property-helpers`: the required `toLedgerData` helpers are absent
+from `main`. The immutable commit in the vendored lock is authoritative, not the
+moving branch name. PlutusCoreBlaster and Blaster revisions likewise come from
+the vendored `schemas/PIN` and `assurance-workspace.json`; the CLI does not repin
+or repair sibling checkouts.
+
+Revision mismatches produce warnings and are recorded in the adjacent
+`<output>.run.json` sidecar (for example, `environment.json.run.json`). The
+environment manifest itself retains the upstream capture's exact bytes;
+revision diagnostics are not injected into that manifest. Capturing an
+environment is not property verification or evidence of a successful SMT check.
+The sidecar records capture status and, on success, the manifest's SHA-256.
+A temporary driver and staged manifest are removed after invocation. An existing
+output manifest is replaced only after successful capture and schema validation;
+a failed invocation is recorded without presenting the old manifest as a new one.
+The output's parent directory must already exist.
+
+Pass the manifest directly to generation, without normalization or conversion:
+
+```sh
+aiken verify generate --environment environment.json
+```
+
+Generation binds the manifest's exact bytes. Keep the manifest and generated
+UAL inputs outside the clean sibling source trees; the run sidecar is separate
+from the environment artifact consumed by generation.
+
 ## Prerequisites and pins
 
 - Bash, Python 3.11+, Git, and access to the approved public GitHub repositories.
