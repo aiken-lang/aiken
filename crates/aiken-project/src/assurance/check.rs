@@ -135,7 +135,7 @@ pub fn check_assurance(
         replace_file(
             &driver,
             format!(
-                "{DRIVER_IMPORTS}#verify_blueprint AikenAssurance {}\n",
+                "{DRIVER_IMPORTS}open CardanoLedgerApi.V3 CardanoLedgerApi.V3.Contexts.ScriptInfo\n#verify_blueprint AikenAssurance {}\n",
                 lean_path_literal(&output.join("assurance.json"))?
             )
             .as_bytes(),

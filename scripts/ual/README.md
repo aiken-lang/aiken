@@ -112,8 +112,11 @@ identity inspection is also bounded. `--env`, `--trace-level` and
 `--trace-filter` have the same meaning as for `verify generate`.
 
 The command generates the bundle, writes `assurance/Check.lean` with both
-environment-capture imports, and invokes `lake env lean` in the configured
-workspace. The pinned consumer has no JSON verdict-report option: this revision
+environment-capture imports, opens `CardanoLedgerApi.V3` and
+`CardanoLedgerApi.V3.Contexts.ScriptInfo`, and invokes `lake env lean` in the
+configured workspace. Opening these namespaces makes `ScriptContext`,
+`toLedgerData` and purpose constructors available; it adds no loaded modules.
+The pinned consumer has no JSON verdict-report option: this revision
 uses its exact per-property messages and final summary, not the Python runner's
 human-readable output. A consumer pin update must select the corresponding
 verdict protocol deliberately; unsupported pins fail closed.
@@ -218,3 +221,41 @@ Script regressions (no Lean builds):
 ```sh
 python3 -B -m unittest discover -s scripts/ual -p 'test_*.py'
 ```
+
+## End-to-end conformance (UAL-13)
+
+```sh
+scripts/ual/e2e.sh
+# Retain the real environment, generated bundles, reports, and raw logs:
+scripts/ual/e2e.sh --output /tmp/ual-e2e-run
+# Reuse an already built CLI:
+scripts/ual/e2e.sh --aiken target/debug/aiken --workspace "$HOME/ual-workspace"
+```
+
+The runner uses the setup script's pinned workspace checks, builds this checkout's
+CLI unless `--aiken` is supplied, and captures a fresh real environment. It copies
+fixture sources without their synthetic goldens into isolated projects. No Lean
+installation is required for ordinary Rust CI; this script is for local/hermes use.
+
+It checks fixtures 1–4 through `aiken verify check`, the equivalent match-based
+purpose premise, a one-step budget, and every fixture-5 producer diagnostic.
+Verified cases must exit zero and publish evidence; other cases must exit nonzero
+without evidence. Fixture 3 must surface integer counterexample bindings. It also
+checks that the ordinary root blueprint remains unchanged.
+
+Tamper tests mutate generated function `compiledCode` or its digest and run the
+exact generated Lean driver directly. Running `verify check` again would regenerate
+the bundle and erase the tampering, so it would not exercise consumer rejection.
+
+`--timeout` defaults to 300 seconds per check. `--workspace` (or `UAL_WORKSPACE`)
+selects the sibling root, not the ledger directory. `--output` must name a new
+directory; without it, temporary projects are removed after the run. Retained
+`identity.json` and `results.json` record tool versions, actual revisions, environment
+digest, expected/observed results and timings; `.stdout`/`.stderr` files retain
+the diagnostics. These are SMT results, not reconstructed Lean proofs.
+
+**The pinned consumer currently prevents a green run:** one-step exhaustion
+reports `falsified` instead of the required `inconclusive`. The script deliberately
+exits 1 rather than accepting that discrepancy. See
+[`docs/ual/e2e-results.md`](../../docs/ual/e2e-results.md) for results and the upstream
+prerequisite. No skip, expected-failure override, or alternative solver is used.

@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken**: Add a pinned real-consumer UAL end-to-end runner covering fixture verdicts, counterexamples, purpose-premise comparison, source diagnostics and tamper rejection, retaining a failing check for the consumer's exhaustion-verdict discrepancy. @Riley-Kilgore
 - **aiken**: Add `verify check` with bounded consumer execution, fail-closed verdict validation, terminal/JSON reports, trust-base disclosure, validator-scope warnings and success-only context-bound SMT evidence. @Riley-Kilgore
 - **aiken**: Add `verify env` to capture the loaded UAL consumer environment using a configured ledger workspace, preserving upstream manifest bytes for generation and recording revision mismatches in a separate run sidecar. @Riley-Kilgore
 - **aiken**: Add pinned UAL consumer workspace setup with offline toolchain preflight, sibling Lake overrides, Game smoke verification and read-only repeat runs. @Riley-Kilgore
@@ -25,6 +26,7 @@
 
 ### Fixed
 
+- **aiken-project**: Open V3 ledger namespaces in verification drivers and emit bracketed existential purpose binders accepted by the pinned consumer. @Riley-Kilgore
 - **aiken-project**: Select the UAL 1.0 language profile for compiled-interface properties so generated bundles are accepted by the pinned consumer. @Riley-Kilgore
 - **aiken-project**: Reject references to project predicate fragments missing from a property's import closure, including references from its reachable predicates. @Riley-Kilgore
 - **aiken-lang**: Correct single-line and end-of-file diagnostic coordinate bounds so the LSP can report unterminated annotation regions without failing. @Riley-Kilgore

@@ -135,11 +135,12 @@ fn fixture_2_universal_validator_bundle() {
     };
     assert!(
         source("positive_minimum")
-            .contains("∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d")
+            .contains("∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d")
     );
     assert!(
-        source("fallback_rejects")
-            .contains("¬ (∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d)")
+        source("fallback_rejects").contains(
+            "¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)"
+        )
     );
     insta::assert_json_snapshot!(snapshot(&bundle));
 }
@@ -288,8 +289,14 @@ fn duplicate_handler_scopes_keep_one_checking_target_and_all_premises() {
         .source
         .as_ref()
         .unwrap();
-    assert!(source.contains("∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d"));
-    assert!(source.contains("¬ (∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d)"));
+    assert!(
+        source.contains("∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d")
+    );
+    assert!(
+        source.contains(
+            "¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)"
+        )
+    );
 }
 
 #[test]

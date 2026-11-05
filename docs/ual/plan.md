@@ -111,15 +111,15 @@ Each validator checking target must name a `purpose`. In V3 every invocation has
 
 | Aiken handler | Premise added |
 |---|---|
-| `spend` | `∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d` |
-| `mint` | `∃ cs, … = MintingScript cs` |
-| `withdraw` | `∃ cred, … = RewardingScript cred` |
-| `publish` | `∃ i cert, … = CertifyingScript i cert` |
-| `vote` | `∃ voter, … = VotingScript voter` |
-| `propose` | `∃ i pp, … = ProposingScript i pp` |
+| `spend` | `∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d` |
+| `mint` | `∃ (cs : _), … = MintingScript cs` |
+| `withdraw` | `∃ (cred : _), … = RewardingScript cred` |
+| `publish` | `∃ (i : _) (cert : _), … = CertifyingScript i cert` |
+| `vote` | `∃ (voter : _), … = VotingScript voter` |
+| `propose` | `∃ (i : _) (pp : _), … = ProposingScript i pp` |
 | `else` | conjunction of the negations of every handler `v` defines |
 
-Constructor names come from CardanoLedgerApi V3 `Contexts.lean`. `∃` is inside the consumer's accepted syntax profile. UAL-13 compares solver behaviour against a match-based predicate.
+Constructor names come from CardanoLedgerApi V3 `Contexts.lean`. UAL-13 found that the pinned consumer rejects unbracketed existential binders; bracketed binders with inferred types are accepted. Both this form and an equivalent match-based premise discharge fixture 2's spend/else properties. Retain the existential form: it verified successfully and the match form showed no discharge advantage. See [the empirical results](e2e-results.md). The check driver opens `CardanoLedgerApi.V3` and `CardanoLedgerApi.V3.Contexts.ScriptInfo` for annotation names and generated constructors; imports alone do not open these namespaces.
 
 ### 3.4 Predicates, fragments, namespaces
 
@@ -164,7 +164,7 @@ aiken verify env      [--out <environment.json>]
 - **`generate`** compiles, runs the assurance pass, validates, and writes `assurance/plutus.json`, `assurance/assurance.json` and the checking contexts. `--no-environment` runs the whole pass and its diagnostics but writes **nothing**: a bundle without an environment binding is unrunnable and must not exist on disk.
 - **`check`** works the way the consumer's own runners do, since `#verify_blueprint` has no machine-readable output mode:
   1. Run `generate`.
-  2. Write a Lean driver: `import PlutusCore.UPLC.BlueprintEncoding.Assurance`, `import CardanoLedgerApi.V3`, then `#verify_blueprint <ns> "<assurance.json>"`.
+  2. Write a Lean driver: `import PlutusCore.UPLC.BlueprintEncoding.Assurance`, `import CardanoLedgerApi.V3`, `open CardanoLedgerApi.V3 CardanoLedgerApi.V3.Contexts.ScriptInfo`, then `#verify_blueprint <ns> "<assurance.json>"`.
   3. Run it with `lake env lean` in the consumer workspace (§4.1).
   4. Read verdicts. Prefer the JSON verdict report (`(report := "<path>")`, format `blaster-verification-report-v1`) once PlutusCoreBlaster #69 merges. Until then, parse the per-property log lines: `Property '<id>': verified (Blaster SMT; no reconstructed Lean proof)`, `falsified`, `inconclusive`, `not checked (…)`, and the summary line. Any property without a recognised verdict, a non-zero Lean exit, or unparseable output is a failure.
 
@@ -219,6 +219,8 @@ These mirror the UAL acceptance criteria. Phase 1 compares emitted JSON against 
    - id collision after mapping;
    - altered bytes or hash mismatch;
    - step exhaustion, reported as inconclusive rather than rejected.
+
+UAL-13 empirical exception: the pinned consumer reports **falsified**, not inconclusive, for fixture 1 reduced to one CEK step. The end-to-end script retains the required inconclusive expectation and fails on that discrepancy. Do not reinterpret a consumer counterexample or silently change the expected verdict. Acceptance requires an upstream exhaustion/verdict contract and an approved consumer pin implementing it; see [the results and reproducer](e2e-results.md).
 
 ## 7. Phases (one branch, one draft PR)
 

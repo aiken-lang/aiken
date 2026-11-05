@@ -19,13 +19,15 @@ pub(super) fn purpose(handler: Option<&str>) -> Purpose {
 }
 
 fn premise(handler: &str) -> &'static str {
+    // The pinned consumer accepts bracketed binders, but rejects Lean's
+    // unbracketed existential-binder syntax node. Infer types from ScriptInfo.
     match handler {
-        "spend" => "∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d",
-        "mint" => "∃ cs, ctx.scriptContextScriptInfo = MintingScript cs",
-        "withdraw" => "∃ cred, ctx.scriptContextScriptInfo = RewardingScript cred",
-        "publish" => "∃ i cert, ctx.scriptContextScriptInfo = CertifyingScript i cert",
-        "vote" => "∃ voter, ctx.scriptContextScriptInfo = VotingScript voter",
-        "propose" => "∃ i pp, ctx.scriptContextScriptInfo = ProposingScript i pp",
+        "spend" => "∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d",
+        "mint" => "∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs",
+        "withdraw" => "∃ (cred : _), ctx.scriptContextScriptInfo = RewardingScript cred",
+        "publish" => "∃ (i : _) (cert : _), ctx.scriptContextScriptInfo = CertifyingScript i cert",
+        "vote" => "∃ (voter : _), ctx.scriptContextScriptInfo = VotingScript voter",
+        "propose" => "∃ (i : _) (pp : _), ctx.scriptContextScriptInfo = ProposingScript i pp",
         _ => unreachable!("only the six defined handlers have positive premises"),
     }
 }
@@ -266,32 +268,32 @@ mod tests {
             (
                 "spend",
                 Purpose::Spend,
-                "∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d",
+                "∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d",
             ),
             (
                 "mint",
                 Purpose::Mint,
-                "∃ cs, ctx.scriptContextScriptInfo = MintingScript cs",
+                "∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs",
             ),
             (
                 "withdraw",
                 Purpose::Withdraw,
-                "∃ cred, ctx.scriptContextScriptInfo = RewardingScript cred",
+                "∃ (cred : _), ctx.scriptContextScriptInfo = RewardingScript cred",
             ),
             (
                 "publish",
                 Purpose::Publish,
-                "∃ i cert, ctx.scriptContextScriptInfo = CertifyingScript i cert",
+                "∃ (i : _) (cert : _), ctx.scriptContextScriptInfo = CertifyingScript i cert",
             ),
             (
                 "vote",
                 Purpose::Vote,
-                "∃ voter, ctx.scriptContextScriptInfo = VotingScript voter",
+                "∃ (voter : _), ctx.scriptContextScriptInfo = VotingScript voter",
             ),
             (
                 "propose",
                 Purpose::Propose,
-                "∃ i pp, ctx.scriptContextScriptInfo = ProposingScript i pp",
+                "∃ (i : _) (pp : _), ctx.scriptContextScriptInfo = ProposingScript i pp",
             ),
         ] {
             assert_eq!(purpose(Some(handler)), selected);
@@ -318,7 +320,7 @@ mod tests {
                 &targets(&["spend", "else"])
             )
             .unwrap(),
-            "∀ (p : VestingParams) (ctx : ScriptContext), ((∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n  ¬ txSignedBy p.owner ctx.scriptContextTxInfo →\n    isUnsuccessful (vesting__vesting p (toLedgerData ctx))\n)"
+            "∀ (p : VestingParams) (ctx : ScriptContext), ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n  ¬ txSignedBy p.owner ctx.scriptContextTxInfo →\n    isUnsuccessful (vesting__vesting p (toLedgerData ctx))\n)"
         );
     }
 
@@ -327,7 +329,7 @@ mod tests {
         let prop = property("∀ ctx : ScriptContext, P ctx", &[Some("else")]);
         assert_eq!(
             lower(&prop, &targets(&["spend", "mint", "else"])).unwrap(),
-            "∀ ctx : ScriptContext, ((¬ (∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d) ∧ ¬ (∃ cs, ctx.scriptContextScriptInfo = MintingScript cs))) → ( P ctx\n)"
+            "∀ ctx : ScriptContext, ((¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d) ∧ ¬ (∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs))) → ( P ctx\n)"
         );
         assert_eq!(
             lower(&prop, &targets(&["else"])).unwrap(),
@@ -353,7 +355,7 @@ mod tests {
                 &targets(&[])
             )
             .unwrap(),
-            "forall (p : Params), ∀ ctx : ScriptContext, ∀ n : Nat, ((∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d) ∧ (∃ cs, ctx.scriptContextScriptInfo = MintingScript cs)) → ( P p ctx n\n)"
+            "forall (p : Params), ∀ ctx : ScriptContext, ∀ n : Nat, ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d) ∧ (∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs)) → ( P p ctx n\n)"
         );
     }
 
@@ -365,7 +367,7 @@ mod tests {
         assert_eq!(
             lower(&property(&body, &[Some("mint")]), &targets(&[])).unwrap(),
             format!(
-                "{prefix} ((∃ cs, ctx.scriptContextScriptInfo = MintingScript cs)) → ({suffix}\n)"
+                "{prefix} ((∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs)) → ({suffix}\n)"
             )
         );
     }

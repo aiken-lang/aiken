@@ -1,6 +1,6 @@
 # Phase-1 UAL producer fixtures
 
-These fixtures record our reading of the pinned draft schemas and UAL 1.0. They are regression guards, not proof of conformance or verified properties. No Lean process or solver runs here. Consumer verdicts belong to UAL-13.
+These fixtures record our reading of the pinned draft schemas and UAL 1.0. The Rust tests are regression guards, not proof of conformance or verified properties; no Lean process or solver runs in them. `scripts/ual/e2e.sh` regenerates these sources with a real environment and checks the pinned consumer. See [the UAL-13 results](../../../../../docs/ual/e2e-results.md), including the unresolved exhaustion-verdict discrepancy.
 
 ## Running
 

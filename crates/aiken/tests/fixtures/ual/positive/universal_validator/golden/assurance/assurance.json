@@ -60,7 +60,7 @@
       "statement": {
         "formal": {
           "language": "ual",
-          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((¬ (∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d))) → (\n    isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
+          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d))) → (\n    isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
         },
         "text": "All non-spending invocations fail."
       }
@@ -76,7 +76,7 @@
       "statement": {
         "formal": {
           "language": "ual",
-          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((∃ ref d, ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    minimum ≤ 0 → isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
+          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    minimum ≤ 0 → isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
         },
         "text": "A nonpositive minimum rejects spending."
       }
