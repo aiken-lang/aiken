@@ -212,3 +212,59 @@ Formatting initially requested wrapping three updated assertions; `cargo fmt
 used the bounded `aiken-acceptance` wrapper, not an unbounded `bash ci` invocation.
 The separate real-consumer e2e command remains red solely for the exhaustion
 verdict described above.
+
+## Repeat execution on the supplied UAL-13 checkout
+
+Ran the unmodified `scripts/ual/e2e.sh` against freshly provisioned public
+consumer checkouts. The command exited **1**, with **17/18 cases passed**, in
+832.20 seconds including the cold workspace build. Workspace setup took
+579.9 seconds and verified all three upstream Game properties. The existing
+upstream `CekMachine.lean:309` `sorry` warning was unchanged.
+
+| Case | Observed | Check wall time |
+| --- | --- | ---: |
+| Fixture 1 | `outbids`: verified | 25.805 s |
+| Fixture 2, bracketed existential premises | Both properties verified | 51.304 s |
+| Fixture 3 | Falsified; runner accepted the surfaced integer counterexample bindings | 23.474 s |
+| Fixture 4 | `preserves_leaf`: verified | 23.068 s |
+| Fixture 2, match premises | Both properties verified | 58.415 s |
+| One-step budget | **Falsified**, `old = 0`, `proposed = 1`; expected inconclusive | 24.705 s |
+| Ten source-negative cases | All rejected with the expected diagnostics | 3.031–3.122 s each |
+| Altered compiledCode | Rejected: `function compiledCode hash mismatch` | 1.445 s |
+| Mismatched digest | Rejected: `function compiledCode hash mismatch` | 1.435 s |
+
+The runner also passed its evidence-presence, exact-property-set, exit-status,
+trust-warning and root-blueprint-preservation checks. This default invocation
+removed its temporary fixture copies on exit; it did not retain an `--output`
+artifact directory.
+
+The observed consumer, ledger and Blaster revisions, Lean, Lake, Z3 build and
+Z3 binary digest match the table above. The CLI identified itself as
+`aiken v1.1.24+4e14d3a`; Rust was `1.94.1 (e408947bf 2026-03-25)` and Python was
+`3.13.5`. The setup's `recfun-finder` probe passed. No pin, default, fixture,
+expected verdict or implementation changed during this repeat execution.
+
+The purpose comparison again provides no discharge reason to replace the
+bracketed existential form. These wall times are not optimization benchmarks.
+The all-green criterion still requires the upstream exhaustion/verdict contract
+described above; changing Aiken's label would misrepresent the real consumer.
+Issue filing remains unavailable: this worker has no GitHub CLI, `GH_TOKEN`,
+`GITHUB_TOKEN`, or configured Git credential helper. The existing filing-ready
+reports remain unfiled; no new issue-creation request or issue URL is claimed.
+
+Repository checks passed in this repeat execution:
+
+```text
+cargo build --workspace --all-targets
+cargo build --workspace
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --workspace
+aiken-acceptance
+python3 -B -m unittest discover -s scripts/ual -p 'test_*.py'
+bash -n scripts/ual/e2e.sh
+```
+
+Only this results record and the append-only decisions log were updated.
+The existing changelog and plan already describe the implemented producer fixes
+and unresolved consumer contract; no new behavioral change is claimed.
