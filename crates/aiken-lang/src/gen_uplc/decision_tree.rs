@@ -165,6 +165,9 @@ pub enum DecisionTree<'a> {
     ListSwitch {
         path: Vec<Path>,
         cases: Vec<(CaseTest, DecisionTree<'a>)>,
+        /// Sorted by ascending number of elements, regardless of the order of the clauses. A list
+        /// must be tested against the longest pattern it fits, since only that case holds every
+        /// clause the list can match.
         tail_cases: Vec<(CaseTest, DecisionTree<'a>)>,
         default: Option<Box<DecisionTree<'a>>>,
     },
@@ -1150,6 +1153,10 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                             x.0,
                             self.do_build_tree(subject_tipo, PatternMatrix { rows: x.1 }, then_map),
                         )
+                    })
+                    .sorted_by_key(|(case, _)| match case {
+                        CaseTest::ListWithTail(elems) => *elems,
+                        _ => unreachable!("tail_cases only holds ListWithTail cases"),
                     })
                     .collect_vec(),
                 default: fallback_option,

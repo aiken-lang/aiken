@@ -2880,7 +2880,7 @@ impl<'a> CodeGenerator<'a> {
                         itertools::Position::First(index) | itertools::Position::Only(index) => {
                             let (_, tree) = cases
                                 .iter()
-                                .chain(tail_cases.iter())
+                                .chain(tail_cases.iter().rev())
                                 .find(|x| match x.0 {
                                     CaseTest::List(i) => i == index,
                                     CaseTest::ListWithTail(i) => i <= index,
@@ -2922,7 +2922,7 @@ impl<'a> CodeGenerator<'a> {
                         itertools::Position::Middle(index) | itertools::Position::Last(index) => {
                             let (_, tree) = cases
                                 .iter()
-                                .chain(tail_cases.iter())
+                                .chain(tail_cases.iter().rev())
                                 .find(|x| match x.0 {
                                     CaseTest::List(i) => i == index,
                                     CaseTest::ListWithTail(i) => i <= index,
