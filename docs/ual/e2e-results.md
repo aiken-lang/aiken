@@ -2,11 +2,13 @@
 
 ## Status and reproduction
 
-The pinned consumer does **not** satisfy the required exhaustion verdict. Reducing
-fixture 1 to one CEK step reports `falsified`, not `inconclusive`. The runner keeps
-`inconclusive` as its expectation and exits nonzero on this discrepancy. UAL-13's
-all-green acceptance criterion is therefore blocked; this is not a successful
-end-to-end signoff.
+The one-step case expects exactly **falsified**, with a nonzero CLI exit and no
+published evidence. At PlutusCoreBlaster `1c23de8`, `_returns` is false for every
+CEK state other than a matching `Halt` within the declared step budget. A too-small
+budget therefore falsifies “returns true within this budget”; verified results
+are unaffected. The 2026-11-09 decision supersedes the earlier inconclusive
+assumption, which was not a consumer contract. A separate exhaustion verdict is
+an upstream request tracked by **UAL-21**, not a blocker for UAL-13.
 
 ```sh
 scripts/ual/e2e.sh
@@ -21,14 +23,92 @@ check`. Tampered bundles use the generated driver with `lake env lean`, because
 `verify check` would regenerate and overwrite the corruption. No upstream source,
 consumer pin, solver, step-budget default, or CI configuration was changed.
 
+## Final run — 2026-11-09 bounded-semantics decision
 
-## Final fixture run
+Command: `scripts/ual/e2e.sh --output /tmp/ual-13-bounded-e2e`.
+Observed exit status: **0**, **18/18 cases passed**, **0 failed**.
+
+Repository validation for this decision also passed:
+
+```text
+cargo build --workspace --all-targets
+cargo build --workspace
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --workspace
+aiken-acceptance
+python3 -B -m unittest discover -s scripts/ual -p 'test_*.py'
+bash -n scripts/ual/e2e.sh
+```
+
+The five script regressions passed; acceptance used at most two Aiken processes.
+No tests, snapshots, dependencies, or CI/release configuration were changed.
+
+Total wall time: **846.12 seconds**, including **583.6 seconds** provisioning
+the pinned workspace. All three upstream Game properties verified during setup.
+The pre-existing upstream `CekMachine.lean:309` `sorry` warning remains unchanged.
+
+| Fixture/case | Expected and observed | Check wall time |
+| --- | --- | ---: |
+| 1: native function, 100 steps, E | `outbids`: verified; evidence published | 22.059 s |
+| 2: universal validator, 2500 steps, E | `fallback_rejects` and `positive_minimum`: verified; evidence published | 54.151 s |
+| 3: deliberately false equal bid, 100 steps, E | `equal_bid_outbids`: falsified; `old = 0`, `proposed = 0`; no evidence | 25.599 s |
+| 4: recursive Data, 2500 steps, C | `preserves_leaf`: verified; evidence published | 24.139 s |
+| Match-based equivalent of fixture 2 | Both properties verified; evidence published | 58.962 s |
+| 5: one-step native function | `outbids`: falsified; `old = 0`, `proposed = 1`; nonzero CLI exit, no evidence | 23.935 s |
+| 5: unknown scope | Producer rejection; no bundle/evidence | 3.101 s |
+| 5: wrong-module scope | Producer rejection; no bundle/evidence | 2.993 s |
+| 5: missing fragment | Producer rejection; no bundle/evidence | 3.076 s |
+| 5: opaque parameter | Producer rejection; no bundle/evidence | 3.020 s |
+| 5: missing steps | Producer rejection; no bundle/evidence | 3.066 s |
+| 5: invalid semantics | Producer rejection; no bundle/evidence | 3.033 s |
+| 5: mapped ID collision | Producer rejection; no bundle/evidence | 3.068 s |
+| 5: mixed step budgets | Producer rejection; no bundle/evidence | 3.033 s |
+| 5: mixed semantics | Producer rejection; no bundle/evidence | 3.075 s |
+| 5: unterminated annotation | Producer rejection; no bundle/evidence | 3.033 s |
+| 5: altered function compiledCode | Consumer rejection: `function compiledCode hash mismatch`, Lean exit 1 | 1.481 s |
+| 5: mismatched function digest | Consumer rejection: `function compiledCode hash mismatch`, Lean exit 1 | 1.398 s |
+
+Every source-negative diagnostic matched. Every `verify check` case passed the
+exact-property-set/verdict, exit/success, evidence-presence, counterexample,
+no-trust-warning and root-blueprint-preservation assertions. Fresh verification
+used the real captured environment, not synthetic goldens or cached verdicts.
+The existential and match premises both discharged; retain bracketed existentials.
+These wall times overlap repository checks and are not optimization benchmarks.
+
+Observed Linux aarch64 identities, retained in `identity.json`:
+
+| Component | Final-run identity |
+| --- | --- |
+| PlutusCoreBlaster | `1c23de8f35fdc5decf6f126c7b56ed6649e4a57f` |
+| Lean-blaster | `bc03bb402ce702984875bbf8ba51216bd6f843d7` |
+| CardanoLedgerApiBlaster | `997b9caafb3f72f45d866929c2f561945d036e10` |
+| Lean | `4.24.0`, commit `797c613eb9b6d4ec95db23e3e00af9ac6657f24b`, Release |
+| Lake | `5.0.0-src+797c613` |
+| Z3 | `5.1.0`, build `ca39e58c525c5b03c2484f118ade2b92fae31215`; `recfun-finder` preflight passed |
+| Z3 binary SHA-256 | `6a9c23e251e44bffab2f5e7fe6d63ce247a891062d35a5d7a4836694b8776aea` |
+| Rust | `rustc 1.94.1 (e408947bf 2026-03-25)` |
+| Python | `3.13.5`, GCC 14.2.0 |
+| Aiken | `v1.1.24+d258b36` |
+| Environment SHA-256 | `65bbdc2e64b4c2e51bb82762199b5a3927429615ed235c11036a93935f473536` |
+
+`results.json`, raw `.stdout`/`.stderr` logs, generated inputs and evidence are
+retained under `/tmp/ual-13-bounded-e2e`. No consumer pin, step budget/default,
+solver setting, CLI behavior or protected generator/evaluator file changed.
+The one-step runner expectation alone changed to the user's approved `falsified`;
+other verdicts still fail, and no evidence is permitted for this case.
+These results are **Blaster SMT, without reconstructed Lean proofs**, relative
+to declared CEK budgets. Both upstream reports below are **to be filed by the user**.
+
+
+
+## Historical fixture run before the bounded-semantics decision
 
 Command: `scripts/ual/e2e.sh --output /tmp/ual-13-e2e-fixed`.
 Observed exit status: **1**, with **17/18 cases passed**. Total wall time:
 203.70 seconds, including environment capture and setup verification.
 
-| Fixture/case | Expected | Observed | Check wall time |
+| Fixture/case | Expected at that time | Observed | Check wall time |
 | --- | --- | --- | ---: |
 | 1: native function, 100 steps, E | verified | `outbids`: verified; evidence published | 14.801 s |
 | 2: universal validator, 2500 steps, E | both verified | `fallback_rejects` and `positive_minimum`: verified; evidence published | 35.146 s |
@@ -84,7 +164,7 @@ Lean proofs**, relative to the declared CEK step budgets.
 ## Producer discrepancies and purpose comparison
 
 The first complete run passed 15/18 cases. Fixture 2 and its match-based variant
-failed before SMT; the third failure was the exhaustion verdict.
+failed before SMT; the third failure was the runner's then-incorrect exhaustion expectation.
 
 1. The driver imported `CardanoLedgerApi.V3` but did not open its namespace.
    The match variant reported unknown `ScriptContext`, `toLedgerData`, and
@@ -117,16 +197,18 @@ the existential binders. Compiled code, interfaces, blueprint bytes, checking
 contexts, digests, descriptions, and property meanings did not change. No
 snapshots were bulk-accepted and no protected generator/evaluator files changed.
 
-## Consumer discrepancy reports
+## Upstream reports — to be filed by the user
 
-**Not filed:** GitHub REST issue-creation requests for both reports below failed
-with `Temporary failure in name resolution` in the worker. No GitHub CLI, token,
-or Git credential helper is configured. Public read-only GitHub access was
-available, but that does not provide authenticated issue creation. No issue URL
-or upstream fix is claimed. The reports below are ready to file in
+**Status for both reports: to be filed by the user.** Workers cannot file issues.
+Earlier worker REST requests failed with `Temporary failure in name resolution`;
+no issue was filed and no issue URL or upstream fix is claimed. These reports
+are ready for manual filing in
 [PlutusCoreBlaster](https://github.com/input-output-hk/PlutusCoreBlaster/issues).
 
-### CEK exhaustion is reported as a falsified exact-result proposition
+### UAL-21: request a separate CEK exhaustion verdict
+
+**Status: to be filed by the user.** This is an upstream feature request, not a
+consumer correctness bug at the current pin or a prerequisite for UAL-13.
 
 Reproducer: `tiny_budget` in `scripts/ual/e2e.sh`. Start from
 `crates/aiken/tests/fixtures/ual/positive/native_function`, change only
@@ -154,8 +236,9 @@ Property 'outbids': falsified
 Assurance 'fixtures/ual_native_function': 1 checked, 0 not checked, 1 failed/inconclusive
 ```
 
-Expected by UAL-13: `inconclusive` for unfinished evaluation, without presenting
-it as a completed wrong result. Actual: `falsified`, nonzero CLI exit, no evidence.
+Actual and expected by UAL-13 after the 2026-11-09 decision: `falsified`,
+nonzero CLI exit, no evidence. The earlier `inconclusive` expectation was our
+assumption, not a consumer contract.
 
 Source explanation at the pin:
 
@@ -167,14 +250,19 @@ Source explanation at the pin:
   maps Blaster's `Falsified` directly to `falsified`; `inconclusive` represents
   `Undetermined`, not a separate CEK-exhaustion classification.
 
-The reported falsification is consistent with that bounded proposition. It does
-not meet the requested exhaustion contract. Aiken cannot safely infer completion
-from the text verdict or relabel every small-budget counterexample. Required
-upstream prerequisite: an exhaustion/verdict contract that also handles arbitrary
-propositions, followed by an approved consumer pin implementing it. The script
-keeps the required expectation; it has no skip or expected-failure override.
+The reported falsification is correct for the bounded proposition: it means
+**no matching result within the declared step budget**, not necessarily a
+completed wrong result. Request: expose a separate exhaustion verdict or
+diagnostic that distinguishes unfinished evaluation without silently changing
+arbitrary proposition meanings. UAL-21 tracks this request and any future
+approved consumer pin implementing it. Aiken does not infer completion from
+the text verdict or relabel small-budget counterexamples. The E2E runner
+requires exactly `falsified` and no evidence until that contract is deliberately
+revisited; it has no skip or expected-failure override.
 
 ### Ordinary existential binder syntax is rejected
+
+**Status: to be filed by the user.**
 
 Reproducer: fixture 2's original purpose premise:
 
@@ -192,7 +280,7 @@ or whitelist weakening was applied locally.
 
 ## Repository validation
 
-Passed after the producer fixes:
+Passed after the earlier producer fixes (historical run):
 
 ```text
 cargo build --workspace --all-targets
@@ -210,10 +298,10 @@ bash -n scripts/ual/e2e.sh
 Formatting initially requested wrapping three updated assertions; `cargo fmt
 --all` applied those changes and the final formatting check passed. Acceptance
 used the bounded `aiken-acceptance` wrapper, not an unbounded `bash ci` invocation.
-The separate real-consumer e2e command remains red solely for the exhaustion
-verdict described above.
+At that time the separate real-consumer E2E command was red solely for the
+incorrect exhaustion expectation, superseded by the 2026-11-09 decision.
 
-## Repeat execution on the supplied UAL-13 checkout
+## Historical repeat execution before the bounded-semantics decision
 
 Ran the unmodified `scripts/ual/e2e.sh` against freshly provisioned public
 consumer checkouts. The command exited **1**, with **17/18 cases passed**, in
@@ -246,11 +334,10 @@ expected verdict or implementation changed during this repeat execution.
 
 The purpose comparison again provides no discharge reason to replace the
 bracketed existential form. These wall times are not optimization benchmarks.
-The all-green criterion still requires the upstream exhaustion/verdict contract
-described above; changing Aiken's label would misrepresent the real consumer.
-Issue filing remains unavailable: this worker has no GitHub CLI, `GH_TOKEN`,
-`GITHUB_TOKEN`, or configured Git credential helper. The existing filing-ready
-reports remain unfiled; no new issue-creation request or issue URL is claimed.
+At that time the all-green criterion was considered blocked on an upstream
+exhaustion/verdict contract. The 2026-11-09 bounded-semantics decision supersedes
+that interpretation; Aiken's consumer label does not need changing.
+Both reports remain **to be filed by the user**; no issue URL is claimed.
 
 Repository checks passed in this repeat execution:
 
@@ -265,6 +352,5 @@ python3 -B -m unittest discover -s scripts/ual -p 'test_*.py'
 bash -n scripts/ual/e2e.sh
 ```
 
-Only this results record and the append-only decisions log were updated.
-The existing changelog and plan already describe the implemented producer fixes
-and unresolved consumer contract; no new behavioral change is claimed.
+Only the results record and append-only decisions log were updated in that
+historical repeat. No behavior changed then.

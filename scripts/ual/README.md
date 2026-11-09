@@ -129,6 +129,14 @@ Both outputs state the SMT/no-reconstructed-Lean-proof trust boundary, actual
 Z3 path and SHA-256, installed consumer/ledger/Blaster revisions, and that results
 are relative to each checking context's CEK step budget.
 
+For exact-result (`_returns`) claims, `falsified` means a counterexample has **no
+matching result within the declared step budget**. A too-small budget can also
+produce it: this does not distinguish unfinished evaluation from a completed
+wrong result, nor establish failure with an unlimited budget. At the pinned
+consumer, `_returns` is false for every state except a matching `Halt`.
+`inconclusive` represents solver `Undetermined`, not a separate exhaustion verdict.
+Only verified properties can receive evidence; verified results remain bounded.
+
 Only an all-verified run with a consistent summary, successful Lean exit and
 successful evidence publication exits zero. Missing, duplicate, unknown or
 malformed verdicts, mismatched summaries, timeouts and consumer errors fail.
@@ -254,8 +262,9 @@ directory; without it, temporary projects are removed after the run. Retained
 digest, expected/observed results and timings; `.stdout`/`.stderr` files retain
 the diagnostics. These are SMT results, not reconstructed Lean proofs.
 
-**The pinned consumer currently prevents a green run:** one-step exhaustion
-reports `falsified` instead of the required `inconclusive`. The script deliberately
-exits 1 rather than accepting that discrepancy. See
-[`docs/ual/e2e-results.md`](../../docs/ual/e2e-results.md) for results and the upstream
-prerequisite. No skip, expected-failure override, or alternative solver is used.
+The one-step case must report exactly **falsified**, exit nonzero and publish no
+evidence. The runner fails if the verdict changes to inconclusive or anything else,
+so a future consumer pin bump must revisit this bounded-semantics contract.
+See [`docs/ual/e2e-results.md`](../../docs/ual/e2e-results.md) for results and the
+separate upstream exhaustion-verdict request (UAL-21). No skip, expected-failure
+override, or alternative solver is used.

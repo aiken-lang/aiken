@@ -174,7 +174,10 @@ def execute(args, output, aiken, env, tools, workspace):
     text = source.read_text()
     require(text.count("steps: 100") == 1, "Native fixture budget changed; review the exhaustion case")
     source.write_text(text.replace("steps: 100", "steps: 1"))
-    suite.check("tiny_budget", project, {"outbids": "inconclusive"})
+    # At this pin, _returns is false unless a matching Halt is reached within
+    # the budget. Keep the exact verdict check so future pin drift fails.
+    # Suite.check also requires a nonzero exit and no published evidence.
+    suite.check("tiny_budget", project, {"outbids": "falsified"})
 
     for fixture, diagnostic in NEGATIVES.items():
         name = "negative_" + fixture.replace("/", "_")

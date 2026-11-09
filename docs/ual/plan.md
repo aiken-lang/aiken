@@ -174,6 +174,8 @@ aiken verify env      [--out <environment.json>]
   - the PlutusCoreBlaster, CardanoLedgerApi and Blaster revisions;
   - that results are relative to the step budget.
 
+  For exact-result (`_returns`) claims, `falsified` means a counterexample has **no matching result within the declared step budget**. A too-small budget can therefore falsify the bounded claim even when the program would return the expected result with more steps. It does not establish a completed wrong result or unbounded failure; verified results remain relative to the declared budget.
+
   It warns when a property scopes a helper used by a validator but no property scopes that validator.
 - **`env`** writes and runs a driver with the same imports and `#write_checking_environment "<out>"`.
 
@@ -218,9 +220,9 @@ These mirror the UAL acceptance criteria. Phase 1 compares emitted JSON against 
    - a semantics variant other than `c`/`e`;
    - id collision after mapping;
    - altered bytes or hash mismatch;
-   - step exhaustion, reported as inconclusive rather than rejected.
+   - one-step exhaustion, reported as **falsified** with no evidence.
 
-UAL-13 empirical exception: the pinned consumer reports **falsified**, not inconclusive, for fixture 1 reduced to one CEK step. The end-to-end script retains the required inconclusive expectation and fails on that discrepancy. Do not reinterpret a consumer counterexample or silently change the expected verdict. Acceptance requires an upstream exhaustion/verdict contract and an approved consumer pin implementing it; see [the results and reproducer](e2e-results.md).
+Bounded-semantics decision (2026-11-09): at PlutusCoreBlaster `1c23de8`, `_returns` is `False` for every CEK state other than a matching `Halt` within the step budget. “Returns true within 1 step” is genuinely false for the native fixture, so **falsified**, not inconclusive, is the correct verdict. A verified result is unaffected. The earlier inconclusive expectation was our assumption, not a consumer contract. The end-to-end script asserts the exact falsified verdict and absence of evidence, and must fail if a future pin changes it. A separate exhaustion verdict is an upstream request tracked by **UAL-21**, not a prerequisite for UAL-13; see [the results and reproducer](e2e-results.md).
 
 ## 7. Phases (one branch, one draft PR)
 
