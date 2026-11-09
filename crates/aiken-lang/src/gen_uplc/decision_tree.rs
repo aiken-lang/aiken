@@ -757,14 +757,14 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                 unreachable!()
             };
 
-            // This is just to prevent repeated assigning clones for the same fallback
-            // used in multiple places
-            // So we could just overwrite it everytime too.
+            // The body of a clause is shared by every leaf reaching it, and receives its
+            // variables by position. Rows collect variables as columns get specialized, which can
+            // happen in a different order on each branch, so all leaves must use the same order.
             if assigns.is_empty() {
-                *assigns = row.assigns.clone();
+                *assigns = row.assigns;
             }
 
-            return DecisionTree::HoistedLeaf(row.then, row.assigns);
+            return DecisionTree::HoistedLeaf(row.then, assigns.clone());
         };
 
         let mut longest_elems_no_tail = None;

@@ -16,6 +16,7 @@
 
 - **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
+- **aiken-lang**: Fix variables bound by a `when` clause receiving each other's values when the clause is reached through branches that test the patterns in a different order. Scripts containing such a clause may compile to a different hash, including those where the mix-up had no visible effect. @logicalmechanism
 
 ## v1.1.24 - 2026-09-26
 
