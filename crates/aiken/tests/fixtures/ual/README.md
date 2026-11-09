@@ -14,11 +14,14 @@ The existing `cargo test --workspace` CI job runs every case. No workflow change
 | --- | --- |
 | `positive/native_function` | Data integer arguments, native Bool result, predicate fragment and `outbids` property |
 | `positive/universal_validator` | Spend and else scopes, lowered purpose premises, universal minimum parameter |
+| `positive/applied_validator` | Fixture 2 variant: zero-minimum spending rejection, positive-minimum fallback rejection, and a coexisting universal property; Flat values and deployed scripts are hash-bound |
 | `positive/falsified` | Equal bids claimed to outbid; `old = proposed = 0` is the intended counterexample, not a phase-1 verdict |
 | `positive/recursive_data` | Recursive Tree definitions and an identity function applied to valid Data-encoded leaves |
 | `negative/*` | Unknown scope, wrong module, missing project fragment helper, opaque argument, missing steps, invalid semantics, mapped ID collision, both execution-setting mismatches, unterminated block |
 
 The source-edit regression changes the native function from strict to non-strict comparison and checks that its compiled-code SHA-256 and checking-context digest both change while the companion blueprint remains unchanged.
+
+The applied-parameter regression compares the specialized program bytes/hash with `aiken blueprint apply`, changes a parameter and requires new script/context hashes while template/universal context bytes stay unchanged, and checks stale artifact pruning. Applied goldens include binary `.flat` terms and `.cbor` programs; comparisons are byte-exact.
 
 Function fixtures include real unscoped companion validators: the pinned compiled-interface schema requires at least one validator. Propositions use Unicode ordering operators where needed; Aiken function bodies use Aiken operators.
 

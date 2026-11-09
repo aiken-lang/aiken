@@ -1,7 +1,7 @@
 # Aiken × UAL / Blaster integration plan
 
 Status: planning. Agreed 2026-10-27; review findings and upstream unknowns resolved 2026-10-30; upstream re-checked 2026-11-03.
-Vocabulary: `docs/ual/CONTEXT.md`. Decisions with rationale: `docs/ual/adr/0001`–`0007`.
+Vocabulary: `docs/ual/CONTEXT.md`. Decisions with rationale: `docs/ual/adr/0001`–`0008`.
 
 ## 1. Shape of the integration
 
@@ -134,12 +134,12 @@ Each property gets one `checking-<property-id>.json`. It carries:
 - `{"semanticsVariant": …, "budget": {"kind": "cek-steps", "steps": n}, "acceptance": "evaluation"}` from the target's `@onchain`;
 - the target digests and, for validators, the selected purpose;
 - the function interface copy, for function targets;
-- `parameters.mode: universal`;
+- `parameters.mode: universal`, or `applied` with all parameter artifacts and the specialized script identity (ADR-0008);
 - the environment manifest hash.
 
 All targets in one property must share execution settings (spec).
 
-Applied-parameter checking (`mode: applied`) is supported by the consumer but has no Aiken syntax yet. It is a stretch goal (ticket UAL-14), so v1 properties are universal over parameters.
+Applied-parameter checking (`mode: applied`, UAL-14) uses a per-scope `[CBOR_HEX,...]` suffix after the target/handler name. Values follow declaration order and use `aiken blueprint apply`'s Plutus Data CBOR input form. The property's wrapper takes runtime arguments only; the template remains unchanged. See [ADR-0008](adr/0008-property-local-applied-parameters.md).
 
 Before any file is written, the producer validates:
 - unique ids;
@@ -208,7 +208,7 @@ These pins move when PlutusCoreBlaster #70 merges (Blaster → `1cb5a63`, Cardan
 These mirror the UAL acceptance criteria. Phase 1 compares emitted JSON against reviewed expected documents; phase 2 runs the fixtures through the consumer.
 
 1. A function target with a native result (`outbids`), with one verified property.
-2. A validator target with `spend` and `else`, and a purpose-scoped property, universal over parameters.
+2. A validator target with `spend` and `else`, and purpose-scoped properties, both universal over parameters and an applied variant binding concrete values.
 3. A property that must be **falsified**, whose counterexample surfaces in `verify check`.
 4. A recursive Data type through a function target, so the `definitions` graph round-trips.
 5. Negative cases:

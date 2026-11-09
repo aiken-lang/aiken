@@ -22,6 +22,7 @@ pub(super) enum Block {
 pub(super) struct Scope {
     pub name: String,
     pub handler: Option<String>,
+    pub applied_parameters: Option<Vec<String>>,
     pub location: Span,
 }
 
@@ -89,7 +90,8 @@ pub(super) fn parse(source: &str, span: Span) -> Result<Block, ParseError> {
                 if parser.remaining().starts_with('"') || parser.remaining().is_empty() {
                     break;
                 }
-                let (scope, location) = parser.word();
+                let start = parser.position;
+                let (scope, mut location) = parser.scope_name();
                 let mut parts = scope.split('.');
                 let name = parts.next().unwrap_or_default();
                 let handler = parts.next();
@@ -102,9 +104,12 @@ pub(super) fn parse(source: &str, span: Span) -> Result<Block, ParseError> {
                         location,
                     ));
                 }
+                let applied_parameters = parser.parameters()?;
+                location = parser.location(start, parser.position);
                 scopes.push(Scope {
                     name: name.into(),
                     handler: handler.map(str::to_owned),
+                    applied_parameters,
                     location,
                 });
             }
@@ -186,6 +191,71 @@ impl<'a> Parser<'a> {
             &self.content[start..self.position],
             self.location(start, self.position),
         )
+    }
+
+    fn scope_name(&mut self) -> (&'a str, Span) {
+        let start = self.position;
+        self.position += self
+            .remaining()
+            .find(|char: char| char.is_whitespace() || char == '[')
+            .unwrap_or(self.remaining().len());
+        (
+            &self.content[start..self.position],
+            self.location(start, self.position),
+        )
+    }
+
+    fn parameters(&mut self) -> Result<Option<Vec<String>>, ParseError> {
+        if !self.remaining().starts_with('[') {
+            return Ok(None);
+        }
+        let start = self.position;
+        self.position += 1;
+        self.whitespace();
+        let mut parameters = Vec::new();
+        if !self.remaining().starts_with(']') {
+            loop {
+                let value_start = self.position;
+                self.position += self
+                    .remaining()
+                    .bytes()
+                    .take_while(u8::is_ascii_hexdigit)
+                    .count();
+                if value_start == self.position || !(self.position - value_start).is_multiple_of(2)
+                {
+                    return Err(Self::error(
+                        "An applied parameter must be a nonempty, even-length CBOR hex literal.",
+                        self.location(start, self.position),
+                    ));
+                }
+                parameters.push(self.content[value_start..self.position].to_ascii_lowercase());
+                self.whitespace();
+                if self.remaining().starts_with(']') {
+                    break;
+                }
+                if !self.remaining().starts_with(',') {
+                    return Err(Self::error(
+                        "Expected `,` or `]` after an applied parameter.",
+                        self.location(start, self.position),
+                    ));
+                }
+                self.position += 1;
+                self.whitespace();
+            }
+        }
+        self.position += 1;
+        if self
+            .remaining()
+            .chars()
+            .next()
+            .is_some_and(|char| !char.is_whitespace())
+        {
+            return Err(Self::error(
+                "Expected whitespace after an applied-parameter suffix.",
+                self.location(start, self.position),
+            ));
+        }
+        Ok(Some(parameters))
     }
 
     fn description(&mut self) -> Result<String, ParseError> {
@@ -295,6 +365,45 @@ mod tests {
         assert!(full_source.is_char_boundary(shifted.location.start));
         assert!(full_source.is_char_boundary(shifted.location.end));
         error
+    }
+
+    #[test]
+    fn scope_parameters_preserve_order_and_include_suffix_in_span() {
+        let source =
+            "//@ PROPERTY p for vesting.spend[ 182A ,\n 00 ] other empty[] \"claim\" True @//";
+        let Block::Property { scopes, .. } = block(source).unwrap() else {
+            panic!("expected property");
+        };
+        assert_eq!(scopes[0].name, "vesting");
+        assert_eq!(scopes[0].handler.as_deref(), Some("spend"));
+        assert_eq!(
+            scopes[0].applied_parameters,
+            Some(vec!["182a".to_string(), "00".to_string()])
+        );
+        assert_eq!(
+            &source[scopes[0].location.range()],
+            "vesting.spend[ 182A ,\n 00 ]"
+        );
+        assert_eq!(scopes[1].applied_parameters, None);
+        assert_eq!(scopes[2].applied_parameters, Some(vec![]));
+    }
+
+    #[test]
+    fn malformed_scope_parameter_suffixes_are_rejected() {
+        for scope in [
+            "v[0]",
+            "v[gg]",
+            "v[,00]",
+            "v[00,]",
+            "v[00,,01]",
+            "v[00 01]",
+            "v[00",
+            "v[",
+            "v[00]]",
+            "v[00].spend",
+        ] {
+            invalid(&format!("//@ PROPERTY p for {scope} \"claim\" True @//"));
+        }
     }
 
     #[test]

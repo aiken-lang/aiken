@@ -175,12 +175,18 @@ fn write_bundle(output: &Path, bundle: &bundle::Bundle, environment: &Path) -> m
                 .iter()
                 .map(|(id, bytes)| (format!("checking-{id}.json"), bytes.as_slice())),
         )
+        .chain(
+            bundle
+                .artifacts()
+                .iter()
+                .map(|(uri, bytes)| (uri.clone(), bytes.as_slice())),
+        )
         .collect::<BTreeMap<_, _>>();
     if environment.parent() == Some(output)
         && environment
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| artifacts.contains_key(name) || is_checking_file(name))
+            .is_some_and(|name| artifacts.contains_key(name) || is_generated_file(name))
     {
         return Err(miette::miette!(
             "environment manifest overlaps generated bundle files"
@@ -190,12 +196,12 @@ fn write_bundle(output: &Path, bundle: &bundle::Bundle, environment: &Path) -> m
     for (name, bytes) in &artifacts {
         replace_file(&output.join(name), bytes)?;
     }
-    // Prune only producer-owned checking files, after all new artifacts are written.
+    // Prune only producer-owned artifacts, after all new artifacts are written.
     for entry in fs::read_dir(output).into_diagnostic()? {
         let entry = entry.into_diagnostic()?;
         let name = entry.file_name();
         if let Some(name) = name.to_str()
-            && is_checking_file(name)
+            && is_generated_file(name)
             && !artifacts.contains_key(name)
             && !entry.file_type().into_diagnostic()?.is_dir()
         {
@@ -205,8 +211,22 @@ fn write_bundle(output: &Path, bundle: &bundle::Bundle, environment: &Path) -> m
     Ok(())
 }
 
-fn is_checking_file(name: &str) -> bool {
-    name.starts_with("checking-") && name.ends_with(".json")
+fn is_generated_file(name: &str) -> bool {
+    if name.starts_with("checking-") && name.ends_with(".json") {
+        return true;
+    }
+    [("applied-value-", ".flat"), ("applied-script-", ".cbor")]
+        .into_iter()
+        .any(|(prefix, suffix)| {
+            name.strip_prefix(prefix)
+                .and_then(|name| name.strip_suffix(suffix))
+                .is_some_and(|digest| {
+                    digest.len() == 64
+                        && digest
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                })
+        })
 }
 
 /// Replace rather than truncate: existing symlinks/hard links cannot redirect writes.

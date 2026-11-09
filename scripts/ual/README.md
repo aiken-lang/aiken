@@ -148,12 +148,14 @@ exact inputs, environment, driver, log and trust report. It publishes
 run artifacts are removed before generation, so a failed rerun cannot leave a
 stale success marker. Root `plutus.json` is untouched.
 
-The pinned evidence schema requires one `scriptHash` for a validator-scoped
-property, and the consumer checks it against every scoped validator. A property
-spanning distinct validator hashes therefore cannot receive valid evidence at
-this pin: publication fails explicitly. Split such claims into separate
-properties or wait for an upstream evidence format that can bind multiple
-validator hashes; Aiken does not weaken the schema or invent a binding.
+The pinned evidence schema requires one template `scriptHash` for a
+validator-scoped property, and the consumer checks it against every scoped
+validator. A property spanning distinct template hashes therefore cannot receive
+valid evidence at this pin: publication fails explicitly. Applied deployments
+additionally bind their parameter terms and specialized script hash through
+`checkingContextHash`; their binary artifacts are included in the run archive.
+Split multi-template claims into separate properties; Aiken does not weaken the
+schema or invent a binding.
 
 A helper's successful property does not verify validators that use it. The
 report warns about uncovered validators using scoped helpers, including
@@ -245,7 +247,8 @@ CLI unless `--aiken` is supplied, and captures a fresh real environment. It copi
 fixture sources without their synthetic goldens into isolated projects. No Lean
 installation is required for ordinary Rust CI; this script is for local/hermes use.
 
-It checks fixtures 1–4 through `aiken verify check`, the equivalent match-based
+It checks fixtures 1–4, including Fixture 2's applied-parameter variant with
+coexisting universal mode, through `aiken verify check`, the equivalent match-based
 purpose premise, a one-step budget, and every fixture-5 producer diagnostic.
 Verified cases must exit zero and publish evidence; other cases must exit nonzero
 without evidence. Fixture 3 must surface integer counterexample bindings. It also

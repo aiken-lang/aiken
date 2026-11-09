@@ -314,3 +314,81 @@ fn function_definition_graph_rejects_missing_and_unguarded_references() {
         assert!(dialect::graph::validate(&document).is_err());
     }
 }
+
+#[test]
+fn applied_values_reject_partial_extra_malformed_and_wrongly_typed_parameters() {
+    for values in ["", "00,01", "40", "ff", "0001"] {
+        let source =
+            VALIDATOR.replace("for vesting.spend", &format!("for vesting.spend[{values}]"));
+        assert!(draft(&source).is_err(), "accepted parameters [{values}]");
+    }
+    let source = VALIDATOR
+        .replace("vesting(minimum: Int)", "vesting")
+        .replace("minimum > 0", "True")
+        .replace("for vesting.spend", "for vesting.spend[]");
+    assert!(
+        draft(&source).is_err(),
+        "accepted application without parameters"
+    );
+}
+
+#[test]
+fn applied_parameters_preserve_declaration_order_and_data_encoding() {
+    let source = VALIDATOR
+        .replace(
+            "vesting(minimum: Int)",
+            "vesting(minimum: Int, owner: ByteArray)",
+        )
+        .replace("minimum > 0", "minimum > 0 && owner == #\"ab\"")
+        .replace("for vesting.spend", "for vesting.spend[182a,41ab]");
+    let result = bundle(&source);
+    let context: ual::CheckingContext =
+        serde_json::from_slice(&result.contexts()["positive_minimum"]).unwrap();
+    let ual::ContextTarget::Validator(target) = &context.targets[0] else {
+        panic!("expected validator")
+    };
+    let ual::ParameterBinding::Applied {
+        values,
+        applied_script,
+        applied_script_hash,
+    } = &target.parameters
+    else {
+        panic!("expected applied binding")
+    };
+    let blueprint: ual::CompiledInterfaceBlueprint =
+        serde_json::from_slice(result.blueprint_bytes()).unwrap();
+    let mut cbor_buffer = Vec::new();
+    let mut flat_buffer = Vec::new();
+    let template = uplc::ast::Program::<uplc::ast::DeBruijn>::from_hex(
+        blueprint.validators[0].compiled_code.as_ref().unwrap(),
+        &mut cbor_buffer,
+        &mut flat_buffer,
+    )
+    .unwrap();
+    let mut expected = template;
+    for (index, cbor) in ["182a", "41ab"].iter().enumerate() {
+        assert_eq!(values[index].parameter, format!("/parameters/{index}"));
+        let bytes = &result.artifacts()[&values[index].term.uri];
+        values[index].term.hash.verify(bytes).unwrap();
+        // Decode as a term, not a program: Flat artifacts have no version prefix.
+        let term: uplc::ast::Term<uplc::ast::DeBruijn> = pallas_codec::flat::decode(bytes).unwrap();
+        let data = uplc::plutus_data(&hex::decode(cbor).unwrap()).unwrap();
+        assert_eq!(term, uplc::ast::Term::data(data.clone()));
+        expected = expected.apply_data(data);
+    }
+    let bytes = &result.artifacts()[&applied_script.uri];
+    applied_script.hash.verify(bytes).unwrap();
+    assert_eq!(*bytes, expected.to_cbor().unwrap());
+    assert_eq!(
+        applied_script_hash,
+        &uplc::ast::SerializableProgram::PlutusV3Program(expected)
+            .compiled_code_and_hash()
+            .0
+            .to_string()
+    );
+    let swapped = source.replace("[182a,41ab]", "[41ab,182a]");
+    assert!(
+        draft(&swapped).is_err(),
+        "parameter schemas must follow declaration order"
+    );
+}

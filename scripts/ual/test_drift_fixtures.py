@@ -70,6 +70,23 @@ class GoldenTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "exported synthetic environment differs"):
             self.compare()
 
+    def test_applied_artifacts_are_required_and_digest_bound(self):
+        self.fixture = Path(self.temporary.name) / "without-golden"
+        root = self.project / "assurance"
+        raw = b"\x4c\x01\x01\x00\x01"
+        artifact = {"uri": "value.flat",
+                    "hash": {"alg": "sha256", "digest": hashlib.sha256(raw).hexdigest()}}
+        context = {"targets": [{"parameters": {
+            "mode": "applied", "values": [{"term": artifact}], "appliedScript": artifact}}]}
+        (root / "checking-outbids.json").write_text(json.dumps(context))
+        with self.assertRaisesRegex(RuntimeError, "Missing applied artifact"):
+            self.compare()
+        (root / "value.flat").write_bytes(raw)
+        self.assertIn("value.flat", self.compare()["files"])
+        (root / "value.flat").write_bytes(raw + b"\x00")
+        with self.assertRaisesRegex(RuntimeError, "Applied artifact digest differs"):
+            self.compare()
+
 
 class FixtureRunnerTests(unittest.TestCase):
     def test_all_fixtures_are_isolated_and_no_consumer_success_is_claimed(self):

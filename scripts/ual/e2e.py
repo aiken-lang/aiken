@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 
 from fixture_cases import NEGATIVES
 from workspace_setup import SCHEMAS, preflight, require, run
@@ -21,6 +22,8 @@ FIXTURES = ROOT / "crates/aiken/tests/fixtures/ual"
 POSITIVES = {
     "native_function": {"outbids": "verified"},
     "universal_validator": {"positive_minimum": "verified", "fallback_rejects": "verified"},
+    "applied_validator": {"applied_spend": "verified", "applied_fallback": "verified",
+                          "universal_minimum": "verified"},
     "falsified": {"equal_bid_outbids": "falsified"},
     "recursive_data": {"preserves_leaf": "verified"},
 }
@@ -84,6 +87,21 @@ class Suite:
         evidence = project / "assurance/verified-assurance.json"
         if evidence.exists() != success:
             problems.append("Evidence must exist if and only if every property verified")
+        if success and evidence.exists():
+            with zipfile.ZipFile(project / "assurance/verification-artifact.zip") as archive:
+                assurance = json.loads(evidence.read_text())
+                for reference in assurance["checkingContexts"].values():
+                    context = json.loads((project / "assurance" / reference["uri"]).read_bytes())
+                    for target in context["targets"]:
+                        parameters = target.get("parameters", {})
+                        if parameters.get("mode") != "applied":
+                            continue
+                        for artifact in [*(value["term"] for value in parameters["values"]),
+                                         parameters["appliedScript"]]:
+                            uri = artifact["uri"]
+                            raw = (project / "assurance" / uri).read_bytes()
+                            if archive.read(uri) != raw or hashlib.sha256(raw).hexdigest() != artifact["hash"]["digest"]:
+                                problems.append(f"Applied artifact missing or changed in evidence: {uri}")
         if (project / "plutus.json").read_text() != "root blueprint sentinel\n":
             problems.append("verify check changed the ordinary root blueprint")
         if diagnostic and diagnostic not in result.stdout + result.stderr:

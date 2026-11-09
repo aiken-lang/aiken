@@ -92,6 +92,9 @@ pub struct ResolvedScope {
     pub target: String,
     /// Source handler selector, deliberately not lowered to a purpose or premise.
     pub handler: Option<String>,
+    /// Concrete validator parameters in declaration order; absent means universal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applied_parameters: Option<Vec<String>>,
     pub location: Span,
 }
 
@@ -102,6 +105,9 @@ pub enum ErrorKind {
     UnknownScope,
     MissingOnchain,
     FunctionHandler,
+    FunctionParameters,
+    ConflictingParameters,
+    AppliedParameters,
     UnknownHandler,
     DuplicateProperty,
     HelperCollision,
@@ -337,10 +343,33 @@ pub fn validate<'a>(
                 );
                 continue;
             }
-            let mut resolved = Vec::new();
+            let mut resolved: Vec<ResolvedScope> = Vec::new();
             for scope in &scopes {
                 match resolve_scope(module, scope) {
-                    Ok(scope) => resolved.push(scope),
+                    Ok(scope) => {
+                        if let Some(previous) = resolved.iter().find(|previous| {
+                            previous.target == scope.target
+                                && previous.applied_parameters != scope.applied_parameters
+                        }) {
+                            errors.push(
+                                Error::new(
+                                    module,
+                                    ErrorKind::ConflictingParameters,
+                                    scope.location,
+                                    format!(
+                                        "Repeated scopes for '{}' must use identical parameter bindings.",
+                                        scope.target
+                                    ),
+                                )
+                                .with_related(
+                                    module,
+                                    previous.location,
+                                    "first scope with different parameter bindings".into(),
+                                ),
+                            );
+                        }
+                        resolved.push(scope);
+                    }
                     Err(error) => errors.push(*error),
                 }
             }
@@ -522,6 +551,17 @@ fn resolve_scope(
         });
         return Err(Box::new(error));
     };
+    if scope.applied_parameters.is_some() && matches!(definition, Definition::Fn(_)) {
+        return Err(Box::new(Error::new(
+            module,
+            ErrorKind::FunctionParameters,
+            scope.location,
+            format!(
+                "Function scope '{}' cannot have applied validator parameters.",
+                scope.name
+            ),
+        )));
+    }
     if let Some(handler) = &scope.handler {
         match definition {
             Definition::Fn(_) => {
@@ -558,6 +598,7 @@ fn resolve_scope(
     Ok(ResolvedScope {
         target: id,
         handler: scope.handler.clone(),
+        applied_parameters: scope.applied_parameters.clone(),
         location: scope.location,
     })
 }

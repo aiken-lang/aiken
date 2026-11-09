@@ -15,6 +15,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub use super::function::Error as FunctionError;
 
+mod applied;
+
 #[cfg(test)]
 mod tests;
 
@@ -93,6 +95,7 @@ pub struct PendingBundle {
     assurance: ual::AssuranceDocument,
     blueprint: Vec<u8>,
     contexts: BTreeMap<String, PendingContext>,
+    artifacts: BTreeMap<String, Vec<u8>>,
 }
 
 /// Schema- and binding-validated final artifacts. No evidence is emitted.
@@ -102,6 +105,7 @@ pub struct Bundle {
     assurance_bytes: Vec<u8>,
     blueprint: Vec<u8>,
     contexts: BTreeMap<String, Vec<u8>>,
+    artifacts: BTreeMap<String, Vec<u8>>,
 }
 
 impl PendingBundle {
@@ -153,6 +157,7 @@ impl PendingBundle {
             assurance_bytes,
             blueprint: self.blueprint,
             contexts,
+            artifacts: self.artifacts,
         })
     }
 }
@@ -173,6 +178,11 @@ impl Bundle {
     /// Final context bytes keyed by property id (artifact URI: `checking-<id>.json`).
     pub fn contexts(&self) -> &BTreeMap<String, Vec<u8>> {
         &self.contexts
+    }
+
+    /// Additional byte-bound artifacts keyed by their bundle-relative URI.
+    pub fn artifacts(&self) -> &BTreeMap<String, Vec<u8>> {
+        &self.artifacts
     }
 }
 
@@ -271,6 +281,7 @@ pub fn lower(
     let definitions = (!definitions.is_empty()).then_some(definitions);
     let mut properties = Vec::with_capacity(model.properties.len());
     let mut contexts = BTreeMap::new();
+    let mut artifacts = BTreeMap::new();
     for property in model.properties.values() {
         let mut seen = BTreeSet::new();
         let mut scoped_functions = Vec::new();
@@ -302,10 +313,27 @@ pub fn lower(
                 }
                 TargetKind::Validator { .. } => {
                     scoped_validators.push(scope.target.clone());
+                    let parameters = match &scope.applied_parameters {
+                        None => ual::ParameterBinding::Universal {},
+                        Some(parameters) => {
+                            applied::lower(blueprint, target, parameters, &mut artifacts).map_err(
+                                |message| Error::Annotations {
+                                    errors: vec![super::Error::new(
+                                        modules
+                                            .get(&property.module)
+                                            .expect("property module checked before lowering"),
+                                        ErrorKind::AppliedParameters,
+                                        scope.location,
+                                        message,
+                                    )],
+                                },
+                            )?
+                        }
+                    };
                     targets.push(ual::ContextTarget::Validator(ual::ValidatorTarget {
                         validator: scope.target.clone(),
                         purpose: purpose::purpose(scope.handler.as_deref()),
-                        parameters: ual::ParameterBinding::Universal {},
+                        parameters,
                     }));
                 }
             }
@@ -424,5 +452,6 @@ pub fn lower(
         assurance,
         blueprint,
         contexts,
+        artifacts,
     })
 }

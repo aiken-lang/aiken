@@ -238,6 +238,7 @@ mod tests {
                 .map(|handler| ResolvedScope {
                     target: "vesting__vesting".to_string(),
                     handler: handler.map(str::to_string),
+                    applied_parameters: None,
                     location: Span { start: 0, end: 0 },
                 })
                 .collect(),

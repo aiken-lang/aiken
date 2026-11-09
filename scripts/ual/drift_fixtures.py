@@ -51,7 +51,22 @@ def _compare_golden(project, fixture, environment):
     contexts = sorted(name for name in actual
                       if name.startswith("checking-") and name.endswith(".json"))
     _require(contexts, f"No checking contexts generated for {fixture.name}")
-    _require(set(actual) == {"plutus.json", "assurance.json", *contexts},
+    applied = set()
+    for name in contexts:
+        context = json.loads(actual[name])
+        for target in context["targets"]:
+            parameters = target.get("parameters", {})
+            if parameters.get("mode") != "applied":
+                continue
+            for artifact in [*(value["term"] for value in parameters["values"]),
+                             parameters["appliedScript"]]:
+                uri, digest = artifact["uri"], artifact["hash"]
+                _require(uri in actual, f"Missing applied artifact: {uri}")
+                _require(digest["alg"] == "sha256" and
+                         digest["digest"] == hashlib.sha256(actual[uri]).hexdigest(),
+                         f"Applied artifact digest differs: {uri}")
+                applied.add(uri)
+    _require(set(actual) == {"plutus.json", "assurance.json", *contexts, *applied},
              f"Unexpected bundle files for {fixture.name}")
     golden = fixture / "golden"
     if not golden.exists():

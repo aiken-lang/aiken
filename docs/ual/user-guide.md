@@ -134,6 +134,24 @@ The complete lowered proposition, not just the author's original text, appears i
 
 Multiple handler-scoped entries conjoin their premises against the **same** `ctx`. Do not express alternatives by listing incompatible purposes: a contradictory premise can make the implication vacuous. Write separate properties when separate purpose claims are intended. The implementation is [`purpose.rs`](../../crates/aiken-project/src/assurance/purpose.rs). The bracketed existential syntax above is deliberate: the pinned consumer rejected unbracketed existentials in the [recorded experiment](e2e-results.md#producer-discrepancies-and-purpose-comparison).
 
+### Applied deployments
+
+Bind every validator parameter by appending `[CBOR_HEX,...]` to that property's scope:
+
+```aiken
+//@ PROPERTY deployed_rejects for vesting.spend[00]
+  "The zero-minimum deployment rejects spending."
+  ∀ (ctx : ScriptContext),
+    isUnsuccessful (fixtures__vesting (toLedgerData ctx))
+@//
+```
+
+Values use the same hex-encoded Plutus Data CBOR as `aiken blueprint apply`: `00` is integer zero, `182a` is integer 42, and `41ab` is a one-byte byte array. They must cover **all** validator parameters in declaration order and match their blueprint schemas. The `[` immediately follows the scope; whitespace inside the list is allowed. Function scopes, empty/partial applications, extra parameters, malformed/trailing CBOR, and conflicting bindings on repeated scopes are rejected.
+
+The applied wrapper takes **runtime arguments only**: omit parameter arguments from its call. Aiken preserves the proposition as written and still adds handler premises; it does not remove parameter quantifiers or infer a deployed theorem from a universal one. Without brackets, that property's scope remains universal. Independent properties can bind different deployments of the same validator in one bundle.
+
+Generation retains the template blueprint and emits raw Flat value terms, a single-CBOR specialized program, its script hash and a `mode: applied` checking context. Changing a value changes the specialized script and context hashes, not the template. See [ADR-0008](adr/0008-property-local-applied-parameters.md) and the [applied Fixture 2 variant](../../crates/aiken/tests/fixtures/ual/positive/applied_validator/validators/fixtures.ak).
+
 ## 3. Provision the consumer and capture its environment
 
 Use an Aiken executable built from this checkout with `verify` support. The consumer workspace setup requires Bash, Python 3.11+, Git, access to the public pinned repositories, installed Lean/Lake 4.24.0, and an assurance Z3 with the `recfun-finder` simplifier. The supported recorded run used Z3 5.1.0 at the source baseline below; stock Z3 4.15.2 is insufficient. Setup checks the solver capability and records its identity, rather than enforcing an exact Z3 binary or source baseline. Aiken itself does not install or repair this workspace or download toolchains.
@@ -231,14 +249,16 @@ Generated artifacts:
 | --- | --- |
 | `assurance/plutus.json` | Compiled-interface blueprint, separate from ordinary root `plutus.json`. |
 | `assurance/assurance.json` | Properties, complete purpose-lowered propositions, fragments, and function registry. No verification evidence from generation. |
-| `assurance/checking-<property-id>.json` | One per property; target bindings, declared semantics and CEK budget, `acceptance: evaluation`, universal parameter mode, and environment binding. |
+| `assurance/checking-<property-id>.json` | One per property; target bindings, declared semantics and CEK budget, `acceptance: evaluation`, universal or applied parameter mode, and environment binding. |
+| `assurance/applied-value-<sha256>.flat` | Applied parameter as a closed Data constant, raw Flat term without a program-version prefix. |
+| `assurance/applied-script-<sha256>.cbor` | Specialized program: exact ordered application of the template, single-CBOR Flat. |
 | `assurance/Check.lean` | Check driver, with the capture imports and opened V3/ScriptInfo namespaces. |
 | `assurance/verification.log` | Full consumer log once the process has been invoked, including failed verdicts/diagnostics. Early failures need not produce a log. |
 | `assurance/run-report.json` | Successful-run trust/report artifact. |
 | `assurance/verification-artifact.zip` | Successful-run exact inputs, environment, driver, log, and trust report. |
 | `assurance/verified-assurance.json` | Published last on success, with `smt-check` evidence bound to each `checkingContextHash` and scoped target hashes. |
 
-Generation removes stale checking-context files and never overwrites the root blueprint ([ADR-0006](adr/0006-dialect-blueprint-under-assurance.md)). Bundle references resolve relative to `assurance/`; retain the referenced environment when moving a generated bundle. Function digests are SHA-256 of hex-decoded `compiledCode` (single CBOR-wrapped Flat); validator bindings use the script hash. Modified bytes are not interchangeable with verified bytes.
+Generation removes stale checking-context files and content-addressed applied artifacts and never overwrites the root blueprint ([ADR-0006](adr/0006-dialect-blueprint-under-assurance.md)). Bundle references resolve relative to `assurance/`; retain every referenced artifact and the environment when moving a generated bundle. Function digests are SHA-256 of hex-decoded `compiledCode` (single CBOR-wrapped Flat); validator bindings use the script hash. Modified bytes are not interchangeable with verified bytes.
 
 Before compilation or workspace loading, each check attempt removes stale evidence, its archive/report, old driver, and old log. It exits nonzero for no properties, any non-verified property, timeout, unsuccessful Lean exit, incomplete/unrecognized/duplicate/unknown verdicts, an inconsistent summary, or evidence-publication failure. On Unix the timeout terminates the consumer process group. A wall-clock timeout is separate from the declared CEK bound. Successful verdict text alone is not sufficient for success.
 
@@ -246,7 +266,7 @@ The pinned consumer has no JSON verdict-report option. The driver parses its exa
 
 TTY output shows the property table and diagnostics; non-TTY stdout emits a JSON report, with compiler diagnostics and the raw consumer log on stderr. Workspace checks emit one report per member. Consumers of this output should use `--show-json-schema`, not scrape the styled table.
 
-The pinned evidence format has one `scriptHash` per validator-scoped property. A property spanning distinct validator hashes cannot receive valid evidence and publication fails; split it into separate properties. This is a format limitation, not permission to omit a target binding. Applied-parameter checking has no Aiken annotation syntax: generated contexts use universal mode.
+The pinned evidence format has one `scriptHash` per validator-scoped property. A property spanning distinct template validator hashes cannot receive valid evidence and publication fails; split it into separate properties. This is a format limitation, not permission to omit a target binding. For applied properties, this field retains the template hash expected by the pinned consumer; `checkingContextHash` additionally binds the parameter terms and specialized script hash. The verification archive includes those binary artifacts.
 
 ## 6. Interpret results within their trust boundary
 

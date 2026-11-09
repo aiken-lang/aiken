@@ -495,12 +495,32 @@ fn publish_evidence(
         .map(|(id, bytes)| (id.clone(), bytes.as_slice()))
         .collect();
     ual::validate_bindings(assurance, &blueprint_bytes, &context_refs).into_diagnostic()?;
+    let mut applied_artifacts = BTreeMap::new();
     for bytes in contexts.values() {
-        ual::validate_environment(
-            &serde_json::from_slice(bytes).into_diagnostic()?,
-            &environment_bytes,
-        )
-        .into_diagnostic()?;
+        let context: ual::CheckingContext = serde_json::from_slice(bytes).into_diagnostic()?;
+        ual::validate_environment(&context, &environment_bytes).into_diagnostic()?;
+        for target in context.targets {
+            if let ual::ContextTarget::Validator(ual::ValidatorTarget {
+                parameters:
+                    ual::ParameterBinding::Applied {
+                        values,
+                        applied_script,
+                        ..
+                    },
+                ..
+            }) = target
+            {
+                for artifact in values
+                    .into_iter()
+                    .map(|value| value.term)
+                    .chain(std::iter::once(applied_script))
+                {
+                    let bytes = fs::read(output.join(&artifact.uri)).into_diagnostic()?;
+                    artifact.hash.verify(&bytes).into_diagnostic()?;
+                    applied_artifacts.insert(artifact.uri, bytes);
+                }
+            }
+        }
     }
     let date = civil_date(
         SystemTime::now()
@@ -537,6 +557,10 @@ fn publish_evidence(
         archive
             .start_file(&artifact.uri, options)
             .into_diagnostic()?;
+        archive.write_all(bytes).into_diagnostic()?;
+    }
+    for (uri, bytes) in &applied_artifacts {
+        archive.start_file(uri, options).into_diagnostic()?;
         archive.write_all(bytes).into_diagnostic()?;
     }
     let artifact_bytes = archive.finish().into_diagnostic()?.into_inner();

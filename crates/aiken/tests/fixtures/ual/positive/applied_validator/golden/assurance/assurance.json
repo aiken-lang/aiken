@@ -1,0 +1,109 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "dfb39eb7e2f31dd2253c521754f7a07cd9bcad3429387b4fb19562948d07536d"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "applied_fallback": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "021b21b9d15b6283094c5a86eb793aae41023b661322fdf809bbc9228216b00d"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-applied_fallback.json"
+    },
+    "applied_spend": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "308e772f90f962772df5928295f83f4458e10b0880abe052c24df5bfc45b547a"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-applied_spend.json"
+    },
+    "universal_minimum": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "98430a1fac25bb72201d01cfd5692dd8693583cde4c5b0c849f6c6d7e2d1899a"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-universal_minimum.json"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "name": "UAL",
+      "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "fixtures"
+    ],
+    "created": "2026-11-04",
+    "description": "UAL concrete-parameter validator producer fixture",
+    "license": "Apache-2.0",
+    "title": "fixtures/ual_applied_validator",
+    "version": "1.0.0"
+  },
+  "properties": [
+    {
+      "checkingContext": "applied_fallback",
+      "id": "applied_fallback",
+      "scope": {
+        "validators": [
+          "fixtures__vesting"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (ctx : ScriptContext), ((¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d))) → (\n    isUnsuccessful (fixtures__vesting (toLedgerData ctx))\n\n)"
+        },
+        "text": "The deployed positive-minimum validator rejects non-spending invocations."
+      }
+    },
+    {
+      "checkingContext": "applied_spend",
+      "id": "applied_spend",
+      "scope": {
+        "validators": [
+          "fixtures__vesting"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (ctx : ScriptContext), ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    isUnsuccessful (fixtures__vesting (toLedgerData ctx))\n\n)"
+        },
+        "text": "The deployed zero-minimum validator rejects spending."
+      }
+    },
+    {
+      "checkingContext": "universal_minimum",
+      "id": "universal_minimum",
+      "scope": {
+        "validators": [
+          "fixtures__vesting"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    minimum ≤ 0 → isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
+        },
+        "text": "A nonpositive minimum rejects spending for every deployment."
+      }
+    }
+  ]
+}

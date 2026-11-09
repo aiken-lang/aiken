@@ -38,6 +38,16 @@ fn scope_diagnostics_label_the_exact_scope() {
             ErrorKind::FunctionHandler,
         ),
         (
+            "@onchain(steps: 1, semantics: e)\npub fn f() { 1 }",
+            "f[00]",
+            ErrorKind::FunctionParameters,
+        ),
+        (
+            "@onchain(steps: 1, semantics: e)\npub fn f() { 1 }",
+            "f[]",
+            ErrorKind::FunctionParameters,
+        ),
+        (
             "@onchain(steps: 1, semantics: e)\nvalidator v { mint(_r: Data, _p: ByteArray, _c: Data) { True } }",
             "v.spend",
             ErrorKind::UnknownHandler,
@@ -72,6 +82,69 @@ fn scope_diagnostics_label_the_exact_scope() {
             assert!(error.help.as_ref().unwrap().contains("@onchain"));
         }
     }
+}
+
+#[test]
+fn repeated_validator_scopes_require_identical_parameter_bindings() {
+    for (scopes, conflicting) in [
+        ("v[00] v.else[01]", true),
+        ("v v.else[00]", true),
+        ("v[00] v.else", true),
+        ("v[] v.else[00]", true),
+        ("v[00] v.else[00]", false),
+        ("v v.else", false),
+    ] {
+        let source = format!(
+            "@onchain(steps: 1, semantics: e)\nvalidator v(n: Int) {{ else(_ctx: Data) {{ n == 0 }} }}\n//@ PROPERTY p for {scopes} \"claim\" True @//"
+        );
+        let mut project = TestProject::new();
+        let module = check(&mut project, "local", &source);
+        let result = validate([&module]);
+        if conflicting {
+            let errors = result.unwrap_err();
+            assert_eq!(errors.len(), 1, "{errors:?}");
+            assert_eq!(errors[0].kind, ErrorKind::ConflictingParameters);
+            assert_eq!(
+                &source[errors[0].location.range()],
+                scopes.split_whitespace().nth(1).unwrap()
+            );
+            assert_eq!(errors[0].related.len(), 1);
+        } else {
+            let model = result.unwrap();
+            let scopes = &model.properties["p"].scopes;
+            assert_eq!(scopes[0].applied_parameters, scopes[1].applied_parameters);
+            assert_eq!(
+                scopes[0].applied_parameters.is_none(),
+                !source.contains("[00]")
+            );
+        }
+    }
+}
+
+#[test]
+fn separate_properties_may_bind_different_parameters() {
+    let source = r#"
+        @onchain(steps: 1, semantics: e)
+        validator v(n: Int) { else(_ctx: Data) { n == 0 } }
+        //@ PROPERTY universal for v "universal" True @//
+        //@ PROPERTY zero for v[00] "zero" True @//
+        //@ PROPERTY one for v[01] "one" True @//
+    "#;
+    let mut project = TestProject::new();
+    let module = check(&mut project, "local", source);
+    let model = validate([&module]).unwrap();
+    assert_eq!(
+        model.properties["universal"].scopes[0].applied_parameters,
+        None
+    );
+    assert_eq!(
+        model.properties["zero"].scopes[0].applied_parameters,
+        Some(vec!["00".to_string()])
+    );
+    assert_eq!(
+        model.properties["one"].scopes[0].applied_parameters,
+        Some(vec!["01".to_string()])
+    );
 }
 
 #[test]

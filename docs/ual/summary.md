@@ -23,6 +23,7 @@ replaced by verification output.
 | [0005: no fuzzer lifting](adr/0005-no-fuzzer-to-quantifier-lift.md) | Sampling distributions do not define quantified domains. Properties are written explicitly; no test-to-property translation or old integration-branch implementation is used. |
 | [0006: separate blueprint](adr/0006-dialect-blueprint-under-assurance.md) | The compiled-interface dialect lives at `assurance/plutus.json`; root `plutus.json` remains for existing off-chain tooling. |
 | [0007: emitted IDs](adr/0007-emitted-target-ids.md) | `module/path.name` becomes `module_path__name` (also replacing module-path hyphens). Scopes use local Aiken names; Lean propositions use emitted IDs. Collisions are errors. This supersedes ADR-0004's illustrative dotted ID. |
+| [0008: applied parameters](adr/0008-property-local-applied-parameters.md) | `validator.handler[CBOR_HEX,...]` binds all parameters per property; wrappers take runtime arguments only. Exact template applications, Flat values and deployed script hashes are context-bound. Universal claims remain available without brackets. |
 
 Implementation boundaries: `aiken-lang` owns annotation trivia and decorators;
 `aiken-project/src/assurance/` owns scope resolution, lowering and consumer
@@ -35,7 +36,7 @@ tooling live in [`scripts/ual/`](../../scripts/ual/README.md).
 | Area | Current contract |
 | --- | --- |
 | Execution settings | **No default steps or semantics.** Each target declares positive `steps` and `semantics: c` or `e`. All targets of one property must agree. These are CEK steps, not ledger CPU/memory ex-units. E is post-Conway; C remains supported. |
-| Checking context | Plutus V3, `acceptance: evaluation`, universal validator parameters. No applied-parameter syntax or template syntax is exposed. |
+| Checking context | Plutus V3, `acceptance: evaluation`, universal parameters by default. A scope's `[CBOR_HEX,...]` suffix selects fully applied mode. No property-template syntax is exposed. |
 | Properties | Project-unique IDs, mandatory nonempty descriptions, targets in the property's own module. Predicate fragments follow Aiken `use` edges. |
 | Purpose scopes | All six V3 invocations are emitted. Handler scopes insert bracketed existential premises; `else` conjoins negations of defined handlers. Unsuffixed and `else` scopes select `spend` as the calling convention, not as a context restriction. Multiple handler scopes conjoin premises, so mutually exclusive scopes can make a claim vacuous. |
 | Generation | Requires `--environment PATH` or `--no-environment`. The latter is a write-free, environment-unbound dry run; `--environment PATH --dry-run` validates full bindings without writes. Existing dependency installations are required for read-only compilation. |

@@ -141,8 +141,8 @@ impl Project {
         }
         for (path, bytes) in expected {
             assert_eq!(
-                std::str::from_utf8(&actual[&path]).unwrap(),
-                std::str::from_utf8(&bytes).unwrap(),
+                actual[&path],
+                bytes,
                 "{relative}/{}: golden bundle differs",
                 path.display()
             );
@@ -240,6 +240,94 @@ fn source_edit_invalidates_function_and_checking_digests() {
     assert_eq!(
         blueprint,
         fs::read(project.0.join("assurance/plutus.json")).unwrap()
+    );
+    assert_bindings(
+        &project.bundle(),
+        &fs::read(fixtures().join("environment.json")).unwrap(),
+    );
+}
+
+#[test]
+fn applied_validator_binds_deployment_bytes_and_parameter_changes() {
+    let project = Project::fixture("positive/applied_validator");
+    project.put("plutus.json", b"ordinary blueprint sentinel");
+    project.generate();
+    project.assert_golden("positive/applied_validator");
+    let before = project.json("assurance/assurance.json");
+    let context = project.json("assurance/checking-applied_spend.json");
+    let parameters = &context["targets"][0]["parameters"];
+    assert_eq!(parameters["mode"], "applied");
+    assert_eq!(parameters["values"][0]["parameter"], "/parameters/0");
+    let deployment_uri = parameters["appliedScript"]["uri"].as_str().unwrap();
+    let deployment = fs::read(project.0.join("assurance").join(deployment_uri)).unwrap();
+    for artifact in [
+        &parameters["values"][0]["term"],
+        &parameters["appliedScript"],
+    ] {
+        let artifact: aiken_ual::Artifact = serde_json::from_value(artifact.clone()).unwrap();
+        artifact
+            .hash
+            .verify(&fs::read(project.0.join("assurance").join(artifact.uri)).unwrap())
+            .unwrap();
+    }
+    assert_eq!(
+        fs::read(project.0.join("plutus.json")).unwrap(),
+        b"ordinary blueprint sentinel"
+    );
+    let template = fs::read(project.0.join("assurance/plutus.json")).unwrap();
+    let universal = fs::read(project.0.join("assurance/checking-universal_minimum.json")).unwrap();
+    assert_bindings(
+        &project.bundle(),
+        &fs::read(fixtures().join("environment.json")).unwrap(),
+    );
+
+    // The specialised artifact is precisely the deployed script produced by the
+    // existing blueprint apply command, not an optimized or recompiled substitute.
+    let built = project.run(&["build"]);
+    assert!(built.status.success(), "{}", diagnostic(&built));
+    let applied = project.run(&["blueprint", "apply", "00", "--out", "deployed.json"]);
+    assert!(applied.status.success(), "{}", diagnostic(&applied));
+    let deployed = project.json("deployed.json");
+    assert_eq!(
+        hex::encode(&deployment),
+        deployed["validators"][0]["compiledCode"].as_str().unwrap()
+    );
+    assert_eq!(
+        parameters["appliedScriptHash"],
+        deployed["validators"][0]["hash"]
+    );
+
+    let source = fs::read_to_string(project.0.join("validators/fixtures.ak")).unwrap();
+    project.put(
+        "validators/fixtures.ak",
+        source.replace("vesting.spend[00]", "vesting.spend[01]"),
+    );
+    project.put("assurance/applied-not-owned.flat", b"user artifact");
+    project.generate();
+    let after = project.json("assurance/assurance.json");
+    let changed = project.json("assurance/checking-applied_spend.json");
+    assert!(!project.0.join("assurance").join(deployment_uri).exists());
+    let old_value_uri = parameters["values"][0]["term"]["uri"].as_str().unwrap();
+    assert!(!project.0.join("assurance").join(old_value_uri).exists());
+    assert_eq!(
+        fs::read(project.0.join("assurance/applied-not-owned.flat")).unwrap(),
+        b"user artifact"
+    );
+    assert_ne!(
+        parameters["appliedScriptHash"],
+        changed["targets"][0]["parameters"]["appliedScriptHash"]
+    );
+    assert_ne!(
+        before["checkingContexts"]["applied_spend"]["hash"],
+        after["checkingContexts"]["applied_spend"]["hash"]
+    );
+    assert_eq!(
+        template,
+        fs::read(project.0.join("assurance/plutus.json")).unwrap()
+    );
+    assert_eq!(
+        universal,
+        fs::read(project.0.join("assurance/checking-universal_minimum.json")).unwrap()
     );
     assert_bindings(
         &project.bundle(),
