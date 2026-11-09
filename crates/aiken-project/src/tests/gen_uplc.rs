@@ -6861,3 +6861,36 @@ fn when_shared_clause_binds_tuple_fields_in_order() {
 
     assert_uplc_evaluates_successfully(src);
 }
+
+#[test]
+fn when_shared_clause_keeps_variables_apart_on_every_branch() {
+    let src = r#"
+        type Action {
+          Deposit
+          Withdraw
+          Update
+        }
+
+        fn allowed(action: Action, old: Option<Int>, new: Option<Int>) -> Bool {
+          when (action, old, new) is {
+            (Deposit, None, _) -> True
+            (Withdraw, _, None) -> True
+            (_, Some(before), Some(after)) -> after >= before
+            _ -> False
+          }
+        }
+
+        test foo() {
+          and {
+            allowed(Update, Some(100), Some(120)),
+            !allowed(Update, Some(100), Some(60)),
+            allowed(Deposit, Some(100), Some(120)),
+            !allowed(Deposit, Some(100), Some(60)),
+            allowed(Withdraw, Some(100), Some(120)),
+            !allowed(Withdraw, Some(100), Some(60)),
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
