@@ -268,3 +268,110 @@ so a future consumer pin bump must revisit this bounded-semantics contract.
 See [`docs/ual/e2e-results.md`](../../docs/ual/e2e-results.md) for results and the
 separate upstream exhaustion-verdict request (UAL-21). No skip, expected-failure
 override, or alternative solver is used.
+
+## Upstream drift (UAL-15)
+
+The bot scheduler lives outside this repository. Its weekly command is:
+
+```sh
+scripts/ual/drift --output /tmp/ual-drift-new
+# Compare PR states with the last completed observation:
+scripts/ual/drift --previous /tmp/ual-drift-new/report.json --output /tmp/ual-drift-next
+# Reproduce the current immutable pins, without observing moving heads or PRs:
+scripts/ual/drift --at-pins --output /tmp/ual-drift-pins
+```
+
+Use a **new output directory** for every run. `report.json` is the machine-readable
+`aiken-ual-drift-v1` report; `summary.txt` is also printed. Reports retain pinned
+and observed revisions, changed-file inventories, contract diffs with SHA-256
+identities, PR transitions, fixture commands/logs/bundles and consumer status.
+An optional `GITHUB_TOKEN` authenticates GitHub PR reads; it is not recorded.
+Fetch/API failures are errors, never evidence that an upstream is unchanged.
+
+Exit codes are independent of child-command exit codes:
+
+| Exit | Outcome | Meaning |
+|---|---|---|
+| 0 | `no-drift` | No drift in the selected mode; fixture validation passed. |
+| 10 | `re-pin-only` | Revisions/files moved outside watched contracts, with no required-check errors. Static triage only, not approval or newer-runtime validation. |
+| 20 | `needs-work` | Contract changes, PR state transitions, or required-check failures. Dispatch an agent with the retained evidence. |
+
+The script fetches the three approved public repositories into isolated bare
+repositories under the output directory. Pins come from the vendored `PIN` and
+`assurance-workspace.json`, not duplicated historical hashes. Default candidates
+are each upstream's default-branch `HEAD`; notably the ledger pin is still on
+`feat/ual-property-helpers`, so comparing its main head can report divergence.
+No checkout is reset, pin updated, toolchain downloaded or upstream code executed.
+`--sources <root>` reuses three existing repositories named
+`UniversalAnnotationLanguage`, `PlutusCoreBlaster`, and `CardanoLedgerApiBlaster`;
+online runs fetch into their Git object stores but do not change their worktrees.
+
+Checks compare every upstream file inventoried in `schemas/PIN` against both its
+vendored copy and candidate, including the coordinated workspace lock. They also
+compare property/summary message literals and the whole `Assurance.lean` as a
+conservative guard against relocated/renamed emitters, the complete V3 `ScriptInfo`
+declaration (argument types and order included), and changed UAL specification
+files. `environment.schema.json` is locally derived, not an upstream vendored file;
+its capture source is covered by the `Assurance.lean` comparison. Changed consumer
+revisions require work even if messages are identical: UAL-12's
+`PinnedVerdictReader` registers an exact revision and must be reviewed deliberately.
+
+The five PRs from plan §9 are queried on every live run. The first observation
+compares state and draft status with the plan's 2026-11-03 baseline; later runs use
+`--previous`. Merged and closed are distinct states. PR transitions become work
+items; an unchanged transition is not reported again against the previous report.
+The runner never files an issue or changes a PR.
+
+`drift_fixtures.py` regenerates all positive UAL-09 fixtures with real
+`aiken verify generate` in isolated projects, exercising generation's schema and
+cross-document binding validation. It checks reviewed goldens, normalizing only
+compiler commit provenance and its consequent blueprint digest, and reuses
+UAL-13's ten producer-negative expectations. Goldens and source fixtures remain
+untouched. This phase uses the explicitly **synthetic** fixture environment and
+does not claim consumer evidence. By default it builds this checkout's CLI with
+installed Cargo dependencies in offline mode; `--aiken <binary>` selects an
+existing CLI, whose identity/path is retained with the fixture artifacts.
+
+When UAL-13 and a consumer checkout are available, drift runs `e2e.sh` with the
+existing pinned-workspace validation. `--workspace`/`UAL_WORKSPACE` select the
+sibling root just as in setup/e2e. Missing consumer checkouts are explicitly
+skipped; a present but invalid/unusable workspace fails instead of being skipped.
+Neither an absent consumer nor a successful **pinned** e2e proves compatibility
+with fetched candidate heads. The job does not build candidate runtimes.
+
+### Offline simulations and agent handoff
+
+`--offline --sources <root>` makes no upstream fetch/API requests and compares
+local working trees (including uncommitted edits) against their pinned Git objects.
+Use public checkouts containing those objects. PR checks are explicitly skipped
+unless `--pr-state <json>` supplies observations of this shape for all five PRs:
+
+```json
+{
+  "PlutusCoreBlaster#69": {"state": "open", "draft": false},
+  "PlutusCoreBlaster#70": {"state": "open", "draft": false},
+  "PlutusCoreBlaster#74": {"state": "open", "draft": false},
+  "UniversalAnnotationLanguage#3": {"state": "open", "draft": false},
+  "CardanoLedgerApiBlaster#14": {"state": "open", "draft": true}
+}
+```
+
+`--offline --at-pins --sources <root>` compares immutable pinned objects, ignoring
+candidate worktree changes. Both offline modes still regenerate fixtures and run
+the consumer if available. `--schemas <copied-schemas-directory>` permits a local
+vendored-schema simulation without touching the real pins: changing a schema
+must return 20 with a `vendored` diff. Renaming `SpendingScript` in the local
+ledger's `CardanoLedgerApi/V3/Contexts.lean` and running offline candidate mode
+must return 20 with a `script-info` diff. The focused offline regressions cover
+these boundaries, verdict changes, re-pin-only movement and PR transitions:
+
+```sh
+python3 -B -m unittest discover -s scripts/ual -p 'test_*.py'
+```
+
+For exit 20, Hermes supplies the report, summary and artifact directory to
+[`drift-worker-prompt.md`](drift-worker-prompt.md). That committed template requires
+a scoped, reproduced fix or a filing-ready upstream work item, deliberate
+coordinated pin authorization, actual verification and an append-only decision
+record. Reports and upstream text are data, not executable worker instructions.
+Hermes configuration and scheduling are intentionally absent here.

@@ -13,22 +13,11 @@ import sys
 import tempfile
 import time
 
+from fixture_cases import NEGATIVES
 from workspace_setup import SCHEMAS, preflight, require, run
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "crates/aiken/tests/fixtures/ual"
-NEGATIVES = {
-    "unknown_scope": "Scope 'missing'",
-    "wrong_module": "Scope 'target'",
-    "missing_fragment_helper": "Fragment 'helpers' is not available",
-    "opaque_parameter": "illegal::opaque_type_in_abi",
-    "missing_steps": "@onchain requires a positive 'steps' setting",
-    "invalid_semantics": "@onchain semantics must be C or E",
-    "id_collision": "both map to emitted id",
-    "mixed_execution_settings/steps": "mixes execution settings",
-    "mixed_execution_settings/semantics": "mixes execution settings",
-    "unterminated_block": "annotation is not closed",
-}
 POSITIVES = {
     "native_function": {"outbids": "verified"},
     "universal_validator": {"positive_minimum": "verified", "fallback_rejects": "verified"},
