@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken**: Document UAL annotations, verification commands, bounded SMT trust limits and helper-inlining caveats in an in-tree user guide, with reviewer ADRs, defaults, end-to-end evidence and upstream dependencies. @Riley-Kilgore
 - **aiken**: Add public UAL upstream drift detection with contract diffs, fixture regeneration, optional pinned-consumer checks, tracked PR transitions, distinct triage exits and a committed needs-work agent prompt. @Riley-Kilgore
 - **aiken**: Add a pinned real-consumer UAL end-to-end runner covering fixture verdicts, counterexamples, purpose-premise comparison, source diagnostics and tamper rejection, asserting bounded one-step falsification without evidence. @Riley-Kilgore
 - **aiken**: Add `verify check` with bounded consumer execution, fail-closed verdict validation, terminal/JSON reports, trust-base disclosure, validator-scope warnings and success-only context-bound SMT evidence. @Riley-Kilgore
