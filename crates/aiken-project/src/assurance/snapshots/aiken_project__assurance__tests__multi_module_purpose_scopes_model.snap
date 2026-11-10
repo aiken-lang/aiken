@@ -43,9 +43,10 @@ expression: model
     "contract": {
       "id": "contract",
       "module": "contract",
+      "namespace": "contract",
       "imports": [
         "predicates.base",
-        "«namespace»"
+        "namespace"
       ],
       "predicates": [
         {
@@ -72,27 +73,10 @@ expression: model
         }
       ]
     },
-    "predicates.base": {
-      "id": "predicates.base",
-      "module": "predicates/base",
-      "imports": [],
-      "predicates": [
-        {
-          "body": "\ndef positive (n : Int) : Prop := n > 0\n",
-          "location": {
-            "start": 0,
-            "end": 56
-          },
-          "body_location": {
-            "start": 13,
-            "end": 53
-          }
-        }
-      ]
-    },
-    "«namespace»": {
-      "id": "«namespace»",
+    "namespace": {
+      "id": "namespace",
       "module": "namespace",
+      "namespace": "«namespace»",
       "imports": [],
       "predicates": [
         {
@@ -104,6 +88,25 @@ expression: model
           "body_location": {
             "start": 13,
             "end": 54
+          }
+        }
+      ]
+    },
+    "predicates.base": {
+      "id": "predicates.base",
+      "module": "predicates/base",
+      "namespace": "predicates.base",
+      "imports": [],
+      "predicates": [
+        {
+          "body": "\ndef positive (n : Int) : Prop := n > 0\n",
+          "location": {
+            "start": 0,
+            "end": 56
+          },
+          "body_location": {
+            "start": 13,
+            "end": 53
           }
         }
       ]

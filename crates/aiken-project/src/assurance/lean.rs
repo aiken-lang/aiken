@@ -1,5 +1,23 @@
 use aiken_lang::ast::Span;
 
+/// UAL fragment id of an Aiken module: `/` becomes `.` and `.` becomes `-`.
+///
+/// Aiken module names use only `[a-z0-9_./]` (`is_aiken_path` admits dots after
+/// the first segment and `-` is normalized to `_`), so this is injective and
+/// always matches the fragment-id schema `^[A-Za-z0-9_.-]+$`. Ids of modules whose
+/// path segments are plain identifiers are unchanged from the Lean spelling.
+/// The id is a bundle key only; it is never a Lean name.
+pub(crate) fn fragment_id(module: &str) -> String {
+    module
+        .chars()
+        .map(|character| match character {
+            '/' => '.',
+            '.' => '-',
+            other => other,
+        })
+        .collect()
+}
+
 /// Fragment namespaces preserve module path segments, escaping Lean syntax only.
 pub(crate) fn namespace(module: &str) -> String {
     let mut result = String::with_capacity(module.len());
@@ -66,6 +84,56 @@ pub(super) fn references_namespace(body: &str, namespace: &str) -> bool {
             }
         }
         name.next().is_some()
+    })
+}
+
+/// Unescaped segments of a Lean name spelling; escaped dots stay in one segment.
+pub(super) fn segments(name: &str) -> Vec<String> {
+    Segments(name).map(str::to_owned).collect()
+}
+
+/// Canonical Lean spelling of unescaped name segments.
+pub(super) fn spell(segments: &[String]) -> String {
+    let mut result = String::new();
+    for (index, segment) in segments.iter().enumerate() {
+        if index != 0 {
+            result.push('.');
+        }
+        push_segment(&mut result, segment);
+    }
+    result
+}
+
+/// The module-qualified copy of a predicate body: each `def`/`abbrev` name that
+/// [`helpers`] finds gets the `namespace.` prefix; every other byte is unchanged.
+/// Lean elaborates a dotted declaration with its prefixes opened, so unqualified
+/// sibling references in the copy resolve to the qualified siblings.
+pub(super) fn qualify(body: &str, namespace: &str) -> String {
+    let mut result = String::with_capacity(body.len());
+    let mut copied = 0;
+    for (_, location) in helpers(body, 0) {
+        result.push_str(&body[copied..location.start]);
+        result.push_str(namespace);
+        result.push('.');
+        copied = location.start;
+    }
+    result.push_str(&body[copied..]);
+    result
+}
+
+/// Whether a lexical name names `declaration` exactly, or projects from it.
+/// Comments and literals never match. A local binder spelled like a module path
+/// is indistinguishable here; callers must only use this for names that a
+/// project helper declares, never for bare namespace prefixes.
+pub(super) fn references_declaration(body: &str, declaration: &[String]) -> bool {
+    Lexer::new(body).any(|token| {
+        let Token::Name(location) = token else {
+            return false;
+        };
+        let mut name = Segments(&body[location.start..location.end]);
+        declaration
+            .iter()
+            .all(|segment| name.next() == Some(segment.as_str()))
     })
 }
 
@@ -438,7 +506,108 @@ impl Iterator for Lexer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{helpers, namespace, references_namespace};
+    use super::{
+        fragment_id, helpers, namespace, qualify, references_declaration, references_namespace,
+        segments, spell,
+    };
+
+    #[test]
+    fn fragment_ids_are_schema_legal_and_injective_over_aiken_module_names() {
+        let modules = [
+            "example",
+            "namespace",
+            "proofs/helpers",
+            "a/b",
+            "a.b",
+            "a/b.c",
+            "a.b/c",
+            "a_b",
+            "v2/x.1",
+        ];
+        let ids: Vec<_> = modules.iter().map(|module| fragment_id(module)).collect();
+        assert_eq!(
+            ids,
+            [
+                "example",
+                "namespace",
+                "proofs.helpers",
+                "a.b",
+                "a-b",
+                "a.b-c",
+                "a-b.c",
+                "a_b",
+                "v2.x-1"
+            ]
+        );
+        assert_eq!(
+            ids.iter().collect::<std::collections::BTreeSet<_>>().len(),
+            modules.len()
+        );
+        for id in &ids {
+            assert!(
+                id.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+            );
+        }
+        // Lean spellings of the colliding-looking pair stay distinct names.
+        assert_eq!(namespace("a/b"), "a.b");
+        assert_eq!(namespace("a.b"), "«a.b»");
+        assert_ne!(segments(&namespace("a/b")), segments(&namespace("a.b")));
+    }
+
+    #[test]
+    fn qualified_copies_prefix_only_declaration_names() {
+        let body = concat!(
+            "\n-- def commented := True\n",
+            "def larger (old proposed : Int) : Prop := old < proposed\n",
+            "abbrev «both» (a b c : Int) : Prop := larger a b ∧ larger b c -- def no\n",
+            "def pick {α : Type} (x : α) : α := x\n",
+            "def text := \"def quoted := True\"\n",
+        );
+        assert_eq!(
+            qualify(body, "«example»"),
+            concat!(
+                "\n-- def commented := True\n",
+                "def «example».larger (old proposed : Int) : Prop := old < proposed\n",
+                "abbrev «example».«both» (a b c : Int) : Prop := larger a b ∧ larger b c -- def no\n",
+                "def «example».pick {α : Type} (x : α) : α := x\n",
+                "def «example».text := \"def quoted := True\"\n",
+            )
+        );
+        assert_eq!(qualify("True", "a.b"), "True");
+    }
+
+    #[test]
+    fn names_round_trip_through_segments() {
+        for name in ["a.b", "«a.b».f", "«example».larger", "Some.«has.dot»", "α"] {
+            assert_eq!(spell(&segments(name)), name);
+        }
+        assert_eq!(spell(&segments("«plain».x")), "plain.x");
+    }
+
+    #[test]
+    fn declaration_references_need_the_whole_declared_name() {
+        let declared = segments("ctx.unrelated");
+        for body in [
+            "ctx.unrelated",
+            "∀ x, ctx.unrelated x",
+            "ctx.unrelated.field",
+            "«ctx».unrelated",
+        ] {
+            assert!(references_declaration(body, &declared), "{body}");
+        }
+        for body in [
+            "∀ ctx : ScriptContext, ctx.scriptContextTxInfo = ctx.scriptContextTxInfo",
+            "ctx",
+            "ctx.unrelatedness",
+            "other.ctx.unrelated",
+            "-- ctx.unrelated",
+            "\"ctx.unrelated\"",
+            "«ctx.unrelated»",
+        ] {
+            assert!(!references_declaration(body, &declared), "{body}");
+        }
+    }
 
     #[test]
     fn namespaces_preserve_segments_and_escape_lean_syntax() {

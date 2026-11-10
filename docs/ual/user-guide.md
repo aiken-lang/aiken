@@ -38,7 +38,28 @@ PROPERTY <id> for <target-or-target.handler> ... "<description>" <Lean propositi
 
 `PREDICATE` bodies provide Lean helper definitions. The pinned consumer accepts a restricted definitional expression profile, including ordinary `def`/`abbrev`, not tactics, attributes, or `by` proofs. Aiken does not elaborate Lean: passing producer validation does not guarantee that the consumer accepts or proves the proposition. At this pin, use Unicode `≤`/`≥`, not ASCII `<=`/`>=` in Lean annotations. This does not change Aiken expression syntax outside annotations.
 
-All predicate blocks in a module are concatenated in source order into one fragment. Module `vesting/onchain` becomes Lean namespace `vesting.onchain`; non-identifier segments are escaped with `«…»`. Aiken `use` edges provide fragment dependencies, traversing modules without fragments. Annotation-only modules with `use` declarations are supported. Use the corresponding Lean namespace when referring to imported helpers. Helper-name collisions in a property's fragment closure and recognized references to missing fragments are producer errors; this name scan is not a replacement for consumer elaboration. See [`mod.rs`](../../crates/aiken-project/src/assurance/mod.rs) and [`lean.rs`](../../crates/aiken-project/src/assurance/lean.rs).
+All predicate blocks in a module are concatenated in source order into one fragment. Aiken `use` edges provide fragment dependencies, traversing modules without fragments, so an annotation-free bridge module still carries its imports. Annotation-only modules with `use` declarations are supported.
+
+#### Helper names
+
+A helper `larger` defined in module `proofs/helpers` (file `lib/proofs/helpers.ak`) has four related names:
+
+| Concept | Rule | Example |
+| --- | --- | --- |
+| Aiken module | Path below `lib/` or `validators/` without `.ak`; `-` becomes `_` | `proofs/helpers`, `example`, `a.b` |
+| UAL fragment id | `/` becomes `.` and `.` becomes `-`; a bundle key, never a Lean name | `proofs.helpers`, `example`, `a-b` |
+| Lean namespace | Module segments split at `/`; a segment is escaped `«…»` when it is not a plain Lean identifier, including Lean keywords | `proofs.helpers`, `«example»`, `«a.b»` |
+| Helper reference | Namespace, `.`, then the helper name as you declared it | `proofs.helpers.larger`, `«example».positive` |
+
+Write imported helpers by their qualified name, with the full module path. `use proofs/helpers as h` does **not** make `h.larger` a Lean name. In the property's own module, refer to helpers by the names you declared, as before. Each fragment emits your declarations unchanged and then a module-qualified copy of each one, so both spellings work in every property whose fragment closure contains the module. The pinned consumer accepts only `def`/`abbrev` commands, so the copies are full definitions, not `namespace` blocks or aliases. Implicit parameters such as `{α : Type}` work in both spellings.
+
+Within one property's fragment closure:
+
+- Every emitted name, declared or qualified, must name exactly one helper. Two imported modules both defining `larger` are rejected, as is module `a`'s helper `b.f` next to module `a/b`'s `f`: both are `a.b.f`. The error names both definitions.
+- A qualified copy is elaborated with its module namespace open. If that would make a name inside it resolve to a different helper than in your declaration, the producer rejects the closure instead of letting the copies disagree.
+- A reference that spells a project helper's qualified name exactly, such as `helpers.valid`, is rejected when module `helpers` is not in the property's import closure: import the module. A name that only starts with a module's namespace is not treated as a module reference. `ctx.scriptContextTxInfo` on a bound `ctx` is a projection, even if the project has an unrelated `lib/ctx.ak`. Unqualified, unknown or misspelled names are left to the consumer's elaboration error. This lexical scan does not replace consumer elaboration.
+
+Fragment ids are injective over Aiken module names, so `a/b.ak` and `a.b.ak` keep separate fragments (`a.b`, `a-b`) and namespaces (`a.b`, `«a.b»`). Recursive helpers are rejected by the pinned consumer's fragment audit, whatever their spelling. See [`mod.rs`](../../crates/aiken-project/src/assurance/mod.rs) and [`lean.rs`](../../crates/aiken-project/src/assurance/lean.rs).
 
 ### Execution settings: no implicit defaults
 

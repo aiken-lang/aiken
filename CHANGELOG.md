@@ -32,7 +32,8 @@
 
 - **aiken-project**: Open V3 ledger namespaces in verification drivers and emit bracketed existential purpose binders accepted by the pinned consumer. @Riley-Kilgore
 - **aiken-project**: Select the UAL 1.0 language profile for compiled-interface properties so generated bundles are accepted by the pinned consumer. @Riley-Kilgore
-- **aiken-project**: Reject references to project predicate fragments missing from a property's import closure, including references from its reachable predicates. @Riley-Kilgore
+- **aiken-project**: Reject references to project predicate fragments missing from a property's import closure, including references from its reachable predicates. Only exact helper names count, so a bound `ctx.…` projection no longer fails beside an unrelated `ctx` module. @Riley-Kilgore
+- **aiken-project**: Emit schema-legal fragment ids for every module name (for example `example`, not `«example»`), and module-qualified helper copies so documented references such as `proofs.helpers.larger` resolve in the consumer. Reject qualified-name collisions and rebinding within a property's fragment closure. @Riley-Kilgore
 - **aiken-lang**: Correct single-line and end-of-file diagnostic coordinate bounds so the LSP can report unterminated annotation regions without failing. @Riley-Kilgore
 - **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78

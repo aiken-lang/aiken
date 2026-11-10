@@ -4,7 +4,7 @@
 //! supplies the caller's artifact and validates the complete binding chain before
 //! exposing final bytes. These bytes must be written unchanged by a future writer.
 
-use super::{AnnotationModel, ErrorKind, TargetKind, function, purpose};
+use super::{AnnotationModel, ErrorKind, Fragment, TargetKind, function, lean, purpose};
 use crate::{
     blueprint::{Blueprint, dialect},
     module::CheckedModules,
@@ -188,6 +188,30 @@ impl Bundle {
 
 /// Selectors whose generated purpose premises admit no common purpose would make the
 /// property vacuously true, so this is a producer error rather than a solver question.
+/// The predicate blocks in source order, followed by their module-qualified copies.
+///
+/// Source spellings keep helpers callable unqualified anywhere in the closure, as
+/// before; the copies make the documented `module.path.helper` names resolve. Both
+/// are plain `def`/`abbrev` commands, the only fragment commands the consumer accepts.
+fn fragment_source(fragment: &Fragment) -> String {
+    let source: Vec<_> = fragment
+        .predicates
+        .iter()
+        .map(|predicate| predicate.body.as_str())
+        .collect();
+    let qualified: Vec<_> = fragment
+        .predicates
+        .iter()
+        .map(|predicate| lean::qualify(&predicate.body, &fragment.namespace))
+        .collect();
+    format!(
+        "{}\n-- Module-qualified copies in namespace {}\n{}",
+        source.join("\n"),
+        fragment.namespace,
+        qualified.join("\n")
+    )
+}
+
 fn incompatible_purposes(
     module: &crate::module::CheckedModule,
     property: &super::Property,
@@ -458,12 +482,7 @@ pub fn lower(
             id: fragment.id.clone(),
             language: "lean".to_owned(),
             imports: (!fragment.imports.is_empty()).then(|| fragment.imports.clone()),
-            source: fragment
-                .predicates
-                .iter()
-                .map(|predicate| predicate.body.as_str())
-                .collect::<Vec<_>>()
-                .join("\n"),
+            source: fragment_source(fragment),
             extensions: BTreeMap::new(),
         })
         .collect();

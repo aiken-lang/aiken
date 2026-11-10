@@ -26,7 +26,12 @@ POSITIVES = {
                           "universal_minimum": "verified"},
     "falsified": {"equal_bid_outbids": "falsified"},
     "recursive_data": {"preserves_leaf": "verified"},
+    "qualified_helpers": {"local_helper": "verified", "qualified_import": "verified",
+                          "escaped_module": "verified", "qualified_falsified": "falsified"},
 }
+# A bound `ctx` projection next to an unrelated, unimported `ctx` predicate module.
+CTX_MODULE = "//@ PREDICATE\ndef unrelated : Prop := True\n@//\n"
+CTX_PROJECTION = "ctx.scriptContextTxInfo = ctx.scriptContextTxInfo → "
 
 
 def save_json(path, value):
@@ -175,6 +180,15 @@ def execute(args, output, aiken, env, tools, workspace):
     text = text.replace("    isUnsuccessful", "    (¬ " + premise + ") → isUnsuccessful")
     source.write_text(text)
     suite.check("purpose_match", project, POSITIVES["universal_validator"])
+
+    project = suite.copy("positive/universal_validator", "ctx_projection")
+    (project / "lib").mkdir(exist_ok=True)
+    (project / "lib/ctx.ak").write_text(CTX_MODULE)
+    source = project / "validators/fixtures.ak"
+    text = source.read_text()
+    require(text.count("minimum ≤ 0 →") == 1, "Universal fixture changed; review the ctx projection case")
+    source.write_text(text.replace("minimum ≤ 0 →", CTX_PROJECTION + "minimum ≤ 0 →"))
+    suite.check("ctx_projection", project, POSITIVES["universal_validator"])
 
     project = suite.copy("positive/native_function", "tiny_budget")
     source = project / "validators/fixtures.ak"

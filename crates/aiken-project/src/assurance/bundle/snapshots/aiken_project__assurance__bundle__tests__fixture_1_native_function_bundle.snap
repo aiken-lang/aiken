@@ -38,7 +38,7 @@ expression: snapshot(&bundle(FUNCTION))
       {
         "id": "fixtures",
         "language": "lean",
-        "source": "\ndef larger (old proposed : Int) : Prop := old < proposed\n"
+        "source": "\ndef larger (old proposed : Int) : Prop := old < proposed\n\n-- Module-qualified copies in namespace fixtures\n\ndef fixtures.larger (old proposed : Int) : Prop := old < proposed\n"
       }
     ],
     "properties": [

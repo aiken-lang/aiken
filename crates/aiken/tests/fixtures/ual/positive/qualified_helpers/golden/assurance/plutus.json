@@ -1,0 +1,107 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+  "$vocabulary": {
+    "https://cips.cardano.org/cips/cip57": true,
+    "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+  },
+  "preamble": {
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.24+ad34d61"
+    },
+    "description": "UAL qualified, local and escaped predicate helper fixture",
+    "license": "Apache-2.0",
+    "plutusVersion": "v3",
+    "title": "fixtures/ual_qualified_helpers",
+    "version": "1.0.0"
+  },
+  "validators": [
+    {
+      "compiledCode": "5001010023259800b452689b2b20025735",
+      "hash": "22c9a103ed3f2fa97c982d76d6e2af50c5d54ac306983b196c8fcdab",
+      "id": "fixtures__companion",
+      "interface": {
+        "callingConvention": "ledger-v3",
+        "invocations": [
+          {
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "spend"
+          },
+          {
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "mint"
+          },
+          {
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "withdraw"
+          },
+          {
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "publish"
+          },
+          {
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "vote"
+          },
+          {
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "propose"
+          }
+        ]
+      },
+      "redeemer": {
+        "oneOf": [
+          {
+            "purpose": "spend",
+            "schema": {}
+          },
+          {
+            "purpose": "mint",
+            "schema": {}
+          },
+          {
+            "purpose": "withdraw",
+            "schema": {}
+          },
+          {
+            "purpose": "publish",
+            "schema": {}
+          },
+          {
+            "purpose": "vote",
+            "schema": {}
+          },
+          {
+            "purpose": "propose",
+            "schema": {}
+          }
+        ]
+      },
+      "title": "fixtures.companion"
+    }
+  ]
+}

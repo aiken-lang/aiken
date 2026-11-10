@@ -503,3 +503,102 @@ fn applied_parameters_preserve_declaration_order_and_data_encoding() {
         "parameter schemas must follow declaration order"
     );
 }
+
+fn multi_module_bundle(order: &[usize]) -> Bundle {
+    let sources = [
+        (
+            "proofs/helpers",
+            "//@ PREDICATE\ndef larger (old proposed : Int) : Prop := old < proposed\ndef pick {α : Type} (x : α) : α := x\n@//\npub fn identity(value: Int) -> Int { value }",
+        ),
+        (
+            "proofs/bridge",
+            "use proofs/helpers\npub fn same(value: Int) -> Int { helpers.identity(value) }",
+        ),
+        (
+            "example",
+            "use proofs/bridge\n//@ PREDICATE\ndef positive (x : Int) : Prop := proofs.helpers.larger 0 x\n@//\npub fn same(value: Int) -> Int { bridge.same(value) }",
+        ),
+        ("a/b", "//@ PREDICATE def f : Prop := True @//"),
+        ("a.b", "//@ PREDICATE def f : Prop := False @//"),
+        (
+            "fixtures",
+            "use example\n//@ PREDICATE\ndef raised (old proposed : Int) : Prop := proofs.helpers.larger (proofs.helpers.pick old) proposed\n@//\n@onchain(steps: 100, semantics: e)\npub fn outbids(old: Int, proposed: Int) -> Bool { example.same(proposed) > old }\n//@ PROPERTY outbids for outbids \"qualified\" ∀ (old proposed : Int), raised old proposed → «example».positive 1 → fixtures__outbids_returns (Data.I old) (Data.I proposed) true @//\nvalidator companion { else(_ctx: Data) { fail } }",
+        ),
+    ];
+    let mut project = TestProject::new();
+    let mut modules = std::collections::HashMap::new();
+    for &index in order {
+        let (name, source) = sources[index];
+        let mut parsed = project.parse(source);
+        parsed.name = name.to_owned();
+        parsed.ast.name = name.to_owned();
+        parsed.path = format!("{name}.ak").into();
+        let module = project.check(parsed);
+        modules.insert(name.to_owned(), module);
+    }
+    let modules = CheckedModules::from(modules);
+    let model = super::super::validate(modules.values()).unwrap();
+    let config = ProjectConfig::default(&project.package);
+    let mut generator = project.new_generator(Tracing::silent());
+    let mut blueprint = Blueprint::new(&config, &modules, &mut generator, false).unwrap();
+    blueprint.preamble.compiler.as_mut().unwrap().version = "test-compiler".to_owned();
+    lower(&model, &modules, &mut generator, &blueprint, preamble())
+        .unwrap()
+        .bind_environment(environment())
+        .unwrap()
+}
+
+#[test]
+fn fragments_emit_schema_legal_ids_and_qualified_declarations() {
+    // `lower` validates against the pinned schema; reaching here means the ids passed.
+    let bundle = multi_module_bundle(&[0, 1, 2, 3, 4, 5]);
+    assert_bindings(&bundle);
+    let fragments = bundle.assurance().formal_fragments.as_ref().unwrap();
+    let identities: Vec<_> = fragments
+        .iter()
+        .map(|fragment| {
+            (
+                fragment.id.as_str(),
+                fragment.imports.clone().unwrap_or_default(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        identities,
+        [
+            ("a-b", vec![]),
+            ("a.b", vec![]),
+            ("example", vec!["proofs.helpers".to_owned()]),
+            ("fixtures", vec!["example".to_owned()]),
+            ("proofs.helpers", vec![]),
+        ]
+    );
+    let source = |id: &str| {
+        fragments
+            .iter()
+            .find(|fragment| fragment.id == id)
+            .unwrap()
+            .source
+            .as_str()
+    };
+    assert_eq!(
+        source("proofs.helpers"),
+        "\ndef larger (old proposed : Int) : Prop := old < proposed\ndef pick {α : Type} (x : α) : α := x\n\n-- Module-qualified copies in namespace proofs.helpers\n\ndef proofs.helpers.larger (old proposed : Int) : Prop := old < proposed\ndef proofs.helpers.pick {α : Type} (x : α) : α := x\n"
+    );
+    assert_eq!(
+        source("example"),
+        "\ndef positive (x : Int) : Prop := proofs.helpers.larger 0 x\n\n-- Module-qualified copies in namespace «example»\n\ndef «example».positive (x : Int) : Prop := proofs.helpers.larger 0 x\n"
+    );
+    assert!(source("a-b").ends_with("def «a.b».f : Prop := False "));
+    assert!(source("a.b").ends_with("def a.b.f : Prop := True "));
+    let formal = bundle.assurance().properties[0]
+        .statement
+        .formal
+        .as_ref()
+        .unwrap();
+    assert_eq!(formal.uses.as_deref(), Some(&["fixtures".to_owned()][..]));
+    // Neither check order of independent modules nor (randomized) map order
+    // changes a byte. Imports must be checked before their importers.
+    let reordered = multi_module_bundle(&[4, 3, 0, 1, 2, 5]);
+    assert_eq!(bundle.assurance_bytes(), reordered.assurance_bytes());
+}

@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct AnnotationModel {
     /// Keyed by ADR-0007 emitted id, shared by functions and validators.
     pub targets: BTreeMap<String, Target>,
-    /// Keyed by escaped Lean module namespace.
+    /// Keyed by fragment id ([`lean::fragment_id`]), not by Lean spelling.
     pub fragments: BTreeMap<String, Fragment>,
     /// Project-wide property ids.
     pub properties: BTreeMap<String, Property>,
@@ -59,8 +59,11 @@ pub struct ExecutionSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Fragment {
+    /// Schema-legal bundle key, injective over module names.
     pub id: String,
     pub module: String,
+    /// Lean namespace of the module-qualified declaration copies.
+    pub namespace: String,
     /// Nearest imported fragments, in source-edge order, without duplicates.
     pub imports: Vec<String>,
     /// Predicate blocks in source order; their bodies retain original whitespace.
@@ -256,12 +259,13 @@ pub fn validate<'a>(
             }
         }
         if !predicates.is_empty() {
-            let id = lean::namespace(name);
+            let id = lean::fragment_id(name);
             model.fragments.insert(
                 id.clone(),
                 Fragment {
                     id,
                     module: name.to_string(),
+                    namespace: lean::namespace(name),
                     imports: Vec::new(),
                     predicates,
                 },
@@ -375,9 +379,9 @@ pub fn validate<'a>(
                     Err(error) => errors.push(*error),
                 }
             }
-            let namespace = lean::namespace(name);
-            let uses = if model.fragments.contains_key(&namespace) {
-                vec![namespace]
+            let own = lean::fragment_id(name);
+            let uses = if model.fragments.contains_key(&own) {
+                vec![own]
             } else {
                 roots[name].clone()
             };
@@ -628,15 +632,55 @@ fn nearest_fragments(
     }
 }
 
+/// A helper declaration as the bundle emits it: the source spelling and its copy
+/// in the module namespace. Names are unescaped Lean segments.
+struct Declaration<'a> {
+    module: &'a str,
+    leaf: Vec<String>,
+    qualified: Vec<String>,
+    location: Span,
+}
+
+/// Which declaration an emitted name belongs to; both of its copies share one origin.
+#[derive(Clone, Copy)]
+struct Origin<'a> {
+    declaration: &'a Declaration<'a>,
+}
+
+impl PartialEq for Origin<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.declaration, other.declaration)
+    }
+}
+
+/// The emitted name Lean picks for `reference` inside a declaration named `within`:
+/// the innermost opened prefix `P` with `P.reference` declared wins, then the root.
+/// Consumer and Lean library names are outside this model.
+fn resolve<'n, 'a>(
+    emitted: &'n BTreeMap<Vec<String>, Origin<'a>>,
+    within: &[String],
+    reference: &[String],
+) -> Option<(&'n Vec<String>, Origin<'a>)> {
+    (1..within.len())
+        .rev()
+        .find_map(|length| {
+            let candidate = [&within[..length], reference].concat();
+            emitted.get_key_value(&candidate)
+        })
+        .or_else(|| emitted.get_key_value(reference))
+        .map(|(name, origin)| (name, *origin))
+}
+
 fn check_helpers(
     model: &AnnotationModel,
     modules: &BTreeMap<&str, &CheckedModule>,
     errors: &mut Vec<Error>,
 ) {
-    let helpers: BTreeMap<_, Vec<_>> = model
+    let declarations: BTreeMap<_, Vec<_>> = model
         .fragments
         .iter()
         .map(|(id, fragment)| {
+            let namespace = lean::segments(&fragment.namespace);
             (
                 id.as_str(),
                 fragment
@@ -645,58 +689,124 @@ fn check_helpers(
                     .flat_map(|predicate| {
                         lean::helpers(&predicate.body, predicate.body_location.start)
                     })
+                    .map(|(name, location)| {
+                        let leaf = lean::segments(&name);
+                        Declaration {
+                            module: fragment.module.as_str(),
+                            qualified: [namespace.as_slice(), &leaf].concat(),
+                            leaf,
+                            location,
+                        }
+                    })
                     .collect(),
             )
         })
         .collect();
     for property in model.properties.values() {
+        let reporting = modules[property.module.as_str()];
         let mut seen_fragments = BTreeSet::new();
-        let mut names = BTreeMap::new();
+        let mut closure = Vec::new();
         let mut pending: Vec<_> = property.uses.iter().rev().map(String::as_str).collect();
         while let Some(id) = pending.pop() {
-            if !seen_fragments.insert(id) {
-                continue;
+            if seen_fragments.insert(id) {
+                closure.push(id);
+                pending.extend(model.fragments[id].imports.iter().rev().map(String::as_str));
             }
-            let fragment = &model.fragments[id];
-            for (name, location) in &helpers[id] {
-                if let Some((previous_module, previous_location)) =
-                    names.insert(name.as_str(), (fragment.module.as_str(), *location))
-                {
-                    errors.push(Error::new(modules[property.module.as_str()], ErrorKind::HelperCollision, property.location,
-                        format!("Helper '{name}' is defined more than once in property '{}' fragment closure (modules '{previous_module}' and '{}').", property.id, fragment.module))
-                        .with_related(modules[previous_module], previous_location, format!("first definition of '{name}'"))
-                        .with_related(modules[fragment.module.as_str()], *location, format!("conflicting definition of '{name}'")));
+        }
+
+        // Every emitted spelling, source and module-qualified, names one declaration.
+        let mut emitted: BTreeMap<Vec<String>, Origin<'_>> = BTreeMap::new();
+        let mut collided = false;
+        for declaration in closure.iter().flat_map(|id| &declarations[id]) {
+            let mut reported = Vec::new();
+            for name in [&declaration.leaf, &declaration.qualified] {
+                if let Some(previous) = emitted.insert(name.clone(), Origin { declaration }) {
+                    collided = true;
+                    let previous = previous.declaration;
+                    // Equal source spellings in one module also collide when qualified.
+                    if reported.iter().any(|seen| std::ptr::eq(*seen, previous)) {
+                        continue;
+                    }
+                    reported.push(previous);
+                    let spelling = lean::spell(name);
+                    errors.push(Error::new(reporting, ErrorKind::HelperCollision, property.location,
+                        format!("Helper '{spelling}' is defined more than once in property '{}' fragment closure (modules '{}' and '{}').", property.id, previous.module, declaration.module))
+                        .with_related(modules[previous.module], previous.location, format!("first definition of '{spelling}'"))
+                        .with_related(modules[declaration.module], declaration.location, format!("conflicting definition of '{spelling}'")));
                 }
             }
-            pending.extend(fragment.imports.iter().rev().map(String::as_str));
         }
-        // Project fragment namespaces are known without elaborating Lean. Do not
-        // attempt to resolve arbitrary consumer names, binders or builtins.
-        for id in model.fragments.keys() {
-            if !seen_fragments.contains(id.as_str())
-                && (lean::references_namespace(&property.body, id)
-                    || seen_fragments.iter().any(|available| {
-                        model.fragments[*available]
-                            .predicates
-                            .iter()
-                            .any(|predicate| lean::references_namespace(&predicate.body, id))
-                    }))
-            {
-                let mut error = Error::new(
-                    modules[property.module.as_str()],
-                    ErrorKind::MissingFragment,
-                    property.body_location,
-                    format!(
-                        "Fragment '{id}' is not available in property '{}' fragment closure.",
-                        property.id
-                    ),
-                );
-                error.help = Some(format!(
-                    "Import module '{}' where its predicate helpers are referenced.",
-                    model.fragments[id].module
-                ));
-                errors.push(error);
+        // A qualified copy is elaborated with its module namespace opened. It must
+        // resolve every emitted name to the same helper as the source spelling does,
+        // or the two copies would silently call different helpers.
+        if !collided {
+            'declarations: for declaration in closure.iter().flat_map(|id| &declarations[id]) {
+                for reference in emitted.keys() {
+                    let (Some((source, expected)), Some((qualified, actual))) = (
+                        resolve(&emitted, &declaration.leaf, reference),
+                        resolve(&emitted, &declaration.qualified, reference),
+                    ) else {
+                        continue;
+                    };
+                    if expected == actual {
+                        continue;
+                    }
+                    let (expected, actual) = (expected.declaration, actual.declaration);
+                    let mut error = Error::new(reporting, ErrorKind::HelperCollision, property.location,
+                        format!("Helper '{}' from module '{}' shadows '{}' from module '{}' inside the qualified declaration '{}' in property '{}' fragment closure.",
+                            lean::spell(qualified), actual.module, lean::spell(source), expected.module, lean::spell(&declaration.qualified), property.id))
+                        .with_related(modules[actual.module], actual.location, format!("shadowing definition of '{}'", lean::spell(qualified)))
+                        .with_related(modules[expected.module], expected.location, format!("shadowed definition of '{}'", lean::spell(source)));
+                    error.help = Some("Rename one of the helpers; module-qualified names must resolve to the same helpers as source names.".into());
+                    errors.push(error);
+                    break 'declarations;
+                }
             }
+        }
+
+        // A reference that spells a project helper's exact qualified declaration is
+        // a missing import. Prefixes alone are not: `ctx.scriptContextTxInfo` is
+        // usually a projection of a bound variable, not module `ctx`. Unqualified
+        // and unknown names are left to consumer elaboration.
+        let bodies: Vec<_> = std::iter::once(property.body.as_str())
+            .chain(closure.iter().flat_map(|id| {
+                model.fragments[*id]
+                    .predicates
+                    .iter()
+                    .map(|predicate| predicate.body.as_str())
+            }))
+            .collect();
+        for (id, fragment) in &model.fragments {
+            if seen_fragments.contains(id.as_str()) {
+                continue;
+            }
+            let Some(referenced) = declarations[id.as_str()].iter().find(|declaration| {
+                bodies
+                    .iter()
+                    .any(|body| lean::references_declaration(body, &declaration.qualified))
+            }) else {
+                continue;
+            };
+            let mut error = Error::new(
+                reporting,
+                ErrorKind::MissingFragment,
+                property.body_location,
+                format!(
+                    "Fragment '{id}' is not available in property '{}' fragment closure, but '{}' names its helper.",
+                    property.id,
+                    lean::spell(&referenced.qualified)
+                ),
+            )
+            .with_related(
+                modules[fragment.module.as_str()],
+                referenced.location,
+                format!("'{}' is defined here", lean::spell(&referenced.qualified)),
+            );
+            error.help = Some(format!(
+                "Import module '{}' where its predicate helpers are referenced.",
+                fragment.module
+            ));
+            errors.push(error);
         }
     }
 }

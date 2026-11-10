@@ -130,10 +130,12 @@ Constructor names come from CardanoLedgerApi V3 `Contexts.lean`. UAL-13 found th
 
 ### 3.4 Predicates, fragments, namespaces
 
-- The Lean namespace of module `vesting/onchain` is `vesting.onchain`. Segments are kept verbatim; a segment is escaped `«…»` only when it is not a valid Lean identifier. Fragment ids may contain `.`.
-- All PREDICATE blocks of a module concatenate, in source order, into one fragment `<namespace>`. The fragment's `imports` are the module's `use` edges to modules that have fragments, followed transitively through modules without. The graph is acyclic by construction.
+- Four names are kept distinct. The **Aiken module** is the project-unique module path (`[a-z0-9_./]`). The **fragment id** maps `/` to `.` and `.` to `-` (`proofs/helpers` → `proofs.helpers`, `a.b` → `a-b`). It is injective over module names and always matches the fragment-id schema `^[A-Za-z0-9_.-]+$`; ids of plain-identifier paths equal their Lean spelling, as before. The **Lean namespace** keeps `/`-separated segments and escapes a segment `«…»` only when it is not a valid Lean identifier (`example` → `«example»`, `a.b` → `«a.b»`). A **helper reference** is the namespace, `.`, and the declared name.
+- All PREDICATE blocks of a module concatenate, in source order, into one fragment. The fragment's `imports` are the module's `use` edges to modules that have fragments, followed transitively through modules without. The graph is acyclic by construction.
+- The fragment source is the blocks verbatim, then a copy of each block in which every `def`/`abbrev` name is prefixed with the module namespace. The pinned consumer elaborates every fragment in one driver namespace and accepts only `def`/`abbrev` commands, so `namespace … end`, `open` and `@`-aliases are unavailable, and a plain `abbrev` alias fails for implicit parameters. Lean elaborates a dotted declaration with its prefixes open, so sibling references in a copy resolve to the qualified siblings. Declared names keep working unqualified across the closure; qualified names are the documented form for imported helpers. Aiken `use … as` aliases are not Lean names.
 - A module containing only annotation blocks and `use` lines is valid. The unused-import warning is suppressed when an annotation references the imported namespace.
-- Helper-name collisions across a property's fragment closure are a producer error, because the spec forbids silent merging.
+- In each property's fragment closure, every emitted name (declared and qualified) must belong to one helper. A copy must also resolve each emitted name to the same helper as its declaration: Lean tries the innermost open prefix first. Both are producer errors, because the spec forbids silent merging or rebinding.
+- A missing-fragment error requires a lexical name that spells a project helper's qualified declaration exactly, or projects from it. A bare namespace prefix is not evidence of a module reference, because `ctx.scriptContextTxInfo` is normally a projection of a bound variable. Unqualified and unknown names are left to the consumer.
 
 ### 3.5 Properties
 

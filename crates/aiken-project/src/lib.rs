@@ -1450,7 +1450,7 @@ mod assurance_integration_tests {
         fixture.project.compile(Options::default()).unwrap();
         let model = fixture.project.annotation_model().unwrap();
         assert_eq!(model.fragments.len(), 2);
-        assert_eq!(model.fragments["«example»"].imports, ["proofs"]);
+        assert_eq!(model.fragments["example"].imports, ["proofs"]);
         assert!(fixture.project.warnings().is_empty());
     }
 

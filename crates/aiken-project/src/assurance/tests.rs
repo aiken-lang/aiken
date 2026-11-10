@@ -311,7 +311,7 @@ fn multi_module_purpose_scopes_model() {
     assert_eq!(model, reordered);
     assert_eq!(
         model.fragments["contract"].imports,
-        ["predicates.base", "«namespace»"]
+        ["predicates.base", "namespace"]
     );
     assert_eq!(model.fragments["contract"].predicates.len(), 2);
     assert_eq!(
@@ -392,4 +392,190 @@ fn fragment_helper_dependencies_must_be_in_the_transitive_closure() {
             assert_block_label(&errors[0], source);
         }
     }
+}
+
+#[test]
+fn bound_variable_projections_are_not_module_references() {
+    // An unrelated predicate module named like the bound variable must not turn
+    // `ctx.scriptContextTxInfo` into a missing-import error.
+    for (imports, body, missing) in [
+        (
+            "",
+            "∀ ctx : ScriptContext, ctx.scriptContextTxInfo = ctx.scriptContextTxInfo",
+            false,
+        ),
+        (
+            "",
+            "∀ ctx : ScriptContext, ctx.unrelated ∧ ctx.scriptContextTxInfo = ctx.scriptContextTxInfo",
+            true,
+        ),
+        ("use ctx\n", "ctx.unrelated", false),
+    ] {
+        let mut project = TestProject::new();
+        let unrelated = check(
+            &mut project,
+            "ctx",
+            "//@ PREDICATE\ndef unrelated : Prop := True\n@//",
+        );
+        let source = format!(
+            "{imports}@onchain(steps: 100, semantics: e)\npub fn f() {{ True }}\n//@ PROPERTY p for f \"projection\" {body} @//"
+        );
+        let module = check(&mut project, "local", &source);
+        let result = validate([&unrelated, &module]);
+        if missing {
+            let errors = result.unwrap_err();
+            assert_eq!(errors.len(), 1, "{errors:?}");
+            assert_eq!(errors[0].kind, ErrorKind::MissingFragment);
+            assert!(
+                errors[0]
+                    .message
+                    .contains("Fragment 'ctx' is not available")
+            );
+            assert!(errors[0].message.contains("'ctx.unrelated'"));
+            assert_eq!(
+                errors[0].help.as_deref(),
+                Some("Import module 'ctx' where its predicate helpers are referenced.")
+            );
+            assert_eq!(
+                &errors[0].related[0].source_code.inner()[errors[0].related[0].location.range()],
+                "unrelated"
+            );
+        } else {
+            result.unwrap();
+        }
+    }
+}
+
+#[test]
+fn annotation_free_bridges_give_a_deterministic_transitive_closure() {
+    let mut project = TestProject::new();
+    let helpers = check(
+        &mut project,
+        "proofs/helpers",
+        "//@ PREDICATE def larger (a b : Int) : Prop := a < b @//\npub fn identity(value: Int) -> Int { value }",
+    );
+    let bridge = check(
+        &mut project,
+        "proofs/bridge",
+        "use proofs/helpers\npub fn same(value: Int) -> Int { helpers.identity(value) }",
+    );
+    let keyword = check(
+        &mut project,
+        "example",
+        "use proofs/bridge\n//@ PREDICATE def positive (x : Int) : Prop := proofs.helpers.larger 0 x @//\npub fn same(value: Int) -> Int { bridge.same(value) }",
+    );
+    let source = "use example\nuse proofs/bridge\n//@ PREDICATE def raised (a b : Int) : Prop := proofs.helpers.larger a b @//\n@onchain(steps: 100, semantics: e)\npub fn f() { True }\n//@ PROPERTY p for f \"closure\" «example».positive 1 ∧ raised 0 1 @//";
+    let module = check(&mut project, "fixtures", source);
+    let model = validate([&helpers, &bridge, &keyword, &module]).unwrap();
+    assert_eq!(
+        model,
+        validate([&module, &keyword, &bridge, &helpers]).unwrap()
+    );
+    assert_eq!(
+        model.fragments.keys().collect::<Vec<_>>(),
+        ["example", "fixtures", "proofs.helpers"]
+    );
+    assert_eq!(model.fragments["example"].namespace, "«example»");
+    assert_eq!(model.fragments["example"].imports, ["proofs.helpers"]);
+    assert_eq!(
+        model.fragments["fixtures"].imports,
+        ["example", "proofs.helpers"]
+    );
+    assert_eq!(model.properties["p"].uses, ["fixtures"]);
+}
+
+#[test]
+fn nested_and_dotted_module_paths_keep_distinct_identities() {
+    let mut project = TestProject::new();
+    let nested = check(
+        &mut project,
+        "a/b",
+        "//@ PREDICATE def f : Prop := True @//",
+    );
+    let dotted = check(
+        &mut project,
+        "a.b",
+        "//@ PREDICATE def f : Prop := False @//\n@onchain(steps: 1, semantics: e) pub fn g() { 1 }\n//@ PROPERTY dotted for g \"dotted\" f @//",
+    );
+    let model = validate([&nested, &dotted]).unwrap();
+    let identities: Vec<_> = model
+        .fragments
+        .values()
+        .map(|fragment| {
+            (
+                fragment.id.as_str(),
+                fragment.module.as_str(),
+                fragment.namespace.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(identities, [("a-b", "a.b", "«a.b»"), ("a.b", "a/b", "a.b")]);
+    assert_eq!(model.properties["dotted"].uses, ["a-b"]);
+}
+
+#[test]
+fn qualified_spellings_collide_with_any_other_emitted_name() {
+    // Module `a`'s helper `b.f` and module `a/b`'s helper `f` are both `a.b.f`.
+    let mut project = TestProject::new();
+    let outer = check(
+        &mut project,
+        "a",
+        "//@ PREDICATE def b.f : Prop := True @//",
+    );
+    let inner = check(
+        &mut project,
+        "a/b",
+        "//@ PREDICATE def f : Prop := False @//",
+    );
+    let source = "use a\nuse a/b\n@onchain(steps: 1, semantics: e) pub fn g() { 1 }\n//@ PROPERTY p for g \"claim\" a.b.f @//";
+    let module = check(&mut project, "local", source);
+    let errors = validate([&outer, &inner, &module]).unwrap_err();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(errors[0].kind, ErrorKind::HelperCollision);
+    assert!(
+        errors[0].message.contains("Helper 'a.b.f'"),
+        "{}",
+        errors[0].message
+    );
+    assert!(errors[0].message.contains("modules 'a' and 'a/b'"));
+    let related: Vec<_> = errors[0]
+        .related
+        .iter()
+        .map(|related| &related.source_code.inner()[related.location.range()])
+        .collect();
+    assert_eq!(related, ["b.f", "f"]);
+}
+
+#[test]
+fn qualified_copies_cannot_resolve_to_a_different_helper() {
+    // Inside `x.g`, Lean resolves `f` to `x.f` (module z) although `g` means
+    // module y's `f`; the copies would silently disagree.
+    let mut project = TestProject::new();
+    let y = check(&mut project, "y", "//@ PREDICATE def f : Prop := True @//");
+    let z = check(
+        &mut project,
+        "z",
+        "//@ PREDICATE def x.f : Prop := False @//",
+    );
+    let x = check(
+        &mut project,
+        "x",
+        "use y\nuse z\n//@ PREDICATE def g : Prop := f @//",
+    );
+    let source = "use x\n@onchain(steps: 1, semantics: e) pub fn h() { 1 }\n//@ PROPERTY p for h \"claim\" x.g @//";
+    let module = check(&mut project, "local", source);
+    let errors = validate([&x, &y, &z, &module]).unwrap_err();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(errors[0].kind, ErrorKind::HelperCollision);
+    assert!(
+        errors[0].message.contains("Helper 'x.f' from module 'z' shadows 'f' from module 'y' inside the qualified declaration 'x.g'"),
+        "{}",
+        errors[0].message
+    );
+
+    // Same-module dotted helpers resolve alike in both copies and are accepted.
+    let mut project = TestProject::new();
+    let source = "//@ PREDICATE def x : Prop := True\ndef Some.x : Prop := False\ndef Some.y : Prop := x @//\n@onchain(steps: 1, semantics: e) pub fn h() { 1 }\n//@ PROPERTY p for h \"claim\" local.Some.y @//";
+    let module = check(&mut project, "local", source);
+    validate([&module]).unwrap();
 }
