@@ -1,9 +1,115 @@
 use super::{
-    Property, Target, TargetKind,
+    Property, ResolvedScope, Target, TargetKind,
     lean::{Lexer, Token},
 };
 use aiken_ual::Purpose;
 use std::{collections::BTreeMap, iter::Peekable};
+
+/// The six V3 `ScriptInfo` constructors, named by their Aiken handlers. Every V3
+/// script context is exactly one of them.
+const PURPOSES: [&str; 6] = ["spend", "mint", "withdraw", "publish", "vote", "propose"];
+
+/// The purposes a scope selector's generated premise admits: a subset of [`PURPOSES`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Purposes(u8);
+
+impl Purposes {
+    pub(super) const ALL: Self = Self((1 << PURPOSES.len()) - 1);
+
+    fn of(handler: &str) -> Self {
+        let index = PURPOSES
+            .iter()
+            .position(|purpose| *purpose == handler)
+            .unwrap_or_else(|| unreachable!("handler scopes were validated during resolution"));
+        Self(1 << index)
+    }
+
+    pub(super) fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    fn intersect(self, other: Self) -> Self {
+        Self(self.0 & other.0)
+    }
+}
+
+impl std::fmt::Display for Purposes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<_> = PURPOSES
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| self.0 & (1 << index) != 0)
+            .map(|(_, name)| *name)
+            .collect();
+        write!(f, "{{{}}}", names.join(", "))
+    }
+}
+
+/// What a selector's premise admits: unsuffixed and function scopes add no
+/// restriction, `v.h` admits h, and `v.else` admits every purpose v has no
+/// explicit handler for. This mirrors [`lower`] exactly.
+pub(super) fn allowed(
+    scope: &ResolvedScope,
+    targets: &BTreeMap<String, Target>,
+) -> Result<Purposes, String> {
+    match scope.handler.as_deref() {
+        None => Ok(Purposes::ALL),
+        Some("else") => {
+            let handlers = validator_handlers(&scope.target, targets)?;
+            Ok(handlers
+                .iter()
+                .filter(|handler| handler.as_str() != "else")
+                .fold(Purposes::ALL, |left, handler| {
+                    Purposes(left.0 & !Purposes::of(handler).0)
+                }))
+        }
+        Some(handler) => Ok(Purposes::of(handler)),
+    }
+}
+
+/// Selectors that admit no common purpose. The selectors' premises all constrain
+/// the same `ctx`, and their conjunction holds exactly when some purpose is admitted
+/// by every selector: the six constructors are disjoint and exhaustive. An empty
+/// intersection makes the generated antecedent unsatisfiable and the property vacuous.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Conflict {
+    /// Every scope's admitted purposes, in source order.
+    pub sets: Vec<Purposes>,
+    /// The scope at which the running intersection first became empty.
+    pub at: usize,
+}
+
+pub(super) fn conflict(
+    property: &Property,
+    targets: &BTreeMap<String, Target>,
+) -> Result<Option<Conflict>, String> {
+    let sets = property
+        .scopes
+        .iter()
+        .map(|scope| allowed(scope, targets))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut common = Purposes::ALL;
+    for (at, set) in sets.iter().enumerate() {
+        common = common.intersect(*set);
+        if common.is_empty() {
+            return Ok(Some(Conflict { sets, at }));
+        }
+    }
+    Ok(None)
+}
+
+fn validator_handlers<'a>(
+    target: &str,
+    targets: &'a BTreeMap<String, Target>,
+) -> Result<&'a [String], String> {
+    let target = targets
+        .get(target)
+        .ok_or_else(|| format!("missing validator target '{target}'"))?;
+    let TargetKind::Validator { handlers } = &target.kind else {
+        return Err(format!("target '{}' is not a validator", target.id));
+    };
+    Ok(handlers)
+}
 
 /// The V3 purpose selects a calling convention, not a restriction on the context.
 pub(super) fn purpose(handler: Option<&str>) -> Purpose {
@@ -46,12 +152,7 @@ pub(super) fn lower(
         }
         condition.push('(');
         if handler == "else" {
-            let target = targets
-                .get(&scope.target)
-                .ok_or_else(|| format!("missing validator target '{}'", scope.target))?;
-            let TargetKind::Validator { handlers } = &target.kind else {
-                return Err(format!("target '{}' is not a validator", scope.target));
-            };
+            let handlers = validator_handlers(&scope.target, targets)?;
             let mut first = true;
             for handler in handlers.iter().filter(|handler| handler.as_str() != "else") {
                 if !first {
@@ -219,7 +320,7 @@ fn context_binder_end(body: &str) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{lower, premise, purpose};
+    use super::{allowed, conflict, lower, premise, purpose};
     use crate::assurance::{ExecutionSettings, Property, ResolvedScope, Target, TargetKind};
     use aiken_lang::ast::Span;
     use aiken_ual::Purpose;
@@ -348,16 +449,141 @@ mod tests {
     }
 
     #[test]
-    fn multiple_scopes_conjoin_inside_all_chained_binders() {
+    fn compatible_scopes_conjoin_inside_all_chained_binders() {
+        // spend ∩ all ∩ (all − {mint}) = {spend}: one purpose satisfies every premise.
         let body = "forall (p : Params), ∀ ctx : ScriptContext, ∀ n : Nat, P p ctx n";
+        let prop = property(body, &[Some("spend"), None, Some("else")]);
+        let targets = targets(&["mint"]);
+        assert_eq!(conflict(&prop, &targets).unwrap(), None);
         assert_eq!(
-            lower(
-                &property(body, &[Some("spend"), None, Some("mint")]),
-                &targets(&[])
-            )
-            .unwrap(),
-            "forall (p : Params), ∀ ctx : ScriptContext, ∀ n : Nat, ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d) ∧ (∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs)) → ( P p ctx n\n)"
+            lower(&prop, &targets).unwrap(),
+            "forall (p : Params), ∀ ctx : ScriptContext, ∀ n : Nat, ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d) ∧ (¬ (∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs))) → ( P p ctx n\n)"
         );
+    }
+
+    fn scoped(scopes: &[(&str, Option<&str>)]) -> Property {
+        let mut prop = property("∀ (ctx : ScriptContext), P ctx", &[]);
+        prop.scopes = scopes
+            .iter()
+            .map(|(target, handler)| ResolvedScope {
+                target: target.to_string(),
+                handler: handler.map(str::to_string),
+                applied_parameters: None,
+                location: Span { start: 0, end: 0 },
+            })
+            .collect();
+        prop
+    }
+
+    /// `v` handles spend; `w` handles mint; `f` is a function; `all` handles every purpose.
+    fn validators() -> BTreeMap<String, Target> {
+        let mut map = BTreeMap::new();
+        for (id, kind) in [
+            (
+                "v",
+                TargetKind::Validator {
+                    handlers: vec!["spend".to_string()],
+                },
+            ),
+            (
+                "w",
+                TargetKind::Validator {
+                    handlers: vec!["mint".to_string()],
+                },
+            ),
+            ("f", TargetKind::Function),
+            (
+                "all",
+                TargetKind::Validator {
+                    handlers: ["spend", "mint", "withdraw", "publish", "vote", "propose"]
+                        .map(str::to_string)
+                        .to_vec(),
+                },
+            ),
+        ] {
+            let mut target = targets(&[]).remove("vesting__vesting").unwrap();
+            target.id = id.to_string();
+            target.kind = kind;
+            map.insert(id.to_string(), target);
+        }
+        map
+    }
+
+    #[test]
+    fn allowed_purposes_mirror_the_generated_premises() {
+        let targets = validators();
+        for (scope, expected) in [
+            (
+                ("v", None),
+                "{spend, mint, withdraw, publish, vote, propose}",
+            ),
+            (
+                ("f", None),
+                "{spend, mint, withdraw, publish, vote, propose}",
+            ),
+            (("v", Some("spend")), "{spend}"),
+            (
+                ("v", Some("else")),
+                "{mint, withdraw, publish, vote, propose}",
+            ),
+            (
+                ("w", Some("else")),
+                "{spend, withdraw, publish, vote, propose}",
+            ),
+            (("all", Some("else")), "{}"),
+        ] {
+            let prop = scoped(&[scope]);
+            assert_eq!(
+                allowed(&prop.scopes[0], &targets).unwrap().to_string(),
+                expected,
+                "{scope:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn scopes_compose_by_intersecting_admitted_purposes() {
+        let targets = validators();
+        // (scopes, index at which the intersection first becomes empty)
+        for (scopes, at) in [
+            // A single scope, unsuffixed or handler, keeps its lowering.
+            (vec![("v", None)], None),
+            (vec![("v", Some("spend"))], None),
+            (vec![("f", None), ("v", Some("spend"))], None),
+            // Repeating a compatible selector is harmless.
+            (vec![("v", Some("spend")), ("v", Some("spend"))], None),
+            (vec![("v", Some("spend")), ("v", None)], None),
+            // Within one validator.
+            (vec![("v", Some("spend")), ("v", Some("mint"))], Some(1)),
+            (vec![("v", Some("spend")), ("v", Some("else"))], Some(1)),
+            (vec![("v", Some("else")), ("v", Some("spend"))], Some(1)),
+            (vec![("v", Some("else")), ("v", Some("mint"))], None),
+            // Across validators, by each validator's own handlers: w.else still admits spend.
+            (vec![("v", Some("spend")), ("w", Some("else"))], None),
+            (vec![("v", Some("else")), ("w", Some("else"))], None),
+            (vec![("v", Some("spend")), ("w", Some("mint"))], Some(1)),
+            (vec![("w", Some("mint")), ("v", Some("else"))], None),
+            (vec![("w", Some("mint")), ("w", Some("else"))], Some(1)),
+            // The conflict is reported where it arises, not at the end.
+            (
+                vec![
+                    ("v", None),
+                    ("v", Some("spend")),
+                    ("w", Some("mint")),
+                    ("v", None),
+                ],
+                Some(2),
+            ),
+            // A selector that admits nothing is a conflict on its own.
+            (vec![("all", Some("else"))], Some(0)),
+        ] {
+            let prop = scoped(&scopes);
+            assert_eq!(
+                conflict(&prop, &targets).unwrap().map(|c| c.at),
+                at,
+                "{scopes:?}"
+            );
+        }
     }
 
     #[test]

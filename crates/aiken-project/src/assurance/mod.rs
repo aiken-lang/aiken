@@ -113,6 +113,8 @@ pub enum ErrorKind {
     HelperCollision,
     MissingFragment,
     MixedExecutionSettings,
+    /// The scopes' purpose premises cannot hold for one script context.
+    IncompatiblePurposes,
     PurposeLowering,
 }
 

@@ -10,5 +10,6 @@ NEGATIVES = {
     "id_collision": "both map to emitted id",
     "mixed_execution_settings/steps": "mixes execution settings",
     "mixed_execution_settings/semantics": "mixes execution settings",
+    "incompatible_purposes": "scopes cannot hold together for one script context",
     "unterminated_block": "annotation is not closed",
 }

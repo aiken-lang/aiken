@@ -17,7 +17,7 @@ The existing `cargo test --workspace` CI job runs every case. No workflow change
 | `positive/applied_validator` | Fixture 2 variant: zero-minimum spending rejection, positive-minimum fallback rejection, and a coexisting universal property; Flat values and deployed scripts are hash-bound |
 | `positive/falsified` | Equal bids claimed to outbid; `old = proposed = 0` is the intended counterexample, not a phase-1 verdict |
 | `positive/recursive_data` | Recursive Tree definitions and an identity function applied to valid Data-encoded leaves |
-| `negative/*` | Unknown scope, wrong module, missing project fragment helper, opaque argument, missing steps, invalid semantics, mapped ID collision, both execution-setting mismatches, unterminated block |
+| `negative/*` | Unknown scope, wrong module, missing project fragment helper, opaque argument, missing steps, invalid semantics, mapped ID collision, both execution-setting mismatches, incompatible purpose scopes (`v.spend v.else`, which would make an impossible conclusion vacuous), unterminated block |
 
 The source-edit regression changes the native function from strict to non-strict comparison and checks that its compiled-code SHA-256 and checking-context digest both change while the companion blueprint remains unchanged.
 

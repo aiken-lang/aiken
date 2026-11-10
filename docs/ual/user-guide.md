@@ -132,7 +132,17 @@ The complete lowered proposition, not just the author's original text, appears i
 
 **Context binder requirement:** handler-scoped properties must start with explicit outer `∀`/`forall` binders containing exactly one binder named `ctx`. Prefer `∀ (parameters : Type) (ctx : ScriptContext), ...`; chained universal binders also work. A context called `context`, an inner existential context, or a `ctx` merely mentioned in a type/body does not meet this requirement. Unsupported binder forms must be rewritten; Aiken uses a small prefix recognizer, not a Lean parser. Unsuffixed scopes do not require this lowering-specific binder. Consumer elaboration still checks the actual types.
 
-Multiple handler-scoped entries conjoin their premises against the **same** `ctx`. Do not express alternatives by listing incompatible purposes: a contradictory premise can make the implication vacuous. Write separate properties when separate purpose claims are intended. The implementation is [`purpose.rs`](../../crates/aiken-project/src/assurance/purpose.rs). The bracketed existential syntax above is deliberate: the pinned consumer rejected unbracketed existentials in the [recorded experiment](e2e-results.md#producer-discrepancies-and-purpose-comparison).
+**Several scopes in one property** conjoin their premises against the **same** `ctx`, so each scope narrows the purposes the property is about:
+
+| Scope | Purposes it admits |
+|---|---|
+| `v` (no suffix), or a function | all six |
+| `v.spend`, `v.mint`, … | that one purpose |
+| `v.else` | every purpose `v` has no explicit handler for |
+
+A property must leave at least one purpose that every scope admits. Otherwise no script context could satisfy its premises, and the claim would "verify" vacuously. `aiken verify generate` (and both dry runs) rejects such a property, names the conflicting scopes, and writes nothing. For example, `for vesting.spend vesting.mint` is rejected, as is `for vesting.spend vesting.else` when `vesting` has a `spend` handler. Scopes on different validators are judged by each validator's own handlers: `for vesting.spend minter.else` is accepted, because `minter.else` excludes only mint. To claim something for several purposes, write a separate property for each. To state an alternative ("spend or mint"), use an unsuffixed scope (`for vesting`) and write the purpose condition in the proposition yourself.
+
+This check is exact for the purpose premises Aiken inserts, and only for those. Aiken does not check whether your own antecedents can be satisfied: `∀ ctx, False → P` is still your responsibility. The implementation is [`purpose.rs`](../../crates/aiken-project/src/assurance/purpose.rs). The bracketed existential syntax above is deliberate: the pinned consumer rejected unbracketed existentials in the [recorded experiment](e2e-results.md#producer-discrepancies-and-purpose-comparison).
 
 ### Applied deployments
 

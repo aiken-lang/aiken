@@ -119,6 +119,13 @@ Each validator checking target must name a `purpose`. In V3 every invocation has
 | `propose` | `∃ (i : _) (pp : _), … = ProposingScript i pp` |
 | `else` | conjunction of the negations of every handler `v` defines |
 
+**Composing scopes.** A property's scopes all constrain the one `ctx`, and their premises are conjoined. Each selector admits a set of purposes over the six V3 `ScriptInfo` constructors:
+- an unsuffixed validator scope, or a function scope, admits all six (no premise);
+- `v.h` admits `{h}`;
+- `v.else` admits all six minus `v`'s explicit handlers.
+
+The conjunction holds exactly when some purpose is admitted by every selector. The six constructors are disjoint and exhaustive, so intersecting the sets is exact for the generated premises, not an approximation. The producer rejects a property whose intersection is empty (`v.spend v.mint`; `v.spend v.else` when `v` defines spend; `v.spend w.mint`; `v.else` when `v` handles all six purposes). It reports a source-located diagnostic before any code generation or file is written, rather than publishing a vacuous claim. Selectors across validators follow each validator's own handlers: `v.spend w.else` is accepted when `w` defines no spend handler. The check covers only the premises Aiken generates. A user-written antecedent can still be unsatisfiable, and the producer never tries to decide that. Disjunctions of purposes are written explicitly in the proposition under an unsuffixed scope; the producer never turns conjunction into disjunction.
+
 Constructor names come from CardanoLedgerApi V3 `Contexts.lean`. UAL-13 found that the pinned consumer rejects unbracketed existential binders; bracketed binders with inferred types are accepted. Both this form and an equivalent match-based premise discharge fixture 2's spend/else properties. Retain the existential form: it verified successfully and the match form showed no discharge advantage. See [the empirical results](e2e-results.md). The check driver opens `CardanoLedgerApi.V3` and `CardanoLedgerApi.V3.Contexts.ScriptInfo` for annotation names and generated constructors; imports alone do not open these namespaces.
 
 ### 3.4 Predicates, fragments, namespaces

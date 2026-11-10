@@ -186,6 +186,52 @@ impl Bundle {
     }
 }
 
+/// Selectors whose generated purpose premises admit no common purpose would make the
+/// property vacuously true, so this is a producer error rather than a solver question.
+fn incompatible_purposes(
+    module: &crate::module::CheckedModule,
+    property: &super::Property,
+    conflict: &purpose::Conflict,
+) -> super::Error {
+    let selector = |index: usize| module.code[property.scopes[index].location.range()].to_owned();
+    let culprit = selector(conflict.at);
+    let message = if conflict.at == 0 {
+        format!(
+            "property {:?}: scope '{culprit}' admits no script purpose, because the validator defines a handler for every purpose; the property would hold vacuously",
+            property.id
+        )
+    } else {
+        let admitted = (0..=conflict.at)
+            .map(|index| format!("'{}' admits {}", selector(index), conflict.sets[index]))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "property {:?}: scopes cannot hold together for one script context ({admitted}); every scope constrains the same 'ctx', and no purpose satisfies all of them, so the property would hold vacuously",
+            property.id
+        )
+    };
+    let mut error = super::Error::new(
+        module,
+        ErrorKind::IncompatiblePurposes,
+        property.scopes[conflict.at].location,
+        message,
+    );
+    for index in 0..conflict.at {
+        if conflict.sets[index] != purpose::Purposes::ALL {
+            error = error.with_related(
+                module,
+                property.scopes[index].location,
+                format!("'{}' admits {}", selector(index), conflict.sets[index]),
+            );
+        }
+    }
+    error.help = Some(
+        "Write a separate property for each purpose. To state alternatives, scope the validator without a handler suffix (e.g. `for vesting`) and write the purpose condition in the proposition yourself."
+            .to_owned(),
+    );
+    error
+}
+
 /// Compile functions through `aiken export`'s generator path and lower the annotation
 /// model against the UAL-07 blueprint. All inputs must describe the same checked
 /// project and tracing policy. No filesystem or consumer operations are performed.
@@ -229,6 +275,22 @@ pub fn lower(
                         property.id, first_target.id, first_target.settings.steps, first_target.settings.semantics,
                         target.id, target.settings.steps, target.settings.semantics))
                     .with_related(module, first.location, "first scoped execution policy".to_owned()));
+            }
+        }
+        match purpose::conflict(property, &model.targets) {
+            Ok(Some(conflict)) => {
+                errors.push(incompatible_purposes(module, property, &conflict));
+                continue;
+            }
+            Ok(None) => {}
+            Err(message) => {
+                errors.push(super::Error::new(
+                    module,
+                    ErrorKind::PurposeLowering,
+                    property.body_location,
+                    message,
+                ));
+                continue;
             }
         }
         match purpose::lower(property, &model.targets) {

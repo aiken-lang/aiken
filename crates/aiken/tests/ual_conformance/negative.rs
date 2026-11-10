@@ -134,6 +134,46 @@ fn mixed_semantics_are_rejected() {
 }
 
 #[test]
+fn incompatible_purpose_scopes_are_rejected() {
+    let expected = [
+        "aiken::assurance",
+        "\"vacuous_impossible\"",
+        "'vesting.spend' admits {spend}",
+        "'vesting.else' admits {mint, withdraw, publish, vote, propose}",
+        "same 'ctx'",
+        "vacuously",
+        "separate property",
+    ];
+    rejects_fixture("incompatible_purposes", &expected);
+    // Both write-free dry runs reject it the same way: nothing is generated to inspect.
+    for args in [
+        &[
+            "verify",
+            "generate",
+            "--environment",
+            "environment.json",
+            "--dry-run",
+        ][..],
+        &["verify", "generate", "--no-environment"][..],
+    ] {
+        let project = Project::fixture("negative/incompatible_purposes");
+        let output = project.run(args);
+        let message = diagnostic(&output);
+        assert!(!output.status.success(), "{args:?} succeeded:\n{message}");
+        for fragment in expected {
+            assert!(
+                message.contains(fragment),
+                "{args:?}: {fragment:?}:\n{message}"
+            );
+        }
+        assert!(
+            !project.0.join("assurance").exists(),
+            "{args:?}:\n{message}"
+        );
+    }
+}
+
+#[test]
 fn unterminated_annotation_block_is_rejected() {
     rejects_fixture(
         "unterminated_block",

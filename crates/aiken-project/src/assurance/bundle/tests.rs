@@ -262,15 +262,44 @@ fn function_interfaces_copy_all_merged_definitions() {
     }
 }
 
+const SPENDING: &str = "∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d";
+
+fn formal_source<'a>(bundle: &'a Bundle, id: &str) -> &'a str {
+    bundle
+        .assurance()
+        .properties
+        .iter()
+        .find(|p| p.id == id)
+        .unwrap()
+        .statement
+        .formal
+        .as_ref()
+        .unwrap()
+        .source
+        .as_deref()
+        .unwrap()
+}
+
+fn rejected(source: &str) -> Vec<super::super::Error> {
+    match draft(source) {
+        Err(Error::Annotations { errors }) => errors,
+        other => panic!("expected annotation diagnostics, got {other:?}"),
+    }
+}
+
 #[test]
-fn duplicate_handler_scopes_keep_one_checking_target_and_all_premises() {
+fn compatible_repeated_scopes_keep_one_checking_target_and_every_premise() {
     let source = format!(
-        "{VALIDATOR}\n//@ PROPERTY both for vesting.spend vesting.else vesting.spend \"all selectors\" ∀ (ctx : ScriptContext), True @//"
+        "{VALIDATOR}\n//@ PROPERTY both for vesting.spend vesting vesting.spend \"all selectors\" ∀ (minimum : Int) (ctx : ScriptContext), isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx)) @//"
     );
     let bundle = bundle(&source);
     assert_bindings(&bundle);
     let context: ual::CheckingContext = serde_json::from_slice(&bundle.contexts()["both"]).unwrap();
     assert_eq!(context.targets.len(), 1);
+    let ual::ContextTarget::Validator(target) = &context.targets[0] else {
+        panic!("validator target")
+    };
+    assert_eq!(target.purpose, ual::Purpose::Spend);
     let property = bundle
         .assurance()
         .properties
@@ -281,22 +310,104 @@ fn duplicate_handler_scopes_keep_one_checking_target_and_all_premises() {
         property.scope.validators.as_ref().unwrap(),
         &["fixtures__vesting"]
     );
-    let source = property
+    // Target deduplication keeps one checking target; it never drops a selector's premise.
+    assert_eq!(formal_source(&bundle, "both").matches(SPENDING).count(), 2);
+    let again = super::tests::bundle(&source);
+    assert_eq!(again.assurance_bytes(), bundle.assurance_bytes());
+}
+
+#[test]
+fn contradictory_purpose_scopes_are_rejected_before_lowering() {
+    // The review's reproduction: spend is explicit on vesting, so vesting.else excludes
+    // it, and the conjoined premises would make this impossible conclusion "verify".
+    let source = format!(
+        "{VALIDATOR}\n//@ PROPERTY vacuous_impossible for vesting.spend vesting.else\n  \"An impossible conclusion should never verify.\"\n  ∀ (minimum : Int) (ctx : ScriptContext),\n    isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx)) ∧ False\n@//"
+    );
+    let errors = rejected(&source);
+    assert_eq!(errors.len(), 1);
+    let error = &errors[0];
+    assert_eq!(error.kind, ErrorKind::IncompatiblePurposes);
+    assert_eq!(&source[error.location.range()], "vesting.else");
+    assert_eq!(error.related.len(), 1);
+    assert_eq!(&source[error.related[0].location.range()], "vesting.spend");
+    for fragment in [
+        "\"vacuous_impossible\"",
+        "'vesting.spend' admits {spend}",
+        "'vesting.else' admits {mint, withdraw, publish, vote, propose}",
+        "same 'ctx'",
+        "vacuously",
+    ] {
+        assert!(
+            error.message.contains(fragment),
+            "{fragment}: {}",
+            error.message
+        );
+    }
+    assert!(error.help.as_ref().unwrap().contains("separate property"));
+
+    // Two distinct handlers can't both describe one context either.
+    let source = format!(
+        "{VALIDATOR}\n//@ PROPERTY two for vesting.spend vesting.mint \"two purposes\" ∀ (minimum : Int) (ctx : ScriptContext), True @//"
+    );
+    let source = source.replace(
+        "  else(_ctx: Data) {",
+        "  mint(_redeemer: Data, _policy: ByteArray, _tx: Data) {\n    True\n  }\n\n  else(_ctx: Data) {",
+    );
+    let errors = rejected(&source);
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].kind, ErrorKind::IncompatiblePurposes);
+    assert_eq!(&source[errors[0].location.range()], "vesting.mint");
+}
+
+#[test]
+fn cross_validator_scopes_follow_each_validators_own_handlers() {
+    let minter = "@onchain(steps: 2500, semantics: e)\nvalidator minter {\n  mint(_redeemer: Data, _policy: ByteArray, _tx: Data) {\n    True\n  }\n\n  else(_ctx: Data) {\n    fail\n  }\n}\n";
+    let with = |scopes: &str| {
+        format!(
+            "{VALIDATOR}\n{minter}\n//@ PROPERTY pair for {scopes} \"pair\" ∀ (minimum : Int) (ctx : ScriptContext), isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx)) @//"
+        )
+    };
+    // minter.else excludes only mint, so it admits spend; both premises can hold.
+    let accepted = draft(&with("vesting.spend minter.else")).unwrap();
+    let pair = accepted
+        .assurance()
+        .properties
+        .iter()
+        .find(|p| p.id == "pair")
+        .unwrap();
+    let source = pair
         .statement
         .formal
         .as_ref()
         .unwrap()
         .source
-        .as_ref()
+        .as_deref()
         .unwrap();
-    assert!(
-        source.contains("∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d")
-    );
-    assert!(
-        source.contains(
-            "¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)"
-        )
-    );
+    assert!(source.contains(SPENDING));
+    assert!(source.contains("¬ (∃ (cs : _), ctx.scriptContextScriptInfo = MintingScript cs)"));
+    assert!(draft(&with("vesting.else minter.else")).is_ok());
+
+    for (scopes, culprit) in [
+        ("vesting.spend minter.mint", "minter.mint"),
+        ("minter.mint minter.else", "minter.else"),
+    ] {
+        let source = with(scopes);
+        let errors = rejected(&source);
+        assert_eq!(errors.len(), 1, "{scopes}");
+        assert_eq!(errors[0].kind, ErrorKind::IncompatiblePurposes, "{scopes}");
+        assert_eq!(&source[errors[0].location.range()], culprit, "{scopes}");
+    }
+}
+
+#[test]
+fn else_scope_of_a_validator_handling_every_purpose_is_rejected() {
+    // Aiken rejects an explicit fallback here, but `else` still names the implicit one.
+    let source = "@onchain(steps: 100, semantics: e)\nvalidator full {\n  spend(_d: Option<Data>, _r: Data, _o: Data, _tx: Data) { True }\n  mint(_r: Data, _p: ByteArray, _tx: Data) { True }\n  withdraw(_r: Data, _c: Data, _tx: Data) { True }\n  publish(_r: Data, _c: Data, _tx: Data) { True }\n  vote(_r: Data, _v: Data, _tx: Data) { True }\n  propose(_r: Data, _p: Data, _tx: Data) { True }\n}\n//@ PROPERTY nothing for full.else \"no purpose left\" ∀ (ctx : ScriptContext), True @//";
+    let errors = rejected(source);
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].kind, ErrorKind::IncompatiblePurposes);
+    assert_eq!(&source[errors[0].location.range()], "full.else");
+    assert!(errors[0].message.contains("admits no script purpose"));
 }
 
 #[test]
