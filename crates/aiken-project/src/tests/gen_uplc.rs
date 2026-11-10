@@ -6811,3 +6811,86 @@ fn invalid_module_constant_returns_codegen_error() {
     assert_eq!(name, "test_module.x");
     assert!(matches!(*error, uplc::machine::Error::DivideByZero(..)));
 }
+
+#[test]
+fn when_shared_clause_binds_list_elements_in_order() {
+    let src = r#"
+        fn pick(xs: List<List<Int>>) -> Int {
+          when xs is {
+            [_, [0]] -> 100
+            [[a, ..], [b, ..], ..] -> a * 10 + b
+            _ -> 300
+          }
+        }
+
+        test foo() {
+          and {
+            pick([[1], [2], [3]]) == 12,
+            pick([[1], [2]]) == 12,
+            pick([[9], [0]]) == 100,
+            pick([[1], []]) == 300,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn when_shared_clause_binds_tuple_fields_in_order() {
+    let src = r#"
+        fn pick(flag: Bool, x: Option<Int>, y: Option<Int>) -> Int {
+          when (flag, x, y) is {
+            (True, Some(0), _) -> 100
+            (False, _, Some(0)) -> 200
+            (_, Some(a), Some(b)) -> a * 10 + b
+            _ -> 300
+          }
+        }
+
+        test foo() {
+          and {
+            pick(False, Some(1), Some(2)) == 12,
+            pick(True, Some(1), Some(2)) == 12,
+            pick(True, Some(0), Some(2)) == 100,
+            pick(False, Some(1), Some(0)) == 200,
+            pick(True, None, Some(2)) == 300,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn when_shared_clause_keeps_variables_apart_on_every_branch() {
+    let src = r#"
+        type Action {
+          Deposit
+          Withdraw
+          Update
+        }
+
+        fn allowed(action: Action, old: Option<Int>, new: Option<Int>) -> Bool {
+          when (action, old, new) is {
+            (Deposit, None, _) -> True
+            (Withdraw, _, None) -> True
+            (_, Some(before), Some(after)) -> after >= before
+            _ -> False
+          }
+        }
+
+        test foo() {
+          and {
+            allowed(Update, Some(100), Some(120)),
+            !allowed(Update, Some(100), Some(60)),
+            allowed(Deposit, Some(100), Some(120)),
+            !allowed(Deposit, Some(100), Some(60)),
+            allowed(Withdraw, Some(100), Some(120)),
+            !allowed(Withdraw, Some(100), Some(60)),
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
