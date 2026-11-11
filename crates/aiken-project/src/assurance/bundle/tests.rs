@@ -525,10 +525,18 @@ fn multi_module_bundle(order: &[usize]) -> Bundle {
             "use example\n//@ PREDICATE\ndef raised (old proposed : Int) : Prop := proofs.helpers.larger (proofs.helpers.pick old) proposed\n@//\n@onchain(steps: 100, semantics: e)\npub fn outbids(old: Int, proposed: Int) -> Bool { example.same(proposed) > old }\n//@ PROPERTY outbids for outbids \"qualified\" ∀ (old proposed : Int), raised old proposed → «example».positive 1 → fixtures__outbids_returns (Data.I old) (Data.I proposed) true @//\nvalidator companion { else(_ctx: Data) { fail } }",
         ),
     ];
+    let ordered: Vec<_> = order.iter().map(|&index| sources[index]).collect();
+    project_draft(&ordered)
+        .unwrap()
+        .bind_environment(environment())
+        .unwrap()
+}
+
+/// Check `sources` as one project, in the given order, and lower it.
+fn project_draft(sources: &[(&str, &str)]) -> Result<PendingBundle, Error> {
     let mut project = TestProject::new();
     let mut modules = std::collections::HashMap::new();
-    for &index in order {
-        let (name, source) = sources[index];
+    for &(name, source) in sources {
         let mut parsed = project.parse(source);
         parsed.name = name.to_owned();
         parsed.ast.name = name.to_owned();
@@ -543,9 +551,6 @@ fn multi_module_bundle(order: &[usize]) -> Bundle {
     let mut blueprint = Blueprint::new(&config, &modules, &mut generator, false).unwrap();
     blueprint.preamble.compiler.as_mut().unwrap().version = "test-compiler".to_owned();
     lower(&model, &modules, &mut generator, &blueprint, preamble())
-        .unwrap()
-        .bind_environment(environment())
-        .unwrap()
 }
 
 #[test]
@@ -601,4 +606,222 @@ fn fragments_emit_schema_legal_ids_and_qualified_declarations() {
     // changes a byte. Imports must be checked before their importers.
     let reordered = multi_module_bundle(&[4, 3, 0, 1, 2, 5]);
     assert_eq!(bundle.assurance_bytes(), reordered.assurance_bytes());
+}
+
+const COMPANION: &str = "validator companion { else(_ctx: Data) { fail } }";
+
+fn project_rejected(sources: &[(&str, &str)]) -> Vec<super::super::Error> {
+    match project_draft(sources) {
+        Err(Error::Annotations { errors }) => errors,
+        other => panic!("expected annotation diagnostics, got {other:?}"),
+    }
+}
+
+/// Every emitted document, serialized and validated against the vendored schemas.
+fn assert_schema_valid(bundle: &Bundle) {
+    let value = |bytes: &[u8]| serde_json::from_slice::<Value>(bytes).unwrap();
+    ual::validate(
+        ual::DocumentKind::Assurance,
+        &value(bundle.assurance_bytes()),
+    )
+    .unwrap();
+    ual::validate(
+        ual::DocumentKind::Blueprint,
+        &value(bundle.blueprint_bytes()),
+    )
+    .unwrap();
+    for bytes in bundle.contexts().values() {
+        ual::validate(ual::DocumentKind::CheckingContext, &value(bytes)).unwrap();
+    }
+    let contexts = bundle
+        .contexts()
+        .iter()
+        .map(|(id, bytes)| (id.clone(), bytes.as_slice()))
+        .collect();
+    ual::validate_bindings(bundle.assurance(), bundle.blueprint_bytes(), &contexts).unwrap();
+}
+
+#[test]
+fn dotted_module_validators_keep_their_module_and_get_lean_bound_ids() {
+    let dotted = "@onchain(steps: 2500, semantics: e)\nvalidator v(minimum: Int) {\n  spend(_d: Option<Data>, _r: Data, _o: Data, _t: Data) { minimum > 0 }\n  else(_ctx: Data) { fail }\n}\n//@ PROPERTY dotted for v.spend \"Dotted module.\" ∀ (minimum : Int) (ctx : ScriptContext), minimum ≤ 0 → isUnsuccessful (fixtures_extra__v minimum (toLedgerData ctx)) @//\n//@ PROPERTY dotted_applied for v.spend[01] \"Applied.\" ∀ (ctx : ScriptContext), isUnsuccessful (fixtures_extra__v (toLedgerData ctx)) @//";
+    let sources = [("fixtures.extra", dotted), ("fixtures", COMPANION)];
+    let first = project_draft(&sources)
+        .unwrap()
+        .bind_environment(environment())
+        .unwrap();
+    assert_schema_valid(&first);
+    let blueprint: ual::CompiledInterfaceBlueprint =
+        serde_json::from_slice(first.blueprint_bytes()).unwrap();
+    let identities: Vec<_> = blueprint
+        .validators
+        .iter()
+        .map(|v| (v.id.as_str(), v.title.as_str()))
+        .collect();
+    assert_eq!(
+        identities,
+        [
+            ("fixtures__companion", "fixtures.companion"),
+            ("fixtures_extra__v", "fixtures.extra.v")
+        ]
+    );
+    for property in ["dotted", "dotted_applied"] {
+        let context: ual::CheckingContext =
+            serde_json::from_slice(&first.contexts()[property]).unwrap();
+        let ual::ContextTarget::Validator(target) = &context.targets[0] else {
+            panic!("expected validator")
+        };
+        assert_eq!(target.validator, "fixtures_extra__v");
+        // The applied path finds the dotted module's template by its own title.
+        assert_eq!(
+            matches!(target.parameters, ual::ParameterBinding::Applied { .. }),
+            property == "dotted_applied"
+        );
+    }
+    // Repeated generation is byte-identical, in either module check order.
+    let reversed = [sources[1], sources[0]];
+    let second = project_draft(&reversed)
+        .unwrap()
+        .bind_environment(environment())
+        .unwrap();
+    assert_eq!(first.assurance_bytes(), second.assurance_bytes());
+    assert_eq!(first.blueprint_bytes(), second.blueprint_bytes());
+    assert_eq!(first.contexts(), second.contexts());
+    assert_eq!(first.artifacts(), second.artifacts());
+}
+
+#[test]
+fn dotted_and_underscored_modules_merging_to_one_id_are_reported() {
+    let validator = "validator v { else(_ctx: Data) { fail } }";
+    let fixtures = format!(
+        "{COMPANION}\n@onchain(steps: 100, semantics: e)\npub fn f(x: Int) -> Int {{ x }}\n//@ PROPERTY p for f \"f\" ∀ (x : Int), fixtures__f_returns (Data.I x) (Data.I x) @//"
+    );
+    let error = project_draft(&[
+        ("a.b", validator),
+        ("a_b", validator),
+        ("fixtures", &fixtures),
+    ])
+    .unwrap_err();
+    let Error::Blueprint(dialect::Error::TargetIdCollision { id, first, second }) = error else {
+        panic!("expected target id collision, got {error:?}")
+    };
+    assert_eq!(
+        (id.as_str(), first.as_str(), second.as_str()),
+        ("a_b__v", "a.b.v", "a_b.v")
+    );
+}
+
+fn function_pair(second: &str, formula: &str) -> String {
+    format!(
+        "@onchain(steps: 100, semantics: e)\npub fn f(x: Int) -> Int {{ x }}\n@onchain(steps: 100, semantics: e)\npub fn {second}(x: Int) -> Int {{ x }}\n{formula}\n{COMPANION}"
+    )
+}
+
+#[test]
+fn functions_colliding_with_generated_function_declarations_are_rejected() {
+    // Both functions are called, so no disconnected-target check can mask the collision.
+    for (second, role) in [
+        ("f_returns", "`_returns` predicate"),
+        ("f_script", "`_script` program"),
+    ] {
+        let source = function_pair(
+            second,
+            &format!(
+                "//@ PROPERTY both for f {second} \"both\" ∀ (x : Int), fixtures__f_returns (Data.I x) (Data.I x) ∧ fixtures__{second}_returns (Data.I x) (Data.I x) @//"
+            ),
+        );
+        let errors = rejected(&source);
+        assert_eq!(errors.len(), 1, "{second}: {errors:?}");
+        assert_eq!(errors[0].kind, ErrorKind::GeneratedNameCollision);
+        assert_eq!(
+            errors[0].message,
+            format!(
+                "Generated Lean name 'fixtures__{second}' is declared by both function 'fixtures.f' ({role}) and function 'fixtures.{second}' (function binding) in the consumer environment of property 'both'."
+            )
+        );
+        // Labels: the second function, the first function, and the property.
+        assert!(source[errors[0].location.range()].starts_with(&format!("pub fn {second}(")));
+        assert_eq!(errors[0].related.len(), 2);
+    }
+}
+
+#[test]
+fn generated_suffixes_in_separate_property_environments_are_allowed() {
+    for second in ["f_returns", "f_script"] {
+        let source = function_pair(
+            second,
+            &format!(
+                "//@ PROPERTY first for f \"f\" ∀ (x : Int), fixtures__f_returns (Data.I x) (Data.I x) @//\n//@ PROPERTY second for {second} \"g\" ∀ (x : Int), fixtures__{second}_returns (Data.I x) (Data.I x) @//"
+            ),
+        );
+        let bundle = bundle(&source);
+        assert_schema_valid(&bundle);
+        let functions = bundle.assurance().functions.as_ref().unwrap();
+        assert!(functions.contains_key("fixtures__f"));
+        assert!(functions.contains_key(&format!("fixtures__{second}")));
+    }
+}
+
+#[test]
+fn validator_declarations_collide_in_every_property_environment() {
+    // `v` declares `fixtures_v_hash`; validator `v_hash` binds the same title name.
+    let source = format!(
+        "validator v {{ else(_ctx: Data) {{ fail }} }}\nvalidator v_hash {{ else(_ctx: Data) {{ fail }} }}\n{FUNCTION}"
+    );
+    let errors = rejected(&source);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(
+        errors[0].message,
+        "Generated Lean name 'fixtures_v_hash' is declared by both validator 'fixtures.v' (`_hash` constant) and validator 'fixtures.v_hash' (title binding) in the consumer environment of property 'outbids'."
+    );
+    assert!(
+        errors[0]
+            .help
+            .as_ref()
+            .unwrap()
+            .contains("every blueprint validator")
+    );
+
+    // Module `m_`'s title binding spells module `m`'s id binding.
+    let fixtures = format!(
+        "{COMPANION}\n@onchain(steps: 100, semantics: e)\npub fn f(x: Int) -> Int {{ x }}\n//@ PROPERTY p for f \"f\" ∀ (x : Int), fixtures__f_returns (Data.I x) (Data.I x) @//"
+    );
+    let validator = "validator v { else(_ctx: Data) { fail } }";
+    let errors = project_rejected(&[("m", validator), ("m_", validator), ("fixtures", &fixtures)]);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(
+        errors[0].message,
+        "Generated Lean name 'm__v' is declared by both validator 'm.v' (id binding) and validator 'm_.v' (title binding) in the consumer environment of property 'p'."
+    );
+}
+
+#[test]
+fn helpers_colliding_with_generated_declarations_are_rejected() {
+    let source = FUNCTION.replace(
+        "def larger (old proposed : Int) : Prop := old < proposed",
+        "def larger (old proposed : Int) : Prop := old < proposed\ndef fixtures__outbids_script : Prop := True",
+    );
+    let errors = rejected(&source);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(
+        errors[0].message,
+        "Generated Lean name 'fixtures__outbids_script' is declared by both function 'fixtures.outbids' (`_script` program) and helper 'fixtures__outbids_script' in module 'fixtures' in the consumer environment of property 'outbids'."
+    );
+    assert_eq!(
+        &source[errors[0].location.range()],
+        "fixtures__outbids_script"
+    );
+}
+
+#[test]
+fn applied_targets_declare_no_parameter_count() {
+    let helper = "//@ PREDICATE\ndef fixtures_vesting_paramCount : Prop := True\n@//\n";
+    let universal = format!("{helper}{VALIDATOR}");
+    let errors = rejected(&universal);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].message.contains("validator 'fixtures.vesting' (`_paramCount` constant) and helper 'fixtures_vesting_paramCount'"));
+    // Specialized checking targets drop their parameters, so no `_paramCount` exists.
+    let applied = universal
+        .replace("for vesting.spend", "for vesting.spend[01]")
+        .replace("for vesting.else", "for vesting.else[01]");
+    assert_schema_valid(&bundle(&applied));
 }

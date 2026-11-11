@@ -336,6 +336,11 @@ pub fn lower(
         return Err(Error::NoValidators);
     }
     let dialect = blueprint.to_compiled_interface()?;
+    // The consumer declares these names; reject collisions before any compilation.
+    let errors = super::bindings::check(model, modules, &dialect.validators);
+    if !errors.is_empty() {
+        return Err(Error::Annotations { errors });
+    }
     let validators: BTreeSet<_> = dialect.validators.iter().map(|v| v.id.as_str()).collect();
     let mut functions = BTreeMap::new();
     let mut definitions = BTreeMap::new();

@@ -2,6 +2,7 @@
 //!
 //! Lean elaboration and its accepted syntax profile belong to the consumer.
 
+mod bindings;
 pub mod bundle;
 pub mod check;
 pub mod consumer;
@@ -114,6 +115,8 @@ pub enum ErrorKind {
     UnknownHandler,
     DuplicateProperty,
     HelperCollision,
+    /// Two sources map to one declaration in a property's consumer environment.
+    GeneratedNameCollision,
     MissingFragment,
     MixedExecutionSettings,
     /// The scopes' purpose premises cannot hold for one script context.
@@ -183,11 +186,16 @@ fn source(module: &CheckedModule) -> NamedSource<String> {
 }
 
 /// The single ADR-0007 target-id mapping, shared by function and validator targets.
+///
+/// Module paths use `[a-z0-9_-]`, `/` and, in the file name, `.`. Each of `/`, `-`
+/// and `.` becomes `_`, so the id is also the Lean name the consumer binds and
+/// propositions call (its `sanitizeName` is the identity on these ids). The mapping
+/// is not injective: ids that merge are reported as collisions, never renamed.
 pub fn emitted_target_id(module: &str, name: &str) -> String {
     let mut id = String::with_capacity(module.len() + 2 + name.len());
     for character in module.chars() {
         id.push(match character {
-            '/' | '-' => '_',
+            '/' | '-' | '.' => '_',
             other => other,
         });
     }
@@ -671,6 +679,25 @@ fn resolve<'n, 'a>(
         .map(|(name, origin)| (name, *origin))
 }
 
+/// Every fragment a property's closure contains, deterministically ordered: depth-first
+/// over `uses`, then each fragment's `imports`, without duplicates.
+fn fragment_closure<'m>(model: &'m AnnotationModel, property: &Property) -> Vec<&'m str> {
+    let mut seen = BTreeSet::new();
+    let mut closure = Vec::new();
+    let mut pending: Vec<_> = property.uses.iter().rev().map(String::as_str).collect();
+    while let Some(id) = pending.pop() {
+        if seen.insert(id) {
+            let (id, fragment) = model
+                .fragments
+                .get_key_value(id)
+                .expect("property uses and fragment imports name known fragments");
+            closure.push(id.as_str());
+            pending.extend(fragment.imports.iter().rev().map(String::as_str));
+        }
+    }
+    closure
+}
+
 fn check_helpers(
     model: &AnnotationModel,
     modules: &BTreeMap<&str, &CheckedModule>,
@@ -704,15 +731,8 @@ fn check_helpers(
         .collect();
     for property in model.properties.values() {
         let reporting = modules[property.module.as_str()];
-        let mut seen_fragments = BTreeSet::new();
-        let mut closure = Vec::new();
-        let mut pending: Vec<_> = property.uses.iter().rev().map(String::as_str).collect();
-        while let Some(id) = pending.pop() {
-            if seen_fragments.insert(id) {
-                closure.push(id);
-                pending.extend(model.fragments[id].imports.iter().rev().map(String::as_str));
-            }
-        }
+        let closure = fragment_closure(model, property);
+        let seen_fragments: BTreeSet<_> = closure.iter().copied().collect();
 
         // Every emitted spelling, source and module-qualified, names one declaration.
         let mut emitted: BTreeMap<Vec<String>, Origin<'_>> = BTreeMap::new();

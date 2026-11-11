@@ -59,6 +59,17 @@ impl<T> Validator<T> {
 
         (known_module_name, known_validator_name)
     }
+
+    /// Split a `module.validator.handler` title from the right. Validator and handler
+    /// names are identifiers without dots, but a module's file name may contain dots
+    /// (`validators/fixtures.extra.ak` is module `fixtures.extra`), so everything
+    /// before the last two dots is the module.
+    pub fn handler_title_parts(&self) -> Option<(&str, &str, &str)> {
+        let (rest, handler) = self.title.rsplit_once('.')?;
+        let (module, name) = rest.rsplit_once('.')?;
+        (!module.is_empty() && !name.is_empty() && !handler.is_empty())
+            .then_some((module, name, handler))
+    }
 }
 
 pub fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {

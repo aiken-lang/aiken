@@ -70,16 +70,10 @@ impl Blueprint {
             if !matches!(validator.program, SerializableProgram::PlutusV3Program(_)) {
                 return Err(Error::PlutusVersion);
             }
-            let mut parts = validator.title.split('.');
-            let (Some(module), Some(name), Some(handler), None) =
-                (parts.next(), parts.next(), parts.next(), parts.next())
-            else {
+            let Some((module, name, handler)) = validator.handler_title_parts() else {
                 return Err(Error::HandlerTitle(validator.title.clone()));
             };
-            if module.is_empty()
-                || name.is_empty()
-                || (handler != "else" && !PURPOSES.iter().any(|(_, name)| *name == handler))
-            {
+            if handler != "else" && !PURPOSES.iter().any(|(_, name)| *name == handler) {
                 return Err(Error::HandlerTitle(validator.title.clone()));
             }
             let handlers = groups.entry((module, name)).or_default();

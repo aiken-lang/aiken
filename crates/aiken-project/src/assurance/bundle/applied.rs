@@ -21,7 +21,9 @@ pub(super) fn lower(
         .validators
         .iter()
         .find(|validator| {
-            validator.get_module_and_name() == (target.module.as_str(), target.name.as_str())
+            validator
+                .handler_title_parts()
+                .is_some_and(|(module, name, _)| (module, name) == (&*target.module, &*target.name))
         })
         .ok_or_else(|| {
             format!(

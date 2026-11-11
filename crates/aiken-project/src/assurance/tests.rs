@@ -223,6 +223,47 @@ fn mapped_ids_collide_across_modules_and_target_kinds() {
 }
 
 #[test]
+fn module_path_alphabet_maps_to_schema_legal_lean_bound_ids() {
+    // The vendored schema's validator-id pattern, read rather than restated.
+    let schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../aiken-ual/schemas/interface.schema.json"
+    ))
+    .unwrap();
+    let pattern = schema
+        .pointer("/properties/validators/items/properties/id/pattern")
+        .and_then(|pattern| pattern.as_str())
+        .expect("schema declares the validator id pattern");
+    let id_pattern = regex::Regex::new(pattern).unwrap();
+    // Every spelling `is_aiken_path` accepts: nested, dotted, hyphenated, underscored.
+    for (module, name, expected) in [
+        ("vesting", "vesting", "vesting__vesting"),
+        ("auction/lib", "outbids", "auction_lib__outbids"),
+        ("fixtures.extra", "v", "fixtures_extra__v"),
+        ("a/b.c-d", "f", "a_b_c_d__f"),
+        ("my-lib/v2.0", "check_it", "my_lib_v2_0__check_it"),
+        ("x_y/z", "g", "x_y_z__g"),
+    ] {
+        let file = std::path::PathBuf::from(format!("{module}.ak"));
+        assert!(
+            crate::is_aiken_path(&file, ""),
+            "{module} is not a module path"
+        );
+        let id = emitted_target_id(module, name);
+        assert_eq!(id, expected, "{module}.{name}");
+        assert!(id_pattern.is_match(&id), "{id} violates {pattern}");
+        // The id is the consumer's Lean binding unchanged.
+        assert_eq!(bindings::lean_binding(&id), id);
+    }
+    // Different source paths that merge are collisions, never silent renames.
+    for (first, second) in [("a.b", "a_b"), ("a.b", "a/b"), ("a-b", "a.b")] {
+        assert_eq!(
+            emitted_target_id(first, "v"),
+            emitted_target_id(second, "v")
+        );
+    }
+}
+
+#[test]
 fn helper_collisions_are_checked_per_property_closure() {
     let mut project = TestProject::new();
     let first = check(

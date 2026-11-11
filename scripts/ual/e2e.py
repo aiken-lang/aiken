@@ -28,6 +28,7 @@ POSITIVES = {
     "recursive_data": {"preserves_leaf": "verified"},
     "qualified_helpers": {"local_helper": "verified", "qualified_import": "verified",
                           "escaped_module": "verified", "qualified_falsified": "falsified"},
+    "dotted_module": {"dotted_minimum": "verified"},
 }
 # A bound `ctx` projection next to an unrelated, unimported `ctx` predicate module.
 CTX_MODULE = "//@ PREDICATE\ndef unrelated : Prop := True\n@//\n"

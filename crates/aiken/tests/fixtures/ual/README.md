@@ -18,7 +18,8 @@ The existing `cargo test --workspace` CI job runs every case. No workflow change
 | `positive/falsified` | Equal bids claimed to outbid; `old = proposed = 0` is the intended counterexample, not a phase-1 verdict |
 | `positive/recursive_data` | Recursive Tree definitions and an identity function applied to valid Data-encoded leaves |
 | `positive/qualified_helpers` | Nested `lib/proofs/helpers.ak`, an annotation-free bridge and the Lean-keyword module `example`. Properties use a local unqualified helper, qualified imported helpers with an implicit parameter, an escaped `«example».positive`, and a falsified qualified claim |
-| `negative/*` | Unknown scope, wrong module, missing project fragment helper, opaque argument, missing steps, invalid semantics, mapped ID collision, both execution-setting mismatches, incompatible purpose scopes (`v.spend v.else`, which would make an impossible conclusion vacuous), unterminated block |
+| `positive/dotted_module` | Validator in the dotted file `validators/fixtures.extra.ak`: ordinary `build` succeeds and keeps title `fixtures.extra.vesting.*`; the bundle uses id `fixtures_extra__vesting`, is schema-valid and is byte-identical when regenerated |
+| `negative/*` | Unknown scope, wrong module, missing project fragment helper, opaque argument, missing steps, invalid semantics, mapped ID collision, generated Lean-name collision (`f` and `f_returns` called together in one property), both execution-setting mismatches, incompatible purpose scopes (`v.spend v.else`, which would make an impossible conclusion vacuous), unterminated block |
 
 The source-edit regression changes the native function from strict to non-strict comparison and checks that its compiled-code SHA-256 and checking-context digest both change while the companion blueprint remains unchanged.
 

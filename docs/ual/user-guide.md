@@ -98,7 +98,16 @@ Scopes use Aiken names such as `outbids` or `vesting.spend`. Propositions call e
 module/path.target → module_path__target
 ```
 
-The producer replaces `/` and `-` in the module path with `_`, appends `__`, then the declaration name. Thus the `outbids` function in `validators/fixtures.ak` is `fixtures__outbids`; its exact-result relation is `fixtures__outbids_returns`. `<id>` exposes the evaluation state and `<id>_returns` expresses an exact result within the bound. Mapping collisions are errors, not silently renamed targets. See [ADR-0007](adr/0007-emitted-target-ids.md) and `emitted_target_id` in [`mod.rs`](../../crates/aiken-project/src/assurance/mod.rs).
+The producer replaces `/`, `-` and `.` in the module path with `_`, appends `__`, then the declaration name. Thus the `outbids` function in `validators/fixtures.ak` is `fixtures__outbids`; its exact-result relation is `fixtures__outbids_returns`. A dotted file name works too: validator `vesting` in `validators/fixtures.extra.ak` is `fixtures_extra__vesting`, while its blueprint title stays `fixtures.extra.vesting`. `<id>` exposes the evaluation state and `<id>_returns` expresses an exact result within the bound. Mapping collisions are errors, not silently renamed targets. See [ADR-0007](adr/0007-emitted-target-ids.md) and `emitted_target_id` in [`mod.rs`](../../crates/aiken-project/src/assurance/mod.rs).
+
+The consumer declares more names than the ids, all in one Lean namespace per property: `<id>_script` and `<id>_returns` for each scoped function, and for every validator its title binding (`fixtures_extra_vesting`, every non-alphanumeric character replaced by `_`), `<title>_hash`, `<title>_paramCount` when it has unapplied parameters, and `_script` names for the property's checking target. If one property would declare a name twice, generation fails and names both sources. Common cases:
+
+- functions `f` and `f_returns` (or `f_script`) scoped by the same property;
+- validators `v` and `v_hash` in one module, which collide in every property;
+- validator `v` in modules `m` and `m_`, or in `a.b` and `a_b`;
+- a predicate helper named like any of these.
+
+Scoping `f` and `f_returns` in separate properties is fine. The full inventory is in [ADR-0007](adr/0007-emitted-target-ids.md#generated-name-collisions).
 
 ## 2. Validator purposes are premises
 

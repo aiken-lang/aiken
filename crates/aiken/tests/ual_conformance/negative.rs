@@ -54,6 +54,18 @@ fn helper_outside_the_fragment_closure_is_rejected() {
 }
 
 #[test]
+fn generated_function_name_collision_is_rejected_before_publishing() {
+    rejects_fixture(
+        "generated_name_collision",
+        &[
+            "aiken::assurance",
+            "Generated Lean name 'fixtures__f_returns' is declared by both function 'fixtures.f' (`_returns` predicate) and function 'fixtures.f_returns' (function binding)",
+            "property 'both'",
+        ],
+    );
+}
+
+#[test]
 fn opaque_parameter_is_rejected() {
     rejects_fixture(
         "opaque_parameter",

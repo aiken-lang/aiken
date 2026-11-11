@@ -82,3 +82,50 @@ fn unrelated_ctx_module_does_not_block_bound_ctx_projections() {
             .all(|property| property["statement"]["formal"].get("uses").is_none())
     );
 }
+
+#[test]
+fn dotted_module_file_builds_and_generates_schema_valid_bundle() {
+    let project = Project::fixture("positive/dotted_module");
+    // The ordinary build accepts `validators/fixtures.extra.ak` unchanged.
+    let output = project.run(&["build"]);
+    assert!(output.status.success(), "{}", super::diagnostic(&output));
+    let root = std::fs::read(project.0.join("plutus.json")).unwrap();
+    let titles: Vec<_> = serde_json::from_slice::<serde_json::Value>(&root).unwrap()["validators"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|validator| validator["title"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        titles,
+        [
+            "fixtures.extra.vesting.spend",
+            "fixtures.extra.vesting.else"
+        ]
+    );
+
+    project.generate();
+    project.assert_golden("positive/dotted_module");
+    // Verification generation never rewrites the ordinary root blueprint.
+    assert_eq!(std::fs::read(project.0.join("plutus.json")).unwrap(), root);
+    let blueprint = project.json("assurance/plutus.json");
+    aiken_ual::validate(aiken_ual::DocumentKind::Blueprint, &blueprint).unwrap();
+    let assurance = project.json("assurance/assurance.json");
+    aiken_ual::validate(aiken_ual::DocumentKind::Assurance, &assurance).unwrap();
+    let context = project.json("assurance/checking-dotted_minimum.json");
+    aiken_ual::validate(aiken_ual::DocumentKind::CheckingContext, &context).unwrap();
+    assert_eq!(blueprint["validators"][0]["id"], "fixtures_extra__vesting");
+    assert_eq!(
+        blueprint["validators"][0]["title"],
+        "fixtures.extra.vesting"
+    );
+    assert_eq!(
+        context["targets"][0]["validator"],
+        "fixtures_extra__vesting"
+    );
+
+    // A second generation publishes identical bytes.
+    let first = project.bundle();
+    project.generate();
+    assert_eq!(project.bundle(), first);
+}
