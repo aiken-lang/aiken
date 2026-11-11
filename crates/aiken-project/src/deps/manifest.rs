@@ -121,6 +121,18 @@ pub struct Package {
     pub version: String,
     pub requirements: Vec<String>,
     pub source: Platform,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subdir: Option<crate::package_subdir::PackageSubdir>,
+}
+
+impl std::fmt::Display for Package {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(subdir) = &self.subdir {
+            write!(f, "/{subdir}")?;
+        }
+        Ok(())
+    }
 }
 
 #[allow(clippy::result_large_err)]
@@ -139,6 +151,7 @@ where
                 version: dep.version.clone(),
                 requirements: vec![],
                 source: dep.source,
+                subdir: dep.subdir.clone(),
             })
             .collect(),
         requirements: config.dependencies.clone(),

@@ -2,6 +2,7 @@ use crate::{
     deps::manifest::{Manifest, Package},
     error::Error,
     package_name::PackageName,
+    package_subdir::PackageSubdir,
     telemetry::{Event, EventListener},
 };
 use regex::Regex;
@@ -28,8 +29,13 @@ pub fn packages_toml() -> PathBuf {
     packages().join("packages.toml")
 }
 
-pub fn build_deps_package(package_name: &PackageName) -> PathBuf {
-    packages().join(format!("{}-{}", package_name.owner, package_name.repo))
+pub fn build_deps_package(package_name: &PackageName, subdir: Option<&PackageSubdir>) -> PathBuf {
+    let name = format!("{}-{}", package_name.owner, package_name.repo);
+    packages().join(match subdir {
+        None => name,
+        // '@' cannot appear in GitHub names, so this never clashes with a root package.
+        Some(subdir) => format!("{name}@{}", subdir.as_str().replace('/', "_")),
+    })
 }
 
 pub fn package_cache_zipball(cache_key: &CacheKey) -> PathBuf {
@@ -181,6 +187,22 @@ pub fn is_git_sha_or_tag(version: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subdir_packages_get_their_own_build_directory() {
+        let name = PackageName {
+            owner: "example".to_string(),
+            repo: "contracts".to_string(),
+        };
+        assert_eq!(
+            build_deps_package(&name, None),
+            PathBuf::from("build/packages/example-contracts")
+        );
+        assert_eq!(
+            build_deps_package(&name, Some(&"packages/onchain".parse().unwrap())),
+            PathBuf::from("build/packages/example-contracts@packages_onchain")
+        );
+    }
 
     #[test]
     fn test_is_git_sha_or_tag() {

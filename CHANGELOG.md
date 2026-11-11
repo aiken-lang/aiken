@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken**: Support GitHub dependencies in repository subdirectories using `subdir` in `aiken.toml` or `--subdir` with `aiken add` and `aiken packages upgrade`. @rober-m
 - **uplc**: Make `TxInfo::script_context_data` public, so that callers evaluating several redeemers of one transaction can convert the transaction info to `Data` once and share it between every script context. @colll78
 
 ### Changed
