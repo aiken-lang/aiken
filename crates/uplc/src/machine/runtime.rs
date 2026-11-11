@@ -1842,11 +1842,10 @@ impl DefaultFunction {
 
                 let shift = shift.mod_floor(&(byte_length * 8).into());
 
-                let mut bv = BitVec::<u8, Msb0>::from_vec(bytes.clone());
-
-                bv.rotate_left(usize::try_from(shift).unwrap());
-
-                Ok(Value::byte_string(bv.into_vec()))
+                Ok(Value::byte_string(rotate_bytes_left(
+                    bytes,
+                    usize::try_from(shift).unwrap(),
+                )))
             }
             DefaultFunction::CountSetBits => {
                 let bytes = args[0].unwrap_byte_string()?;
@@ -2068,6 +2067,38 @@ impl DefaultFunction {
             }
         }
     }
+}
+
+/// Rotates `bytes`, read as one bit string with the most significant bit of
+/// the first byte first, `shift` bits towards its start.
+///
+/// The result is that of `BitVec::<u8, Msb0>::rotate_left`, in time linear
+/// in the length whatever the amount: the whole bytes move with one slice
+/// rotation, and each output byte then takes the low bits of one rotated byte
+/// and the high bits of the next. `BitSlice::rotate_left` copies the whole
+/// slice once per machine word of the amount instead, which is quadratic in
+/// the length when the reduced amount is close to `8 * bytes.len()`, as it is
+/// for every small negative amount.
+///
+/// `shift` must be smaller than `8 * bytes.len()`.
+fn rotate_bytes_left(bytes: &[u8], shift: usize) -> Vec<u8> {
+    let mut rotated = bytes.to_vec();
+
+    rotated.rotate_left(shift / 8);
+
+    let bit_shift = shift % 8;
+
+    if bit_shift == 0 {
+        return rotated;
+    }
+
+    let next = rotated.iter().cycle().skip(1);
+
+    rotated
+        .iter()
+        .zip(next)
+        .map(|(byte, next_byte)| (byte << bit_shift) | (next_byte >> (8 - bit_shift)))
+        .collect()
 }
 
 fn exp_mod_integer(base: &BigInt, exponent: &BigInt, modulus: &BigInt) -> Result<BigInt, Error> {
@@ -2320,8 +2351,172 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 mod tests {
     use super::{BuiltinSemantics, Error, convert_constr_to_tag, convert_tag_to_constr};
     use crate::{builtins::DefaultFunction, machine::value::Value};
+    use bitvec::{order::Msb0, vec::BitVec};
     use num_bigint::BigInt;
+    use num_integer::Integer;
     use pallas_primitives::conway::Language;
+    use proptest::prelude::*;
+
+    /// `RotateByteString` as it was computed before `rotate_bytes_left`, with
+    /// `BitSlice::rotate_left` over the reduced amount: the reference the
+    /// linear rotation must match exactly.
+    fn rotate_byte_string_with_bitvec(bytes: &[u8], amount: &BigInt) -> Vec<u8> {
+        if bytes.is_empty() {
+            return vec![];
+        }
+
+        let amount = amount.mod_floor(&(bytes.len() * 8).into());
+
+        let mut bits = BitVec::<u8, Msb0>::from_vec(bytes.to_vec());
+
+        bits.rotate_left(usize::try_from(amount).unwrap());
+
+        bits.into_vec()
+    }
+
+    /// The definition of `RotateByteString`, one bit at a time: bit `i` of
+    /// the result (most significant bit of the first byte first) is bit
+    /// `i + amount` of the input, modulo its length in bits.
+    fn rotate_byte_string_by_definition(bytes: &[u8], amount: &BigInt) -> Vec<u8> {
+        if bytes.is_empty() {
+            return vec![];
+        }
+
+        let bits = bytes.len() * 8;
+        let amount = usize::try_from(amount.mod_floor(&bits.into())).unwrap();
+        let bit = |index: usize| (bytes[index / 8] >> (7 - index % 8)) & 1;
+
+        let mut result = vec![0u8; bytes.len()];
+
+        for index in 0..bits {
+            result[index / 8] |= bit((index + amount) % bits) << (7 - index % 8);
+        }
+
+        result
+    }
+
+    fn rotate_byte_string(bytes: &[u8], amount: &BigInt) -> Vec<u8> {
+        let result = DefaultFunction::RotateByteString
+            .call(
+                BuiltinSemantics::C,
+                &[
+                    Value::byte_string(bytes.to_vec()),
+                    Value::integer(amount.clone()),
+                ],
+                &mut vec![],
+            )
+            .unwrap();
+
+        result.unwrap_byte_string().unwrap().clone()
+    }
+
+    /// Deterministic filler bytes (xorshift), so that every bit position
+    /// carries a distinguishable value.
+    fn filler_bytes(length: usize, seed: u64) -> Vec<u8> {
+        let mut state = seed | 1;
+
+        (0..length)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                state as u8
+            })
+            .collect()
+    }
+
+    #[test]
+    fn rotate_byte_string_matches_the_bitwise_rotation() {
+        let huge: BigInt = BigInt::from(1) << 200;
+
+        for length in [0usize, 1, 2, 3, 7, 8, 9, 31, 9_216, 131_072] {
+            let bytes = filler_bytes(length, length as u64);
+            let bits = BigInt::from(length * 8);
+
+            let mut amounts: Vec<BigInt> = [0, 1, 3, 7, 8, 9, 15, 16, 17]
+                .into_iter()
+                .map(BigInt::from)
+                .collect();
+            amounts.extend([
+                &bits - 1,
+                &bits - 3,
+                &bits - 8,
+                bits.clone(),
+                &bits * 2,
+                &bits * 3,
+                &bits + 1,
+                &bits + 5,
+                &bits * 7 + 11,
+                huge.clone(),
+                &huge + 13,
+                &huge * &bits,
+                BigInt::from(i64::MAX),
+            ]);
+
+            amounts.extend(amounts.clone().into_iter().map(|amount| -amount));
+            amounts.push(BigInt::from(i64::MIN));
+
+            for amount in amounts {
+                let rotated = rotate_byte_string(&bytes, &amount);
+
+                assert_eq!(
+                    rotated,
+                    rotate_byte_string_by_definition(&bytes, &amount),
+                    "length {length}, amount {amount}"
+                );
+
+                // `BitSlice::rotate_left` is too slow for the long inputs in an
+                // unoptimised test build; that slowness is what this replaces.
+                if length <= 64 {
+                    assert_eq!(
+                        rotated,
+                        rotate_byte_string_with_bitvec(&bytes, &amount),
+                        "length {length}, amount {amount}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rotate_byte_string_examples() {
+        let rotate = |bytes: &str, amount: i64| {
+            hex::encode(rotate_byte_string(
+                &hex::decode(bytes).unwrap(),
+                &amount.into(),
+            ))
+        };
+
+        assert_eq!(rotate("", 3), "");
+        assert_eq!(rotate("81", 1), "03");
+        assert_eq!(rotate("81", -1), "c0");
+        assert_eq!(rotate("ebfc", 4), "bfce");
+        assert_eq!(rotate("ebfc", -4), "cebf");
+        assert_eq!(rotate("ebfc", 8), "fceb");
+        assert_eq!(rotate("ebfc", 16), "ebfc");
+        assert_eq!(rotate("ebfc", 3), "5fe7");
+        assert_eq!(rotate("ebfc", -3), "9d7f");
+    }
+
+    proptest! {
+        #[test]
+        fn rotate_byte_string_matches_the_bitwise_rotation_at_random(
+            bytes in proptest::collection::vec(any::<u8>(), 0..300),
+            amount in any::<i64>(),
+            wide in any::<u64>(),
+        ) {
+            for amount in [
+                BigInt::from(amount),
+                BigInt::from(amount % 2_400),
+                (BigInt::from(amount) << 64u32) + BigInt::from(wide),
+            ] {
+                let rotated = rotate_byte_string(&bytes, &amount);
+
+                prop_assert_eq!(&rotated, &rotate_byte_string_with_bitvec(&bytes, &amount));
+                prop_assert_eq!(&rotated, &rotate_byte_string_by_definition(&bytes, &amount));
+            }
+        }
+    }
 
     #[test]
     fn exp_mod_integer_handles_positive_and_negative_exponents() {
