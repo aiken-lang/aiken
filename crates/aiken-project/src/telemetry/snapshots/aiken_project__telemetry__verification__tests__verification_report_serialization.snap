@@ -1,0 +1,49 @@
+---
+source: crates/aiken-project/src/telemetry/verification.rs
+expression: report
+---
+{
+  "title": "example/validator",
+  "trust": {
+    "method": "Blaster SMT; no reconstructed Lean proof",
+    "z3": "/usr/bin/z3",
+    "revisions": {
+      "Blaster": "revision"
+    },
+    "budget": "results relative to 100 steps"
+  },
+  "properties": [
+    {
+      "id": "verified",
+      "verdict": "verified",
+      "counterexample": null
+    },
+    {
+      "id": "falsified",
+      "verdict": "falsified",
+      "counterexample": "input = 0"
+    },
+    {
+      "id": "inconclusive",
+      "verdict": "inconclusive",
+      "counterexample": null
+    },
+    {
+      "id": "not-checked",
+      "verdict": "not-checked",
+      "counterexample": null
+    },
+    {
+      "id": "missing",
+      "verdict": "missing",
+      "counterexample": null
+    }
+  ],
+  "warnings": [
+    "revision mismatch"
+  ],
+  "errors": [
+    "consumer failed"
+  ],
+  "success": false
+}

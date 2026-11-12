@@ -1,0 +1,5 @@
+name = "fixtures/ual_qualified_helpers"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "UAL qualified, local and escaped predicate helper fixture"

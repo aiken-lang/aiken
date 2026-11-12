@@ -9,13 +9,13 @@ use crate::{
     IdGenerator,
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, DataType, Decorator, DecoratorKind, Definition,
-        Function, ModuleConstant, ModuleKind, RecordConstructor, RecordConstructorArg, Tracing,
-        TypeAlias, TypedArg, TypedDataType, TypedDefinition, TypedFunction, TypedModule,
-        TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, UntypedPattern,
-        UntypedValidator, Use, Validator,
+        DefinitionDecorators, Function, ModuleConstant, ModuleKind, OnchainValue,
+        RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDataType,
+        TypedDefinition, TypedFunction, TypedModule, TypedValidator, UntypedArg, UntypedDefinition,
+        UntypedModule, UntypedPattern, UntypedValidator, Use, Validator,
     },
     expr::{TypedExpr, UntypedAssignmentKind, UntypedExpr},
-    parser::token::Token,
+    parser::token::{Base, Token},
     tipo::{Span, Type, TypeVar, expr::infer_function},
 };
 use std::{
@@ -58,6 +58,8 @@ impl UntypedModule {
     ) -> Result<TypedModule, Error> {
         let module_name = self.name.clone();
         let docs = std::mem::take(&mut self.docs);
+        let mut definition_decorators = std::mem::take(&mut self.definition_decorators);
+        validate_definition_decorators(&mut definition_decorators, &self.definitions)?;
         let mut environment =
             Environment::new(id_gen.clone(), &module_name, &kind, modules, warnings, env);
 
@@ -126,10 +128,12 @@ impl UntypedModule {
         }
 
         // Generalise functions now that the entire module has been inferred
-        let definitions = definitions
+        let definitions: Vec<_> = definitions
             .into_iter()
             .map(|def| environment.generalise_definition(def, &module_name))
             .collect();
+
+        check_onchain_interfaces(&definition_decorators, &definitions, &environment)?;
 
         // Generate warnings for unused items
         environment.warnings.retain(|warning| match warning {
@@ -187,6 +191,7 @@ impl UntypedModule {
             docs,
             name: module_name.clone(),
             definitions,
+            definition_decorators,
             kind,
             lines: self.lines,
             type_info: TypeInfo {
@@ -1197,7 +1202,11 @@ fn validate_decorators_in_context(
         if !d1.kind.allowed_contexts().contains(&context) {
             return Err(Error::DecoratorValidation {
                 location: d1.location,
-                message: format!("this decorator not allowed in a {context} context"),
+                message: if matches!(d1.kind, DecoratorKind::Onchain { .. }) {
+                    "@onchain is only allowed on top-level functions and validators.".to_string()
+                } else {
+                    format!("this decorator not allowed in a {context} context")
+                },
             });
         }
 
@@ -1225,6 +1234,7 @@ impl DecoratorKind {
         match self {
             DecoratorKind::Tag { .. } => &[DecoratorContext::Record, DecoratorContext::Constructor],
             DecoratorKind::List => &[DecoratorContext::Record],
+            DecoratorKind::Onchain { .. } => &[],
         }
     }
 
@@ -1238,6 +1248,7 @@ impl DecoratorKind {
         match self {
             DecoratorKind::Tag { .. } => Ok(()),
             DecoratorKind::List => Ok(()),
+            DecoratorKind::Onchain { .. } => Ok(()),
         }
     }
 
@@ -1247,6 +1258,321 @@ impl DecoratorKind {
             (DecoratorKind::Tag { .. }, DecoratorKind::Tag { .. }) => true,
             (DecoratorKind::List, DecoratorKind::Tag { .. }) => true,
             (DecoratorKind::List, DecoratorKind::List) => true,
+            (DecoratorKind::Onchain { .. }, _) | (_, DecoratorKind::Onchain { .. }) => false,
+        }
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_definition_decorators(
+    metadata: &mut [DefinitionDecorators],
+    definitions: &[UntypedDefinition],
+) -> Result<(), Error> {
+    for entry in metadata {
+        let eligible = definitions.iter().any(|definition| {
+            definition.location() == entry.location
+                && matches!(definition, Definition::Fn(_) | Definition::Validator(_))
+        });
+        let mut seen_onchain = false;
+        for decorator in &mut entry.decorators {
+            let DecoratorKind::Onchain { arguments } = &mut decorator.kind else {
+                return Err(Error::DecoratorValidation {
+                    location: decorator.location,
+                    message: "@tag and @list are only allowed on data types or constructors."
+                        .to_string(),
+                });
+            };
+            if !eligible {
+                return Err(Error::DecoratorValidation {
+                    location: decorator.location,
+                    message: "@onchain is only allowed on top-level functions and validators."
+                        .to_string(),
+                });
+            }
+            if seen_onchain {
+                return Err(Error::DecoratorValidation {
+                    location: decorator.location,
+                    message: "Only one @onchain decorator is allowed per declaration.".to_string(),
+                });
+            }
+            seen_onchain = true;
+            let mut seen_steps = false;
+            let mut seen_semantics = false;
+            for argument in arguments {
+                let seen = match argument.name.as_str() {
+                    "steps" => &mut seen_steps,
+                    "semantics" => &mut seen_semantics,
+                    name => {
+                        return Err(Error::DecoratorValidation {
+                            location: argument.location,
+                            message: format!(
+                                "Unknown @onchain setting '{name}'. Expected 'steps' or 'semantics'."
+                            ),
+                        });
+                    }
+                };
+                if *seen {
+                    return Err(Error::DecoratorValidation {
+                        location: argument.location,
+                        message: format!("Duplicate @onchain setting '{}'.", argument.name),
+                    });
+                }
+                *seen = true;
+                if argument.name == "steps" {
+                    let OnchainValue::Int { value, base } = &mut argument.value else {
+                        return Err(Error::DecoratorValidation {
+                            location: argument.location,
+                            message: "@onchain steps must be a positive integer literal."
+                                .to_string(),
+                        });
+                    };
+                    let steps = value.parse::<u64>().map_err(|_| Error::DecoratorValidation {
+                        location: argument.location,
+                        message: "@onchain steps must be a positive integer between 1 and 18446744073709551615."
+                            .to_string(),
+                    })?;
+                    if steps == 0 {
+                        return Err(Error::DecoratorValidation {
+                            location: argument.location,
+                            message: "@onchain steps must be greater than zero.".to_string(),
+                        });
+                    }
+                    *value = steps.to_string();
+                    *base = Base::Decimal {
+                        numeric_underscore: false,
+                    };
+                } else {
+                    match &mut argument.value {
+                        OnchainValue::Name { name }
+                            if name.eq_ignore_ascii_case("C") || name.eq_ignore_ascii_case("E") =>
+                        {
+                            name.make_ascii_uppercase();
+                        }
+                        _ => {
+                            return Err(Error::DecoratorValidation {
+                                location: argument.location,
+                                message: "@onchain semantics must be C or E (case-insensitive)."
+                                    .to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            if !seen_steps {
+                return Err(Error::DecoratorValidation {
+                    location: decorator.location,
+                    message: "@onchain requires a positive 'steps' setting.".to_string(),
+                });
+            }
+            if !seen_semantics {
+                return Err(Error::DecoratorValidation {
+                    location: decorator.location,
+                    message: "@onchain requires a 'semantics' setting: C or E.".to_string(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::result_large_err)]
+fn check_onchain_interfaces(
+    metadata: &[DefinitionDecorators],
+    definitions: &[TypedDefinition],
+    environment: &Environment<'_>,
+) -> Result<(), Error> {
+    if metadata.is_empty() {
+        return Ok(());
+    }
+    for definition in definitions {
+        let Definition::Fn(function) = definition else {
+            continue;
+        };
+        if !metadata.iter().any(|entry| {
+            entry.location == definition.location()
+                && entry
+                    .decorators
+                    .iter()
+                    .any(|decorator| matches!(decorator.kind, DecoratorKind::Onchain { .. }))
+        }) {
+            continue;
+        }
+        for argument in &function.arguments {
+            check_validator_abi_arg(environment, argument, "@onchain function argument")?;
+            check_onchain_type(
+                environment,
+                onchain_boundary_type(environment, &argument.tipo, argument.annotation.as_ref()),
+                argument.location,
+                "@onchain function argument",
+                &mut Vec::new(),
+            )?;
+        }
+        if let Some(tipo) = function
+            .return_annotation
+            .as_ref()
+            .and_then(|annotation| find_opaque_in_annotation(environment, annotation))
+        {
+            return Err(Error::IllegalOpaqueType {
+                location: function.location,
+                position: "@onchain function result".to_string(),
+                tipo,
+            });
+        }
+        check_onchain_type(
+            environment,
+            onchain_boundary_type(
+                environment,
+                &function.return_type,
+                function.return_annotation.as_ref(),
+            ),
+            function
+                .return_annotation
+                .as_ref()
+                .map_or(function.location, Annotation::location),
+            "@onchain function result",
+            &mut Vec::new(),
+        )?;
+    }
+    Ok(())
+}
+
+/// Match blueprint `tipo_or_annotation`: `Data<T>` exposes T in the export
+/// schema even though the function receives or returns raw Data.
+fn onchain_boundary_type<'a>(
+    environment: &'a Environment<'_>,
+    tipo: &'a Rc<Type>,
+    annotation: Option<&Annotation>,
+) -> &'a Rc<Type> {
+    if tipo.is_data()
+        && let Some(Annotation::Constructor { arguments, .. }) = annotation
+        && let Some(argument) = arguments.first()
+    {
+        environment.annotations.get(argument).unwrap_or(tipo)
+    } else {
+        tipo
+    }
+}
+
+/// Check the same concrete, serialisable boundary required by export schemas.
+/// Constructor types are available for local private types here, before pruning.
+#[allow(clippy::result_large_err)]
+fn check_onchain_type(
+    environment: &Environment<'_>,
+    tipo: &Rc<Type>,
+    location: Span,
+    position: &str,
+    visiting: &mut Vec<(String, String)>,
+) -> Result<(), Error> {
+    if environment.contains_opaque(tipo) {
+        return Err(Error::IllegalOpaqueType {
+            location,
+            position: position.to_string(),
+            tipo: tipo.clone(),
+        });
+    }
+    match tipo.as_ref() {
+        Type::Var { tipo, .. } => match tipo.as_ref().borrow().deref() {
+            TypeVar::Link { tipo } => {
+                check_onchain_type(environment, tipo, location, position, visiting)
+            }
+            TypeVar::Generic { .. } | TypeVar::Unbound { .. } => {
+                Err(Error::GenericLeftAtBoundary { location })
+            }
+        },
+        Type::Fn { .. } => Err(Error::IllegalTypeInData {
+            location,
+            tipo: tipo.clone(),
+        }),
+        Type::Tuple { elems, .. } => {
+            for elem in elems {
+                check_onchain_type(environment, elem, location, position, visiting)?;
+            }
+            Ok(())
+        }
+        Type::Pair { fst, snd, .. } => {
+            check_onchain_type(environment, fst, location, position, visiting)?;
+            check_onchain_type(environment, snd, location, position, visiting)
+        }
+        Type::App {
+            module, name, args, ..
+        } => {
+            for arg in args {
+                check_onchain_type(environment, arg, location, position, visiting)?;
+            }
+            if module.is_empty() {
+                return if matches!(
+                    name.as_str(),
+                    "Data"
+                        | "ByteArray"
+                        | "Int"
+                        | "Value"
+                        | "String"
+                        | "Void"
+                        | "Bool"
+                        | "Ordering"
+                        | "Never"
+                        | "Option"
+                        | "List"
+                ) {
+                    Ok(())
+                } else {
+                    Err(Error::IllegalTypeInData {
+                        location,
+                        tipo: tipo.clone(),
+                    })
+                };
+            }
+            // Arguments have already been checked, including for recursive applications.
+            // Re-entering the same nominal declaration cannot reveal new field shapes.
+            if visiting.iter().any(|(m, n)| m == module && n == name) {
+                return Ok(());
+            }
+            let (constructors, values) = if module == environment.current_module {
+                (
+                    &environment.module_types_constructors,
+                    &environment.module_values,
+                )
+            } else {
+                let info = environment
+                    .importable_modules
+                    .get(module)
+                    .expect("inferred nominal type must have a module");
+                (&info.types_constructors, &info.values)
+            };
+            visiting.push((module.clone(), name.clone()));
+            if let Some(names) = constructors.get(name) {
+                for name in names {
+                    let constructor = values
+                        .get(name)
+                        .expect("non-opaque data constructor must be registered");
+                    let constructor_type = Type::collapse_links(constructor.tipo.clone());
+                    if let Type::Fn {
+                        args: fields, ret, ..
+                    } = constructor_type.as_ref()
+                    {
+                        let ret = Type::collapse_links(ret.clone());
+                        let Type::App {
+                            args: parameters, ..
+                        } = ret.as_ref()
+                        else {
+                            unreachable!("data constructor must return a nominal type")
+                        };
+                        let substitutions = parameters
+                            .iter()
+                            .zip(args)
+                            .filter_map(|(parameter, arg)| {
+                                parameter.get_generic_id().map(|id| (id, arg.clone()))
+                            })
+                            .collect();
+                        for field in fields {
+                            let field = super::find_and_replace_generics(field, &substitutions);
+                            check_onchain_type(environment, &field, location, position, visiting)?;
+                        }
+                    }
+                }
+            }
+            visiting.pop();
+            Ok(())
         }
     }
 }

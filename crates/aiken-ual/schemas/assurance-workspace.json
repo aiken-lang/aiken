@@ -1,0 +1,31 @@
+{
+  "format": "assurance-workspace-v1",
+  "lean": "4.24.0",
+  "ghc": "9.6.7",
+  "blasterCommit": "bc03bb402ce702984875bbf8ba51216bd6f843d7",
+  "z3Version": "5.1.0",
+  "z3SourceBaseline": "ca39e58c525c5b03c2484f118ade2b92fae31215",
+  "z3RequiredSimplifier": "recfun-finder",
+  "layout": {
+    "blaster": "../Lean-blaster",
+    "ledger": "../CardanoLedgerApiBlaster"
+  },
+  "repositories": {
+    "plutus": {
+      "repository": "RSoulatIOHK/plutus",
+      "commit": "f39439265c603d379bf5836596dccee8311b5189"
+    },
+    "cips": {
+      "repository": "RSoulatIOHK/CIPs",
+      "commit": "b12d4b0cd38757778fa8963e8bbbbbefeab9eea8"
+    },
+    "ual": {
+      "repository": "input-output-hk/UniversalAnnotationLanguage",
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b"
+    },
+    "ledger": {
+      "repository": "input-output-hk/CardanoLedgerApiBlaster",
+      "commit": "997b9caafb3f72f45d866929c2f561945d036e10"
+    }
+  }
+}

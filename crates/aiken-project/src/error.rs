@@ -68,6 +68,9 @@ pub enum Error {
     Blueprint(#[from] Box<blueprint::Error>),
 
     #[error(transparent)]
+    Assurance(#[from] Box<crate::assurance::Error>),
+
+    #[error(transparent)]
     CodeGen(Box<gen_uplc::Error>),
 
     #[error(transparent)]
@@ -353,6 +356,7 @@ impl ExtraData for Error {
     fn extra_data(&self) -> Option<String> {
         match self {
             Error::DuplicateModule { .. }
+            | Error::Assurance(_)
             | Error::FileIo { .. }
             | Error::Format { .. }
             | Error::StandardIo { .. }
@@ -389,6 +393,7 @@ pub trait GetSource {
 impl GetSource for Error {
     fn path(&self) -> Option<PathBuf> {
         match self {
+            Error::Assurance(error) => Some(PathBuf::from(error.source_code.name())),
             Error::FileIo { .. }
             | Error::Format { .. }
             | Error::StandardIo(_)
@@ -419,6 +424,7 @@ impl GetSource for Error {
 
     fn src(&self) -> Option<String> {
         match self {
+            Error::Assurance(error) => Some(error.source_code.inner().clone()),
             Error::DuplicateModule { .. }
             | Error::FileIo { .. }
             | Error::Format { .. }
@@ -466,6 +472,7 @@ impl Diagnostic for Error {
 
         match self {
             Error::DuplicateModule { .. } => Some(boxed(Box::new("aiken::module::duplicate"))),
+            Error::Assurance(error) => error.code().map(boxed),
             Error::Blueprint(e) => e.code().map(boxed),
             Error::CodeGen(e) => e.code().map(boxed),
             Error::ImportCycle { .. } => Some(boxed(Box::new("aiken::module::cyclical"))),
@@ -502,6 +509,7 @@ impl Diagnostic for Error {
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
+            Error::Assurance(error) => error.help(),
             Error::DuplicateModule { first, second, .. } => Some(Box::new(format!(
                 "Rename either of them:\n- {}\n- {}",
                 first.display().if_supports_color(Stderr, |s| s.yellow()),
@@ -568,6 +576,7 @@ impl Diagnostic for Error {
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         match self {
+            Error::Assurance(error) => error.labels(),
             Error::Blueprint(e) => e.labels(),
             Error::CodeGen(e) => e.labels(),
             Error::Parse { error, .. } => error.labels(),
@@ -607,6 +616,7 @@ impl Diagnostic for Error {
 
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
+            Error::Assurance(error) => error.source_code(),
             Error::Blueprint(e) => e.source_code(),
             Error::CodeGen(e) => e.source_code(),
             Error::Parse { named, .. } => Some(named.as_ref()),
@@ -637,6 +647,7 @@ impl Diagnostic for Error {
 
     fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
+            Error::Assurance(error) => error.url(),
             Error::Blueprint(e) => e.url(),
             Error::CodeGen(e) => e.url(),
             Error::Type { error, .. } => error.url(),
@@ -668,6 +679,7 @@ impl Diagnostic for Error {
 
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
         match self {
+            Error::Assurance(error) => error.related(),
             Error::Blueprint(e) => e.related(),
             Error::CodeGen(e) => e.related(),
             Error::Type { error, .. } => error.related(),

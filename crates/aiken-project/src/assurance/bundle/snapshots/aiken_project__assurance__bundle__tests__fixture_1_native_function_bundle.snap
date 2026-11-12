@@ -1,0 +1,295 @@
+---
+source: crates/aiken-project/src/assurance/bundle/tests.rs
+expression: snapshot(&bundle(FUNCTION))
+---
+{
+  "assurance": {
+    "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+    "preamble": {
+      "title": "UAL bundle fixture",
+      "version": "1.0",
+      "authors": [
+        "Fixture author"
+      ],
+      "created": "2026-11-04",
+      "license": "Apache-2.0"
+    },
+    "blueprint": {
+      "uri": "plutus.json",
+      "hash": {
+        "alg": "sha256",
+        "digest": "ff0552377b1f6b754aa0fc8a16db3056e249cb9fc01642c6d8b5194da523c5b2"
+      }
+    },
+    "languages": {
+      "lean": {
+        "name": "Lean",
+        "version": "4.24.0",
+        "uri": "https://lean-lang.org"
+      },
+      "ual": {
+        "name": "UAL",
+        "version": "1.0",
+        "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+        "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b"
+      }
+    },
+    "formalFragments": [
+      {
+        "id": "fixtures",
+        "language": "lean",
+        "source": "\ndef larger (old proposed : Int) : Prop := old < proposed\n\n-- Module-qualified copies in namespace fixtures\n\ndef fixtures.larger (old proposed : Int) : Prop := old < proposed\n"
+      }
+    ],
+    "properties": [
+      {
+        "id": "outbids",
+        "scope": {
+          "functions": [
+            "fixtures__outbids"
+          ]
+        },
+        "statement": {
+          "text": "A larger proposed bid returns true.",
+          "formal": {
+            "language": "ual",
+            "source": "\n  ∀ (old proposed : Int), larger old proposed → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n",
+            "uses": [
+              "fixtures"
+            ]
+          }
+        },
+        "checkingContext": "outbids"
+      }
+    ],
+    "checkingContexts": {
+      "outbids": {
+        "uri": "checking-outbids.json",
+        "hash": {
+          "alg": "sha256",
+          "digest": "133af843bcde37746e0015a000454346ea53f7867bd2278abcba108127565eda"
+        },
+        "mediaType": "application/json"
+      }
+    },
+    "functions": {
+      "fixtures__outbids": {
+        "compiledCode": "500101002232337100026eb4008dd68011",
+        "serialization": "cbor-flat",
+        "hash": {
+          "alg": "sha256",
+          "digest": "31b6a638822fbcfbc099803b82b0d363e0ec887aa7bd5b5f116d3557407500a3"
+        },
+        "plutusVersion": "v3",
+        "arguments": [
+          {
+            "$ref": "#/definitions/Int"
+          },
+          {
+            "$ref": "#/definitions/Int"
+          }
+        ],
+        "result": {
+          "dataType": "#boolean"
+        }
+      }
+    },
+    "definitions": {
+      "Bool": {
+        "title": "Bool",
+        "anyOf": [
+          {
+            "title": "False",
+            "dataType": "constructor",
+            "index": 0,
+            "fields": []
+          },
+          {
+            "title": "True",
+            "dataType": "constructor",
+            "index": 1,
+            "fields": []
+          }
+        ]
+      },
+      "Int": {
+        "dataType": "integer"
+      }
+    }
+  },
+  "blueprint": {
+    "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+    "$vocabulary": {
+      "https://cips.cardano.org/cips/cip57": true,
+      "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+    },
+    "preamble": {
+      "compiler": {
+        "name": "Aiken",
+        "version": "test-compiler"
+      },
+      "description": "Aiken contracts for project 'test/project'",
+      "license": "Apache-2.0",
+      "plutusVersion": "v3",
+      "title": "test/project",
+      "version": "0.0.0"
+    },
+    "validators": [
+      {
+        "compiledCode": "5001010023259800b452689b2b20025735",
+        "hash": "22c9a103ed3f2fa97c982d76d6e2af50c5d54ac306983b196c8fcdab",
+        "id": "fixtures__companion",
+        "interface": {
+          "callingConvention": "ledger-v3",
+          "invocations": [
+            {
+              "arguments": [
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "spend"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "mint"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "withdraw"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "publish"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "vote"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "propose"
+            }
+          ]
+        },
+        "redeemer": {
+          "oneOf": [
+            {
+              "purpose": "spend",
+              "schema": {}
+            },
+            {
+              "purpose": "mint",
+              "schema": {}
+            },
+            {
+              "purpose": "withdraw",
+              "schema": {}
+            },
+            {
+              "purpose": "publish",
+              "schema": {}
+            },
+            {
+              "purpose": "vote",
+              "schema": {}
+            },
+            {
+              "purpose": "propose",
+              "schema": {}
+            }
+          ]
+        },
+        "title": "fixtures.companion"
+      }
+    ]
+  },
+  "contexts": {
+    "outbids": {
+      "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+      "environment": {
+        "hash": {
+          "alg": "sha256",
+          "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+        },
+        "mediaType": "application/json",
+        "uri": "environment.json"
+      },
+      "execution": {
+        "acceptance": "evaluation",
+        "budget": {
+          "kind": "cek-steps",
+          "steps": 100
+        },
+        "semanticsVariant": "E"
+      },
+      "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+      "targets": [
+        {
+          "function": "fixtures__outbids",
+          "functionHash": {
+            "alg": "sha256",
+            "digest": "31b6a638822fbcfbc099803b82b0d363e0ec887aa7bd5b5f116d3557407500a3"
+          },
+          "functionInterface": {
+            "arguments": [
+              {
+                "$ref": "#/definitions/Int"
+              },
+              {
+                "$ref": "#/definitions/Int"
+              }
+            ],
+            "definitions": {
+              "Bool": {
+                "anyOf": [
+                  {
+                    "dataType": "constructor",
+                    "fields": [],
+                    "index": 0,
+                    "title": "False"
+                  },
+                  {
+                    "dataType": "constructor",
+                    "fields": [],
+                    "index": 1,
+                    "title": "True"
+                  }
+                ],
+                "title": "Bool"
+              },
+              "Int": {
+                "dataType": "integer"
+              }
+            },
+            "plutusVersion": "v3",
+            "result": {
+              "dataType": "#boolean"
+            },
+            "serialization": "cbor-flat"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "4e4a73cca1d8a378c4b5cd1e39a3c0e3bf846673efb97c652a311acf9a3fd3ca"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "outbids": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "83c6c3d731f7a68550679694fb60eb3f705bf3296acec9189c1670a97e2d480f"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-outbids.json"
+    }
+  },
+  "definitions": {
+    "Bool": {
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 0,
+          "title": "False"
+        },
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 1,
+          "title": "True"
+        }
+      ],
+      "title": "Bool"
+    },
+    "Int": {
+      "dataType": "integer"
+    }
+  },
+  "formalFragments": [
+    {
+      "id": "fixtures",
+      "language": "lean",
+      "source": "\ndef larger (old proposed : Int) : Prop := old < proposed\n\n-- Module-qualified copies in namespace fixtures\n\ndef fixtures.larger (old proposed : Int) : Prop := old < proposed\n"
+    }
+  ],
+  "functions": {
+    "fixtures__outbids": {
+      "arguments": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ],
+      "compiledCode": "500101002232337100026eb4008dd68011",
+      "hash": {
+        "alg": "sha256",
+        "digest": "31b6a638822fbcfbc099803b82b0d363e0ec887aa7bd5b5f116d3557407500a3"
+      },
+      "plutusVersion": "v3",
+      "result": {
+        "dataType": "#boolean"
+      },
+      "serialization": "cbor-flat"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "name": "UAL",
+      "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "fixtures"
+    ],
+    "created": "2026-11-04",
+    "description": "UAL phase-1 native Bool function producer fixture",
+    "license": "Apache-2.0",
+    "title": "fixtures/ual_native_function",
+    "version": "1.0.0"
+  },
+  "properties": [
+    {
+      "checkingContext": "outbids",
+      "id": "outbids",
+      "scope": {
+        "functions": [
+          "fixtures__outbids"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (old proposed : Int), larger old proposed → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n",
+          "uses": [
+            "fixtures"
+          ]
+        },
+        "text": "A larger proposed bid returns true."
+      }
+    }
+  ]
+}

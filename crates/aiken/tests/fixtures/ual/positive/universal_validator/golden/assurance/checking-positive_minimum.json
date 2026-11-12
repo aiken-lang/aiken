@@ -1,0 +1,29 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+  "environment": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+    },
+    "mediaType": "application/json",
+    "uri": "../environment.json"
+  },
+  "execution": {
+    "acceptance": "evaluation",
+    "budget": {
+      "kind": "cek-steps",
+      "steps": 2500
+    },
+    "semanticsVariant": "E"
+  },
+  "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+  "targets": [
+    {
+      "parameters": {
+        "mode": "universal"
+      },
+      "purpose": "spend",
+      "validator": "fixtures__vesting"
+    }
+  ]
+}

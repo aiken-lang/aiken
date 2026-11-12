@@ -1,4 +1,7 @@
-use super::{DownloadSource, Event, EventListener, find_max_execution_units, group_by_module};
+use super::{
+    DownloadSource, Event, EventListener, VerificationReport, VerificationTrust,
+    VerificationVerdict, find_max_execution_units, group_by_module,
+};
 use crate::{CoverageMode, pretty};
 use aiken_lang::{
     ast::OnTestFailure,
@@ -26,6 +29,8 @@ pub struct Terminal;
 impl EventListener for Terminal {
     fn handle_event(&self, event: Event) {
         match event {
+            Event::StartingVerification { trust } => fmt_verification_trust(&trust),
+            Event::FinishedVerification { report } => fmt_verification_report(&report),
             Event::StartingCompilation {
                 name,
                 version,
@@ -362,6 +367,72 @@ impl EventListener for Terminal {
             }
         }
     }
+}
+
+fn fmt_verification_trust(trust: &VerificationTrust) {
+    eprintln!(
+        "{:>13} with Blaster SMT; no reconstructed Lean proof",
+        "Verifying"
+            .if_supports_color(Stderr, |s| s.bold())
+            .if_supports_color(Stderr, |s| s.purple())
+    );
+    eprintln!("      Method: {}", trust.method);
+    eprintln!("   Z3 binary: {}", trust.z3);
+    for (name, key) in [
+        ("PlutusCoreBlaster", "PlutusCoreBlaster"),
+        ("CardanoLedgerApi", "CardanoLedgerApiBlaster"),
+        ("Blaster", "Lean-blaster"),
+    ] {
+        eprintln!(
+            "   {name} revision: {}",
+            trust.revisions.get(key).map_or("unknown", String::as_str)
+        );
+    }
+    eprintln!("      Budget: {}", trust.budget);
+    eprintln!("      Results are relative to the configured step budget.");
+}
+
+fn fmt_verification_report(report: &VerificationReport) {
+    println!();
+    println!(
+        "    {}",
+        report.title.if_supports_color(Stderr, |s| s.bold())
+    );
+    println!("    {:<12}  Property", "Verdict");
+    println!("    {:<12}  --------", "------------");
+    for property in &report.properties {
+        let verdict = match property.verdict {
+            VerificationVerdict::Verified => "verified",
+            VerificationVerdict::Falsified => "falsified",
+            VerificationVerdict::Inconclusive => "inconclusive",
+            VerificationVerdict::NotChecked => "not-checked",
+            VerificationVerdict::Missing => "missing",
+        };
+        println!("    {verdict:<12}  {}", property.id);
+        if let Some(counterexample) = &property.counterexample {
+            println!("      Counterexample:");
+            for line in counterexample.lines() {
+                println!("        {line}");
+            }
+        }
+    }
+    if report.properties.is_empty() {
+        println!("    No property results.");
+    }
+    for warning in &report.warnings {
+        println!("    Warning: {warning}");
+    }
+    for error in &report.errors {
+        println!("    Error: {error}");
+    }
+    println!(
+        "\n    Verification {} (relative to the step budget).\n",
+        if report.success {
+            "succeeded"
+        } else {
+            "failed"
+        }
+    );
 }
 
 fn fmt_test(

@@ -1,4 +1,5 @@
 pub mod definitions;
+pub mod dialect;
 pub mod error;
 mod memo_program;
 pub mod parameter;

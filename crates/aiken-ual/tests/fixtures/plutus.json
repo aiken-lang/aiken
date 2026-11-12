@@ -1,0 +1,155 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+  "$vocabulary": {
+    "https://cips.cardano.org/cips/cip57": true,
+    "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+  },
+  "definitions": {
+    "Data": {},
+    "Recursive": {
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 0
+        },
+        {
+          "dataType": "constructor",
+          "fields": [
+            {
+              "$ref": "#/definitions/Recursive"
+            }
+          ],
+          "index": 1
+        }
+      ]
+    }
+  },
+  "preamble": {
+    "compiler": {
+      "name": "fixture",
+      "version": "1"
+    },
+    "description": "Compiled interface contract",
+    "license": "Apache-2.0",
+    "plutusVersion": "v3",
+    "title": "UAL fixture",
+    "version": "0.1.0"
+  },
+  "validators": [
+    {
+      "compiledCode": "46010000200101",
+      "datum": {
+        "oneOf": [
+          {
+            "purpose": "spend",
+            "schema": {
+              "dataType": "integer"
+            }
+          }
+        ]
+      },
+      "description": "Schema and binding fixture",
+      "hash": "396782bf9cb6f05267b541ed7cacd56529fbbaef787ee4283f4f234a",
+      "id": "sample__validator",
+      "interface": {
+        "callingConvention": "ledger-v3",
+        "invocations": [
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "spend"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "mint"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "withdraw"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "publish"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "vote"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "propose"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "description": "parameter",
+          "schema": {
+            "dataType": "integer"
+          },
+          "title": "p"
+        }
+      ],
+      "redeemer": {
+        "purpose": {
+          "oneOf": [
+            "spend",
+            "mint"
+          ]
+        },
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "title": "Sample validator"
+    }
+  ]
+}

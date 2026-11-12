@@ -42,6 +42,9 @@ strum = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 uplc.workspace = true
 
+[dev-dependencies]
+aiken-ual.workspace = true
+
 [target.'cfg(not(windows))'.dependencies]
 xdg.workspace = true
 

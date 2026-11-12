@@ -31,24 +31,59 @@ pub const INDENT: isize = 2;
 pub const MAX_COLUMNS: isize = 80;
 
 pub fn pretty(writer: &mut String, module: UntypedModule, extra: ModuleExtra, src: &str) {
-    let intermediate = Intermediate {
-        comments: extra
+    let mut intermediate = Intermediate {
+        comments: Vec::new(),
+        doc_comments: Vec::new(),
+        empty_lines: &extra.empty_lines,
+        module_comments: Vec::new(),
+        verbatim_comments: !extra.assurance_comments.is_empty()
+            || !module.definition_decorators.is_empty()
+            || module.definitions.iter().any(|definition| {
+                matches!(definition, Definition::DataType(data_type)
+                    if data_type.decorators.iter()
+                        .chain(data_type.constructors.iter().flat_map(|constructor| &constructor.decorators))
+                        .any(|decorator| matches!(decorator.kind, crate::ast::DecoratorKind::Onchain { .. })))
+            }),
+        source: src,
+    };
+
+    if intermediate.verbatim_comments {
+        // Keep all trivia source-ordered around opaque regions and decorators.
+        // Other modules retain the existing comment formatting path.
+        intermediate.comments = [
+            (&extra.comments, 2),
+            (&extra.doc_comments, 3),
+            (&extra.module_comments, 4),
+        ]
+        .into_iter()
+        .flat_map(|(spans, prefix)| {
+            spans.iter().map(move |span| Comment {
+                start: span.start - prefix,
+                content: &src[span.start - prefix..span.end],
+            })
+        })
+        .chain(extra.assurance_comments(src))
+        .collect();
+        intermediate
+            .comments
+            .sort_unstable_by_key(|comment| comment.start);
+    } else {
+        intermediate.comments = extra
             .comments
             .iter()
             .map(|span| Comment::from((span, src)))
-            .collect(),
-        doc_comments: extra
+            .collect();
+        intermediate.doc_comments = extra
             .doc_comments
             .iter()
             .map(|span| Comment::from((span, src)))
-            .collect(),
-        empty_lines: &extra.empty_lines,
-        module_comments: extra
+            .collect();
+        intermediate.module_comments = extra
             .module_comments
             .iter()
             .map(|span| Comment::from((span, src)))
-            .collect(),
-    };
+            .collect();
+    }
 
     Formatter::with_comments(&intermediate)
         .module(&module)
@@ -61,6 +96,8 @@ struct Intermediate<'a> {
     doc_comments: Vec<Comment<'a>>,
     module_comments: Vec<Comment<'a>>,
     empty_lines: &'a [usize],
+    verbatim_comments: bool,
+    source: &'a str,
 }
 
 /// Hayleigh's bane
@@ -70,6 +107,8 @@ pub struct Formatter<'a> {
     doc_comments: &'a [Comment<'a>],
     module_comments: &'a [Comment<'a>],
     empty_lines: &'a [usize],
+    verbatim_comments: bool,
+    source: &'a str,
 }
 
 #[derive(Default)]
@@ -181,6 +220,8 @@ impl<'comments> Formatter<'comments> {
             doc_comments: &extra.doc_comments,
             module_comments: &extra.module_comments,
             empty_lines: extra.empty_lines,
+            verbatim_comments: extra.verbatim_comments,
+            source: extra.source,
         }
     }
 
@@ -189,7 +230,7 @@ impl<'comments> Formatter<'comments> {
     fn pop_comments(
         &mut self,
         limit: usize,
-    ) -> impl Iterator<Item = Option<&'comments str>> + use<'comments> {
+    ) -> impl Iterator<Item = Option<(&'static str, &'comments str)>> + use<'comments> {
         let (popped, rest, empty_lines) =
             comments_before(self.comments, self.empty_lines, limit, true);
 
@@ -197,7 +238,8 @@ impl<'comments> Formatter<'comments> {
 
         self.empty_lines = empty_lines;
 
-        popped
+        let prefix = if self.verbatim_comments { "" } else { "//" };
+        popped.map(move |comment| comment.map(|content| (prefix, content)))
     }
 
     // Pop doc comments that occur before a byte-index in the source, consuming
@@ -234,6 +276,19 @@ impl<'comments> Formatter<'comments> {
     }
 
     pub fn definitions<'a>(&mut self, definitions: &'a [UntypedDefinition]) -> Document<'a> {
+        if self.verbatim_comments {
+            // Sorting imports would move regions (and the trivia surrounding
+            // them) away from their original declarations.
+            return join(
+                definitions.iter().map(|definition| {
+                    let comments = self.pop_comments(definition.location().start);
+                    let document = self.documented_definition(definition);
+                    commented(document, comments)
+                }),
+                lines(2),
+            );
+        }
+
         let mut has_imports = false;
         let mut has_declarations = false;
         let mut imports = Vec::new();
@@ -287,7 +342,35 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn module<'a>(&mut self, module: &'a UntypedModule) -> Document<'a> {
-        let defs = self.definitions(&module.definitions);
+        let defs = if module.definition_decorators.is_empty() {
+            self.definitions(&module.definitions)
+        } else {
+            let mut metadata = module.definition_decorators.iter().peekable();
+            join(
+                module.definitions.iter().map(|definition| {
+                    let decorators = metadata
+                        .next_if(|entry| entry.location == definition.location())
+                        .map(|entry| entry.decorators.as_slice())
+                        .unwrap_or_default();
+                    let start = decorators
+                        .first()
+                        .map(|decorator| decorator.location.start)
+                        .unwrap_or_else(|| definition.location().start);
+                    let comments = self.pop_comments(start);
+                    let prefix = self.decorator(decorators);
+                    let declaration_comments = self.pop_comments(definition.location().start);
+                    let declaration = self.documented_definition(definition);
+                    let declaration = commented(declaration, declaration_comments);
+                    commented(
+                        prefix
+                            .append(if decorators.is_empty() { nil() } else { line() })
+                            .append(declaration),
+                        comments,
+                    )
+                }),
+                lines(2),
+            )
+        };
 
         // Now that `defs` has been collected, only freestanding comments (//)
         // and doc comments (///) remain. Freestanding comments aren't associated
@@ -2276,22 +2359,80 @@ impl<'comments> Formatter<'comments> {
     }
 
     pub fn decorator<'a>(&mut self, decorators: &'a [Decorator]) -> Document<'a> {
-        join(
-            decorators.iter().map(|d| match &d.kind {
-                crate::ast::DecoratorKind::Tag { value, base } => {
-                    docvec![
-                        "@tag(",
-                        Document::String(match base {
-                            Base::Decimal { .. } => value.to_string(),
-                            Base::Hexadecimal => format!("{value:#x}"),
-                        }),
-                        ")"
-                    ]
+        let document = join(
+            decorators.iter().map(|d| {
+                let comments = self.pop_comments(if self.verbatim_comments {
+                    d.location.start
+                } else {
+                    0
+                });
+                let document = match &d.kind {
+                    crate::ast::DecoratorKind::Tag { value, base } => {
+                        docvec![
+                            "@tag(",
+                            Document::String(match base {
+                                Base::Decimal { .. } => value.to_string(),
+                                Base::Hexadecimal => format!("{value:#x}"),
+                            }),
+                            ")"
+                        ]
+                    }
+                    crate::ast::DecoratorKind::List => "@list".to_doc(),
+                    crate::ast::DecoratorKind::Onchain { arguments } => "@onchain"
+                        .to_doc()
+                        .append(wrap_args(arguments.iter().map(|argument| {
+                            let comments = self.pop_comments(argument.location.start);
+                            let value = match &argument.value {
+                                crate::ast::OnchainValue::Int { value, base } => {
+                                    self.int(value, base)
+                                }
+                                crate::ast::OnchainValue::Name { name } => name.to_doc(),
+                                crate::ast::OnchainValue::String { value } => self.string(value),
+                                crate::ast::OnchainValue::ByteString { value } => {
+                                    Document::String(escape(value)).surround("\"", "\"")
+                                }
+                            };
+                            (
+                                commented(
+                                    argument.name.to_doc().append(": ").append(value),
+                                    comments,
+                                ),
+                                false,
+                            )
+                        })))
+                        .group(),
+                };
+                if self.verbatim_comments {
+                    commented(document, comments)
+                } else {
+                    document
                 }
-                crate::ast::DecoratorKind::List => "@list".to_doc(),
             }),
             line(),
-        )
+        );
+
+        if self.verbatim_comments
+            && let Some(last) = decorators.last()
+        {
+            // A region after the final decorator belongs before the type or
+            // constructor, rather than being pushed into its fields.
+            let mut end = last.location.end;
+            for comment in self.comments {
+                if comment.start < end
+                    || !self.source[end..comment.start]
+                        .chars()
+                        .all(char::is_whitespace)
+                {
+                    break;
+                }
+                end = comment.start + comment.content.len();
+            }
+            if let Some(comments) = printed_comments(self.pop_comments(end), false) {
+                return document.append(line()).append(comments);
+            }
+        }
+
+        document
     }
 
     pub fn docs_data_type<'a, A>(
@@ -2949,7 +3090,7 @@ fn list<'a>(elements: Document<'a>, length: usize, tail: Option<Document<'a>>) -
 }
 
 fn printed_comments<'a, 'comments>(
-    comments: impl IntoIterator<Item = Option<&'comments str>>,
+    comments: impl IntoIterator<Item = Option<(&'static str, &'comments str)>>,
     trailing_newline: bool,
 ) -> Option<Document<'a>> {
     let mut comments = comments.into_iter().peekable();
@@ -2959,10 +3100,10 @@ fn printed_comments<'a, 'comments>(
     while let Some(c) = comments.next() {
         match c {
             None => continue,
-            Some(c) => {
+            Some((prefix, c)) => {
                 // There will never be consecutive empty lines (None values),
                 // and whenever we peek a None, we advance past it.
-                doc.push("//".to_doc().append(Document::String(c.to_string())));
+                doc.push(prefix.to_doc().append(Document::String(c.to_string())));
                 match comments.peek() {
                     // Next line is a comment
                     Some(Some(_)) => doc.push(line()),
@@ -2998,7 +3139,7 @@ fn printed_comments<'a, 'comments>(
 
 fn commented<'a, 'comments>(
     doc: Document<'a>,
-    comments: impl IntoIterator<Item = Option<&'comments str>>,
+    comments: impl IntoIterator<Item = Option<(&'static str, &'comments str)>>,
 ) -> Document<'a> {
     match printed_comments(comments, true) {
         Some(comments) => comments.append(doc.group()),

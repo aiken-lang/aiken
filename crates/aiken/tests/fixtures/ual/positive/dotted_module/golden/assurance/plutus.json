@@ -1,0 +1,182 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+  "$vocabulary": {
+    "https://cips.cardano.org/cips/cip57": true,
+    "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+  },
+  "definitions": {
+    "Data": {
+      "description": "Any Plutus data.",
+      "title": "Data"
+    },
+    "Int": {
+      "dataType": "integer"
+    }
+  },
+  "preamble": {
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.24+97953f6"
+    },
+    "description": "UAL producer fixture for a dotted validator file name",
+    "license": "Apache-2.0",
+    "plutusVersion": "v3",
+    "title": "fixtures/ual_dotted_module",
+    "version": "1.0.0"
+  },
+  "validators": [
+    {
+      "compiledCode": "5865010100229800aba2aba1aab9eaab9dab9a9bad00248888896600264653001300700198039804000cc01c0092225980099b8748008c020dd500144c8cc88cdc42400001260160026016601800260126ea800a2c8038600e00260086ea801e29344d95900201",
+      "datum": {
+        "oneOf": [
+          {
+            "purpose": "spend",
+            "schema": {
+              "$ref": "#/definitions/Data"
+            },
+            "title": "_datum"
+          },
+          {
+            "purpose": "mint",
+            "schema": {}
+          },
+          {
+            "purpose": "withdraw",
+            "schema": {}
+          },
+          {
+            "purpose": "publish",
+            "schema": {}
+          },
+          {
+            "purpose": "vote",
+            "schema": {}
+          },
+          {
+            "purpose": "propose",
+            "schema": {}
+          }
+        ]
+      },
+      "hash": "6fc1049a304e50ce43367457fd869f93e7bb79ae842f1a56cb64c9d0",
+      "id": "fixtures_extra__vesting",
+      "interface": {
+        "callingConvention": "ledger-v3",
+        "invocations": [
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "spend"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "mint"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "withdraw"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "publish"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "vote"
+          },
+          {
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "context"
+              }
+            ],
+            "purpose": "propose"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "schema": {
+            "$ref": "#/definitions/Int"
+          },
+          "title": "minimum"
+        }
+      ],
+      "redeemer": {
+        "oneOf": [
+          {
+            "purpose": "spend",
+            "schema": {
+              "$ref": "#/definitions/Data"
+            },
+            "title": "_redeemer"
+          },
+          {
+            "purpose": "mint",
+            "schema": {}
+          },
+          {
+            "purpose": "withdraw",
+            "schema": {}
+          },
+          {
+            "purpose": "publish",
+            "schema": {}
+          },
+          {
+            "purpose": "vote",
+            "schema": {}
+          },
+          {
+            "purpose": "propose",
+            "schema": {}
+          }
+        ]
+      },
+      "title": "fixtures.extra.vesting"
+    }
+  ]
+}

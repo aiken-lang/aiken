@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/check.rs
+assertion_line: 6064
+description: "@onchain(steps: 1, semantics: C)\nfn foo(value) { value }"
+expression: diagnostic
+---
+illegal::generic_in_abi
+I choked on a generic type left in an outward-facing interface.
+
+Elements of the outer-most parts of a project, such as a validator, constants or a property-based test, must be fully instantiated. That means they can no longer carry unbound or generic variables. The type must be fully-known at this point since many structural validation must occur to ensure a safe boundary between the on-chain and off-chain worlds.
