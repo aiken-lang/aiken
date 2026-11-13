@@ -17,6 +17,7 @@
 - **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
 - **aiken-lang**: Fix variables bound by a `when` clause receiving each other's values when the clause is reached through branches that test the patterns in a different order. Scripts containing such a clause may compile to a different hash, including those where the mix-up had no visible effect. @logicalmechanism
+- **aiken-lang**: Fix user code clashing with names the code generator uses for its own variables: a variable named `acc_var` inside an `if ... is` branch, a variable named `tail` after a list, tuple or record is destructured (for example in a `[x, ..tail]` loop), and a record field labelled `then_delayed` or `otherwise_delayed` when the record is checked with `expect` or `if ... is`. The script could fail, or run with the wrong value and return a wrong result, and compilation could crash in the optimiser. Only scripts that use these names this way can compile to a different hash. @logicalmechanism
 
 ## v1.1.24 - 2026-09-26
 
