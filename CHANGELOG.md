@@ -17,6 +17,7 @@
 - **uplc**: Name Plutus V1, not V2, in the error reported when a V1 script is evaluated without a V1 cost model. @colll78
 - **uplc**: Drop deeply nested lists and `Data` without overflowing the stack. @colll78
 - **aiken-lang**: Fix variables bound by a `when` clause receiving each other's values when the clause is reached through branches that test the patterns in a different order. Scripts containing such a clause may compile to a different hash, including those where the mix-up had no visible effect. @logicalmechanism
+- **aiken-lang**: Fix a generic function failing at runtime when a script uses it both with a record decorated with `@list` and with another custom type or `Data`, as in calling `list.any` on a list of each. Both uses shared one compiled copy that converted elements for only one of them. Scripts that use one generic function with an `@list` record and with a tuple, a list or another custom type may compile to a different hash. @logicalmechanism
 
 ## v1.1.24 - 2026-09-26
 
