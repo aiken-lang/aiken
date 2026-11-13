@@ -921,12 +921,14 @@ impl<'a> CodeGenerator<'a> {
                             match &branch.is {
                                 Some((pattern, tipo)) => {
                                     introduce_pattern(&mut self.interner, pattern);
-                                    self.interner.intern("acc_var".to_string());
+                                    // Internal names start with `__`; user identifiers can't
+                                    // start with `_`, so this can't shadow a user variable.
+                                    self.interner.intern("__acc_var".to_string());
 
                                     let body = self.build(&branch.body, module_build_name, &[]);
 
                                     let acc_var =
-                                        self.interner.lookup_interned(&"acc_var".to_string());
+                                        self.interner.lookup_interned(&"__acc_var".to_string());
 
                                     let tree = AirTree::let_assignment(
                                         &acc_var,
@@ -951,7 +953,7 @@ impl<'a> CodeGenerator<'a> {
                                     );
 
                                     pop_pattern(&mut self.interner, pattern);
-                                    self.interner.pop_text("acc_var".to_string());
+                                    self.interner.pop_text("__acc_var".to_string());
 
                                     tree
                                 }
@@ -2521,15 +2523,17 @@ impl<'a> CodeGenerator<'a> {
                 if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
                     defined_data_types.insert(data_type_name.clone(), 1);
 
+                    // Internal names start with `__`; user identifiers and field labels can't
+                    // start with `_`, so the field bindings below can't shadow these.
                     let var_then = AirTree::call(
-                        AirTree::local_var("then_delayed", Type::void()),
+                        AirTree::local_var("__then_delayed", Type::void()),
                         Type::void(),
                         vec![],
                     );
 
                     let otherwise_delayed = otherwise
                         .as_ref()
-                        .map(|_| AirTree::local_var("otherwise_delayed", Type::void()));
+                        .map(|_| AirTree::local_var("__otherwise_delayed", Type::void()));
 
                     let is_never = data_type.is_never();
 
@@ -2658,11 +2662,11 @@ impl<'a> CodeGenerator<'a> {
                         params: if otherwise.is_some() {
                             vec![
                                 "__param_0".to_string(),
-                                "then_delayed".to_string(),
-                                "otherwise_delayed".to_string(),
+                                "__then_delayed".to_string(),
+                                "__otherwise_delayed".to_string(),
                             ]
                         } else {
-                            vec!["__param_0".to_string(), "then_delayed".to_string()]
+                            vec!["__param_0".to_string(), "__then_delayed".to_string()]
                         },
                     };
 
