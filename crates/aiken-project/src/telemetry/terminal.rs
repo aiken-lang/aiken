@@ -68,6 +68,14 @@ impl EventListener for Terminal {
                         .if_supports_color(Stderr, |s| s.purple()),
                 );
             }
+            Event::WaitingForPackageCacheLock => {
+                eprintln!(
+                    "{:>13} for package cache lock...",
+                    "Waiting"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                );
+            }
             Event::DumpingUPLC { path } => {
                 eprintln!(
                     "{:>13} {} ({})",
