@@ -4340,6 +4340,229 @@ fn validator_forbid_imported_record_containing_opaque_type_in_redeemer_abi() {
 }
 
 #[test]
+fn validator_forbid_opaque_type_in_data_alias_abi() {
+    let source_code = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Datum = Data<Thing>
+
+        validator foo {
+          spend(_datum: Option<Datum>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(
+        matches!(result, Err((_, Error::IllegalOpaqueType { ref position, .. })) if position == "datum"),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn validator_forbid_record_containing_data_annotated_opaque_type_in_redeemer_abi() {
+    let source_code = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Redeemer { thing: Data<Thing> }
+
+        validator foo {
+          mint(_redeemer: Redeemer, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(
+        matches!(result, Err((_, Error::IllegalOpaqueType { ref position, .. })) if position == "redeemer"),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn validator_allow_opaque_type_in_fallback_abi() {
+    let source_code = r#"
+        pub opaque type Context { inner: Data }
+
+        validator foo {
+          else(_context: Context) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn validator_forbid_imported_opaque_type_in_data_alias_abi() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Datum = Data<Thing>
+    "#;
+
+    let source_code = r#"
+        use thing.{Datum}
+
+        pub type Thing { inner: Int }
+
+        validator foo {
+          spend(_datum: Option<Datum>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator_with_deps(parse(source_code), vec![parse_as(dependency, "thing")]);
+    assert!(
+        matches!(result, Err((_, Error::IllegalOpaqueType { ref position, .. })) if position == "datum"),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn validator_forbid_imported_record_containing_data_annotated_opaque_type_in_redeemer_abi() {
+    let dependency = r#"
+        pub opaque type Thing { inner: Int }
+        pub type Redeemer { thing: Data<Thing> }
+    "#;
+
+    let source_code = r#"
+        use thing.{Redeemer}
+
+        validator foo {
+          mint(_redeemer: Redeemer, _policy_id: ByteArray, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator_with_deps(parse(source_code), vec![parse_as(dependency, "thing")]);
+    assert!(
+        matches!(result, Err((_, Error::IllegalOpaqueType { ref position, .. })) if position == "redeemer"),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn validator_forbid_nested_record_containing_data_alias_in_datum_abi() {
+    let source_code = r#"
+        pub type Outer { inner: Inner }
+        pub type Inner { thing: Hidden }
+        pub type Hidden = Data<Thing>
+        pub opaque type Thing { inner: Int }
+
+        validator foo {
+          spend(_datum: Option<Outer>, _redeemer: Data, _oref: Data, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(
+        matches!(result, Err((_, Error::IllegalOpaqueType { ref position, .. })) if position == "datum"),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn validator_allow_opaque_type_in_purpose_abi() {
+    let source_code = r#"
+        pub opaque type PolicyId { inner: ByteArray }
+
+        validator foo {
+          mint(_redeemer: Data, _policy_id: PolicyId, _ctx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn validator_allow_opaque_type_in_transaction_abi() {
+    let source_code = r#"
+        pub opaque type Transaction { inner: Data }
+
+        validator foo {
+          spend(_datum: Option<Data>, _redeemer: Data, _oref: Data, _tx: Transaction) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn validator_allow_imported_record_containing_opaque_type_in_context_abi() {
+    let dependency = r#"
+        pub opaque type Hash { inner: ByteArray }
+        pub type Context { hash: Hash }
+    "#;
+
+    let source_code = r#"
+        use context.{Context}
+
+        validator foo {
+          mint(_redeemer: Data, _policy_id: ByteArray, _tx: Context) {
+            True
+          }
+
+          else(_context: Context) {
+            True
+          }
+        }
+    "#;
+
+    let result =
+        check_validator_with_deps(parse(source_code), vec![parse_as(dependency, "context")]);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn validator_allow_opaque_type_in_parameters() {
+    let source_code = r#"
+        pub opaque type Config { inner: Int }
+
+        validator foo(_config: Config) {
+          spend(_datum: Option<Data>, _redeemer: Data, _oref: Data, _tx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn validator_allow_non_opaque_data_aliases_and_recursive_records_in_abi() {
+    let source_code = r#"
+        pub type Payload = Data<Int>
+        pub type Node {
+          Leaf(Payload)
+          Branch(List<Node>)
+        }
+        pub type Redeemer { payload: Payload }
+
+        validator foo {
+          spend(_datum: Option<Node>, _redeemer: Redeemer, _oref: Data, _tx: Data) {
+            True
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
 fn tuple_access_on_call() {
     let source_code = r#"
         use aiken/builtin

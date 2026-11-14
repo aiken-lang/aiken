@@ -95,7 +95,7 @@ impl UntypedModule {
         // Refresh the registry after constructor and accessor hydration. Types are marked as they
         // are registered, and this catches nested records whose dependency is marked later in
         // source order.
-        environment.collect_opaque_types();
+        environment.collect_opaque_types(&self.definitions);
 
         // Infer the types of each definition in the module
         // We first infer all the constants so they can be used in functions defined
@@ -838,6 +838,7 @@ fn check_validator_abi(
     environment: &Environment<'_>,
     handler: &TypedFunction,
 ) -> Result<(), Error> {
+    // Datum and redeemer are untrusted inputs. Ledger-provided arguments may contain opaque types.
     let redeemer_index = if handler.is_spend() {
         let datum = handler.arguments.first().expect("spend datum must exist");
 
@@ -867,9 +868,9 @@ fn check_validator_abi_arg(
     let opaque = if environment.contains_opaque(&tipo) {
         Some(tipo)
     } else {
-        arg.annotation
-            .as_ref()
-            .and_then(|annotation| find_opaque_in_annotation(environment, annotation))
+        arg.annotation.as_ref().and_then(|annotation| {
+            environment.find_opaque_in_annotation(annotation, environment.current_module)
+        })
     };
 
     match opaque {
@@ -879,37 +880,6 @@ fn check_validator_abi_arg(
             tipo,
         }),
         None => Ok(()),
-    }
-}
-
-fn find_opaque_in_annotation(
-    environment: &Environment<'_>,
-    annotation: &Annotation,
-) -> Option<Rc<Type>> {
-    if let Some(tipo) = environment.annotations.get(annotation)
-        && environment.contains_opaque(tipo)
-    {
-        return Some(tipo.clone());
-    }
-
-    match annotation {
-        Annotation::Constructor { arguments, .. } => arguments
-            .iter()
-            .find_map(|annotation| find_opaque_in_annotation(environment, annotation)),
-
-        Annotation::Fn { arguments, ret, .. } => arguments
-            .iter()
-            .find_map(|annotation| find_opaque_in_annotation(environment, annotation))
-            .or_else(|| find_opaque_in_annotation(environment, ret)),
-
-        Annotation::Tuple { elems, .. } => elems
-            .iter()
-            .find_map(|annotation| find_opaque_in_annotation(environment, annotation)),
-
-        Annotation::Pair { fst, snd, .. } => find_opaque_in_annotation(environment, fst)
-            .or_else(|| find_opaque_in_annotation(environment, snd)),
-
-        Annotation::Var { .. } | Annotation::Hole { .. } => None,
     }
 }
 

@@ -991,6 +991,19 @@ impl<'a> Environment<'a> {
     }
 
     pub(crate) fn contains_opaque(&self, tipo: &Type) -> bool {
+        // Data's phantom argument is erased during hydration, but can still name an opaque
+        // type in an alias. Resolve that annotation in the module where the alias was defined.
+        if let Some(alias) = tipo.alias()
+            && self
+                .find_opaque_in_annotation(
+                    &alias.annotation,
+                    alias.module.as_deref().unwrap_or(self.current_module),
+                )
+                .is_some()
+        {
+            return true;
+        }
+
         match tipo {
             Type::App {
                 module, name, args, ..
@@ -1015,17 +1028,73 @@ impl<'a> Environment<'a> {
         }
     }
 
+    pub(crate) fn find_opaque_in_annotation(
+        &self,
+        annotation: &Annotation,
+        module: &str,
+    ) -> Option<Rc<Type>> {
+        let annotations = if module == self.current_module {
+            &self.annotations
+        } else {
+            &self.importable_modules.get(module)?.annotations
+        };
+
+        if let Some(tipo) = annotations.get(annotation)
+            && self.contains_opaque(tipo)
+        {
+            return Some(tipo.clone());
+        }
+
+        match annotation {
+            Annotation::Constructor { arguments, .. } => arguments
+                .iter()
+                .find_map(|annotation| self.find_opaque_in_annotation(annotation, module)),
+
+            Annotation::Fn { arguments, ret, .. } => arguments
+                .iter()
+                .find_map(|annotation| self.find_opaque_in_annotation(annotation, module))
+                .or_else(|| self.find_opaque_in_annotation(ret, module)),
+
+            Annotation::Tuple { elems, .. } => elems
+                .iter()
+                .find_map(|annotation| self.find_opaque_in_annotation(annotation, module)),
+
+            Annotation::Pair { fst, snd, .. } => self
+                .find_opaque_in_annotation(fst, module)
+                .or_else(|| self.find_opaque_in_annotation(snd, module)),
+
+            Annotation::Var { .. } | Annotation::Hole { .. } => None,
+        }
+    }
+
     // Data constructor fields are hydrated after type aliases and function
     // signatures are registered, so opaque containment is derived from the
-    // fully registered type/value metadata rather than cached Type flags.
-    pub fn collect_opaque_types(&mut self) {
+    // fully registered annotations. Inspect the field annotations as well as their
+    // resolved types so Data<Opaque> cannot hide an opaque type from ABI checks.
+    pub fn collect_opaque_types(&mut self, definitions: &[UntypedDefinition]) {
         loop {
             let initial_len = self.opaque_types.len();
 
             let mut opaque_types = HashSet::new();
 
-            self.collect_opaque_types_from_constructors(&self.module_values, &mut opaque_types);
-            self.collect_opaque_types_from_constructors(&self.scope, &mut opaque_types);
+            for definition in definitions {
+                let Definition::DataType(data_type) = definition else {
+                    continue;
+                };
+
+                let qualifier = (self.current_module.clone(), data_type.name.clone());
+
+                if !self.opaque_types.contains(&qualifier)
+                    && data_type.constructors.iter().any(|constructor| {
+                        constructor.arguments.iter().any(|arg| {
+                            self.find_opaque_in_annotation(&arg.annotation, self.current_module)
+                                .is_some()
+                        })
+                    })
+                {
+                    opaque_types.insert(qualifier);
+                }
+            }
 
             for (module, name) in opaque_types {
                 self.register_opaque_type(&module, &name);
@@ -1033,41 +1102,6 @@ impl<'a> Environment<'a> {
 
             if self.opaque_types.len() == initial_len {
                 break;
-            }
-        }
-    }
-
-    fn collect_opaque_types_from_constructors(
-        &self,
-        values: &HashMap<String, ValueConstructor>,
-        opaque_types: &mut HashSet<(String, String)>,
-    ) {
-        for value in values.values() {
-            let ValueConstructorVariant::Record { module, .. } = &value.variant else {
-                continue;
-            };
-
-            if module.as_str() != self.current_module.as_str() {
-                continue;
-            }
-
-            match value.tipo.as_ref() {
-                Type::Fn { args, ret, .. } => {
-                    if let Some(qualifier) = ret.qualifier() {
-                        if qualifier.0.as_str() != self.current_module.as_str()
-                            || self.opaque_types.contains(&qualifier)
-                        {
-                            continue;
-                        }
-
-                        if args.iter().any(|arg| self.contains_opaque(arg)) {
-                            opaque_types.insert(qualifier);
-                        }
-                    }
-                }
-
-                Type::App { .. } => {}
-                Type::Var { .. } | Type::Tuple { .. } | Type::Pair { .. } => {}
             }
         }
     }
