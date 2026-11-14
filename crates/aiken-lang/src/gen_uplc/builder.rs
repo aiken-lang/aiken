@@ -174,7 +174,10 @@ impl Default for CodeGenSpecialFuncs {
     }
 }
 
-pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
+pub fn get_generic_variant_name(
+    t: &Rc<Type>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> String {
     let uplc_type = t.get_uplc_type();
 
     match uplc_type {
@@ -193,6 +196,17 @@ pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
         None if t.is_unbound() => "_unbound".to_string(),
         None if t.is_generic() => {
             unreachable!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE")
+        }
+        // Records decorated with @list are converted to and from Data as lists.
+        // The lookup also resolves a function to the type it returns, so skip those.
+        None if !t.is_function()
+            && lookup_data_type_by_tipo(data_types, t).is_some_and(|dt| {
+                dt.decorators
+                    .iter()
+                    .any(|dec| matches!(dec.kind, DecoratorKind::List))
+            }) =>
+        {
+            "_list".to_string()
         }
         None | Some(UplcType::Data) => "_data".to_string(),
     }

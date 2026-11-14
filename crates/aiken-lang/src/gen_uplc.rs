@@ -3867,7 +3867,7 @@ impl<'a> CodeGenerator<'a> {
                     // Don't sort here. Mono types map is already in argument order.
                     let variant = mono_types
                         .iter()
-                        .map(|(_, tipo)| get_generic_variant_name(tipo))
+                        .map(|(_, tipo)| get_generic_variant_name(tipo, &self.data_types))
                         .join("");
 
                     variant_name.clone_from(&variant);

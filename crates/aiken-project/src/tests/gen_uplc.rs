@@ -3907,6 +3907,115 @@ fn when_tuple_empty_lists() {
 }
 
 #[test]
+fn generic_function_with_list_record_then_constructor_type() {
+    let src = r#"
+        @list
+        type Point {
+          x: Int,
+          y: Int,
+        }
+
+        type Shape {
+          Circle { r: Int }
+          Square { side: Int }
+        }
+
+        fn any(xs: List<a>, f: fn(a) -> Bool) -> Bool {
+          when xs is {
+            [] -> False
+            [x, ..rest] -> f(x) || any(rest, f)
+          }
+        }
+
+        fn has(xs: List<a>, x: a) -> Bool {
+          any(xs, fn(y) { y == x })
+        }
+
+        test foo() {
+          and {
+            any([Point(1, 2)], fn(p) { p.x == 1 }),
+            any([Square(2), Circle(3)], fn(s) { s == Circle(3) }),
+            has([Point(1, 2)], Point(1, 2)),
+            has([Square(2), Circle(3)], Circle(3)),
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn generic_function_with_constructor_type_then_list_record() {
+    let src = r#"
+        @list
+        type Point {
+          x: Int,
+          y: Int,
+        }
+
+        type Shape {
+          Circle { r: Int }
+          Square { side: Int }
+        }
+
+        fn any(xs: List<a>, f: fn(a) -> Bool) -> Bool {
+          when xs is {
+            [] -> False
+            [x, ..rest] -> f(x) || any(rest, f)
+          }
+        }
+
+        fn has(xs: List<a>, x: a) -> Bool {
+          any(xs, fn(y) { y == x })
+        }
+
+        test foo() {
+          and {
+            any([Square(2), Circle(3)], fn(s) { s == Circle(3) }),
+            any([Point(1, 2)], fn(p) { p.x == 1 }),
+            has([Square(2), Circle(3)], Circle(3)),
+            has([Point(1, 2)], Point(1, 2)),
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn generic_function_with_tuple_and_list_record() {
+    let src = r#"
+        @list
+        type Point {
+          x: Int,
+          y: Int,
+        }
+
+        fn any(xs: List<a>, f: fn(a) -> Bool) -> Bool {
+          when xs is {
+            [] -> False
+            [x, ..rest] -> f(x) || any(rest, f)
+          }
+        }
+
+        fn has(xs: List<a>, x: a) -> Bool {
+          any(xs, fn(y) { y == x })
+        }
+
+        test foo() {
+          and {
+            any([(1, 2)], fn(t) { t.1st == 1 }),
+            any([Point(1, 2)], fn(p) { p.y == 2 }),
+            has([(1, 2)], (1, 2)),
+            has([Point(1, 2)], Point(1, 2)),
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
 fn generic_validator_type_test() {
     let src = r#"
       pub type A<x> {

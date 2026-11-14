@@ -20,6 +20,7 @@
 - **aiken-lang**: Fix variables bound by a `when` clause receiving each other's values when the clause is reached through branches that test the patterns in a different order. Scripts containing such a clause may compile to a different hash, including those where the mix-up had no visible effect. @logicalmechanism
 - **aiken-project**: Fix a crash when two `aiken` commands download the same package at once. @MicroProofs
 - **aiken-lang**: Fix `when` on a list selecting the wrong clause, or crashing the compiler, when its clauses use spreads of different lengths. Scripts containing such a `when` may compile to a different hash, including those that already behaved correctly. @logicalmechanism
+- **aiken-lang**: Fix a generic function failing at runtime when a script uses it both with a record decorated with `@list` and with another custom type or `Data`, as in calling `list.any` on a list of each. Both uses shared one compiled copy that converted elements for only one of them. Scripts that use one generic function with an `@list` record and with a tuple, a list or another custom type may compile to a different hash. @logicalmechanism
 
 ## v1.1.24 - 2026-09-26
 
