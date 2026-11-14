@@ -5528,6 +5528,58 @@ fn list_clause_with_assign() {
 }
 
 #[test]
+fn when_tagged_opaque_single_field_option() {
+    let src = r#"
+        @tag(5)
+        opaque type Foo {
+          inner: Option<Int>,
+        }
+
+        fn classify(foo: Foo) -> Int {
+          when foo is {
+            Foo { inner: Some(n) } -> n
+            Foo { inner: None } -> 0
+          }
+        }
+
+        test foo() {
+          and {
+            classify(Foo { inner: Some(7) }) == 7,
+            classify(Foo { inner: None }) == 0,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn when_tagged_opaque_single_field_literal_and_wildcard() {
+    let src = r#"
+        @tag(5)
+        opaque type Foo {
+          inner: Int,
+        }
+
+        fn classify(foo: Foo) -> Int {
+          when foo is {
+            Foo { inner: 0 } -> 1
+            Foo { .. } -> 2
+          }
+        }
+
+        test foo() {
+          and {
+            classify(Foo { inner: 0 }) == 1,
+            classify(Foo { inner: 7 }) == 2,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
 fn opaque_value_in_test() {
     let src = r#"
         const dat: Dat = {
