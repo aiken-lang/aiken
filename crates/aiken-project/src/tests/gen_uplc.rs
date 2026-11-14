@@ -7006,3 +7006,103 @@ fn when_list_spread_on_list_longer_than_any_pattern() {
 
     assert_uplc_evaluates_successfully(src);
 }
+
+#[test]
+fn when_clause_shadowing_a_variable_read_by_another_clause() {
+    let src = r#"
+        fn fee(mode: (Int, Option<Int>), amount: Int) -> Int {
+          when mode is {
+            (0, None) -> amount
+            (amount, _) -> amount + 1
+          }
+        }
+
+        test foo() {
+          and {
+            fee((0, None), 9) == 9,
+            fee((4, None), 9) == 5,
+            fee((0, Some(1)), 9) == 1,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn when_list_clause_shadowing_a_let_read_by_another_clause() {
+    let src = r#"
+        fn pick(xs: List<Int>, x: Int) -> Int {
+          let amount = x * 2
+          when xs is {
+            [0, 0] -> amount
+            [amount, _] -> amount + 1
+            _ -> 0
+          }
+        }
+
+        test foo() {
+          and {
+            pick([0, 0], 9) == 18,
+            pick([4, 0], 9) == 5,
+            pick([0, 1], 9) == 1,
+            pick([], 9) == 0,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn when_nested_clause_shadowing_an_outer_clause_variable() {
+    let src = r#"
+        fn g(a: Option<Int>, b: (Int, Option<Int>)) -> Int {
+          when a is {
+            Some(x) ->
+              when b is {
+                (0, None) -> x
+                (x, _) -> x + 1
+              }
+            None -> 0
+          }
+        }
+
+        test foo() {
+          and {
+            g(Some(7), (0, None)) == 7,
+            g(Some(7), (3, None)) == 4,
+            g(Some(7), (0, Some(1))) == 1,
+            g(None, (0, None)) == 0,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn when_several_clauses_shadowing_a_variable_read_by_another_clause() {
+    let src = r#"
+        fn h(m: (Int, Option<Int>), amount: Int) -> Int {
+          when m is {
+            (0, None) -> amount
+            (amount, None) -> amount + 1
+            (1, Some(_)) -> amount * 100
+            (amount, Some(_)) -> amount + 2
+          }
+        }
+
+        test foo() {
+          and {
+            h((0, None), 9) == 9,
+            h((5, None), 9) == 6,
+            h((1, Some(3)), 9) == 900,
+            h((0, Some(3)), 9) == 2,
+            h((6, Some(3)), 9) == 8,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}

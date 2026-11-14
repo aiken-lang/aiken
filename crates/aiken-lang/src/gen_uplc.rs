@@ -3013,18 +3013,24 @@ impl<'a> CodeGenerator<'a> {
                 pattern,
                 then,
             } => {
-                let assign = AirTree::let_assignment(
+                let params = assigns
+                    .iter()
+                    .map(|i| introduce_name(&mut self.interner, &i.assigned))
+                    .collect_vec();
+
+                // The one reason we have to pass in mutable self
+                // So we can build the TypedExpr into Air
+                let then = self.build(then, module_build_name, &[]);
+
+                // The clause's variables are only in scope in its own body. The rest of the
+                // tree can hold the bodies of other clauses, which must not see them.
+                assigns.into_iter().for_each(|x| {
+                    self.interner.pop_text(x.assigned);
+                });
+
+                AirTree::let_assignment(
                     name,
-                    AirTree::anon_func(
-                        assigns
-                            .iter()
-                            .map(|i| introduce_name(&mut self.interner, &i.assigned))
-                            .collect_vec(),
-                        // The one reason we have to pass in mutable self
-                        // So we can build the TypedExpr into Air
-                        self.build(then, module_build_name, &[]),
-                        true,
-                    ),
+                    AirTree::anon_func(params, then, true),
                     self.handle_decision_tree(
                         subject_name,
                         subject_tipo,
@@ -3033,13 +3039,7 @@ impl<'a> CodeGenerator<'a> {
                         *pattern,
                         stick_set,
                     ),
-                );
-
-                assigns.into_iter().for_each(|x| {
-                    self.interner.pop_text(x.assigned);
-                });
-
-                assign
+                )
             }
         }
     }
