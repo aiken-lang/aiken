@@ -10,8 +10,8 @@ use pallas_addresses::ScriptHash;
 use pallas_primitives::{
     Fragment,
     conway::{
-        CostModels, ExUnits, MintedTx, Redeemer, Redeemers, RedeemersKey, TransactionInput,
-        TransactionOutput,
+        CostModels, ExUnits, Redeemer, Redeemers, RedeemersKey, TransactionInput,
+        TransactionOutput, Tx,
     },
 };
 use pallas_traverse::{Era, MultiEraTx};
@@ -33,7 +33,7 @@ pub mod to_plutus_data;
 /// You may optionally run a subset of phase one checks on
 /// redeemers and scripts.
 pub fn eval_phase_two(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     cost_mdls: Option<&CostModels>,
     initial_budget: Option<&ExBudget>,
@@ -57,7 +57,7 @@ pub fn eval_phase_two(
 /// explicit protocol major version.
 #[allow(clippy::too_many_arguments)]
 pub fn eval_phase_two_with_protocol(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     cost_mdls: Option<&CostModels>,
     initial_budget: Option<&ExBudget>,
@@ -82,7 +82,7 @@ pub fn eval_phase_two_with_protocol(
 /// Like eval_phase_two, but allows replacing scripts dynamically for simulations
 #[allow(clippy::too_many_arguments)]
 pub fn eval_phase_two_with_override(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     cost_mdls: Option<&CostModels>,
     initial_budget: Option<&ExBudget>,
@@ -108,7 +108,7 @@ pub fn eval_phase_two_with_override(
 /// from an explicit protocol major version.
 #[allow(clippy::too_many_arguments)]
 pub fn eval_phase_two_with_override_and_protocol(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     cost_mdls: Option<&CostModels>,
     initial_budget: Option<&ExBudget>,
@@ -133,7 +133,7 @@ pub fn eval_phase_two_with_override_and_protocol(
 
 #[allow(clippy::too_many_arguments)]
 fn eval_phase_two_with_override_and_optional_protocol(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     cost_mdls: Option<&CostModels>,
     initial_budget: Option<&ExBudget>,

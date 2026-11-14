@@ -42,11 +42,23 @@ pub enum Error {
     NonConstrScrutinized(Value),
     #[error("Cases: {0:#?}\n\n are missing branch for constr:\n\n{1:#?}")]
     MissingCaseBranch(Vec<Term<NamedDeBruijn>>, Value),
-    #[error("type mismatch\n{:>13} {0}\n{:>13} {1}", "Expected", "Got")]
+    #[error(
+        "type mismatch\n{expected:>13} {0}\n{got:>13} {1}",
+        expected = "Expected",
+        got = "Got"
+    )]
     TypeMismatch(Type, Type),
-    #[error("type mismatch\n{:>13} (list a)\n{:>13} {0}", "Expected", "Got")]
+    #[error(
+        "type mismatch\n{expected:>13} (list a)\n{got:>13} {0}",
+        expected = "Expected",
+        got = "Got"
+    )]
     ListTypeMismatch(Type),
-    #[error("type mismatch\n{:>13}(pair a b)\n{:>13} {0}", "Expected", "Got")]
+    #[error(
+        "type mismatch\n{expected:>13}(pair a b)\n{got:>13} {0}",
+        expected = "Expected",
+        got = "Got"
+    )]
     PairTypeMismatch(Type),
     #[error(
         "unexpected empty list\n{:>13} {}",
@@ -76,28 +88,37 @@ pub enum Error {
     NotAConstant(Value),
     #[error("The evaluation never reached a final state")]
     MachineNeverReachedDone,
-    #[error("integerToByteString encountered negative size\n{:>13} {0}", "Size")]
+    #[error(
+        "integerToByteString encountered negative size\n{label:>13} {0}",
+        label = "Size"
+    )]
     IntegerToByteStringNegativeSize(BigInt),
-    #[error("replicateByte encountered negative size\n{:>13} {0}", "Size")]
+    #[error(
+        "replicateByte encountered negative size\n{label:>13} {0}",
+        label = "Size"
+    )]
     ReplicateByteNegativeSize(BigInt),
-    #[error("integerToByteString encountered negative input\n{:>13} {0}", "Input")]
+    #[error(
+        "integerToByteString encountered negative input\n{label:>13} {0}",
+        label = "Input"
+    )]
     IntegerToByteStringNegativeInput(BigInt),
     #[error(
-        "bytes size beyond limit when converting from integer\n{:>13} {0}\n{:>13} {1}",
-        "Size",
-        "Maximum"
+        "bytes size beyond limit when converting from integer\n{size:>13} {0}\n{maximum:>13} {1}",
+        size = "Size",
+        maximum = "Maximum"
     )]
     IntegerToByteStringSizeTooBig(BigInt, i64),
     #[error(
-        "bytes size beyond limit when replicate byte\n{:>13} {0}\n{:>13} {1}",
-        "Size",
-        "Maximum"
+        "bytes size beyond limit when replicate byte\n{size:>13} {0}\n{maximum:>13} {1}",
+        size = "Size",
+        maximum = "Maximum"
     )]
     ReplicateByteSizeTooBig(BigInt, i64),
     #[error(
-        "bytes size below limit when converting from integer\n{:>13} {0}\n{:>13} {1}",
-        "Size",
-        "Minimum"
+        "bytes size below limit when converting from integer\n{size:>13} {0}\n{minimum:>13} {1}",
+        size = "Size",
+        minimum = "Minimum"
     )]
     IntegerToByteStringSizeTooSmall(BigInt, usize),
     #[error("Decoding utf8")]
@@ -113,8 +134,8 @@ pub enum Error {
     )]
     ByteStringOutOfBounds(BigInt, Vec<u8>),
     #[error(
-        "attempt to consByteString something than isn't a byte between [0-255]\n{:>13} {0}",
-        "Found"
+        "attempt to consByteString something than isn't a byte between [0-255]\n{label:>13} {0}",
+        label = "Found"
     )]
     ByteStringConsNotAByte(BigInt),
     #[error("divide By Zero: {0} / {1}")]
@@ -126,9 +147,9 @@ pub enum Error {
     #[error("Ed25519S Signature should be 64 bytes but it was {0}")]
     UnexpectedEd25519SignatureLength(usize),
     #[error(
-      "failed to deserialise PlutusData using {0}\n{:>13} {}",
-      "Value",
-      indent(redacted(format!("{:#?}", .1), 10)),
+      "failed to deserialise PlutusData using {0}\n{label:>13} {value}",
+      label = "Value",
+      value = indent(redacted(format!("{:#?}", .1), 10)),
     )]
     DeserialisationError(String, Value),
     #[error("integer overflow")]

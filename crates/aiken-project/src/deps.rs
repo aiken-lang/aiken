@@ -173,6 +173,31 @@ where
 
     local.remove_extra_packages(&manifest, root_path)?;
 
+    let _cache_lock = if local
+        .missing_local_packages(&manifest.packages, &project_name)
+        .is_empty()
+    {
+        None
+    } else {
+        let packages_cache = paths::packages_cache();
+
+        fs::create_dir_all(&packages_cache)?;
+
+        let mut cache_lock = fslock::LockFile::open(&packages_cache.join(".package-cache.lock"))
+            .expect("Package Cache Lock Creation");
+
+        if !cache_lock
+            .try_lock_with_pid()
+            .expect("Trying package cache locking")
+        {
+            event_listener.handle_event(Event::WaitingForPackageCacheLock);
+
+            cache_lock.lock_with_pid().expect("Package cache locking")
+        }
+
+        Some(cache_lock)
+    };
+
     runtime.block_on(fetch_missing_packages(
         &mut manifest,
         &local,

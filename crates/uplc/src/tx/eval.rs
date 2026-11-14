@@ -12,11 +12,11 @@ use crate::{
         script_context::{DataLookupTable, PlutusScript, TxInfoV1, TxInfoV2, TxInfoV3},
     },
 };
-use pallas_primitives::conway::{CostModel, CostModels, ExUnits, Language, MintedTx, Redeemer};
+use pallas_primitives::conway::{CostModel, CostModels, ExUnits, Language, Redeemer, Tx};
 use std::collections::HashMap;
 
 pub fn eval_redeemer(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
@@ -38,7 +38,7 @@ pub fn eval_redeemer(
 
 #[allow(clippy::too_many_arguments)]
 pub fn eval_redeemer_with_protocol(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
@@ -70,19 +70,19 @@ pub fn eval_redeemer_with_protocol(
 /// transaction's redeemers run, so its size is bounded by the transaction and
 /// its resolved inputs, which the caller already holds in memory.
 #[derive(Default)]
-pub(crate) struct TxEvalCache {
-    tx_infos: [Option<(TxInfo, Data)>; 3],
+pub(crate) struct TxEvalCache<'a> {
+    tx_infos: [Option<(TxInfo<'a>, Data)>; 3],
     programs: HashMap<Vec<u8>, Program<NamedDeBruijn>>,
 }
 
-impl TxEvalCache {
+impl<'a> TxEvalCache<'a> {
     fn tx_info(
         &mut self,
         lang: &Language,
-        tx: &MintedTx,
-        utxos: &[ResolvedInput],
+        tx: &Tx<'a>,
+        utxos: &[ResolvedInput<'a>],
         slot_config: &SlotConfig,
-    ) -> Result<&(TxInfo, Data), Error> {
+    ) -> Result<&(TxInfo<'a>, Data), Error> {
         let slot = match lang {
             Language::PlutusV1 => 0,
             Language::PlutusV2 => 1,
@@ -120,7 +120,7 @@ impl TxEvalCache {
 
 #[allow(clippy::too_many_arguments)]
 fn eval_redeemer_with_optional_protocol(
-    tx: &MintedTx,
+    tx: &Tx,
     utxos: &[ResolvedInput],
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
@@ -143,16 +143,16 @@ fn eval_redeemer_with_optional_protocol(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn eval_redeemer_cached(
-    tx: &MintedTx,
-    utxos: &[ResolvedInput],
+pub(crate) fn eval_redeemer_cached<'a>(
+    tx: &Tx<'a>,
+    utxos: &[ResolvedInput<'a>],
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
     lookup_table: &DataLookupTable,
     cost_mdls_opt: Option<&CostModels>,
     initial_budget: &ExBudget,
     protocol_major_version: Option<u16>,
-    cache: &mut TxEvalCache,
+    cache: &mut TxEvalCache<'a>,
 ) -> Result<(Redeemer, EvalResult), Error> {
     #[allow(clippy::too_many_arguments)]
     fn do_eval_redeemer(

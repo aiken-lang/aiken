@@ -72,7 +72,10 @@ pub enum Error {
     NoGuardrailScriptForProcedure,
     #[error("cost model not found for language\n{:>13} {:?}", "Language", .0)]
     CostModelNotFound(Language),
-    #[error("unsupported era, please use Conway\n{:>13} {0}", "Decoder error")]
+    #[error(
+        "unsupported era, please use Conway\n{label:>13} {0}",
+        label = "Decoder error"
+    )]
     WrongEra(#[from] pallas_codec::minicbor::decode::Error),
     #[error("byron address not allowed when PlutusV2 scripts are present")]
     ByronAddressNotAllowed,

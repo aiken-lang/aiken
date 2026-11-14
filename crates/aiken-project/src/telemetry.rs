@@ -61,6 +61,7 @@ pub enum Event {
         plain_numbers: bool,
     },
     WaitingForBuildDirLock,
+    WaitingForPackageCacheLock,
     ResolvingPackages {
         name: String,
     },

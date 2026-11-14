@@ -31,10 +31,11 @@ fn zsh() -> miette::Result<()> {
 
     let home = std::env::var("HOME").expect("Environment variable 'HOME' not set but needed.");
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir)
-        .expect("Could not find completion directory {prefix_dir} in xdg directories.");
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir);
 
-    let data_home = xdg_dirs.get_data_home();
+    let data_home = xdg_dirs
+        .get_data_home()
+        .expect("Could not find completion directory {prefix_dir} in xdg directories.");
 
     let mut completion_file: File;
 
@@ -98,8 +99,7 @@ fn fish() -> miette::Result<()> {
     // NOTE: Installing completion on ~/.confi/fish/completions
     let prefix_dir = "fish/completions";
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir)
-        .expect("Could not find completion directory {prefix_dir} in xdg directories.");
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir);
 
     let completion_path = xdg_dirs
         .place_config_file("aiken.fish")
@@ -120,12 +120,13 @@ fn bash() -> miette::Result<()> {
 
     let aiken_bash = "aiken.completion.bash";
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir)
-        .expect("Could not find completion directory {prefix_dir} in xdg directories.");
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir);
 
     let home = std::env::var("HOME").expect("Environment variable 'HOME' not set but needed.");
 
-    let config_home = xdg_dirs.get_config_home();
+    let config_home = xdg_dirs
+        .get_config_home()
+        .expect("Could not find completion directory {prefix_dir} in xdg directories.");
 
     let completion_path = xdg_dirs
         .place_config_file(aiken_bash)

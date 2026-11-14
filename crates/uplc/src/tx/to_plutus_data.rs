@@ -4,25 +4,26 @@ use super::script_context::{
 use crate::{
     ast::Data,
     machine::runtime::{ANY_TAG, convert_constr_to_tag},
-    tx::script_context::from_alonzo_output,
+    tx::script_context::{from_alonzo_output, sort_reward_accounts, sort_stake_credentials},
 };
+use itertools::Itertools;
 use num_integer::Integer;
 use pallas_addresses::{
     Address, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload,
 };
 use pallas_codec::utils::{
-    AnyUInt, Bytes, Int, KeyValuePairs, MaybeIndefArray, NonEmptyKeyValuePairs, Nullable,
-    PositiveCoin,
+    AnyUInt, Bytes, Int, KeepRaw, KeyValuePairs, MaybeIndefArray, Nullable, PositiveCoin,
 };
 use pallas_crypto::hash::Hash;
 use pallas_primitives::conway::{
     AssetName, BigInt, Certificate, Coin, Constitution, Constr, DRep, DRepVotingThresholds,
-    DatumOption, ExUnitPrices, ExUnits, GovAction, GovActionId, Mint, PlutusData, PolicyId,
-    PoolVotingThresholds, ProposalProcedure, ProtocolParamUpdate, PseudoScript, RationalNumber,
+    DatumOption, ExUnitPrices, ExUnits, GovAction, GovActionId, Mint, NativeScript, PlutusData,
+    PolicyId, PoolVotingThresholds, ProposalProcedure, ProtocolParamUpdate, RationalNumber,
     Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Value, Vote, Voter,
     VotingProcedure,
 };
 use pallas_traverse::ComputeHash;
+use std::collections::BTreeMap;
 
 fn wrap_multiple_with_constr(index: u64, data: Vec<PlutusData>) -> PlutusData {
     let converted = convert_constr_to_tag(index);
@@ -252,14 +253,14 @@ impl<A: ToPlutusData> ToPlutusData for Option<A> {
     }
 }
 
-impl ToPlutusData for Option<DatumOption> {
+impl ToPlutusData for Option<KeepRaw<'_, DatumOption<'_>>> {
     // NoOutputDatum = 0 | OutputDatumHash = 1 | OutputDatum = 2
     fn to_plutus_data(&self) -> PlutusData {
-        match self {
+        match self.as_deref() {
             None => empty_constr(0),
             Some(option) => match option {
                 DatumOption::Hash(hash) => wrap_with_constr(1, hash.to_plutus_data()),
-                DatumOption::Data(data) => wrap_with_constr(2, data.0.clone()),
+                DatumOption::Data(data) => wrap_with_constr(2, PlutusData::clone(&data.0)),
             },
         }
     }
@@ -387,8 +388,8 @@ fn value_to_plutus_data<'a, I, Q>(
     mut data_vec: Vec<(PlutusData, PlutusData)>,
 ) -> PlutusData
 where
-    I: Iterator<Item = &'a (PolicyId, NonEmptyKeyValuePairs<AssetName, Q>)>,
-    Q: Clone,
+    I: Iterator<Item = (&'a PolicyId, &'a BTreeMap<AssetName, Q>)>,
+    Q: Clone + 'a,
 {
     for (policy_id, assets) in mint {
         let mut assets_vec = vec![];
@@ -414,20 +415,20 @@ fn coin_to_plutus_data(coin: &Coin) -> (PlutusData, PlutusData) {
     )
 }
 
-impl ToPlutusData for ScriptRef {
+impl ToPlutusData for ScriptRef<'_> {
     fn to_plutus_data(&self) -> PlutusData {
         match &self {
-            PseudoScript::NativeScript(native_script) => {
-                native_script.compute_hash().to_plutus_data()
+            ScriptRef::NativeScript(native_script) => {
+                NativeScript::compute_hash(native_script).to_plutus_data()
             }
-            PseudoScript::PlutusV1Script(plutus_v1) => plutus_v1.compute_hash().to_plutus_data(),
-            PseudoScript::PlutusV2Script(plutus_v2) => plutus_v2.compute_hash().to_plutus_data(),
-            PseudoScript::PlutusV3Script(plutus_v3) => plutus_v3.compute_hash().to_plutus_data(),
+            ScriptRef::PlutusV1Script(plutus_v1) => plutus_v1.compute_hash().to_plutus_data(),
+            ScriptRef::PlutusV2Script(plutus_v2) => plutus_v2.compute_hash().to_plutus_data(),
+            ScriptRef::PlutusV3Script(plutus_v3) => plutus_v3.compute_hash().to_plutus_data(),
         }
     }
 }
 
-impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<TransactionOutput>>> {
+impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<TransactionOutput<'_>>>> {
     fn to_plutus_data(&self) -> PlutusData {
         list_data(
             self.0
@@ -439,7 +440,7 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<Transacti
     }
 }
 
-impl ToPlutusData for WithZeroAdaAsset<'_, Vec<TransactionOutput>> {
+impl ToPlutusData for WithZeroAdaAsset<'_, Vec<TransactionOutput<'_>>> {
     fn to_plutus_data(&self) -> PlutusData {
         list_data(
             self.0
@@ -450,7 +451,7 @@ impl ToPlutusData for WithZeroAdaAsset<'_, Vec<TransactionOutput>> {
     }
 }
 
-impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, TransactionOutput>> {
+impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, TransactionOutput<'_>>> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0.0 {
             TransactionOutput::Legacy(legacy_output) => {
@@ -465,8 +466,8 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, TransactionOu
                         .unwrap()
                         .to_plutus_data(),
                     WithZeroAdaAsset(&post_alonzo_output.value).to_plutus_data(),
-                    match post_alonzo_output.datum_option {
-                        Some(DatumOption::Hash(hash)) => Some(hash).to_plutus_data(),
+                    match post_alonzo_output.datum_option.as_deref() {
+                        Some(DatumOption::Hash(hash)) => Some(*hash).to_plutus_data(),
                         _ => None::<Hash<32>>.to_plutus_data(),
                     },
                 ],
@@ -475,7 +476,7 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, TransactionOu
     }
 }
 
-impl ToPlutusData for WithZeroAdaAsset<'_, TransactionOutput> {
+impl ToPlutusData for WithZeroAdaAsset<'_, TransactionOutput<'_>> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
             TransactionOutput::Legacy(legacy_output) => {
@@ -500,7 +501,7 @@ impl ToPlutusData for WithZeroAdaAsset<'_, TransactionOutput> {
     }
 }
 
-impl ToPlutusData for TransactionOutput {
+impl ToPlutusData for TransactionOutput<'_> {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             TransactionOutput::Legacy(legacy_output) => {
@@ -816,7 +817,7 @@ impl ToPlutusData for TimeRange {
 }
 
 impl<'a> ToPlutusData
-    for WithOptionDatum<'a, WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo>>>>
+    for WithOptionDatum<'a, WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo<'_>>>>>
 {
     fn to_plutus_data(&self) -> PlutusData {
         list_data(
@@ -833,7 +834,7 @@ impl<'a> ToPlutusData
     }
 }
 
-impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo>>> {
+impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo<'_>>>> {
     fn to_plutus_data(&self) -> PlutusData {
         list_data(
             self.0
@@ -845,7 +846,7 @@ impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<
     }
 }
 
-impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, TxInInfo>> {
+impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, TxInInfo<'_>>> {
     fn to_plutus_data(&self) -> PlutusData {
         wrap_multiple_with_constr(
             0,
@@ -858,7 +859,7 @@ impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, TxIn
 }
 
 impl<'a> ToPlutusData
-    for WithOptionDatum<'a, WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, TxInInfo>>>
+    for WithOptionDatum<'a, WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, TxInInfo<'_>>>>
 {
     fn to_plutus_data(&self) -> PlutusData {
         wrap_multiple_with_constr(
@@ -871,7 +872,7 @@ impl<'a> ToPlutusData
     }
 }
 
-impl ToPlutusData for TxInInfo {
+impl ToPlutusData for TxInInfo<'_> {
     fn to_plutus_data(&self) -> PlutusData {
         wrap_multiple_with_constr(
             0,
@@ -1174,6 +1175,7 @@ impl ToPlutusData for GovAction {
                     KeyValuePairs::from(
                         withdrawals
                             .iter()
+                            .sorted_by(|(a, _), (b, _)| sort_reward_accounts(a, b))
                             .map(|(reward_account, amount)| {
                                 (
                                     Address::from_bytes(reward_account)
@@ -1196,7 +1198,14 @@ impl ToPlutusData for GovAction {
                     vec![
                         previous_action.to_plutus_data(),
                         removed.to_plutus_data(),
-                        added.to_plutus_data(),
+                        KeyValuePairs::from(
+                            added
+                                .iter()
+                                .sorted_by(|(a, _), (b, _)| sort_stake_credentials(a, b))
+                                .map(|(credential, epoch)| (credential.clone(), *epoch))
+                                .collect::<Vec<_>>(),
+                        )
+                        .to_plutus_data(),
                         quorum.to_plutus_data(),
                     ],
                 )
@@ -1335,7 +1344,7 @@ where
     }
 }
 
-impl ToPlutusData for TxInfo {
+impl ToPlutusData for TxInfo<'_> {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             TxInfo::V1(tx_info) => wrap_multiple_with_constr(
@@ -1399,7 +1408,7 @@ impl ToPlutusData for TxInfo {
     }
 }
 
-impl TxInfo {
+impl TxInfo<'_> {
     /// The script context of `redeemer` as Data, given this transaction info
     /// already converted to Data. It is the Data of the `ScriptContext` that
     /// `into_script_context` builds, without converting the transaction info
@@ -1448,7 +1457,7 @@ impl TxInfo {
     }
 }
 
-impl ToPlutusData for ScriptContext {
+impl ToPlutusData for ScriptContext<'_> {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             ScriptContext::V1V2 { tx_info, purpose } => wrap_multiple_with_constr(
