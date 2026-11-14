@@ -5580,6 +5580,60 @@ fn when_tagged_opaque_single_field_literal_and_wildcard() {
 }
 
 #[test]
+fn when_tagged_opaque_single_field_generic() {
+    let src = r#"
+        @tag(5)
+        opaque type Wrapper<a> {
+          inner: a,
+        }
+
+        fn classify(w: Wrapper<Option<Int>>) -> Int {
+          when w is {
+            Wrapper { inner: Some(n) } -> n
+            Wrapper { inner: None } -> 0
+          }
+        }
+
+        test foo() {
+          and {
+            classify(Wrapper { inner: Some(7) }) == 7,
+            classify(Wrapper { inner: None }) == 0,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn when_tagged_opaque_single_field_nested() {
+    let src = r#"
+        @tag(5)
+        opaque type Foo {
+          inner: Int,
+        }
+
+        fn classify(pair: (Foo, Option<Foo>)) -> Int {
+          when pair is {
+            (Foo { inner: x }, Some(Foo { inner: 0 })) -> x
+            (Foo { inner: x }, Some(Foo { inner: y })) -> x + y
+            (_, None) -> -1
+          }
+        }
+
+        test foo() {
+          and {
+            classify((Foo { inner: 3 }, Some(Foo { inner: 0 }))) == 3,
+            classify((Foo { inner: 3 }, Some(Foo { inner: 4 }))) == 7,
+            classify((Foo { inner: 3 }, None)) == -1,
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
 fn opaque_value_in_test() {
     let src = r#"
         const dat: Dat = {
