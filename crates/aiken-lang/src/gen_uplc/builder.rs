@@ -853,7 +853,9 @@ pub fn list_access_to_uplc(
     // If we cut off at least one element then that was tail and possibly some heads
     let tail_wasnt_cutoff = tail_present && no_tailing_discards.len() == names_len;
 
-    let tail_name = |id| format!("tail_id_{id}");
+    // Internal names start with `__`; user identifiers can't start with `_`, so they can't clash
+    // with the names the interner gives user variables (`{name}_id_{n}`).
+    let tail_name = |id| format!("__tail_{id}");
 
     let head_item = |name, tipo: &Rc<Type>, tail_name: &str, then: Term<Name>| {
         if name == "_" {

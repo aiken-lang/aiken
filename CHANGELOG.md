@@ -20,6 +20,7 @@
 - **aiken-lang**: Fix variables bound by a `when` clause receiving each other's values when the clause is reached through branches that test the patterns in a different order. Scripts containing such a clause may compile to a different hash, including those where the mix-up had no visible effect. @logicalmechanism
 - **aiken-project**: Fix a crash when two `aiken` commands download the same package at once. @MicroProofs
 - **aiken-lang**: Fix `when` on a list selecting the wrong clause, or crashing the compiler, when its clauses use spreads of different lengths. Scripts containing such a `when` may compile to a different hash, including those that already behaved correctly. @logicalmechanism
+- **aiken-lang**: Fix user code clashing with names the code generator uses for its own variables: a variable named `acc_var` inside an `if ... is` branch, a variable named `tail` after a list, tuple or record is destructured (for example in a `[x, ..tail]` loop), and a record field labelled `then_delayed` or `otherwise_delayed` when the record is checked with `expect` or `if ... is`. The script could fail, or run with the wrong value and return a wrong result, and compilation could crash in the optimiser. Only scripts that use these names this way can compile to a different hash. @logicalmechanism
 
 ## v1.1.24 - 2026-09-26
 

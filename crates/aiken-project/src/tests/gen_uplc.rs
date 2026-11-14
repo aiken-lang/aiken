@@ -5320,6 +5320,199 @@ fn expect_head_cast_data_with_tail() {
 }
 
 #[test]
+fn if_is_branch_reads_variable_named_acc_var() {
+    let src = r#"
+        fn add(d: Data, acc_var: Int) -> Int {
+          if d is x: Int {
+            x + acc_var
+          } else {
+            0
+          }
+        }
+
+        fn guarded(d: Data, acc_var: fn() -> Bool) -> Bool {
+          if d is _x: Int {
+            acc_var()
+          } else {
+            True
+          }
+        }
+
+        test foo() {
+          and {
+            add(as_data(1), 10) == 11,
+            !guarded(as_data(1), fn() { False }),
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn list_loop_reads_spread_named_tail() {
+    let src = r#"
+        type Inner {
+          v: Int,
+          w: Int,
+        }
+
+        type Outer {
+          inner: Inner,
+          n: Int,
+        }
+
+        fn total(xs: List<Outer>) -> Int {
+          when xs is {
+            [] -> 0
+            [x, ..tail] -> {
+              let Outer { inner, n } = x
+              let Inner { v, w } = inner
+              let (lo, hi) = (v, w)
+              n + lo + hi + total(tail)
+            }
+          }
+        }
+
+        test foo() {
+          let xs =
+            [
+              Outer { inner: Inner { v: 1, w: 1 }, n: 1 },
+              Outer { inner: Inner { v: 2, w: 2 }, n: 2 },
+            ]
+          total(xs) == 9
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn destructuring_reads_list_named_tail() {
+    let src = r#"
+        fn first_is_positive(tail: List<Int>, header: List<Int>) -> Bool {
+          expect [_version, _flags] = header
+          when tail is {
+            [] -> True
+            [x, ..] -> x > 0
+          }
+        }
+
+        test foo() {
+          !first_is_positive([-5], [1, 2])
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn destructuring_reads_variable_named_tail_at_any_position() {
+    // Whether a `tail` variable clashed depended on how names were numbered, so try it after a
+    // varying number of other parameters, with a list, a tuple and a record.
+    let shapes = [
+        r#"
+        fn sum(PARAMStail: Int, xs: List<Int>) -> Int {
+          expect [a, b, c] = xs
+          a + b + c + tail
+        }
+
+        test foo() {
+          sum(ARGS100, [1, 2, 3]) == 106
+        }
+        "#,
+        r#"
+        fn sum(PARAMStail: Int, t: (Int, Int)) -> Int {
+          let (a, b) = t
+          a + b + tail
+        }
+
+        test foo() {
+          sum(ARGS100, (1, 2)) == 103
+        }
+        "#,
+        r#"
+        type Point {
+          x: Int,
+          y: Int,
+        }
+
+        fn sum(PARAMStail: Int, p: Point) -> Int {
+          let Point { x, y } = p
+          x + y + tail
+        }
+
+        test foo() {
+          sum(ARGS100, Point { x: 1, y: 2 }) == 103
+        }
+        "#,
+    ];
+
+    for shape in shapes {
+        for extra in 0..6 {
+            let params: String = (0..extra).map(|i| format!("p{i}: Int, ")).collect();
+            let src = shape
+                .replace("PARAMS", &params)
+                .replace("ARGS", &"0, ".repeat(extra));
+
+            assert_uplc_evaluates_successfully(&src);
+        }
+    }
+}
+
+#[test]
+fn expect_reads_fields_labelled_like_internal_names() {
+    let src = r#"
+        type Foo {
+          then_delayed: Int,
+        }
+
+        type Bar {
+          otherwise_delayed: Int,
+          b: Int,
+        }
+
+        type Other {
+          x: Int,
+          y: ByteArray,
+        }
+
+        test foo() {
+          let foo_data: Data = Foo { then_delayed: 1 }
+          let other_data: Data = Other { x: 1, y: "" }
+          expect foo: Foo = foo_data
+          and {
+            foo.then_delayed == 1,
+            if other_data is _bar: Bar {
+              False
+            } else {
+              True
+            },
+          }
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
+fn closure_over_variable_named_tail_compiles() {
+    let src = r#"
+        fn shift(tail: Int, xs: List<Int>) -> Int {
+          let g = fn(v) { v + tail }
+          expect [a, b] = xs
+          g(a) + g(b) - tail
+        }
+
+        test foo() {
+          shift(100, [1, 2]) == 103
+        }
+    "#;
+
+    assert_uplc_evaluates_successfully(src);
+}
+
+#[test]
 fn test_init_3() {
     let src = r#"
 
