@@ -145,6 +145,9 @@ pub enum Error {
     )]
     UnableToResolvePackage { package: Box<Package> },
 
+    #[error("I couldn't find an 'aiken.toml' manifest in package '{package}'.")]
+    MissingPackageSubdir { package: Box<Package> },
+
     #[error("I couldn't parse the provided stake address.")]
     MalformedStakeAddress {
         error: Box<Option<pallas_addresses::Error>>,
@@ -367,6 +370,7 @@ impl ExtraData for Error {
             | Error::ZipExtract { .. }
             | Error::JoinError { .. }
             | Error::UnknownPackageVersion { .. }
+            | Error::MissingPackageSubdir { .. }
             | Error::UnableToResolvePackage { .. }
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
@@ -399,6 +403,7 @@ impl GetSource for Error {
             | Error::ZipExtract(_)
             | Error::JoinError(_)
             | Error::UnknownPackageVersion { .. }
+            | Error::MissingPackageSubdir { .. }
             | Error::UnableToResolvePackage { .. }
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
@@ -432,6 +437,7 @@ impl GetSource for Error {
             | Error::ZipExtract(_)
             | Error::JoinError(_)
             | Error::UnknownPackageVersion { .. }
+            | Error::MissingPackageSubdir { .. }
             | Error::UnableToResolvePackage { .. }
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
@@ -480,6 +486,7 @@ impl Diagnostic for Error {
             Error::UnknownPackageVersion { .. } => {
                 Some(boxed(Box::new("aiken::packages::resolve")))
             }
+            Error::MissingPackageSubdir { .. } => Some(boxed(Box::new("aiken::packages::subdir"))),
             Error::UnableToResolvePackage { .. } => {
                 Some(boxed(Box::new("aiken::package::download")))
             }
@@ -534,6 +541,9 @@ impl Diagnostic for Error {
             ))),
             Error::UnknownPackageVersion { .. } => Some(Box::new(
                 "Perhaps, double-check the package repository and version?",
+            )),
+            Error::MissingPackageSubdir { .. } => Some(Box::new(
+                "Check that 'subdir' points to a directory containing aiken.toml at the selected repository version.",
             )),
             Error::UnableToResolvePackage { .. } => Some(Box::new(
                 "The network is unavailable and the package isn't in the local cache either. Try connecting to the Internet so I can look it up?",
@@ -593,6 +603,7 @@ impl Diagnostic for Error {
             | Error::ZipExtract(_)
             | Error::JoinError(_)
             | Error::UnknownPackageVersion { .. }
+            | Error::MissingPackageSubdir { .. }
             | Error::UnableToResolvePackage { .. }
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
@@ -626,6 +637,7 @@ impl Diagnostic for Error {
             | Error::ZipExtract(_)
             | Error::JoinError(_)
             | Error::UnknownPackageVersion { .. }
+            | Error::MissingPackageSubdir { .. }
             | Error::UnableToResolvePackage { .. }
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
@@ -655,6 +667,7 @@ impl Diagnostic for Error {
             | Error::ZipExtract { .. }
             | Error::JoinError { .. }
             | Error::UnknownPackageVersion { .. }
+            | Error::MissingPackageSubdir { .. }
             | Error::UnableToResolvePackage { .. }
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
@@ -687,6 +700,7 @@ impl Diagnostic for Error {
             | Error::ZipExtract { .. }
             | Error::JoinError { .. }
             | Error::UnknownPackageVersion { .. }
+            | Error::MissingPackageSubdir { .. }
             | Error::UnableToResolvePackage { .. }
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }

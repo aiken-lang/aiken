@@ -9,6 +9,7 @@ pub mod github;
 pub mod module;
 pub mod options;
 pub mod package_name;
+pub mod package_subdir;
 pub mod paths;
 pub mod pretty;
 pub mod telemetry;
@@ -712,12 +713,15 @@ where
         let manifest = deps::download(&self.event_listener, &self.root, &self.config)?;
 
         for package in manifest.packages {
-            let lib = self.root.join(paths::build_deps_package(&package.name));
+            let lib = self.root.join(paths::build_deps_package(
+                &package.name,
+                package.subdir.as_ref(),
+            ));
 
             self.event_listener
                 .handle_event(Event::StartingCompilation {
                     root: lib.clone(),
-                    name: package.name.to_string(),
+                    name: package.to_string(),
                     version: package.version.clone(),
                 });
 

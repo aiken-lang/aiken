@@ -2,6 +2,7 @@ use aiken_project::{
     config::{Dependency, Platform, ProjectConfig},
     error::Warning,
     package_name::PackageName,
+    package_subdir::PackageSubdir,
     pretty,
 };
 use miette::IntoDiagnostic;
@@ -23,6 +24,10 @@ pub struct Args {
     #[clap(long)]
     pub version: String,
 
+    /// Directory containing aiken.toml within the repository (for example, onchain).
+    #[clap(long)]
+    pub subdir: Option<PackageSubdir>,
+
     #[clap(hide = true, long)]
     pub overwrite: bool,
 }
@@ -34,6 +39,7 @@ pub fn exec(args: Args) -> miette::Result<()> {
         name: PackageName::from_str_unchecked(&args.package)?,
         version: args.version,
         source: Platform::Github,
+        subdir: args.subdir,
     };
 
     let config = match ProjectConfig::load(&root) {
@@ -43,6 +49,39 @@ pub fn exec(args: Args) -> miette::Result<()> {
             process::exit(1);
         }
     };
+
+    // An upgrade must target an existing entry. Otherwise a missing or wrong
+    // --subdir would silently add a second dependency on the same repository.
+    if args.overwrite {
+        let entries: Vec<_> = config
+            .dependencies
+            .iter()
+            .filter(|existing| existing.name == dependency.name)
+            .collect();
+
+        if !entries.is_empty() && !entries.iter().any(|e| e.subdir == dependency.subdir) {
+            let location = match &dependency.subdir {
+                Some(subdir) => format!("in subdirectory '{subdir}'"),
+                None => "at the repository root".to_string(),
+            };
+            let options = entries
+                .iter()
+                .map(|e| match &e.subdir {
+                    Some(subdir) => format!("--subdir {subdir}"),
+                    None => "no --subdir".to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            miette::bail!(
+                help = format!(
+                    "This project depends on '{}' with: {options}.",
+                    dependency.name
+                ),
+                "I couldn't find a dependency on '{}' {location}.",
+                dependency.name
+            );
+        }
+    }
 
     eprintln!(
         "{} {}",
