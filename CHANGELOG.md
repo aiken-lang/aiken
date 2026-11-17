@@ -5,6 +5,7 @@
 ### Added
 
 - **uplc**: Make `TxInfo::script_context_data` public, so that callers evaluating several redeemers of one transaction can convert the transaction info to `Data` once and share it between every script context. @colll78
+- **uplc**: Add `Program::lower`, which makes a generated program runnable without optimizing it, so it can be compared with the optimized one. @MicroProofs
 
 ### Changed
 
@@ -20,6 +21,10 @@
 - **aiken-lang**: Fix variables bound by a `when` clause receiving each other's values when the clause is reached through branches that test the patterns in a different order. Scripts containing such a clause may compile to a different hash, including those where the mix-up had no visible effect. @logicalmechanism
 - **aiken-project**: Fix a crash when two `aiken` commands download the same package at once. @MicroProofs
 - **aiken-lang**: Fix `when` on a list selecting the wrong clause, or crashing the compiler, when its clauses use spreads of different lengths. Scripts containing such a `when` may compile to a different hash, including those that already behaved correctly. @logicalmechanism
+- **uplc**: Fix the optimizer moving a failing expression, such as an `expect`, into a function defined after it, so that it ran only when the function was called. Scripts can compile to a different hash, for example validators with a `ByteArray` parameter, even when they have no such expression. @MicroProofs
+- **uplc**: Fix a compiler crash (`FreeUnique`) on a three-argument builtin such as `slice_bytearray` called several times with the same arguments, when its first argument isn't a constant. @MicroProofs
+- **uplc**: Fix `aiken build` crashing with "BLS12-381 G1 points are not supported for flat encoding" on a script that computes a BLS12-381 point from constants, such as `bls12_381_g1_hash_to_group(#"abcd", #"")`, while `aiken check` passed and reported too low a cost. @MicroProofs
+- **uplc**: Fix the UPLC pretty printer writing the type `bls12_381_G2_element` as `bls12_381_G1_element`. @MicroProofs
 
 ## v1.1.24 - 2026-09-26
 

@@ -83,6 +83,40 @@ impl Default for IdGen {
 
 pub const NO_INLINE: &str = "__no_inline__";
 
+/// Whether evaluating `term` can't fail and does nothing: a variable, a constant, a lambda, a
+/// delay, or a builtin forced and applied to values no more than it takes, short of running.
+fn is_value(term: &Term<Name>) -> bool {
+    let mut head = term;
+    let mut forces = 0;
+    let mut args = 0;
+
+    loop {
+        match head {
+            Term::Apply { function, argument } if is_value(argument) => {
+                args += 1;
+                head = function;
+            }
+            Term::Force(inner) => {
+                forces += 1;
+                head = inner;
+            }
+            _ => break,
+        }
+    }
+
+    match head {
+        Term::Builtin(builtin) => {
+            forces <= builtin.force_count() as usize
+                && (args == 0 || forces == builtin.force_count() as usize)
+                && args < builtin.arity()
+        }
+        Term::Var(_) | Term::Constant(_) | Term::Lambda { .. } | Term::Delay(_) => {
+            forces == 0 && args == 0
+        }
+        _ => false,
+    }
+}
+
 #[derive(PartialEq, PartialOrd, Default, Debug, Clone)]
 pub struct VarLookup {
     found: bool,
@@ -516,26 +550,6 @@ impl DefaultFunction {
                 })
             }
 
-            DefaultFunction::Bls12_381_G1_Equal | DefaultFunction::Bls12_381_G1_Add => {
-                arg_stack.iter().all(|arg| {
-                    if let Term::Constant(c) = arg {
-                        matches!(c.as_ref(), Constant::Bls12_381G1Element(_))
-                    } else {
-                        false
-                    }
-                })
-            }
-
-            DefaultFunction::Bls12_381_G2_Equal | DefaultFunction::Bls12_381_G2_Add => {
-                arg_stack.iter().all(|arg| {
-                    if let Term::Constant(c) = arg {
-                        matches!(c.as_ref(), Constant::Bls12_381G2Element(_))
-                    } else {
-                        false
-                    }
-                })
-            }
-
             DefaultFunction::ConstrData => {
                 if let (Term::Constant(c), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
                     if let (Constant::Integer(i), Constant::ProtoList(Type::Data, _)) =
@@ -545,24 +559,6 @@ impl DefaultFunction {
                     } else {
                         false
                     }
-                } else {
-                    false
-                }
-            }
-
-            DefaultFunction::Bls12_381_G1_HashToGroup
-            | DefaultFunction::Bls12_381_G2_HashToGroup => arg_stack.iter().all(|arg| {
-                if let Term::Constant(c) = arg {
-                    matches!(c.as_ref(), Constant::ByteString(..))
-                } else {
-                    false
-                }
-            }),
-
-            DefaultFunction::Bls12_381_G1_ScalarMul | DefaultFunction::Bls12_381_G2_ScalarMul => {
-                if let (Term::Constant(c1), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
-                    matches!(c1.as_ref(), Constant::Integer(..))
-                        && matches!(c2.as_ref(), Constant::Bls12_381G1Element(..))
                 } else {
                     false
                 }
@@ -638,6 +634,9 @@ impl DefaultFunction {
                 }
             }
 
+            // A builtin that returns a BLS12-381 point or Miller-loop result is never folded:
+            // the constant has no Flat encoding, and `bls381_compressor`, which turns point
+            // constants into `uncompress` calls, has already run.
             _ => false,
         }
     }
@@ -1902,6 +1901,20 @@ impl Term<Name> {
         let mut function_dependencies = vec![vec![]];
 
         loop {
+            // An unapplied lambda ends up above every binding collected so far. Stop before it
+            // when one of those bindings can fail, so that the failure isn't deferred into the
+            // lambda (or skipped when the lambda is never called).
+            if let Term::Lambda { body, .. } = current_term
+                && !matches!(arg_stack.last(), Some(Args::Apply(..)))
+                && function_groups
+                    .iter()
+                    .flatten()
+                    .any(|(_, arg)| !is_value(arg))
+            {
+                Rc::make_mut(body).split_body_lambda();
+                break;
+            }
+
             match current_term {
                 Term::Apply { function, argument } => {
                     current_term = Rc::make_mut(function);
@@ -2950,23 +2963,7 @@ impl Program<Name> {
                 term.remove_inlined_ids(id, vec![], scope, context);
             });
 
-        let mut term = program.term;
-
-        for (index, blst_p1) in context.blst_p1_list.into_iter().enumerate() {
-            let compressed = blst_p1.compress();
-
-            term = term
-                .lambda(format!("blst_p1_index_{index}"))
-                .apply(Term::bls12_381_g1_uncompress().apply(Term::byte_string(compressed)));
-        }
-
-        for (index, blst_p2) in context.blst_p2_list.into_iter().enumerate() {
-            let compressed = blst_p2.compress();
-
-            term = term
-                .lambda(format!("blst_p2_index_{index}"))
-                .apply(Term::bls12_381_g2_uncompress().apply(Term::byte_string(compressed)));
-        }
+        let mut term = bind_bls_constants(program.term, &context);
 
         for default_func in context.builtins_map.keys().sorted().cloned() {
             term = term.lambda(default_func.wrapped_name());
@@ -2980,18 +2977,11 @@ impl Program<Name> {
             });
         }
 
-        let mut program = Program {
+        Program {
             version: program.version,
             term,
-        };
-
-        let mut interner = CodeGenInterner::new();
-
-        interner.program(&mut program);
-
-        let program = Program::<NamedDeBruijn>::try_from(program).unwrap();
-
-        Program::<Name>::try_from(program).unwrap()
+        }
+        .intern()
     }
 
     pub fn multi_pass(self) -> (Self, Context) {
@@ -3056,17 +3046,7 @@ impl Program<Name> {
             },
         );
 
-        if context.integer_list_convert {
-            program.term = program.term.data_list_to_integer_list();
-        }
-
-        if context.g1_element_list_convert {
-            program.term = program.term.data_list_to_g1_element_list();
-        }
-
-        if context.g2_element_list_convert {
-            program.term = program.term.data_list_to_g2_element_list();
-        }
+        program.term = add_typed_list_converters(program.term, &context);
 
         program
     }
@@ -3079,35 +3059,52 @@ impl Program<Name> {
     }
 
     pub fn afterwards(self) -> Self {
-        let (mut program, context) =
-            self.traverse_uplc_with(true, false, &mut |id, term, arg_stack, scope, context| {
-                term.typed_list_convert_arg(id, arg_stack, scope, context);
-            });
+        let (program, context) = self.mark_typed_list_args();
 
-        program = program
+        let mut program = program
             .split_body_lambda_reducer()
             .traverse_uplc_with(true, false, &mut |id, term, _arg_stack, scope, context| {
                 term.case_constr_apply_reducer(id, vec![], scope, context);
             })
             .0;
 
-        if context.integer_list_convert {
-            program.term = program.term.data_list_to_integer_list();
-        }
+        program.term = add_typed_list_converters(program.term, &context);
 
-        if context.g1_element_list_convert {
-            program.term = program.term.data_list_to_g1_element_list();
-        }
+        program.intern()
+    }
 
-        if context.g2_element_list_convert {
-            program.term = program.term.data_list_to_g2_element_list();
-        }
+    /// The lowering every program generated by Aiken needs before it can be encoded and
+    /// run, without any of the optional rewrites: BLS point constants become uncompressed
+    /// byte strings, the `__no_inline__` wrappers go, and the typed-list builtins get the
+    /// adapters from `list data`. The optimizer must agree with this program.
+    pub fn lower(self) -> Self {
+        let (program, context) =
+            self.traverse_uplc_with(false, false, &mut |id, term, _arg_stack, scope, context| {
+                term.bls381_compressor(id, vec![], scope, context);
+            });
 
-        let mut interner = CodeGenInterner::new();
+        let program = Program {
+            version: program.version,
+            term: bind_bls_constants(program.term, &context),
+        };
 
-        interner.program(&mut program);
+        let (mut program, context) = program.clean_up_no_inlines().mark_typed_list_args();
 
-        let program = Program::<NamedDeBruijn>::try_from(program).unwrap();
+        program.term = add_typed_list_converters(program.term, &context);
+
+        program.intern()
+    }
+
+    fn mark_typed_list_args(self) -> (Self, Context) {
+        self.traverse_uplc_with(true, false, &mut |id, term, arg_stack, scope, context| {
+            term.typed_list_convert_arg(id, arg_stack, scope, context);
+        })
+    }
+
+    fn intern(mut self) -> Self {
+        CodeGenInterner::new().program(&mut self);
+
+        let program = Program::<NamedDeBruijn>::try_from(self).unwrap();
 
         Program::<Name>::try_from(program).unwrap()
     }
@@ -3173,11 +3170,16 @@ impl Program<Name> {
                                 id_vec
                             };
 
-                            while let Some(node) = id_vec.pop() {
-                                if !matches!(node.term, Term::Constant { .. }) {
-                                    continue;
-                                }
+                            // Only a prefix of constant arguments is hoisted: a prefix with any
+                            // other argument has no definition the longer ones could build on.
+                            if let Some(position) = id_vec
+                                .iter()
+                                .position(|node| !matches!(node.term, Term::Constant { .. }))
+                            {
+                                id_vec.truncate(position);
+                            }
 
+                            while let Some(node) = id_vec.pop() {
                                 let mut id_only_vec =
                                     id_vec.iter().map(|item| item.curried_id).collect_vec();
 
@@ -3338,6 +3340,41 @@ impl Program<Name> {
 
         self
     }
+}
+
+/// Binds the BLS points `bls381_compressor` collected to the uncompression of their
+/// compressed bytes, since flat encoding has no point constants.
+fn bind_bls_constants(mut term: Term<Name>, context: &Context) -> Term<Name> {
+    for (index, blst_p1) in context.blst_p1_list.iter().enumerate() {
+        term = term
+            .lambda(format!("blst_p1_index_{index}"))
+            .apply(Term::bls12_381_g1_uncompress().apply(Term::byte_string(blst_p1.compress())));
+    }
+
+    for (index, blst_p2) in context.blst_p2_list.iter().enumerate() {
+        term = term
+            .lambda(format!("blst_p2_index_{index}"))
+            .apply(Term::bls12_381_g2_uncompress().apply(Term::byte_string(blst_p2.compress())));
+    }
+
+    term
+}
+
+/// Defines the converters `typed_list_convert_arg` applied.
+fn add_typed_list_converters(mut term: Term<Name>, context: &Context) -> Term<Name> {
+    if context.integer_list_convert {
+        term = term.data_list_to_integer_list();
+    }
+
+    if context.g1_element_list_convert {
+        term = term.data_list_to_g1_element_list();
+    }
+
+    if context.g2_element_list_convert {
+        term = term.data_list_to_g2_element_list();
+    }
+
+    term
 }
 
 fn id_vec_function_to_var(func_name: &str, id_vec: &[usize]) -> String {

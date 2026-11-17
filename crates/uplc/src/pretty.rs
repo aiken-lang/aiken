@@ -423,7 +423,7 @@ impl Type {
                 .append(")"),
             Type::Data => RcDoc::text("data"),
             Type::Bls12_381G1Element => RcDoc::text("bls12_381_G1_element"),
-            Type::Bls12_381G2Element => RcDoc::text("bls12_381_G1_element"),
+            Type::Bls12_381G2Element => RcDoc::text("bls12_381_G2_element"),
             Type::Bls12_381MlResult => RcDoc::text("bls12_381_mlresult"),
             Type::Value => RcDoc::text("value"),
         }
