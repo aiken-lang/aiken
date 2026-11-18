@@ -36,16 +36,18 @@ impl LineNumbers {
 
     /// Get the line number for a byte index
     pub fn line_number(&self, byte_index: usize) -> Option<usize> {
-        self.line_starts
-            .binary_search(&byte_index)
-            .map(|l| Some(l + 1))
-            .unwrap_or_else(|next_index| {
-                if Some(next_index) >= self.last {
-                    None
-                } else {
-                    Some(next_index)
-                }
-            })
+        if self.line_starts.is_empty() || byte_index > self.length {
+            return None;
+        }
+        if self.last.is_some_and(|last| byte_index >= last) {
+            return Some(self.line_starts.len());
+        }
+        Some(
+            self.line_starts
+                .binary_search(&byte_index)
+                .map(|line| line + 1)
+                .unwrap_or_else(|next_line| next_line),
+        )
     }
 
     pub fn line_and_column_number(&self, byte_index: usize) -> Option<LineColumn> {
@@ -98,6 +100,25 @@ mod tests {
         let src = indoc! { r#""# };
         assert_line_column(src, 42, None);
         assert_line_column(src, 0, None);
+    }
+
+    #[test]
+    fn diagnostic_spans_include_single_line_eof() {
+        for src in ["//@ unclosed", "\nx", "a\nb", "λ"] {
+            let lines = LineNumbers::new(src);
+            let last_line = src.bytes().filter(|byte| *byte == b'\n').count() + 1;
+            assert_eq!(lines.line_number(src.len()), Some(last_line));
+            assert_eq!(lines.line_number(src.len() - 1), Some(last_line));
+            assert_eq!(lines.line_number(src.len() + 1), None);
+        }
+        assert_line_column(
+            "//@ unclosed",
+            12,
+            Some(LineColumn {
+                line: 1,
+                column: 13,
+            }),
+        );
     }
 
     #[test]

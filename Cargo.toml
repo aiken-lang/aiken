@@ -153,6 +153,7 @@ uplc = { path = 'crates/uplc', version = "1.1.24" }
 aiken-lang = { path = "crates/aiken-lang", version = "1.1.24" }
 aiken-lsp = { path = "crates/aiken-lsp", version = "1.1.24" }
 aiken-project = { path = 'crates/aiken-project', version = "1.1.24" }
+aiken-ual = { path = "crates/aiken-ual" }
 
 [profile.dev.package.insta]
 opt-level = 3

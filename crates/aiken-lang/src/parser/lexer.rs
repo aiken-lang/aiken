@@ -47,6 +47,10 @@ pub fn run(src: &str) -> Result<LexInfo, Vec<ParseError>> {
                     extra.comments.push(*span);
                     None
                 }
+                Token::AssuranceComment => {
+                    extra.assurance_comments.push(*span);
+                    None
+                }
                 Token::EmptyLine => {
                     extra.empty_lines.push(span.start);
                     None
@@ -336,12 +340,34 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         ))
     }
 
+    // Consume the preceding whitespace with the closer so a non-boundary '@//'
+    // remains opaque content. Newlines (including CRLF) satisfy the same rule.
+    let assurance_close = filter(|c: &char| c.is_whitespace()).ignore_then(just("@//"));
+    let assurance_content = choice((
+        just("//@").validate(|_, span, emit| {
+            emit(ParseError::nested_assurance_comment(span));
+        }),
+        assurance_close.not().ignored(),
+    ));
+    let assurance_comment = just("//@")
+        .ignore_then(assurance_content.repeated())
+        .then(assurance_close.or_not())
+        .validate(|(_, close), span, emit| {
+            if close.is_none() {
+                // The delimiter-inclusive span ends at the final source byte.
+                emit(ParseError::unterminated_assurance_comment(span));
+            }
+            Token::AssuranceComment
+        })
+        .map_with_span(|token, span| (token, span));
+
     let newlines = choice((
         choice((just("\n\n"), just("\r\n\r\n"))).to(Token::EmptyLine),
         choice((just("\n"), just("\r\n"))).to(Token::NewLine),
     ));
 
     choice((
+        assurance_comment,
         comment_parser(Token::ModuleComment),
         comment_parser(Token::DocComment),
         comment_parser(Token::Comment),

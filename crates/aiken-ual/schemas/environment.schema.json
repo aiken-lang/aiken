@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aiken:ual:checking-environment:v1",
+  "title": "Pinned Blaster loaded checking environment",
+  "$comment": "Local schema, not an upstream CIP schema. Derived from captureCheckingEnvironment in PlutusCore.UPLC.BlueprintEncoding.Assurance at blaster 1c23de8f35fdc5decf6f126c7b56ed6649e4a57f, lines 512-532; lowercase SHA-256 representation follows sha256File at lines 438-448. This checks capture shape, not equality with a live loaded environment. The capture has no $schema member. Native library capture is optional; solver options are fixed by this consumer pin.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "leanVersion",
+    "compilerSha256",
+    "solverSha256",
+    "solverOptions",
+    "modules"
+  ],
+  "properties": {
+    "format": { "const": "blaster-loaded-environment-v1" },
+    "leanVersion": { "type": "string" },
+    "compilerSha256": { "$ref": "#/$defs/sha256" },
+    "solverSha256": { "$ref": "#/$defs/sha256" },
+    "nativeBlasterSha256": { "$ref": "#/$defs/sha256" },
+    "solverOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeoutSeconds", "maxRecDepth", "maxHeartbeats"],
+      "properties": {
+        "timeoutSeconds": { "const": 60 },
+        "maxRecDepth": { "const": 100000 },
+        "maxHeartbeats": { "const": 0 }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/sha256" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

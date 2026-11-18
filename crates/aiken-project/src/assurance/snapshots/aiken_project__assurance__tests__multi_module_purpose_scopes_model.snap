@@ -1,0 +1,160 @@
+---
+source: crates/aiken-project/src/assurance/tests.rs
+expression: model
+---
+{
+  "targets": {
+    "contract__identity": {
+      "id": "contract__identity",
+      "module": "contract",
+      "name": "identity",
+      "kind": "Function",
+      "location": {
+        "start": 124,
+        "end": 158
+      },
+      "settings": {
+        "steps": 100,
+        "semantics": "E"
+      }
+    },
+    "contract__policy": {
+      "id": "contract__policy",
+      "module": "contract",
+      "name": "policy",
+      "kind": {
+        "Validator": {
+          "handlers": [
+            "mint"
+          ]
+        }
+      },
+      "location": {
+        "start": 207,
+        "end": 216
+      },
+      "settings": {
+        "steps": 100,
+        "semantics": "E"
+      }
+    }
+  },
+  "fragments": {
+    "contract": {
+      "id": "contract",
+      "module": "contract",
+      "namespace": "contract",
+      "imports": [
+        "predicates.base",
+        "namespace"
+      ],
+      "predicates": [
+        {
+          "body": "\ndef accepted (n : Int) : Prop := positive n\n",
+          "location": {
+            "start": 26,
+            "end": 87
+          },
+          "body_location": {
+            "start": 39,
+            "end": 84
+          }
+        },
+        {
+          "body": "\nabbrev unchanged (n : Int) : Prop := same n n\n",
+          "location": {
+            "start": 303,
+            "end": 366
+          },
+          "body_location": {
+            "start": 316,
+            "end": 363
+          }
+        }
+      ]
+    },
+    "namespace": {
+      "id": "namespace",
+      "module": "namespace",
+      "namespace": "«namespace»",
+      "imports": [],
+      "predicates": [
+        {
+          "body": "\nabbrev same (a b : Int) : Prop := a = b\n",
+          "location": {
+            "start": 0,
+            "end": 57
+          },
+          "body_location": {
+            "start": 13,
+            "end": 54
+          }
+        }
+      ]
+    },
+    "predicates.base": {
+      "id": "predicates.base",
+      "module": "predicates/base",
+      "namespace": "predicates.base",
+      "imports": [],
+      "predicates": [
+        {
+          "body": "\ndef positive (n : Int) : Prop := n > 0\n",
+          "location": {
+            "start": 0,
+            "end": 56
+          },
+          "body_location": {
+            "start": 13,
+            "end": 53
+          }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "mint_or_fallback": {
+      "id": "mint_or_fallback",
+      "module": "contract",
+      "location": {
+        "start": 368,
+        "end": 554
+      },
+      "description": "Mint, implicit fallback, and a function share an execution context.",
+      "body": "\n  ∀ (n : Int), accepted n → unchanged n\n",
+      "body_location": {
+        "start": 506,
+        "end": 551
+      },
+      "scopes": [
+        {
+          "target": "contract__policy",
+          "handler": "mint",
+          "location": {
+            "start": 402,
+            "end": 413
+          }
+        },
+        {
+          "target": "contract__policy",
+          "handler": "else",
+          "location": {
+            "start": 414,
+            "end": 425
+          }
+        },
+        {
+          "target": "contract__identity",
+          "handler": null,
+          "location": {
+            "start": 426,
+            "end": 434
+          }
+        }
+      ],
+      "uses": [
+        "contract"
+      ]
+    }
+  }
+}

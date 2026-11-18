@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/check.rs
+assertion_line: 6064
+description: "@onchain(steps: 1, semantics: C)\nfn foo(value: Data<fn(Int) -> Int>) { value }"
+expression: diagnostic
+---
+illegal::type_in_data
+I found a type definition that has unsupported inhabitants.
+
+Data-types cannot contain values of type fn(Int) -> Int because they aren't serialisable into a Plutus Data. Yet this is necessary for inhabitants of compound structures like List, Tuple or Fuzzer.

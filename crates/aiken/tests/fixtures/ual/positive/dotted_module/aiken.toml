@@ -1,0 +1,5 @@
+name = "fixtures/ual_dotted_module"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "UAL producer fixture for a dotted validator file name"

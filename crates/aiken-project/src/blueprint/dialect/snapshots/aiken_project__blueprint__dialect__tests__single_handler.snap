@@ -1,0 +1,272 @@
+---
+source: crates/aiken-project/src/blueprint/dialect/tests.rs
+expression: compiled
+---
+{
+  "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+  "preamble": {
+    "title": "test/project",
+    "description": "Aiken contracts for project 'test/project'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "test-compiler"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "id": "fixtures_contracts__first",
+      "title": "fixtures/contracts.first",
+      "redeemer": {
+        "oneOf": [
+          {
+            "title": "_redeemer",
+            "schema": {
+              "$ref": "#/definitions/Data"
+            },
+            "purpose": "spend"
+          },
+          {
+            "schema": {},
+            "purpose": "mint"
+          },
+          {
+            "schema": {},
+            "purpose": "withdraw"
+          },
+          {
+            "schema": {},
+            "purpose": "publish"
+          },
+          {
+            "schema": {},
+            "purpose": "vote"
+          },
+          {
+            "schema": {},
+            "purpose": "propose"
+          }
+        ]
+      },
+      "datum": {
+        "oneOf": [
+          {
+            "title": "_datum",
+            "schema": {
+              "$ref": "#/definitions/Data"
+            },
+            "purpose": "spend"
+          },
+          {
+            "schema": {},
+            "purpose": "mint"
+          },
+          {
+            "schema": {},
+            "purpose": "withdraw"
+          },
+          {
+            "schema": {},
+            "purpose": "publish"
+          },
+          {
+            "schema": {},
+            "purpose": "vote"
+          },
+          {
+            "schema": {},
+            "purpose": "propose"
+          }
+        ]
+      },
+      "interface": {
+        "callingConvention": "ledger-v3",
+        "invocations": [
+          {
+            "purpose": "spend",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "mint",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "withdraw",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "publish",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "vote",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "propose",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          }
+        ]
+      },
+      "compiledCode": "<redacted>",
+      "hash": "<redacted>"
+    },
+    {
+      "id": "fixtures_contracts__second",
+      "title": "fixtures/contracts.second",
+      "redeemer": {
+        "oneOf": [
+          {
+            "title": "_redeemer",
+            "schema": {
+              "$ref": "#/definitions/Data"
+            },
+            "purpose": "spend"
+          },
+          {
+            "schema": {},
+            "purpose": "mint"
+          },
+          {
+            "schema": {},
+            "purpose": "withdraw"
+          },
+          {
+            "schema": {},
+            "purpose": "publish"
+          },
+          {
+            "schema": {},
+            "purpose": "vote"
+          },
+          {
+            "schema": {},
+            "purpose": "propose"
+          }
+        ]
+      },
+      "datum": {
+        "oneOf": [
+          {
+            "title": "_datum",
+            "schema": {
+              "$ref": "#/definitions/Data"
+            },
+            "purpose": "spend"
+          },
+          {
+            "schema": {},
+            "purpose": "mint"
+          },
+          {
+            "schema": {},
+            "purpose": "withdraw"
+          },
+          {
+            "schema": {},
+            "purpose": "publish"
+          },
+          {
+            "schema": {},
+            "purpose": "vote"
+          },
+          {
+            "schema": {},
+            "purpose": "propose"
+          }
+        ]
+      },
+      "interface": {
+        "callingConvention": "ledger-v3",
+        "invocations": [
+          {
+            "purpose": "spend",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "mint",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "withdraw",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "publish",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "vote",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "propose",
+            "arguments": [
+              {
+                "role": "context"
+              }
+            ]
+          }
+        ]
+      },
+      "compiledCode": "<redacted>",
+      "hash": "<redacted>"
+    }
+  ],
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    }
+  },
+  "$vocabulary": {
+    "https://cips.cardano.org/cips/cip57": true,
+    "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+  }
+}

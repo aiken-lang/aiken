@@ -1,0 +1,5 @@
+name = "fixtures/ual_generated_name_collision"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "UAL producer fixture: f and f_returns share a generated Lean name"

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "fb2efa069fff0dd32845c50bda6822f303ffbc2b8cfe4712778c8f851b23bca8"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "check": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "b2b4be528a553c5a918fe765e2d5a2e8347a4f7d67bf5ad6df541a3648b0e6a6"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-property.json"
+    }
+  },
+  "definitions": {
+    "Data": {},
+    "Recursive": {
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 0
+        },
+        {
+          "dataType": "constructor",
+          "fields": [
+            {
+              "$ref": "#/definitions/Recursive"
+            }
+          ],
+          "index": 1
+        }
+      ]
+    }
+  },
+  "formalFragments": [
+    {
+      "id": "sample.predicates",
+      "imports": [],
+      "language": "lean",
+      "source": "def nonnegative (x : Int) : Prop := x ≥ 0"
+    }
+  ],
+  "functions": {
+    "sample__function": {
+      "arguments": [
+        {
+          "dataType": "integer"
+        }
+      ],
+      "compiledCode": "46010000200101",
+      "hash": {
+        "alg": "sha256",
+        "digest": "9028cd01283a3f51a726124b222ea4179c58e8feebf14bfe84d7a812b6361299"
+      },
+      "plutusVersion": "v3",
+      "result": {
+        "dataType": "#boolean"
+      },
+      "serialization": "cbor-flat"
+    }
+  },
+  "languages": {
+    "lean": {
+      "description": "Formal source language",
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "name": "UAL",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "Fixture author"
+    ],
+    "created": "2026-11-04",
+    "license": "Apache-2.0",
+    "title": "UAL fixture",
+    "version": "1.0"
+  },
+  "properties": [
+    {
+      "assumptions": [
+        {
+          "text": "An explicitly documentary assumption."
+        }
+      ],
+      "checkingContext": "check",
+      "id": "property",
+      "scope": {
+        "functions": [
+          "sample__function"
+        ],
+        "validators": [
+          "sample__validator"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "lean",
+          "source": "∀ (x : Int), x = x",
+          "uses": [
+            "sample.predicates"
+          ]
+        },
+        "text": "Schema and byte-binding fixture, not a verified claim."
+      },
+      "tags": [
+        "fixture"
+      ],
+      "title": "Example property"
+    }
+  ],
+  "tools": {
+    "blaster": {
+      "name": "Blaster",
+      "version": "bc03bb4"
+    }
+  },
+  "x-producer": {
+    "a": "preserved extension",
+    "z": {
+      "a": 1,
+      "b": 2
+    }
+  }
+}

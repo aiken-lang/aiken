@@ -74,6 +74,24 @@ impl ParseError {
         }
     }
 
+    pub fn nested_assurance_comment(span: Span) -> Self {
+        Self {
+            kind: Box::new(ErrorKind::NestedAssuranceComment),
+            expected: HashSet::new(),
+            span,
+            label: Some("nested annotation opener"),
+        }
+    }
+
+    pub fn unterminated_assurance_comment(span: Span) -> Self {
+        Self {
+            kind: Box::new(ErrorKind::UnterminatedAssuranceComment),
+            expected: HashSet::new(),
+            span,
+            label: Some("annotation is not closed"),
+        }
+    }
+
     pub fn expected_but_got(expected: Pattern, got: Pattern, span: Span) -> Self {
         Self {
             kind: Box::new(ErrorKind::Unexpected(got)),
@@ -340,6 +358,16 @@ pub enum ErrorKind {
         "Expect doc-comments are turned into traces and must remain short.\nHence, I will only allow a single line of doc-comment above an 'expect'. And yet, you've put many."
     ))]
     IllegalMultilineExpectComment,
+
+    #[error("I found a nested annotation region.")]
+    #[diagnostic(help("Annotation regions cannot contain another '//@' opener."))]
+    NestedAssuranceComment,
+
+    #[error("I reached the end of the file inside an annotation region.")]
+    #[diagnostic(help(
+        "Close the annotation with '@//' at the start of a line or immediately after Unicode whitespace."
+    ))]
+    UnterminatedAssuranceComment,
 
     #[error("I spotted an invalid constructor decorator tag.")]
     #[diagnostic(help(

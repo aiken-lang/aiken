@@ -1,0 +1,66 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+  "environment": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+    },
+    "mediaType": "application/json",
+    "uri": "../environment.json"
+  },
+  "execution": {
+    "acceptance": "evaluation",
+    "budget": {
+      "kind": "cek-steps",
+      "steps": 100
+    },
+    "semanticsVariant": "E"
+  },
+  "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+  "targets": [
+    {
+      "function": "fixtures__outbids",
+      "functionHash": {
+        "alg": "sha256",
+        "digest": "31b6a638822fbcfbc099803b82b0d363e0ec887aa7bd5b5f116d3557407500a3"
+      },
+      "functionInterface": {
+        "arguments": [
+          {
+            "$ref": "#/definitions/Int"
+          },
+          {
+            "$ref": "#/definitions/Int"
+          }
+        ],
+        "definitions": {
+          "Bool": {
+            "anyOf": [
+              {
+                "dataType": "constructor",
+                "fields": [],
+                "index": 0,
+                "title": "False"
+              },
+              {
+                "dataType": "constructor",
+                "fields": [],
+                "index": 1,
+                "title": "True"
+              }
+            ],
+            "title": "Bool"
+          },
+          "Int": {
+            "dataType": "integer"
+          }
+        },
+        "plutusVersion": "v3",
+        "result": {
+          "dataType": "#boolean"
+        },
+        "serialization": "cbor-flat"
+      }
+    }
+  ]
+}

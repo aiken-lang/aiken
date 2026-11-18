@@ -6041,3 +6041,275 @@ fn incomplete_pair() {
         Err((_, Error::IncorrectFunctionCallArity { expected, .. })) if expected == 2
     ))
 }
+
+mod onchain {
+    use super::*;
+    use crate::ast::{DecoratorKind, OnchainValue};
+    use crate::parser::token::Base;
+    use miette::Diagnostic;
+
+    fn snapshot_error(name: &str, source: &str, dependencies: Vec<UntypedModule>) {
+        let (_, error) = check_with_deps(parse(source), dependencies)
+            .expect_err("@onchain misuse must be an ordinary type error");
+        let diagnostic = format!(
+            "{}\n{}\n{}",
+            error.code().expect("diagnostic code"),
+            error,
+            error.help().expect("helpful diagnostic")
+        );
+        insta::with_settings!({
+            description => source,
+            prepend_module_to_snapshot => false,
+        }, {
+            insta::assert_snapshot!(name, diagnostic);
+        });
+    }
+
+    #[test]
+    fn valid_functions_retain_normalized_settings() {
+        let source = r#"
+            @onchain(steps: 0x10, semantics: c)
+            fn private_function(value) { value + 1 }
+
+            @onchain(semantics: e, steps: 1_000)
+            pub fn public_function(value: Int) -> Int { value }
+        "#;
+        let (_, module) = check(parse(source)).expect("monomorphic functions are eligible");
+        assert_eq!(module.definition_decorators.len(), 2);
+        for (entry, (steps, semantics)) in module
+            .definition_decorators
+            .iter()
+            .zip([("16", "C"), ("1000", "E")])
+        {
+            let function = module
+                .definitions
+                .iter()
+                .find_map(|definition| match definition {
+                    Definition::Fn(function) if definition.location() == entry.location => {
+                        Some(function)
+                    }
+                    _ => None,
+                })
+                .expect("decorator must retain its underlying definition location");
+            assert!(function.arguments[0].tipo.is_int());
+            assert!(function.return_type.is_int());
+            let [decorator] = entry.decorators.as_slice() else {
+                panic!("one retained decorator expected");
+            };
+            let DecoratorKind::Onchain { arguments } = &decorator.kind else {
+                panic!("onchain decorator expected");
+            };
+            assert!(arguments.iter().any(|argument| argument.name == "steps"
+                && matches!(&argument.value, OnchainValue::Int { value, base }
+                    if value == steps && matches!(base, Base::Decimal { numeric_underscore: false }))));
+            assert!(arguments.iter().any(|argument| argument.name == "semantics"
+                && matches!(&argument.value, OnchainValue::Name { name } if name == semantics)));
+        }
+    }
+
+    #[test]
+    fn valid_validator_retains_settings() {
+        let source = r#"
+            @onchain(steps: 25, semantics: E)
+            validator foo {
+                mint(_redeemer: Data, _policy_id: ByteArray, _ctx: Data) { True }
+            }
+        "#;
+        let (_, module) = check_validator(parse(source)).expect("validator is eligible");
+        assert_eq!(module.definition_decorators.len(), 1);
+        assert!(module.definitions.iter().any(|definition| matches!(
+            definition,
+            Definition::Validator(_)
+        ) && definition.location()
+            == module.definition_decorators[0].location));
+    }
+
+    #[test]
+    fn valid_concrete_generic_and_recursive_fields() {
+        let source = r#"
+            type Box<a> { value: a }
+            type Tree<a> { Leaf(a) Branch(List<Tree<a>>) }
+
+            @onchain(steps: 18446744073709551615, semantics: C)
+            fn foo(value: Box<Tree<Int>>) -> Box<Tree<Int>> { value }
+        "#;
+        assert!(check(parse(source)).is_ok());
+    }
+
+    #[test]
+    fn valid_imported_generic_fields() {
+        let dependency = "pub type Box<a> { value: a }";
+        let source = r#"
+            use box.{Box}
+            @onchain(steps: 1, semantics: C)
+            fn foo(value: Box<Int>) -> Box<Int> { value }
+        "#;
+        assert!(check_with_deps(parse(source), vec![parse_as(dependency, "box")]).is_ok());
+    }
+
+    #[test]
+    fn invalid_settings() {
+        for (name, settings) in [
+            ("missing_steps", "semantics: C"),
+            ("missing_semantics", "steps: 1"),
+            ("missing_all", ""),
+            ("duplicate_steps", "steps: 1, steps: 2, semantics: C"),
+            (
+                "duplicate_semantics",
+                "steps: 1, semantics: C, semantics: E",
+            ),
+            ("unknown_setting", "steps: 1, semantics: C, fuel: 2"),
+            ("zero_steps", "steps: 0, semantics: C"),
+            ("negative_steps", "steps: -1, semantics: C"),
+            (
+                "overflow_steps",
+                "steps: 18446744073709551616, semantics: C",
+            ),
+            ("named_steps", "steps: budget, semantics: C"),
+            ("string_steps", "steps: @\"1\", semantics: C"),
+            ("bytes_steps", "steps: \"1\", semantics: C"),
+            ("unknown_semantics", "steps: 1, semantics: X"),
+            ("integer_semantics", "steps: 1, semantics: 1"),
+            ("string_semantics", "steps: 1, semantics: @\"C\""),
+            ("bytes_semantics", "steps: 1, semantics: \"C\""),
+        ] {
+            let source = format!("@onchain({settings})\nfn foo(value: Int) -> Int {{ value }}");
+            snapshot_error(&format!("onchain_{name}"), &source, Vec::new());
+        }
+        snapshot_error(
+            "onchain_duplicate_decorator",
+            "@onchain(steps: 1, semantics: C)\n@onchain(steps: 2, semantics: E)\nfn foo() { 1 }",
+            Vec::new(),
+        );
+    }
+
+    #[test]
+    fn invalid_targets() {
+        for (name, declaration) in [
+            ("test", "test foo() { True }"),
+            ("benchmark", "bench foo(n via sampler()) { True }"),
+            ("constant", "const foo = 1"),
+            ("alias", "type Foo = Int"),
+            ("import", "use aiken/builtin"),
+            ("record", "type Foo { value: Int }"),
+            ("enum", "type Foo { Foo Bar }"),
+        ] {
+            let source = format!("@onchain(steps: 1, semantics: C)\n{declaration}");
+            snapshot_error(&format!("onchain_target_{name}"), &source, Vec::new());
+        }
+        snapshot_error(
+            "onchain_target_constructor",
+            "type Foo {\n@onchain(steps: 1, semantics: C)\nFoo\nBar\n}",
+            Vec::new(),
+        );
+        for (name, source) in [
+            ("tag_function", "@tag(1)\nfn foo() { 1 }"),
+            ("list_function", "@list\nfn foo() { 1 }"),
+            (
+                "tag_validator",
+                "@tag(1)\nvalidator foo { else(_) { True } }",
+            ),
+            (
+                "list_validator",
+                "@list\nvalidator foo { else(_) { True } }",
+            ),
+        ] {
+            snapshot_error(&format!("onchain_{name}"), source, Vec::new());
+        }
+    }
+
+    #[test]
+    fn invalid_function_interfaces() {
+        for (name, source) in [
+            (
+                "free_argument",
+                "@onchain(steps: 1, semantics: C)\nfn foo(value) { value }",
+            ),
+            (
+                "free_result",
+                "@onchain(steps: 1, semantics: C)\nfn foo() { todo }",
+            ),
+            (
+                "free_nested",
+                "@onchain(steps: 1, semantics: C)\nfn foo(value: List<a>) { value }",
+            ),
+            (
+                "function_argument",
+                "@onchain(steps: 1, semantics: C)\nfn foo(f: fn(Int) -> Int) { f(1) }",
+            ),
+            (
+                "function_result",
+                "@onchain(steps: 1, semantics: C)\nfn foo() { fn(value: Int) { value } }",
+            ),
+            (
+                "nested_function",
+                "type Box<a> { value: a }\n@onchain(steps: 1, semantics: C)\nfn foo(value: Box<fn(Int) -> Int>) { value }",
+            ),
+            (
+                "opaque_argument",
+                "opaque type Secret { value: Int }\n@onchain(steps: 1, semantics: C)\nfn foo(value: Secret) { value }",
+            ),
+            (
+                "opaque_result",
+                "opaque type Secret { value: Int }\n@onchain(steps: 1, semantics: C)\nfn foo() { Secret { value: 1 } }",
+            ),
+            (
+                "opaque_nested_container",
+                "opaque type Secret { value: Int }\n@onchain(steps: 1, semantics: C)\nfn foo(value: List<Pair<Int, Secret>>) { value }",
+            ),
+            (
+                "opaque_nested_field",
+                "type Box<a> { value: a }\nopaque type Secret { value: Int }\ntype Envelope { inner: Box<Secret> }\n@onchain(steps: 1, semantics: C)\nfn foo(value: Envelope) { value }",
+            ),
+            (
+                "opaque_data_annotation",
+                "opaque type Secret { value: Int }\n@onchain(steps: 1, semantics: C)\nfn foo(value: Data<Secret>) { value }",
+            ),
+            (
+                "opaque_result_annotation",
+                "opaque type Secret { value: Int }\n@onchain(steps: 1, semantics: C)\nfn foo(value: Data) -> Data<Secret> { value }",
+            ),
+            (
+                "free_data_annotation",
+                "@onchain(steps: 1, semantics: C)\nfn foo(value: Data<a>) { value }",
+            ),
+            (
+                "function_data_annotation",
+                "@onchain(steps: 1, semantics: C)\nfn foo(value: Data<fn(Int) -> Int>) { value }",
+            ),
+            (
+                "free_result_data_annotation",
+                "@onchain(steps: 1, semantics: C)\nfn foo(value: Data) -> Data<a> { value }",
+            ),
+            (
+                "function_result_data_annotation",
+                "@onchain(steps: 1, semantics: C)\nfn foo(value: Data) -> Data<fn(Int) -> Int> { value }",
+            ),
+        ] {
+            snapshot_error(&format!("onchain_{name}"), source, Vec::new());
+        }
+    }
+
+    #[test]
+    fn invalid_imported_opaque_interfaces() {
+        let dependency = r#"
+            pub opaque type Secret { value: Int }
+            pub type Box<a> { value: a }
+            pub type Envelope { inner: List<Box<Secret>> }
+        "#;
+        for (name, signature) in [
+            ("argument", "fn foo(value: List<Secret>) { value }"),
+            ("field", "fn foo(value: Envelope) { value }"),
+            ("result", "fn foo() -> Envelope { todo }"),
+        ] {
+            let source = format!(
+                "use secret.{{Secret, Envelope}}\n@onchain(steps: 1, semantics: C)\n{signature}"
+            );
+            snapshot_error(
+                &format!("onchain_imported_opaque_{name}"),
+                &source,
+                vec![parse_as(dependency, "secret")],
+            );
+        }
+    }
+}

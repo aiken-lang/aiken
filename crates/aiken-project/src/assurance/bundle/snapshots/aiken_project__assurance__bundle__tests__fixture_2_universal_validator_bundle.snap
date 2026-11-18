@@ -1,0 +1,332 @@
+---
+source: crates/aiken-project/src/assurance/bundle/tests.rs
+expression: snapshot(&bundle)
+---
+{
+  "assurance": {
+    "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+    "preamble": {
+      "title": "UAL bundle fixture",
+      "version": "1.0",
+      "authors": [
+        "Fixture author"
+      ],
+      "created": "2026-11-04",
+      "license": "Apache-2.0"
+    },
+    "blueprint": {
+      "uri": "plutus.json",
+      "hash": {
+        "alg": "sha256",
+        "digest": "74df40d54c6f077121e9dc3a15e3cf3766bff9012adf9a5b9797849d97e8f44c"
+      }
+    },
+    "languages": {
+      "lean": {
+        "name": "Lean",
+        "version": "4.24.0",
+        "uri": "https://lean-lang.org"
+      },
+      "ual": {
+        "name": "UAL",
+        "version": "1.0",
+        "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+        "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b"
+      }
+    },
+    "properties": [
+      {
+        "id": "fallback_rejects",
+        "scope": {
+          "validators": [
+            "fixtures__vesting"
+          ]
+        },
+        "statement": {
+          "text": "All non-spending invocations fail.",
+          "formal": {
+            "language": "ual",
+            "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d))) → (\n    isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
+          }
+        },
+        "checkingContext": "fallback_rejects"
+      },
+      {
+        "id": "positive_minimum",
+        "scope": {
+          "validators": [
+            "fixtures__vesting"
+          ]
+        },
+        "statement": {
+          "text": "A nonpositive minimum rejects spending.",
+          "formal": {
+            "language": "ual",
+            "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    minimum ≤ 0 → isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
+          }
+        },
+        "checkingContext": "positive_minimum"
+      }
+    ],
+    "checkingContexts": {
+      "fallback_rejects": {
+        "uri": "checking-fallback_rejects.json",
+        "hash": {
+          "alg": "sha256",
+          "digest": "47ac7d4bcdeba2dc160bcd5327fbf15d84fcfe1560bec9361b898315060f6122"
+        },
+        "mediaType": "application/json"
+      },
+      "positive_minimum": {
+        "uri": "checking-positive_minimum.json",
+        "hash": {
+          "alg": "sha256",
+          "digest": "47ac7d4bcdeba2dc160bcd5327fbf15d84fcfe1560bec9361b898315060f6122"
+        },
+        "mediaType": "application/json"
+      }
+    }
+  },
+  "blueprint": {
+    "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+    "$vocabulary": {
+      "https://cips.cardano.org/cips/cip57": true,
+      "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+    },
+    "definitions": {
+      "Data": {
+        "description": "Any Plutus data.",
+        "title": "Data"
+      },
+      "Int": {
+        "dataType": "integer"
+      }
+    },
+    "preamble": {
+      "compiler": {
+        "name": "Aiken",
+        "version": "test-compiler"
+      },
+      "description": "Aiken contracts for project 'test/project'",
+      "license": "Apache-2.0",
+      "plutusVersion": "v3",
+      "title": "test/project",
+      "version": "0.0.0"
+    },
+    "validators": [
+      {
+        "compiledCode": "5865010100229800aba2aba1aab9eaab9dab9a9bad00248888896600264653001300700198039804000cc01c0092225980099b8748008c020dd500144c8cc88cdc42400001260160026016601800260126ea800a2c8038600e00260086ea801e29344d95900201",
+        "datum": {
+          "oneOf": [
+            {
+              "purpose": "spend",
+              "schema": {
+                "$ref": "#/definitions/Data"
+              },
+              "title": "_datum"
+            },
+            {
+              "purpose": "mint",
+              "schema": {}
+            },
+            {
+              "purpose": "withdraw",
+              "schema": {}
+            },
+            {
+              "purpose": "publish",
+              "schema": {}
+            },
+            {
+              "purpose": "vote",
+              "schema": {}
+            },
+            {
+              "purpose": "propose",
+              "schema": {}
+            }
+          ]
+        },
+        "hash": "6fc1049a304e50ce43367457fd869f93e7bb79ae842f1a56cb64c9d0",
+        "id": "fixtures__vesting",
+        "interface": {
+          "callingConvention": "ledger-v3",
+          "invocations": [
+            {
+              "arguments": [
+                {
+                  "role": "parameter",
+                  "source": "/parameters/0"
+                },
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "spend"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "parameter",
+                  "source": "/parameters/0"
+                },
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "mint"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "parameter",
+                  "source": "/parameters/0"
+                },
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "withdraw"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "parameter",
+                  "source": "/parameters/0"
+                },
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "publish"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "parameter",
+                  "source": "/parameters/0"
+                },
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "vote"
+            },
+            {
+              "arguments": [
+                {
+                  "role": "parameter",
+                  "source": "/parameters/0"
+                },
+                {
+                  "role": "context"
+                }
+              ],
+              "purpose": "propose"
+            }
+          ]
+        },
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/definitions/Int"
+            },
+            "title": "minimum"
+          }
+        ],
+        "redeemer": {
+          "oneOf": [
+            {
+              "purpose": "spend",
+              "schema": {
+                "$ref": "#/definitions/Data"
+              },
+              "title": "_redeemer"
+            },
+            {
+              "purpose": "mint",
+              "schema": {}
+            },
+            {
+              "purpose": "withdraw",
+              "schema": {}
+            },
+            {
+              "purpose": "publish",
+              "schema": {}
+            },
+            {
+              "purpose": "vote",
+              "schema": {}
+            },
+            {
+              "purpose": "propose",
+              "schema": {}
+            }
+          ]
+        },
+        "title": "fixtures.vesting"
+      }
+    ]
+  },
+  "contexts": {
+    "fallback_rejects": {
+      "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+      "environment": {
+        "hash": {
+          "alg": "sha256",
+          "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+        },
+        "mediaType": "application/json",
+        "uri": "environment.json"
+      },
+      "execution": {
+        "acceptance": "evaluation",
+        "budget": {
+          "kind": "cek-steps",
+          "steps": 2500
+        },
+        "semanticsVariant": "E"
+      },
+      "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+      "targets": [
+        {
+          "parameters": {
+            "mode": "universal"
+          },
+          "purpose": "spend",
+          "validator": "fixtures__vesting"
+        }
+      ]
+    },
+    "positive_minimum": {
+      "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+      "environment": {
+        "hash": {
+          "alg": "sha256",
+          "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+        },
+        "mediaType": "application/json",
+        "uri": "environment.json"
+      },
+      "execution": {
+        "acceptance": "evaluation",
+        "budget": {
+          "kind": "cek-steps",
+          "steps": 2500
+        },
+        "semanticsVariant": "E"
+      },
+      "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+      "targets": [
+        {
+          "parameters": {
+            "mode": "universal"
+          },
+          "purpose": "spend",
+          "validator": "fixtures__vesting"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,302 @@
+{
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "const": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json"
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "environment": {
+      "$ref": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json#/$defs/artifact"
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "semanticsVariant": {
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E"
+          ]
+        },
+        "budget": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "cek-steps"
+                },
+                "steps": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "steps"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "ledger-units"
+                },
+                "exCPU": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "exMem": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "costModel": {
+                  "$ref": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json#/$defs/artifact"
+                }
+              },
+              "required": [
+                "kind",
+                "exCPU",
+                "exMem",
+                "costModel"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "acceptance": {
+          "enum": [
+            "evaluation",
+            "ledger-script"
+          ]
+        },
+        "protocolVersion": {
+          "type": "object",
+          "properties": {
+            "major": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minor": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "major",
+            "minor"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "semanticsVariant",
+        "budget",
+        "acceptance"
+      ],
+      "additionalProperties": false
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "validator": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "purpose": {
+                "enum": [
+                  "spend",
+                  "mint",
+                  "withdraw",
+                  "publish",
+                  "vote",
+                  "propose"
+                ]
+              },
+              "parameters": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "const": "universal"
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "const": "applied"
+                      },
+                      "values": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "parameter": {
+                              "type": "string",
+                              "pattern": "^/parameters/(0|[1-9][0-9]*)$"
+                            },
+                            "term": {
+                              "$ref": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json#/$defs/artifact"
+                            }
+                          },
+                          "required": [
+                            "parameter",
+                            "term"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "appliedScriptHash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{56}$"
+                      },
+                      "appliedScript": {
+                        "$ref": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json#/$defs/artifact"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "values",
+                      "appliedScriptHash",
+                      "appliedScript"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "validator",
+              "purpose",
+              "parameters"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "function",
+              "functionHash",
+              "functionInterface"
+            ],
+            "properties": {
+              "function": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "functionHash": {
+                "$ref": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json#/$defs/digest"
+              },
+              "functionInterface": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "serialization",
+                  "plutusVersion",
+                  "arguments",
+                  "result"
+                ],
+                "properties": {
+                  "serialization": {
+                    "const": "cbor-flat"
+                  },
+                  "plutusVersion": {
+                    "enum": [
+                      "v1",
+                      "v2",
+                      "v3"
+                    ]
+                  },
+                  "arguments": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                    }
+                  },
+                  "result": {
+                    "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                  },
+                  "definitions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                    }
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "profile",
+    "environment",
+    "execution",
+    "targets"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+  "title": "Draft assurance checking context",
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "execution": {
+            "type": "object",
+            "properties": {
+              "acceptance": {
+                "const": "ledger-script"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "execution": {
+            "type": "object",
+            "properties": {
+              "budget": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "ledger-units"
+                  }
+                }
+              }
+            },
+            "required": [
+              "protocolVersion"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

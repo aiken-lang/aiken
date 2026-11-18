@@ -1,0 +1,51 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+  "environment": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+    },
+    "mediaType": "application/json",
+    "uri": "../environment.json"
+  },
+  "execution": {
+    "acceptance": "evaluation",
+    "budget": {
+      "kind": "cek-steps",
+      "steps": 2500
+    },
+    "semanticsVariant": "E"
+  },
+  "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+  "targets": [
+    {
+      "parameters": {
+        "appliedScript": {
+          "hash": {
+            "alg": "sha256",
+            "digest": "a2fb2708e1f8ce8e40b98eb0a36d5a47e8533f5d9a61eb3a4f43737e96039c4e"
+          },
+          "mediaType": "application/octet-stream",
+          "uri": "applied-script-a2fb2708e1f8ce8e40b98eb0a36d5a47e8533f5d9a61eb3a4f43737e96039c4e.cbor"
+        },
+        "appliedScriptHash": "f98f1dace1ac805615ccc0357b4ecb363a43b947fc99f1a661850867",
+        "mode": "applied",
+        "values": [
+          {
+            "parameter": "/parameters/0",
+            "term": {
+              "hash": {
+                "alg": "sha256",
+                "digest": "9f59e9c16117ff1e626b52b34f16b1347c721bdda2151215c9d2d30861681db0"
+              },
+              "mediaType": "application/octet-stream",
+              "uri": "applied-value-9f59e9c16117ff1e626b52b34f16b1347c721bdda2151215c9d2d30861681db0.flat"
+            }
+          }
+        ]
+      },
+      "purpose": "spend",
+      "validator": "fixtures__vesting"
+    }
+  ]
+}

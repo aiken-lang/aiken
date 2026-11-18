@@ -1,0 +1,61 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "5ca53de2e5ea9798dbe4448db4357f0c0aaaf854419b2d274b74821104507985"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "dotted_minimum": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "b787a1c5806f1bf3d51d5899638d3d4b5b423a7dddfce4df619bb5d5a84e357a"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-dotted_minimum.json"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "name": "UAL",
+      "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "fixtures"
+    ],
+    "created": "2026-11-04",
+    "description": "UAL producer fixture for a dotted validator file name",
+    "license": "Apache-2.0",
+    "title": "fixtures/ual_dotted_module",
+    "version": "1.0.0"
+  },
+  "properties": [
+    {
+      "checkingContext": "dotted_minimum",
+      "id": "dotted_minimum",
+      "scope": {
+        "validators": [
+          "fixtures_extra__vesting"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    minimum ≤ 0 → isUnsuccessful (fixtures_extra__vesting minimum (toLedgerData ctx))\n\n)"
+        },
+        "text": "A nonpositive minimum rejects spending from a dotted module."
+      }
+    }
+  ]
+}

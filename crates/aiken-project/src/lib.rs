@@ -1,3 +1,4 @@
+pub mod assurance;
 pub mod blueprint;
 pub mod config;
 pub mod deps;
@@ -82,6 +83,12 @@ pub struct Checkpoint {
 enum AddModuleBy {
     Source { name: String, code: String },
     Path(PathBuf),
+}
+
+#[derive(Clone, Copy)]
+enum DependencyMode {
+    Download,
+    ReadOnly,
 }
 
 pub struct Project<T>
@@ -184,6 +191,11 @@ where
         self.checked_modules.values().cloned().collect()
     }
 
+    /// Resolve assurance annotations from the currently checked module graph.
+    pub fn annotation_model(&self) -> Result<assurance::AnnotationModel, Vec<assurance::Error>> {
+        assurance::validate(self.checked_modules.values())
+    }
+
     pub fn importable_modules(&self) -> Vec<String> {
         self.module_types.keys().cloned().collect()
     }
@@ -244,7 +256,13 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, Tracing::silent(), None, false)?;
+        self.type_check(
+            &mut modules,
+            Tracing::silent(),
+            None,
+            false,
+            DependencyMode::Download,
+        )?;
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
@@ -391,6 +409,28 @@ where
     }
 
     pub fn compile(&mut self, options: Options) -> Result<(), Vec<Error>> {
+        self.compile_with_dependencies(options, DependencyMode::Download)
+    }
+
+    /// Type-check using only an existing dependency installation, without writing
+    /// build artifacts, lockfiles, or caches. Run `aiken build` first when
+    /// dependencies are missing or stale. Only `CodeGenMode::NoOp` is accepted.
+    pub fn compile_read_only(&mut self, options: Options) -> Result<(), Vec<Error>> {
+        if !matches!(options.code_gen_mode, CodeGenMode::NoOp) {
+            return Err(vec![Error::from(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Read-only compilation requires CodeGenMode::NoOp.",
+            ))]);
+        }
+
+        self.compile_with_dependencies(options, DependencyMode::ReadOnly)
+    }
+
+    fn compile_with_dependencies(
+        &mut self,
+        options: Options,
+        dependency_mode: DependencyMode,
+    ) -> Result<(), Vec<Error>> {
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
@@ -406,7 +446,14 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, options.tracing, env, true)?;
+        self.type_check(&mut modules, options.tracing, env, true, dependency_mode)?;
+
+        self.annotation_model().map_err(|errors| {
+            errors
+                .into_iter()
+                .map(|error| Error::Assurance(Box::new(error)))
+                .collect::<Vec<_>>()
+        })?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -708,8 +755,17 @@ where
         Ok(serde_json::from_reader(BufReader::new(blueprint))?)
     }
 
-    fn with_dependencies(&mut self, parsed_packages: &mut ParsedModules) -> Result<(), Vec<Error>> {
-        let manifest = deps::download(&self.event_listener, &self.root, &self.config)?;
+    fn with_dependencies(
+        &mut self,
+        parsed_packages: &mut ParsedModules,
+        dependency_mode: DependencyMode,
+    ) -> Result<(), Vec<Error>> {
+        let manifest = match dependency_mode {
+            DependencyMode::Download => {
+                deps::download(&self.event_listener, &self.root, &self.config)?
+            }
+            DependencyMode::ReadOnly => deps::load_read_only(&self.root, &self.config)?,
+        };
 
         for package in manifest.packages {
             let lib = self.root.join(paths::build_deps_package(&package.name));
@@ -913,10 +969,11 @@ where
         tracing: Tracing,
         env: Option<&str>,
         validate_module_name: bool,
+        dependency_mode: DependencyMode,
     ) -> Result<(), Vec<Error>> {
         let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
-        self.with_dependencies(modules)?;
+        self.with_dependencies(modules, dependency_mode)?;
 
         modules.extends_glossary(&mut self.glossary);
 
@@ -1303,4 +1360,141 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
             .to_str()
             .expect("is_aiken_path(): to_str"),
     )
+}
+
+#[cfg(test)]
+mod assurance_integration_tests {
+    use super::*;
+    use crate::error::GetSource;
+    use miette::Diagnostic;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct NoopListener;
+    impl EventListener for NoopListener {}
+
+    struct Fixture {
+        project: Project<NoopListener>,
+    }
+
+    impl Fixture {
+        fn new(source: &str) -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let root = std::env::temp_dir().join(format!(
+                "aiken-assurance-integration-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(root.join("lib")).unwrap();
+            let config: ProjectConfig =
+                toml::from_str("name = \"test/assurance\"\nversion = \"0.0.0\"\nplutus = \"v3\"")
+                    .unwrap();
+            config.save(&root).unwrap();
+            std::fs::write(root.join("lib/example.ak"), source).unwrap();
+            Self {
+                project: Project::new_with_config(config, root, NoopListener),
+            }
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.project.root);
+        }
+    }
+
+    #[test]
+    fn compile_surfaces_assurance_diagnostics_before_check_or_build() {
+        for code_gen_mode in [CodeGenMode::NoOp, CodeGenMode::Build(false)] {
+            let source = "//@ UNKNOWN invalid @//";
+            let mut fixture = Fixture::new(source);
+            let errors = fixture
+                .project
+                .compile(Options {
+                    code_gen_mode,
+                    ..Options::default()
+                })
+                .unwrap_err();
+            let error = errors
+                .iter()
+                .find(|error| matches!(error, Error::Assurance(_)))
+                .expect("annotation errors must reach the normal compiler diagnostics");
+            assert_eq!(error.src().as_deref(), Some(source));
+            assert_eq!(
+                error.path(),
+                Some(fixture.project.root.join("lib/example.ak"))
+            );
+            assert!(error.source_code().is_some());
+            assert!(error.labels().unwrap().next().is_some());
+            assert!(fixture.project.annotation_model().is_err());
+            assert!(!fixture.project.root.join("plutus.json").exists());
+        }
+    }
+
+    #[test]
+    fn no_annotation_modules_compile_unchanged() {
+        let mut fixture = Fixture::new("pub fn identity(value: Int) -> Int { value }");
+        fixture.project.compile(Options::default()).unwrap();
+        assert!(fixture.project.annotation_model().is_ok());
+        assert!(fixture.project.warnings().is_empty());
+    }
+
+    #[test]
+    fn annotation_only_module_graph_compiles_together() {
+        let mut fixture =
+            Fixture::new("use proofs\n//@ PREDICATE def valid : Prop := proofs.allowed @//");
+        std::fs::write(
+            fixture.project.root.join("lib/proofs.ak"),
+            "//@ PREDICATE def allowed : Prop := True @//",
+        )
+        .unwrap();
+        fixture.project.compile(Options::default()).unwrap();
+        let model = fixture.project.annotation_model().unwrap();
+        assert_eq!(model.fragments.len(), 2);
+        assert_eq!(model.fragments["example"].imports, ["proofs"]);
+        assert!(fixture.project.warnings().is_empty());
+    }
+
+    #[test]
+    fn read_only_compiles_fresh_project_without_artifacts() {
+        let mut fixture = Fixture::new("pub fn identity(value: Int) -> Int { value }");
+        let snapshot = |root: &Path| {
+            ["", "lib", "aiken.toml", "lib/example.ak"].map(|relative| {
+                let path = root.join(relative);
+                let metadata = fs::metadata(&path).unwrap();
+                (
+                    metadata.modified().unwrap(),
+                    metadata.is_file().then(|| fs::read(path).unwrap()),
+                )
+            })
+        };
+        let before = snapshot(&fixture.project.root);
+
+        fixture
+            .project
+            .compile_read_only(Options::default())
+            .unwrap();
+
+        assert!(fixture.project.checked_modules.get("example").is_some());
+        assert!(fixture.project.annotation_model().is_ok());
+        assert_eq!(snapshot(&fixture.project.root), before);
+        assert_eq!(fs::read_dir(&fixture.project.root).unwrap().count(), 2);
+        assert!(!fixture.project.root.join("build").exists());
+        assert!(!fixture.project.root.join("aiken.lock").exists());
+    }
+
+    #[test]
+    fn read_only_rejects_codegen_before_creating_artifacts() {
+        let mut fixture = Fixture::new("pub fn identity(value: Int) -> Int { value }");
+        let errors = fixture
+            .project
+            .compile_read_only(Options {
+                code_gen_mode: CodeGenMode::Build(false),
+                ..Options::default()
+            })
+            .unwrap_err();
+
+        assert!(errors[0].to_string().contains("CodeGenMode::NoOp"));
+        assert_eq!(fs::read_dir(&fixture.project.root).unwrap().count(), 2);
+        assert!(!fixture.project.root.join("plutus.json").exists());
+    }
 }

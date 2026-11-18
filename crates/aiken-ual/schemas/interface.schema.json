@@ -1,0 +1,534 @@
+{
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "const": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json"
+    },
+    "preamble": {
+      "$ref": "https://cips.cardano.org/cips/cip57/schemas/plutus-blueprint.json#/$defs/preamble"
+    },
+    "validators": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "redeemer": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "schema": {
+                    "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                  },
+                  "purpose": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "spend",
+                          "mint",
+                          "withdraw",
+                          "publish",
+                          "vote",
+                          "propose"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "oneOf": {
+                            "type": "array",
+                            "minItems": 1,
+                            "uniqueItems": true,
+                            "items": {
+                              "enum": [
+                                "spend",
+                                "mint",
+                                "withdraw",
+                                "publish",
+                                "vote",
+                                "propose"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "oneOf"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "schema"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "oneOf": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "schema": {
+                          "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                        },
+                        "purpose": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "spend",
+                                "mint",
+                                "withdraw",
+                                "publish",
+                                "vote",
+                                "propose"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "oneOf": {
+                                  "type": "array",
+                                  "minItems": 1,
+                                  "uniqueItems": true,
+                                  "items": {
+                                    "enum": [
+                                      "spend",
+                                      "mint",
+                                      "withdraw",
+                                      "publish",
+                                      "vote",
+                                      "propose"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "oneOf"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "schema"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "oneOf"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "datum": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "schema": {
+                    "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                  },
+                  "purpose": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "spend",
+                          "mint",
+                          "withdraw",
+                          "publish",
+                          "vote",
+                          "propose"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "oneOf": {
+                            "type": "array",
+                            "minItems": 1,
+                            "uniqueItems": true,
+                            "items": {
+                              "enum": [
+                                "spend",
+                                "mint",
+                                "withdraw",
+                                "publish",
+                                "vote",
+                                "propose"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "oneOf"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "schema"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "oneOf": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "schema": {
+                          "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                        },
+                        "purpose": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "spend",
+                                "mint",
+                                "withdraw",
+                                "publish",
+                                "vote",
+                                "propose"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "oneOf": {
+                                  "type": "array",
+                                  "minItems": 1,
+                                  "uniqueItems": true,
+                                  "items": {
+                                    "enum": [
+                                      "spend",
+                                      "mint",
+                                      "withdraw",
+                                      "publish",
+                                      "vote",
+                                      "propose"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "oneOf"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "schema"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "oneOf"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "schema": {
+                  "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+                },
+                "purpose": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "spend",
+                        "mint",
+                        "withdraw",
+                        "publish",
+                        "vote",
+                        "propose"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "oneOf": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "items": {
+                            "enum": [
+                              "spend",
+                              "mint",
+                              "withdraw",
+                              "publish",
+                              "vote",
+                              "propose"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "oneOf"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "schema"
+              ]
+            }
+          },
+          "interface": {
+            "type": "object",
+            "properties": {
+              "callingConvention": {
+                "enum": [
+                  "ledger-v1",
+                  "ledger-v2",
+                  "ledger-v3"
+                ]
+              },
+              "invocations": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "purpose": {
+                      "enum": [
+                        "spend",
+                        "mint",
+                        "withdraw",
+                        "publish",
+                        "vote",
+                        "propose"
+                      ]
+                    },
+                    "arguments": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "const": "parameter"
+                              },
+                              "source": {
+                                "type": "string",
+                                "pattern": "^/parameters/(0|[1-9][0-9]*)$"
+                              }
+                            },
+                            "required": [
+                              "role",
+                              "source"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "const": "datum"
+                              },
+                              "source": {
+                                "const": "/datum"
+                              }
+                            },
+                            "required": [
+                              "role",
+                              "source"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "const": "redeemer"
+                              },
+                              "source": {
+                                "const": "/redeemer"
+                              }
+                            },
+                            "required": [
+                              "role",
+                              "source"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "const": "context"
+                              }
+                            },
+                            "required": [
+                              "role"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "purpose",
+                    "arguments"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "callingConvention",
+              "invocations"
+            ],
+            "additionalProperties": false
+          },
+          "compiledCode": {
+            "type": "string",
+            "pattern": "^([0-9a-f]{2})+$"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{56}$"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "redeemer",
+          "interface"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "compiledCode"
+              ]
+            },
+            "then": {
+              "required": [
+                "hash"
+              ]
+            }
+          },
+          {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "arguments"
+                  ]
+                },
+                {
+                  "required": [
+                    "budget"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "definitions": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/value-schema.json"
+      }
+    },
+    "$vocabulary": {
+      "type": "object",
+      "properties": {
+        "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": {
+          "const": true
+        },
+        "https://cips.cardano.org/cips/cip57": {
+          "const": true
+        }
+      },
+      "required": [
+        "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary",
+        "https://cips.cardano.org/cips/cip57"
+      ]
+    }
+  },
+  "required": [
+    "$schema",
+    "preamble",
+    "validators",
+    "$vocabulary"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+  "$vocabulary": {
+    "https://json-schema.org/draft/2020-12/vocab/core": true,
+    "https://json-schema.org/draft/2020-12/vocab/applicator": true,
+    "https://json-schema.org/draft/2020-12/vocab/validation": true,
+    "https://cips.cardano.org/cips/cip57": true,
+    "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+  },
+  "title": "Draft CIP-57 compiled interface extension"
+}

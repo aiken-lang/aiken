@@ -1,0 +1,69 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+  "environment": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+    },
+    "mediaType": "application/json",
+    "uri": "environment.json"
+  },
+  "execution": {
+    "acceptance": "evaluation",
+    "budget": {
+      "kind": "cek-steps",
+      "steps": 100
+    },
+    "semanticsVariant": "E"
+  },
+  "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+  "targets": [
+    {
+      "parameters": {
+        "mode": "universal"
+      },
+      "purpose": "spend",
+      "validator": "sample__validator"
+    },
+    {
+      "function": "sample__function",
+      "functionHash": {
+        "alg": "sha256",
+        "digest": "9028cd01283a3f51a726124b222ea4179c58e8feebf14bfe84d7a812b6361299"
+      },
+      "functionInterface": {
+        "arguments": [
+          {
+            "dataType": "integer"
+          }
+        ],
+        "definitions": {
+          "Data": {},
+          "Recursive": {
+            "anyOf": [
+              {
+                "dataType": "constructor",
+                "fields": [],
+                "index": 0
+              },
+              {
+                "dataType": "constructor",
+                "fields": [
+                  {
+                    "$ref": "#/definitions/Recursive"
+                  }
+                ],
+                "index": 1
+              }
+            ]
+          }
+        },
+        "plutusVersion": "v3",
+        "result": {
+          "dataType": "#boolean"
+        },
+        "serialization": "cbor-flat"
+      }
+    }
+  ]
+}

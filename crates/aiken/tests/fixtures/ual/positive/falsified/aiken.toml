@@ -1,0 +1,5 @@
+name = "fixtures/ual_falsified"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "UAL phase-1 deliberately false proposition producer fixture"

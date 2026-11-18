@@ -1,0 +1,74 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/checking-context.json",
+  "environment": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "eafb4587f3b2e8bc7bf1fb9175eee3afdf426cf694fe11aa9641146694280d42"
+    },
+    "mediaType": "application/json",
+    "uri": "../environment.json"
+  },
+  "execution": {
+    "acceptance": "evaluation",
+    "budget": {
+      "kind": "cek-steps",
+      "steps": 2500
+    },
+    "semanticsVariant": "C"
+  },
+  "profile": "https://cips.cardano.org/cips/cipXXXX/profiles/uplc-step-check/v1",
+  "targets": [
+    {
+      "function": "fixtures__preserve",
+      "functionHash": {
+        "alg": "sha256",
+        "digest": "c90e8da9268f3028169138ddeabce8d611885e4773f224c474261f3e65d4be28"
+      },
+      "functionInterface": {
+        "arguments": [
+          {
+            "$ref": "#/definitions/fixtures~1Tree"
+          }
+        ],
+        "definitions": {
+          "Int": {
+            "dataType": "integer"
+          },
+          "fixtures/Tree": {
+            "anyOf": [
+              {
+                "dataType": "constructor",
+                "fields": [
+                  {
+                    "$ref": "#/definitions/Int"
+                  }
+                ],
+                "index": 0,
+                "title": "Leaf"
+              },
+              {
+                "dataType": "constructor",
+                "fields": [
+                  {
+                    "$ref": "#/definitions/fixtures~1Tree"
+                  },
+                  {
+                    "$ref": "#/definitions/fixtures~1Tree"
+                  }
+                ],
+                "index": 1,
+                "title": "Branch"
+              }
+            ],
+            "title": "Tree"
+          }
+        },
+        "plutusVersion": "v3",
+        "result": {
+          "$ref": "#/definitions/fixtures~1Tree"
+        },
+        "serialization": "cbor-flat"
+      }
+    }
+  ]
+}

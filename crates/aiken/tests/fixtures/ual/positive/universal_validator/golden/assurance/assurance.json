@@ -1,0 +1,85 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "6d9b26d4d013e466f98bf3b9ca1f5d302e01cbeb145eaeb9b09f565daed2b490"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "fallback_rejects": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "98430a1fac25bb72201d01cfd5692dd8693583cde4c5b0c849f6c6d7e2d1899a"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-fallback_rejects.json"
+    },
+    "positive_minimum": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "98430a1fac25bb72201d01cfd5692dd8693583cde4c5b0c849f6c6d7e2d1899a"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-positive_minimum.json"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "name": "UAL",
+      "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "fixtures"
+    ],
+    "created": "2026-11-04",
+    "description": "UAL phase-1 universally parameterized validator producer fixture",
+    "license": "Apache-2.0",
+    "title": "fixtures/ual_universal_validator",
+    "version": "1.0.0"
+  },
+  "properties": [
+    {
+      "checkingContext": "fallback_rejects",
+      "id": "fallback_rejects",
+      "scope": {
+        "validators": [
+          "fixtures__vesting"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((¬ (∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d))) → (\n    isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
+        },
+        "text": "All non-spending invocations fail."
+      }
+    },
+    {
+      "checkingContext": "positive_minimum",
+      "id": "positive_minimum",
+      "scope": {
+        "validators": [
+          "fixtures__vesting"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (minimum : Int) (ctx : ScriptContext), ((∃ (ref : _) (d : _), ctx.scriptContextScriptInfo = SpendingScript ref d)) → (\n    minimum ≤ 0 → isUnsuccessful (fixtures__vesting minimum (toLedgerData ctx))\n\n)"
+        },
+        "text": "A nonpositive minimum rejects spending."
+      }
+    }
+  ]
+}

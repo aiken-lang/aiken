@@ -1,0 +1,212 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance-v2.json",
+  "blueprint": {
+    "hash": {
+      "alg": "sha256",
+      "digest": "4b33bf1ebb692eda077bfa4eaed69da0c362b956fd874b39f29ed1fe0d497714"
+    },
+    "uri": "plutus.json"
+  },
+  "checkingContexts": {
+    "escaped_module": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "83c6c3d731f7a68550679694fb60eb3f705bf3296acec9189c1670a97e2d480f"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-escaped_module.json"
+    },
+    "local_helper": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "83c6c3d731f7a68550679694fb60eb3f705bf3296acec9189c1670a97e2d480f"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-local_helper.json"
+    },
+    "qualified_falsified": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "83c6c3d731f7a68550679694fb60eb3f705bf3296acec9189c1670a97e2d480f"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-qualified_falsified.json"
+    },
+    "qualified_import": {
+      "hash": {
+        "alg": "sha256",
+        "digest": "83c6c3d731f7a68550679694fb60eb3f705bf3296acec9189c1670a97e2d480f"
+      },
+      "mediaType": "application/json",
+      "uri": "checking-qualified_import.json"
+    }
+  },
+  "definitions": {
+    "Bool": {
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 0,
+          "title": "False"
+        },
+        {
+          "dataType": "constructor",
+          "fields": [],
+          "index": 1,
+          "title": "True"
+        }
+      ],
+      "title": "Bool"
+    },
+    "Int": {
+      "dataType": "integer"
+    }
+  },
+  "formalFragments": [
+    {
+      "id": "example",
+      "imports": [
+        "proofs.helpers"
+      ],
+      "language": "lean",
+      "source": "\ndef positive (x : Int) : Prop := proofs.helpers.larger 0 x\n\n-- Module-qualified copies in namespace «example»\n\ndef «example».positive (x : Int) : Prop := proofs.helpers.larger 0 x\n"
+    },
+    {
+      "id": "fixtures",
+      "imports": [
+        "example"
+      ],
+      "language": "lean",
+      "source": "\ndef raised (old proposed : Int) : Prop := proofs.helpers.larger old proposed\n\n-- Module-qualified copies in namespace fixtures\n\ndef fixtures.raised (old proposed : Int) : Prop := proofs.helpers.larger old proposed\n"
+    },
+    {
+      "id": "proofs.helpers",
+      "language": "lean",
+      "source": "\ndef larger (old proposed : Int) : Prop := old < proposed\ndef pick {α : Type} (x : α) : α := x\ndef increasing (a b c : Int) : Prop := larger a b ∧ larger b c\n\n-- Module-qualified copies in namespace proofs.helpers\n\ndef proofs.helpers.larger (old proposed : Int) : Prop := old < proposed\ndef proofs.helpers.pick {α : Type} (x : α) : α := x\ndef proofs.helpers.increasing (a b c : Int) : Prop := larger a b ∧ larger b c\n"
+    }
+  ],
+  "functions": {
+    "fixtures__outbids": {
+      "arguments": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ],
+      "compiledCode": "500101002232337100026eb4008dd68011",
+      "hash": {
+        "alg": "sha256",
+        "digest": "31b6a638822fbcfbc099803b82b0d363e0ec887aa7bd5b5f116d3557407500a3"
+      },
+      "plutusVersion": "v3",
+      "result": {
+        "dataType": "#boolean"
+      },
+      "serialization": "cbor-flat"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "uri": "https://lean-lang.org",
+      "version": "4.24.0"
+    },
+    "ual": {
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "name": "UAL",
+      "uri": "https://github.com/input-output-hk/UniversalAnnotationLanguage/tree/1f7ab847736e5fa53cadc2099300cdaf3c720c6b",
+      "version": "1.0"
+    }
+  },
+  "preamble": {
+    "authors": [
+      "fixtures"
+    ],
+    "created": "2026-11-04",
+    "description": "UAL qualified, local and escaped predicate helper fixture",
+    "license": "Apache-2.0",
+    "title": "fixtures/ual_qualified_helpers",
+    "version": "1.0.0"
+  },
+  "properties": [
+    {
+      "checkingContext": "escaped_module",
+      "id": "escaped_module",
+      "scope": {
+        "functions": [
+          "fixtures__outbids"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (old proposed : Int), «example».positive (proposed - old) → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n",
+          "uses": [
+            "fixtures"
+          ]
+        },
+        "text": "A helper of a Lean-keyword module, by escaped qualified name."
+      }
+    },
+    {
+      "checkingContext": "local_helper",
+      "id": "local_helper",
+      "scope": {
+        "functions": [
+          "fixtures__outbids"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (old proposed : Int), raised old proposed → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n",
+          "uses": [
+            "fixtures"
+          ]
+        },
+        "text": "An unqualified helper from the property's own module."
+      }
+    },
+    {
+      "checkingContext": "qualified_falsified",
+      "id": "qualified_falsified",
+      "scope": {
+        "functions": [
+          "fixtures__outbids"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (old proposed : Int), proofs.helpers.larger proposed old → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n",
+          "uses": [
+            "fixtures"
+          ]
+        },
+        "text": "A qualified helper with the wrong direction has a counterexample."
+      }
+    },
+    {
+      "checkingContext": "qualified_import",
+      "id": "qualified_import",
+      "scope": {
+        "functions": [
+          "fixtures__outbids"
+        ]
+      },
+      "statement": {
+        "formal": {
+          "language": "ual",
+          "source": "\n  ∀ (old proposed : Int), proofs.helpers.larger (proofs.helpers.pick old) proposed → fixtures__outbids_returns (Data.I old) (Data.I proposed) true\n",
+          "uses": [
+            "fixtures"
+          ]
+        },
+        "text": "Helpers imported through an annotation-free bridge, by qualified name."
+      }
+    }
+  ]
+}

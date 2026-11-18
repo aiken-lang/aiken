@@ -49,6 +49,47 @@ pub struct ProjectConfig {
 
     #[serde(default)]
     pub config: BTreeMap<String, BTreeMap<String, SimpleExpr>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assurance: Option<AssuranceConfig>,
+}
+
+/// External assurance workspace settings; paths are resolved by the caller.
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[serde(default)]
+pub struct AssuranceConfig {
+    /// CardanoLedgerApiBlaster directory, relative to the containing aiken.toml.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<PathBuf>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct AssuranceEnvelope {
+    assurance: AssuranceConfig,
+}
+
+impl AssuranceConfig {
+    /// Read only assurance settings, including from a monorepo root manifest.
+    /// A missing manifest or assurance section leaves all settings unspecified.
+    #[allow(clippy::result_large_err)]
+    pub fn load(dir: &Path) -> Result<Self, crate::Error> {
+        let config_path = dir.join(paths::project_config());
+        let raw_config = match fs::read_to_string(&config_path) {
+            Ok(raw_config) => raw_config,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
+            Err(error) => {
+                return Err(Error::FileIo {
+                    error,
+                    path: Box::new(config_path),
+                });
+            }
+        };
+        let envelope: AssuranceEnvelope = toml::from_str(&raw_config).map_err(|error| {
+            from_toml_de_error(error, config_path, raw_config, TomlLoadingContext::Project)
+        })?;
+        Ok(envelope.assurance)
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -394,6 +435,7 @@ impl ProjectConfig {
                 source: Platform::Github,
             }],
             config: BTreeMap::new(),
+            assurance: None,
         }
     }
 
@@ -485,6 +527,106 @@ Version:          {}"#,
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    const MINIMAL_PROJECT: &str = "name = \"test/assurance\"\nversion = \"0.0.0\"\n";
+
+    #[test]
+    fn assurance_absent_is_optional() {
+        let config: ProjectConfig = toml::from_str(MINIMAL_PROJECT).unwrap();
+        assert!(config.assurance.is_none());
+        assert_eq!(
+            toml::from_str::<AssuranceConfig>("").unwrap(),
+            AssuranceConfig::default()
+        );
+    }
+
+    #[test]
+    fn assurance_workspace_is_preserved() {
+        let raw =
+            format!("{MINIMAL_PROJECT}\n[assurance]\nworkspace = \"../CardanoLedgerApiBlaster\"\n");
+        let config: ProjectConfig = toml::from_str(&raw).unwrap();
+        assert_eq!(
+            config.assurance.unwrap().workspace,
+            Some(PathBuf::from("../CardanoLedgerApiBlaster"))
+        );
+    }
+
+    #[test]
+    fn assurance_rejects_non_string_workspace() {
+        let raw = format!("{MINIMAL_PROJECT}\n[assurance]\nworkspace = 42\n");
+        assert!(toml::from_str::<ProjectConfig>(&raw).is_err());
+        assert!(toml::from_str::<AssuranceEnvelope>(&raw).is_err());
+    }
+
+    #[test]
+    fn assurance_absent_stays_omitted_on_roundtrip() {
+        let config: ProjectConfig = toml::from_str(MINIMAL_PROJECT).unwrap();
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let value: toml::Value = toml::from_str(&serialized).unwrap();
+        assert!(value.get("assurance").is_none());
+        let restored: ProjectConfig = toml::from_str(&serialized).unwrap();
+        assert!(restored.assurance.is_none());
+    }
+
+    #[test]
+    fn assurance_envelope_accepts_monorepo_manifest() {
+        let raw = "members = [\"packages/*\"]\n[assurance]\nworkspace = \"ledger\"\n";
+        let envelope: AssuranceEnvelope = toml::from_str(raw).unwrap();
+        assert_eq!(envelope.assurance.workspace, Some(PathBuf::from("ledger")));
+        let absent: AssuranceEnvelope = toml::from_str("members = []").unwrap();
+        assert_eq!(absent.assurance, AssuranceConfig::default());
+    }
+
+    #[test]
+    fn assurance_load_handles_manifest_and_errors() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        struct Fixture(PathBuf);
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let fixture = Fixture(std::env::temp_dir().join(format!(
+            "aiken-assurance-config-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        )));
+        fs::create_dir_all(&fixture.0).unwrap();
+        assert_eq!(
+            AssuranceConfig::load(&fixture.0).unwrap(),
+            AssuranceConfig::default()
+        );
+        let manifest = fixture.0.join(paths::project_config());
+        fs::write(&manifest, "members = []\n").unwrap();
+        assert_eq!(
+            AssuranceConfig::load(&fixture.0).unwrap(),
+            AssuranceConfig::default()
+        );
+        fs::write(
+            &manifest,
+            "members = []\n[assurance]\nworkspace = \"../ledger\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            AssuranceConfig::load(&fixture.0).unwrap().workspace,
+            Some(PathBuf::from("../ledger"))
+        );
+        for malformed in ["[assurance]\nworkspace = 42\n", "[assurance"] {
+            fs::write(&manifest, malformed).unwrap();
+            assert!(matches!(
+                AssuranceConfig::load(&fixture.0),
+                Err(Error::TomlLoading { .. })
+            ));
+        }
+        fs::remove_file(&manifest).unwrap();
+        fs::create_dir(&manifest).unwrap();
+        assert!(matches!(
+            AssuranceConfig::load(&fixture.0),
+            Err(Error::FileIo { .. })
+        ));
+    }
 
     #[allow(clippy::arc_with_non_send_sync)]
     fn arbitrary_simple_expr() -> impl Strategy<Value = SimpleExpr> {

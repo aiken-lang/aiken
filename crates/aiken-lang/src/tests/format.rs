@@ -9,6 +9,299 @@ fn format_source(src: &str) -> String {
 }
 
 #[test]
+fn onchain_declarations_roundtrip_idempotently() {
+    for declaration in [
+        "fn answer(){42}",
+        "pub fn answer(){42}",
+        "validator answer{else(_){True}}",
+        "test answer(){True}",
+        "bench answer(x via fuzz.any_int){True}",
+        "const answer=42",
+        "type Answer=Int",
+        "use aiken/list",
+    ] {
+        let source = format!("@onchain(steps:1_000,semantics:e)\n{declaration}");
+        let formatted = format_source(&source);
+        assert!(formatted.starts_with("@onchain(steps: 1_000, semantics: e)\n"));
+        assert_eq!(format_source(&formatted), formatted, "{declaration}");
+        let (module, _) = crate::parser::module(&formatted, crate::ast::ModuleKind::Lib).unwrap();
+        assert_eq!(module.definition_decorators.len(), 1);
+        assert_eq!(
+            module.definition_decorators[0].location,
+            module.definitions[0].location()
+        );
+    }
+}
+
+#[test]
+fn onchain_invalid_settings_are_not_lost_by_formatting() {
+    for decorator in [
+        "@onchain()",
+        "@onchain(semantics: C)",
+        "@onchain(steps: 0)",
+        "@onchain(steps: -0x10)",
+        "@onchain(steps: nope)",
+        "@onchain(steps: \"100\")",
+        "@onchain(steps: @\"100\")",
+        "@onchain(steps: 18446744073709551616)",
+        "@onchain(steps: 1, steps: 2)",
+        "@onchain(steps: 1, unknown: C)",
+        "@onchain(steps: 1, semantics: X)",
+        "@onchain(steps: 1, semantics: \"C\")",
+        "@onchain(steps: 1, semantics: C, semantics: E)",
+    ] {
+        let source = format!("{decorator}\nfn answer() {{ 42 }}");
+        let formatted = format_source(&source);
+        assert!(
+            formatted.starts_with(&format!("{decorator}\n")),
+            "{formatted}"
+        );
+        assert_eq!(format_source(&formatted), formatted);
+    }
+}
+
+#[test]
+fn onchain_keeps_mixed_comment_order_with_and_without_assurance_regions() {
+    for region in ["", "//@ opaque ∀ x → x  \n@//\n"] {
+        let source = format!(
+            "//// module\n// ordinary before\n/// docs before\n{region}\
+             @onchain(steps:1,semantics:c)\n\
+             /// docs between\n// ordinary between\n{region}\
+             @onchain(steps:2,semantics:E)\n\
+             // ordinary after\n/// docs after\n{region}\
+             pub fn answer(){{42}}\n// trailing\n"
+        );
+        let formatted = format_source(&source);
+        let ordered = [
+            "//// module",
+            "// ordinary before",
+            "/// docs before",
+            "@onchain(steps: 1, semantics: c)",
+            "/// docs between",
+            "// ordinary between",
+            "@onchain(steps: 2, semantics: E)",
+            "// ordinary after",
+            "/// docs after",
+            "pub fn answer",
+            "// trailing",
+        ];
+        for pair in ordered.windows(2) {
+            assert!(
+                formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap(),
+                "{formatted}"
+            );
+        }
+        if !region.is_empty() {
+            assert_eq!(formatted.matches(region.trim_end()).count(), 3);
+        }
+        assert_eq!(format_source(&formatted), formatted);
+    }
+}
+
+#[test]
+fn onchain_imports_keep_decorators_and_comment_anchors() {
+    let source = concat!(
+        "/// zeta docs\n",
+        "@onchain(steps:1)\n",
+        "// zeta import\n",
+        "use zeta\n",
+        "// alpha docs\n",
+        "@onchain(steps:2)\n",
+        "use alpha\n",
+        "@onchain(steps:3)\n",
+        "use zeta\n",
+    );
+    let formatted = format_source(source);
+    assert_eq!(formatted.matches("@onchain").count(), 3);
+    assert_eq!(formatted.matches("use zeta").count(), 2);
+    let ordered = [
+        "/// zeta docs",
+        "@onchain(steps: 1)",
+        "// zeta import",
+        "use zeta",
+        "// alpha docs",
+        "@onchain(steps: 2)",
+        "use alpha",
+        "@onchain(steps: 3)",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn onchain_data_types_and_constructors_roundtrip_with_existing_decorators() {
+    let source = concat!(
+        "/// type docs\n",
+        "@onchain(steps:1)\n",
+        "// before list\n",
+        "@list\n",
+        "type Example {\n",
+        "  /// constructor docs\n",
+        "  @onchain(steps:2)\n",
+        "  // before tag\n",
+        "  @tag(7)\n",
+        "  Example(Int)\n",
+        "}\n",
+    );
+    let formatted = format_source(source);
+    let ordered = [
+        "/// type docs",
+        "@onchain(steps: 1)",
+        "// before list",
+        "@list",
+        "type Example",
+        "/// constructor docs",
+        "@onchain(steps: 2)",
+        "// before tag",
+        "@tag(7)",
+        "Example(Int)",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_preserve_bytes_and_are_idempotent() {
+    let region =
+        "//@ opaque\r\n\t∀ x → ¬ (λ y => y) // literal @ and x@// text\r\n  \r\n\u{2003}@//";
+    let source = format!("{region}\nfn answer(){{42}}\n{region}\n");
+    let formatted = format_source(&source);
+    assert_eq!(formatted.matches(region).count(), 2);
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_standalone_and_trailing() {
+    let region = "//@\n\tunknown syntax { [ @ // remains opaque  \r\n@//";
+    for source in [region.to_string(), format!("\n{region}\n\n")] {
+        let formatted = format_source(&source);
+        assert_eq!(formatted, format!("{region}\n"));
+        assert_eq!(format_source(&formatted), formatted);
+    }
+
+    let formatted = format_source(&format!("fn answer() {{ 42 }}\n{region}"));
+    assert!(formatted.ends_with(&format!("{region}\n")));
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_preserve_comment_order() {
+    let source = concat!(
+        "//// module before\n",
+        "//@ first @//\n",
+        "//// module after\n",
+        "// ordinary before\n",
+        "/// documentation before\n",
+        "//@ second @//\n",
+        "/// documentation after\n",
+        "// ordinary after\n",
+        "fn first() { 1 }\n",
+        "/// between before\n",
+        "//@ between @//\n",
+        "/// between after\n",
+        "fn second() { 2 }\n",
+        "/// trailing before\n",
+        "//@ trailing @//\n",
+        "// trailing after\n",
+    );
+    let formatted = format_source(source);
+    let ordered = [
+        "//// module before",
+        "//@ first @//",
+        "//// module after",
+        "// ordinary before",
+        "/// documentation before",
+        "//@ second @//",
+        "/// documentation after",
+        "// ordinary after",
+        "fn first",
+        "/// between before",
+        "//@ between @//",
+        "/// between after",
+        "fn second",
+        "/// trailing before",
+        "//@ trailing @//",
+        "// trailing after",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_keep_import_anchors() {
+    let source = "//@ top @//\nuse zeta\n//@ middle @//\nuse alpha\n//@ end @//";
+    let formatted = format_source(source);
+    let ordered = [
+        "//@ top @//",
+        "use zeta",
+        "//@ middle @//",
+        "use alpha",
+        "//@ end @//",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_keep_decorator_order() {
+    let source = concat!(
+        "/// before type\n",
+        "//@ before decorators @//\n",
+        "@tag(7)\n",
+        "//@ between decorators @//\n",
+        "@list\n",
+        "//@ after decorators @//\n",
+        "type Datum { value: Int }\n",
+        "type Choice {\n",
+        "  @tag(1)\n",
+        "  //@ before constructor @//\n",
+        "  First\n",
+        "  @tag(2)\n",
+        "  //@ before second constructor @//\n",
+        "  Second\n",
+        "}\n",
+    );
+    let formatted = format_source(source);
+    let ordered = [
+        "/// before type",
+        "//@ before decorators @//",
+        "@tag(7)",
+        "//@ between decorators @//",
+        "@list",
+        "//@ after decorators @//",
+        "type Datum",
+        "type Choice",
+        "@tag(1)",
+        "//@ before constructor @//",
+        "First",
+        "@tag(2)",
+        "//@ before second constructor @//",
+        "Second",
+    ];
+    for pair in ordered.windows(2) {
+        assert!(formatted.find(pair[0]).unwrap() < formatted.find(pair[1]).unwrap());
+    }
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
+fn assurance_regions_inside_functions_do_not_reindent() {
+    let region = "//@\r\nunindented λ\r\n\t \t// text @\r\n @//";
+    let source = format!("fn answer() {{\n  {region}\n42\n}}\n");
+    let formatted = format_source(&source);
+    assert!(formatted.contains(region));
+    assert_eq!(format_source(&formatted), formatted);
+}
+
+#[test]
 fn format_comment_at_end_of_file() {
     assert_format!(
         r#"

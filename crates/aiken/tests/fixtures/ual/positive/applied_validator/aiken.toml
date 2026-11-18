@@ -1,0 +1,5 @@
+name = "fixtures/ual_applied_validator"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "UAL concrete-parameter validator producer fixture"

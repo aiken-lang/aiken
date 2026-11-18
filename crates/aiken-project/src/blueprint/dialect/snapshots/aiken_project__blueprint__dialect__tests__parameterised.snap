@@ -1,0 +1,310 @@
+---
+source: crates/aiken-project/src/blueprint/dialect/tests.rs
+expression: compiled
+---
+{
+  "$schema": "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/schema.json",
+  "preamble": {
+    "title": "test/project",
+    "description": "Aiken contracts for project 'test/project'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "test-compiler"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "id": "fixtures_contracts__parameters",
+      "title": "fixtures/contracts.parameters",
+      "redeemer": {
+        "oneOf": [
+          {
+            "schema": {},
+            "purpose": "spend"
+          },
+          {
+            "title": "redeemer",
+            "schema": {
+              "$ref": "#/definitions/Data"
+            },
+            "purpose": "mint"
+          },
+          {
+            "schema": {},
+            "purpose": "withdraw"
+          },
+          {
+            "schema": {},
+            "purpose": "publish"
+          },
+          {
+            "schema": {},
+            "purpose": "vote"
+          },
+          {
+            "schema": {},
+            "purpose": "propose"
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "title": "raw",
+          "schema": {
+            "$ref": "#/definitions/Data"
+          }
+        },
+        {
+          "title": "number",
+          "schema": {
+            "$ref": "#/definitions/Int"
+          }
+        },
+        {
+          "title": "flag",
+          "schema": {
+            "$ref": "#/definitions/Bool"
+          }
+        },
+        {
+          "title": "numbers",
+          "schema": {
+            "$ref": "#/definitions/List<Int>"
+          }
+        },
+        {
+          "title": "pair",
+          "schema": {
+            "$ref": "#/definitions/Pair<Int,Bool>"
+          }
+        }
+      ],
+      "interface": {
+        "callingConvention": "ledger-v3",
+        "invocations": [
+          {
+            "purpose": "spend",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/1"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/2"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/3"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/4"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "mint",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/1"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/2"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/3"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/4"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "withdraw",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/1"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/2"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/3"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/4"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "publish",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/1"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/2"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/3"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/4"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "vote",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/1"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/2"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/3"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/4"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          },
+          {
+            "purpose": "propose",
+            "arguments": [
+              {
+                "role": "parameter",
+                "source": "/parameters/0"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/1"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/2"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/3"
+              },
+              {
+                "role": "parameter",
+                "source": "/parameters/4"
+              },
+              {
+                "role": "context"
+              }
+            ]
+          }
+        ]
+      },
+      "compiledCode": "<redacted>",
+      "hash": "<redacted>"
+    }
+  ],
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List<Int>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/Int"
+      }
+    },
+    "Pair<Int,Bool>": {
+      "title": "Pair",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Bool"
+        }
+      ]
+    }
+  },
+  "$vocabulary": {
+    "https://cips.cardano.org/cips/cip57": true,
+    "https://cips.cardano.org/cips/cip57/extensions/compiled-interface/v1/vocabulary": true
+  }
+}

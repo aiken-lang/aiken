@@ -1,0 +1,15 @@
+repository: https://github.com/input-output-hk/PlutusCoreBlaster
+commit: 1c23de8f35fdc5decf6f126c7b56ed6649e4a57f
+
+Byte-for-byte upstream files:
+PlutusCore/UPLC/BlueprintEncoding/assurance-v2.schema.json
+PlutusCore/UPLC/BlueprintEncoding/checking-context.schema.json
+PlutusCore/UPLC/BlueprintEncoding/interface.schema.json
+PlutusCore/UPLC/BlueprintEncoding/value.schema.json
+PlutusCore/UPLC/BlueprintEncoding/blueprint.schema.json
+scripts/assurance-workspace.json
+
+The compiled-interface dialect uses blueprint.schema.json only for its preamble.
+Its legacy validator references are outside this dialect and are not resolved.
+The environment manifest has no schema at this pin; environment.schema.json is
+local, derived from Assurance.lean captureCheckingEnvironment at the same commit.

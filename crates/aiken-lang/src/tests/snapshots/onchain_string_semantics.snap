@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/check.rs
+assertion_line: 6064
+description: "@onchain(steps: 1, semantics: @\"C\")\nfn foo(value: Int) -> Int { value }"
+expression: diagnostic
+---
+decorators::validation
+I found an incorrect usage of decorators.
+
+@onchain semantics must be C or E (case-insensitive).

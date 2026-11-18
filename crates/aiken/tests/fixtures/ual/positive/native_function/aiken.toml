@@ -1,0 +1,5 @@
+name = "fixtures/ual_native_function"
+version = "1.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "UAL phase-1 native Bool function producer fixture"
