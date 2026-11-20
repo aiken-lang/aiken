@@ -1,0 +1,59 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+assertion_line: 781
+description: "Code:\n\npub type Credential {\n    VerificationKey(ByteArray)\n    Script(ByteArray)\n}\n\npub type PaymentCredential = Credential\n\nvalidator placeholder {\n  spend(_datum: Option<Data>, _redeemer: PaymentCredential, _utxo: Data, _self: Data,) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.placeholder.spend",
+  "datum": {
+    "title": "_datum",
+    "schema": {
+      "$ref": "#/definitions/Data"
+    }
+  },
+  "redeemer": {
+    "title": "_redeemer",
+    "schema": {
+      "$ref": "#/definitions/test_module~1PaymentCredential"
+    }
+  },
+  "compiledCode": "<redacted>",
+  "hash": "<redacted>",
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "test_module/PaymentCredential": {
+      "title": "PaymentCredential",
+      "alias": {
+        "$ref": "#/definitions/test_module~1Credential"
+      },
+      "anyOf": [
+        {
+          "title": "VerificationKey",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "Script",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
